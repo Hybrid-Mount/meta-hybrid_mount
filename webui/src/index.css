@@ -1,3 +1,6 @@
+/* For KernelSU WebUI */
+@import url('https://mui.kernelsu.org/internal/insets.css');
+
 /* ------- Nord Base Colors ------- */
 :root {
   --nord0: #2e3440;
@@ -27,6 +30,8 @@
 }
 
 body {
+  padding-top: var(--window-inset-top, 0px);
+  padding-bottom: var(--window-inset-bottom, 0px);
   margin: 0;
   background: var(--nord0);
   color: var(--nord6);
