@@ -1,6 +1,3 @@
-// Overlayfs mounting implementation
-// Migrated from ksud/src/mount.rs and ksud/src/init_event.rs
-
 use anyhow::{Context, Result, bail};
 use log::{info, warn};
 use std::collections::HashMap;
@@ -308,11 +305,11 @@ pub fn mount_modules_systemlessly(metadata_dir: &str, content_dir: &str) -> Resu
         // Collect other partitions
         for part in &partition {
             let part_path = module_content_path.join(part);
-            if part_path.is_dir()
-                && let Some(v) = partition_lowerdir.get_mut(*part)
-            {
-                v.push(part_path.display().to_string());
-                info!("  + {}/", part);
+            if part_path.is_dir() {
+                if let Some(v) = partition_lowerdir.get_mut(*part) {
+                    v.push(part_path.display().to_string());
+                    info!("  + {}/", part);
+                }
             }
         }
     }

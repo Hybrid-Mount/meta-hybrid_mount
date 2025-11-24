@@ -92,7 +92,7 @@ fn collect_module_files(content_paths: &[PathBuf], extra_partitions: &[String]) 
     }
 }
 
-// ... clone_symlink, mount_mirror, do_magic_mount (KEEP THESE AS IS) ...
+// ... clone_symlink, mount_mirror, do_magic_mount ...
 fn clone_symlink<Src: AsRef<Path>, Dst: AsRef<Path>>(src: Src, dst: Dst) -> Result<()> {
     let src_symlink = read_link(src.as_ref())?;
     symlink(&src_symlink, dst.as_ref())?;
@@ -110,7 +110,9 @@ fn mount_mirror<P: AsRef<Path>, WP: AsRef<Path>>(path: P, work_dir_path: WP, ent
         create_dir(&work_dir_path)?;
         let metadata = entry.metadata()?;
         chmod(&work_dir_path, Mode::from_raw_mode(metadata.mode()))?;
-        chown(&work_dir_path, Some(Uid::from_raw(metadata.uid())), Some(Gid::from_raw(metadata.gid())))?;
+        unsafe {
+            chown(&work_dir_path, Some(Uid::from_raw(metadata.uid())), Some(Gid::from_raw(metadata.gid())))?;
+        }
         lsetfilecon(&work_dir_path, lgetfilecon(&path)?.as_str())?;
         for entry in read_dir(&path)?.flatten() {
             mount_mirror(&path, &work_dir_path, &entry)?;
@@ -179,7 +181,10 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                 let (metadata, src_path) = if path.exists() { (path.metadata()?, &path) } 
                                            else { (current.module_path.as_ref().unwrap().metadata()?, current.module_path.as_ref().unwrap()) };
                 chmod(&work_dir_path, Mode::from_raw_mode(metadata.mode()))?;
-                chown(&work_dir_path, Some(Uid::from_raw(metadata.uid())), Some(Gid::from_raw(metadata.gid())))?;
+                // FIX: Added unsafe block
+                unsafe {
+                    chown(&work_dir_path, Some(Uid::from_raw(metadata.uid())), Some(Gid::from_raw(metadata.gid())))?;
+                }
                 lsetfilecon(&work_dir_path, lgetfilecon(src_path)?.as_str())?;
             }
 
@@ -231,7 +236,8 @@ pub fn mount_partitions(
         let tmp_dir = tmp_path.join("workdir");
         ensure_dir_exists(&tmp_dir)?;
 
-        mount(mount_source, &tmp_dir, "tmpfs", MountFlags::empty(), None).context("mount tmp")?;
+        // FIX: Changed None to "" for data argument to satisfy rustix::path::Arg trait
+        mount(mount_source, &tmp_dir, "tmpfs", MountFlags::empty(), "").context("mount tmp")?;
         mount_change(&tmp_dir, MountPropagationFlags::PRIVATE).context("make tmp private")?;
 
         let result = do_magic_mount("/", &tmp_dir, root, false);

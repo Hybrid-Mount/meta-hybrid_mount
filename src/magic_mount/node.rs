@@ -103,10 +103,10 @@ impl Node {
     where
         P: AsRef<Path>,
     {
-        if let Ok(v) = lgetxattr(&path, REPLACE_DIR_XATTR)
-            && String::from_utf8_lossy(&v) == "y"
-        {
-            return Ok(true);
+        if let Ok(v) = lgetxattr(&path, REPLACE_DIR_XATTR) {
+            if String::from_utf8_lossy(&v) == "y" {
+                return Ok(true);
+            }
         }
 
         let c_path = CString::new(path.as_ref().as_str()?)?;
@@ -145,11 +145,12 @@ impl Node {
             };
             if let Some(file_type) = file_type {
                 let mut replace = false;
-                if file_type == NodeFileType::Directory
-                    && let Ok(s) = Self::dir_is_replace(&path)
-                    && s
-                {
-                    replace = true;
+                if file_type == NodeFileType::Directory {
+                    if let Ok(s) = Self::dir_is_replace(&path) {
+                         if s {
+                            replace = true;
+                         }
+                    }
                 }
                 return Some(Node {
                     name: name.to_string(),
