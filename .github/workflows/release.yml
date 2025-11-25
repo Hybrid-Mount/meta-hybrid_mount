@@ -37,6 +37,11 @@ jobs:
           targets: aarch64-linux-android
           components: rust-src
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "."
+
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
 
@@ -52,7 +57,7 @@ jobs:
           cd webui
           npm install
 
-      # --- 新增步骤：动态修改 module.prop ---
+      # --- 动态修改 module.prop ---
       - name: Update Module Version
         run: |
           PROP_FILE="module/module.prop"
@@ -63,42 +68,34 @@ jobs:
           echo "  Version -> $TAG_NAME"
           echo "  VersionCode -> $RUN_NUMBER"
           
-          # 使用 sed 原地修改文件
           sed -i "s/^version=.*/version=$TAG_NAME/" "$PROP_FILE"
           sed -i "s/^versionCode=.*/versionCode=$RUN_NUMBER/" "$PROP_FILE"
           
-          # 打印检查
           cat "$PROP_FILE"
 
       - name: Build Project
         run: |
-          # 运行 xbuild (内部会自动处理 WebUI、Rust 编译、版本号注入和打包)
-          # xbuild 会读取我们刚刚修改过的 module.prop，并在此基础上追加 git hash
+          # 运行 xbuild
           cargo run -p xbuild --release
 
       - name: Generate Update Files
         id: meta
         run: |
-          # 1. 提取 output 中的最终 module.prop 信息 (包含了 xbuild 注入的 hash)
           PROP_FILE="output/module_files/module.prop"
           VERSION=$(grep "^version=" "$PROP_FILE" | cut -d= -f2)
           VERSION_CODE=$(grep "^versionCode=" "$PROP_FILE" | cut -d= -f2)
           
-          # 获取生成的 ZIP 文件名
           ZIP_FILE=$(cd output && ls *.zip | head -n 1)
           
-          # 构建下载链接
           REPO="${{ github.repository }}"
           TAG="${{ github.ref_name }}"
           DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_FILE"
-          # 你的 changelog 固定链接
           CHANGELOG_URL="https://raw.githubusercontent.com/YuzakiKokuban/meta-hybrid_mount/master/changelog.md"
           
           echo "Final Version: $VERSION"
           echo "Final Code: $VERSION_CODE"
           echo "Zip: $ZIP_FILE"
           
-          # 2. 生成 update.json (临时文件)
           cat <<EOF > /tmp/update.json
           {
             "version": "$VERSION",
@@ -108,8 +105,6 @@ jobs:
           }
           EOF
           
-          # 3. 生成 changelog.md (临时文件)
-          # 获取上一个 tag
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
           echo "## $VERSION" > /tmp/changelog.md
@@ -123,7 +118,6 @@ jobs:
             git log --pretty=format:"* %s" "$PREV_TAG..HEAD" >> /tmp/changelog.md
           fi
           
-          # 打印出来检查一下
           cat /tmp/update.json
 
       - name: Create Release
@@ -140,15 +134,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # 切换到 master 分支
           git fetch origin master
           git checkout master
           
-          # 将生成的临时文件移动到仓库根目录
           mv /tmp/update.json update.json
           mv /tmp/changelog.md changelog.md
           
-          # 提交并推送
           git add update.json changelog.md
           
           if git diff --staged --quiet; then

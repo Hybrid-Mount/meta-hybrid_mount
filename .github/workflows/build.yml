@@ -11,7 +11,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Skip if commit message contains [skip ci], unless triggered manually
     if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
 
     steps:
@@ -24,7 +23,6 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Setup Android SDK and NDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -32,14 +30,15 @@ jobs:
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r26b
-          # This action automatically sets ANDROID_NDK_HOME
 
-      # Use Nightly toolchain because xbuild uses '-Z build-std'
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
           targets: aarch64-linux-android
           components: rust-src
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -58,10 +57,8 @@ jobs:
 
       - name: Build Project
         run: |
-          # FIX: Do NOT wrap this in cargo-ndk. xbuild runs on host and calls cargo-ndk internally.
           cargo run -p xbuild --release
           
-          # Export version to GITHUB_ENV for the next step
           if [ -f "output/version" ]; then
             echo "MODULE_VERSION=$(cat output/version)" >> $GITHUB_ENV
           else
@@ -71,12 +68,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          # Artifact name reflects the version (e.g., Meta-Hybrid-v0.3.0-g123456)
           name: Meta-Hybrid-${{ env.MODULE_VERSION }}
-          # Upload the DIRECTORY contents.
-          # This causes GitHub to create a zip where module.prop is at the root.
-          # This zip is DIRECTLY FLASHABLE in Magisk/KSU.
           path: output/module_files/
           if-no-files-found: error
-          # Include hidden files just in case
           include-hidden-files: true
