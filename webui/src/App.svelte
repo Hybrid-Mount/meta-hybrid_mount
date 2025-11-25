@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { exec } from 'kernelsu';
-  import { fade, fly } from 'svelte/transition';
+  import { fly } from 'svelte/transition';
   import { cubicOut, cubicIn } from 'svelte/easing';
   import locate from './locate.json';
   import './app.css';
@@ -30,8 +30,121 @@
     dark_mode: "M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"
   };
 
+  const Monet = {
+    hexToRgb: (hex) => {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+    },
+    rgbToHsl: (r, g, b) => {
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if (max === min) h = s = 0;
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+      }
+      return { h: h * 360, s: s * 100, l: l * 100 };
+    },
+    hslToHex: (h, s, l) => {
+      l /= 100; const a = s * Math.min(l, 1 - l) / 100;
+      const f = n => {
+        const k = (n + h / 30) % 12;
+        const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+        return Math.round(255 * color).toString(16).padStart(2, '0');
+      };
+      return `#${f(0)}${f(8)}${f(4)}`;
+    },
+    getTone: (baseHsl, lAdjust, sAdjust = 0, hAdjust = 0) => {
+      return Monet.hslToHex((baseHsl.h + hAdjust) % 360, Math.max(0, Math.min(100, baseHsl.s + sAdjust)), lAdjust);
+    },
+    apply: (seedHex, isDark) => {
+      if (!seedHex) return;
+      const rgb = Monet.hexToRgb(seedHex);
+      if (!rgb) return;
+      const base = Monet.rgbToHsl(rgb.r, rgb.g, rgb.b);
+      
+      const p = { h: base.h, s: Math.min(base.s, 90) };
+      const s = { h: base.h, s: Math.min(base.s, 40) }; 
+      const t = { h: (base.h + 60) % 360, s: Math.min(base.s, 50) };
+      const n = { h: base.h, s: Math.min(base.s, 10) };
+      const nv = { h: base.h, s: Math.min(base.s, 15) };
+      const err = { h: 350, s: 80 };
+
+      const tones = isDark ? {
+        primary: Monet.getTone(p, 80), onPrimary: Monet.getTone(p, 20),
+        primaryCont: Monet.getTone(p, 30), onPrimaryCont: Monet.getTone(p, 90),
+        secondary: Monet.getTone(s, 80), onSecondary: Monet.getTone(s, 20),
+        secondaryCont: Monet.getTone(s, 30), onSecondaryCont: Monet.getTone(s, 90),
+        tertiary: Monet.getTone(t, 80), onTertiary: Monet.getTone(t, 20),
+        tertiaryCont: Monet.getTone(t, 30), onTertiaryCont: Monet.getTone(t, 90),
+        error: Monet.getTone(err, 80), onError: Monet.getTone(err, 20),
+        errorCont: Monet.getTone(err, 30), onErrorCont: Monet.getTone(err, 90),
+        bg: Monet.getTone(n, 6), onBg: Monet.getTone(n, 90),
+        surf: Monet.getTone(n, 6), onSurf: Monet.getTone(n, 90),
+        surfVar: Monet.getTone(nv, 30), onSurfVar: Monet.getTone(nv, 80),
+        outline: Monet.getTone(nv, 60), outlineVar: Monet.getTone(nv, 30),
+        surfContLow: Monet.getTone(n, 10), surfCont: Monet.getTone(n, 12),
+        surfContHigh: Monet.getTone(n, 17), surfContHighest: Monet.getTone(n, 22),
+      } : {
+        primary: Monet.getTone(p, 40), onPrimary: Monet.getTone(p, 100),
+        primaryCont: Monet.getTone(p, 90), onPrimaryCont: Monet.getTone(p, 10),
+        secondary: Monet.getTone(s, 40), onSecondary: Monet.getTone(s, 100),
+        secondaryCont: Monet.getTone(s, 90), onSecondaryCont: Monet.getTone(s, 10),
+        tertiary: Monet.getTone(t, 40), onTertiary: Monet.getTone(t, 100),
+        tertiaryCont: Monet.getTone(t, 90), onTertiaryCont: Monet.getTone(t, 10),
+        error: Monet.getTone(err, 40), onError: Monet.getTone(err, 100),
+        errorCont: Monet.getTone(err, 90), onErrorCont: Monet.getTone(err, 10),
+        bg: Monet.getTone(n, 99), onBg: Monet.getTone(n, 10),
+        surf: Monet.getTone(n, 99), onSurf: Monet.getTone(n, 10),
+        surfVar: Monet.getTone(nv, 90), onSurfVar: Monet.getTone(nv, 30),
+        outline: Monet.getTone(nv, 50), outlineVar: Monet.getTone(nv, 80),
+        surfContLow: Monet.getTone(n, 96), surfCont: Monet.getTone(n, 94),
+        surfContHigh: Monet.getTone(n, 92), surfContHighest: Monet.getTone(n, 90),
+      };
+
+      const root = document.documentElement.style;
+      root.setProperty('--md-sys-color-primary', tones.primary);
+      root.setProperty('--md-sys-color-on-primary', tones.onPrimary);
+      root.setProperty('--md-sys-color-primary-container', tones.primaryCont);
+      root.setProperty('--md-sys-color-on-primary-container', tones.onPrimaryCont);
+      root.setProperty('--md-sys-color-secondary', tones.secondary);
+      root.setProperty('--md-sys-color-on-secondary', tones.onSecondary);
+      root.setProperty('--md-sys-color-secondary-container', tones.secondaryCont);
+      root.setProperty('--md-sys-color-on-secondary-container', tones.onSecondaryCont);
+      root.setProperty('--md-sys-color-tertiary', tones.tertiary);
+      root.setProperty('--md-sys-color-on-tertiary', tones.onTertiary);
+      root.setProperty('--md-sys-color-tertiary-container', tones.tertiaryCont);
+      root.setProperty('--md-sys-color-on-tertiary-container', tones.onTertiaryCont);
+      root.setProperty('--md-sys-color-error', tones.error);
+      root.setProperty('--md-sys-color-on-error', tones.onError);
+      root.setProperty('--md-sys-color-error-container', tones.errorCont);
+      root.setProperty('--md-sys-color-on-error-container', tones.onErrorCont);
+      root.setProperty('--md-sys-color-background', tones.bg);
+      root.setProperty('--md-sys-color-on-background', tones.onBg);
+      root.setProperty('--md-sys-color-surface', tones.surf);
+      root.setProperty('--md-sys-color-on-surface', tones.onSurf);
+      root.setProperty('--md-sys-color-surface-variant', tones.surfVar);
+      root.setProperty('--md-sys-color-on-surface-variant', tones.onSurfVar);
+      root.setProperty('--md-sys-color-outline', tones.outline);
+      root.setProperty('--md-sys-color-outline-variant', tones.outlineVar);
+      root.setProperty('--md-sys-color-surface-container-low', tones.surfContLow);
+      root.setProperty('--md-sys-color-surface-container', tones.surfCont);
+      root.setProperty('--md-sys-color-surface-container-high', tones.surfContHigh);
+      root.setProperty('--md-sys-color-surface-container-highest', tones.surfContHighest);
+    }
+  };
+
   let lang = 'en';
   let theme = 'dark';
+  let systemSeedColor = null;
+
   $: L = locate[lang] || locate['en'];
 
   const availableLanguages = Object.keys(locate).map(code => ({
@@ -41,6 +154,7 @@
 
   let showLangMenu = false;
   let activeTab = 'config';
+  let transitionDirection = 1;
   const TABS = [
     { id: 'config', icon: icons.settings },
     { id: 'modules', icon: icons.modules },
@@ -217,6 +331,21 @@
     loading.logs = false;
   }
 
+  async function fetchSystemColor() {
+    try {
+      const { stdout } = await exec('settings get secure theme_customization_overlay_packages');
+      if (!stdout) return;
+      const match = /["']?android\.theme\.customization\.system_palette["']?\s*:\s*["']?#?([0-9a-fA-F]{6,8})["']?/i.exec(stdout) || 
+                    /["']?source_color["']?\s*:\s*["']?#?([0-9a-fA-F]{6,8})["']?/i.exec(stdout);
+      if (match && match[1]) {
+        let hex = match[1];
+        if (hex.length === 8) hex = hex.substring(2);
+        systemSeedColor = '#' + hex;
+        Monet.apply(systemSeedColor, theme === 'dark');
+      }
+    } catch (e) {}
+  }
+
   function handleTouchStart(e) {
     touchStartX = e.changedTouches[0].screenX;
   }
@@ -224,6 +353,14 @@
   function handleTouchEnd(e) {
     touchEndX = e.changedTouches[0].screenX;
     handleSwipe();
+  }
+
+  function switchTab(id) {
+    const currentIndex = TABS.findIndex(t => t.id === activeTab);
+    const newIndex = TABS.findIndex(t => t.id === id);
+    if (currentIndex === newIndex) return;
+    transitionDirection = newIndex > currentIndex ? 1 : -1;
+    activeTab = id;
   }
 
   function handleSwipe() {
@@ -235,10 +372,12 @@
 
     if (diff > 0) {
       if (currentIndex < TABS.length - 1) {
+        transitionDirection = 1;
         activeTab = TABS[currentIndex + 1].id;
       }
     } else {
       if (currentIndex > 0) {
+        transitionDirection = -1;
         activeTab = TABS[currentIndex - 1].id;
       }
     }
@@ -252,16 +391,17 @@
     setTheme(savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
     
     loadConfig();
+    fetchSystemColor();
   });
 
   function setTheme(t) {
     theme = t;
     document.documentElement.setAttribute('data-theme', t);
     localStorage.setItem('mm-theme', t);
+    if (systemSeedColor) Monet.apply(systemSeedColor, t === 'dark');
   }
 
-  function toggleTheme() { setTheme(theme === 'light' ? 'dark' : 'light');
-  }
+  function toggleTheme() { setTheme(theme === 'light' ? 'dark' : 'light'); }
   
   $: if (activeTab === 'modules') loadModules();
   $: if (activeTab === 'logs') loadLog();
@@ -291,7 +431,7 @@
 
     <nav class="nav-tabs">
       {#each TABS as tab}
-        <button class="nav-tab {activeTab === tab.id ? 'active' : ''}" on:click={() => activeTab = tab.id}>
+        <button class="nav-tab {activeTab === tab.id ? 'active' : ''}" on:click={() => switchTab(tab.id)}>
           <svg viewBox="0 0 24 24"><path d={tab.icon}/></svg>
           {L.tabs[tab.id]}
         </button>
@@ -301,7 +441,9 @@
 
   <main class="main-content" on:touchstart={handleTouchStart} on:touchend={handleTouchEnd}>
     {#key activeTab}
-      <div class="tab-pane" in:fly={{ x: 20, duration: 300, easing: cubicOut }} out:fade={{ duration: 150 }}>
+      <div class="tab-pane" 
+           in:fly={{ x: 50 * transitionDirection, duration: 300, easing: cubicOut }} 
+           out:fly={{ x: -50 * transitionDirection, duration: 300, easing: cubicIn }}>
         
         {#if activeTab === 'config'}
           <div class="md3-card">
