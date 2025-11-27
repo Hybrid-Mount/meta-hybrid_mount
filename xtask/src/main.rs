@@ -54,7 +54,6 @@ fn main() -> Result<()> {
             build_webui(&root)?;
 
             // 3. Build Zakosign (Host Tool)
-            // 这一步现在会正确地先编译依赖，再配置 Host 环境
             let zakosign_bin = build_zakosign(&root)?;
 
             // 4. Build Core (Android)
@@ -63,13 +62,15 @@ fn main() -> Result<()> {
             // 5. Copy Module Files
             println!(":: Copying module files...");
             let module_src = root.join("module");
+            // Ensure module.prop, customize.sh, etc. are at the root of the zip
+            // This also includes the freshly built webroot
             dir::copy(
                 &module_src,
                 &output_dir,
                 &dir::CopyOptions::new().overwrite(true).content_only(true),
             )?;
             
-            // Cleanup gitignore
+            // Cleanup gitignore if copied
             let gitignore = module_build_dir.join(".gitignore");
             if gitignore.exists() { fs::remove_file(gitignore)?; }
 
@@ -84,6 +85,7 @@ fn main() -> Result<()> {
             if let Some(zakosign) = zakosign_bin {
                 if let Some(key) = resolve_sign_key(sign_key) {
                     println!(":: Signing meta-hybrid binary...");
+                    // Make binary executable just in case (Unix only)
                     #[cfg(unix)]
                     {
                         use std::os::unix::fs::PermissionsExt;
@@ -190,16 +192,20 @@ fn build_zakosign(root: &Path) -> Result<Option<PathBuf>> {
             }
         }
 
-        println!(":: [Zakosign] Compiling dependencies...");
+        println!(":: [Zakosign] Compiling dependencies (Host Only)...");
         let status_build = Command::new(&setup_script)
             .current_dir(&zakosign_dir)
+            .env_remove("ANDROID_NDK_HOME")
+            .env_remove("ANDROID_NDK_ROOT")
+            .env_remove("ANDROID_NDK")
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()?;
+            
         if !status_build.success() { 
             anyhow::bail!("zakosign setupdep (build) failed"); 
         }
-
+        
         println!(":: [Zakosign] Configuring host environment...");
         let status_host = Command::new(&setup_script)
             .current_dir(&zakosign_dir)
@@ -212,7 +218,6 @@ fn build_zakosign(root: &Path) -> Result<Option<PathBuf>> {
         }
     }
 
-    // 3. Run Make
     println!(":: [Zakosign] Compiling binary...");
     let status = Command::new("make")
         .current_dir(&zakosign_dir)
