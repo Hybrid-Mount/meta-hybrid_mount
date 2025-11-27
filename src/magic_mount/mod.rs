@@ -56,9 +56,23 @@ fn collect_module_files(content_paths: &[PathBuf], extra_partitions: &[String]) 
         for (partition, require_symlink) in BUILTIN_PARTITIONS {
             let path_of_root = Path::new("/").join(partition);
             let path_of_system = Path::new("/system").join(partition);
+            // Logic: If root partition is a directory, we want to mount into it.
+            // Standard partitions like /vendor are usually directories.
             if path_of_root.is_dir() && (!require_symlink || path_of_system.is_symlink()) {
                 let name = partition.to_string();
-                if let Some(node) = system.children.remove(&name) {
+                if let Some(mut node) = system.children.remove(&name) {
+                    if node.file_type == NodeFileType::Symlink {
+                        if let Some(ref p) = node.module_path {
+                            // std::fs::metadata follows symlinks
+                            if let Ok(meta) = fs::metadata(p) {
+                                if meta.is_dir() {
+                                    log::debug!("treating symlink {} as directory for recursion", name);
+                                    node.file_type = NodeFileType::Directory;
+                                }
+                            }
+                        }
+                    }
+                    
                     root.children.insert(name, node);
                 }
             }
@@ -79,8 +93,21 @@ fn collect_module_files(content_paths: &[PathBuf], extra_partitions: &[String]) 
 
             if path_of_root.is_dir() && (!require_symlink || path_of_system.is_symlink()) {
                 let name = partition.to_string();
-                if let Some(node) = system.children.remove(&name) {
+                if let Some(mut node) = system.children.remove(&name) {
                     log::debug!("attach extra partition '{}' to root", name);
+                    
+                    // Apply same Symlink->Directory fix for extra partitions
+                    if node.file_type == NodeFileType::Symlink {
+                        if let Some(ref p) = node.module_path {
+                            if let Ok(meta) = fs::metadata(p) {
+                                if meta.is_dir() {
+                                    log::debug!("treating symlink {} as directory for recursion", name);
+                                    node.file_type = NodeFileType::Directory;
+                                }
+                            }
+                        }
+                    }
+
                     root.children.insert(name, node);
                 }
             }
@@ -170,6 +197,9 @@ fn do_magic_mount<P: AsRef<Path>, WP: AsRef<Path>>(
                         }
                     };
                     if need {
+                        // CRITICAL FIX: Prevent creating tmpfs on Root (or any node without module source).
+                        // If we create tmpfs on Root, it mirrors the entire OS, causing "No space left on device".
+                        // Instead, we must skip this specific conflicting child.
                         if current.module_path.is_none() {
                             log::error!(
                                 "Cannot create tmpfs on {} (no module source), ignoring conflicting child: {}",
