@@ -105,11 +105,13 @@ fn main() -> Result<()> {
                         anyhow::bail!("Zakosign binary not found at: {}", bin_path.display());
                     }
 
-                    // Execute: zakosign sign <zip_path> <private_key>
+                    // FIX: Updated command arguments to match zakosign usage:
+                    // Usage: zakosign sign [options...] --key <private.key> <input>
                     let status = Command::new(&bin_path)
                         .arg("sign")
-                        .arg(&zip_path)
-                        .arg(&key_path)
+                        .arg("--key")      // Explicit flag for key
+                        .arg(&key_path)    // The key path
+                        .arg(&zip_path)    // The input file (zip)
                         .status()?;
 
                     if !status.success() {
