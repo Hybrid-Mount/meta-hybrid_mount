@@ -1,0 +1,85 @@
+{
+  "lang": { "display": "Русский" },
+  "common": {
+    "appName": "Hybrid Mount",
+    "saving": "Сохранение...",
+    "theme": "Тема",
+    "language": "Язык"
+  },
+  "tabs": {
+    "status": "Статус",
+    "config": "Конфиг",
+    "modules": "Модули",
+    "logs": "Логи"
+  },
+  "status": {
+    "storageTitle": "Хранилище",
+    "storageDesc": "Использование modules.img",
+    "moduleTitle": "Модули",
+    "moduleActive": "Активные модули",
+    "modeStats": "Статистика",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount"
+  },
+  "config": {
+    "title": "Конфигурация",
+    "verboseLabel": "Подробный лог",
+    "verboseOff": "Выкл.",
+    "verboseOn": "Вкл.",
+    "forceExt4": "Принудительный Ext4",
+    "enableNuke": "Включить Nuke LKM",
+    "moduleDir": "Путь модулей",
+    "tempDir": "Временная папка",
+    "mountSource": "Источник монтирования",
+    "logFile": "Файл лога",
+    "partitions": "Разделы",
+    "autoPlaceholder": "Авто",
+    "reload": "Обновить",
+    "save": "Сохранить",
+    "loadSuccess": "Конфигурация загружена",
+    "loadError": "Ошибка загрузки конфига",
+    "loadDefault": "Конфиг по умолчанию",
+    "saveSuccess": "Успешно сохранено",
+    "saveFailed": "Ошибка сохранения"
+  },
+  "modules": {
+    "title": "Режимы модулей",
+    "desc": "Выберите 'Magic Mount', если модуль вызывает bootloop или проблемы с OverlayFS.",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "scanning": "Сканирование...",
+    "reload": "Обновить",
+    "save": "Сохранить",
+    "empty": "Активные модули не найдены",
+    "scanError": "Ошибка сканирования модулей",
+    "saveSuccess": "Режимы сохранены",
+    "saveFailed": "Ошибка сохранения режимов",
+    "searchPlaceholder": "Поиск модулей...",
+    "filterLabel": "Фильтр:",
+    "filterAll": "Все"
+  },
+  "logs": {
+    "title": "Системные логи",
+    "select": "Файл",
+    "current": "Текущий",
+    "old": "Предыдущий",
+    "loading": "Загрузка логов...",
+    "refresh": "Обновить",
+    "empty": "Лог пуст",
+    "readFailed": "Ошибка чтения",
+    "readException": "Ошибка при чтении лога",
+    "searchPlaceholder": "Поиск логов...",
+    "filterLabel": "Уровень:",
+    "levels": {
+      "all": "Все",
+      "info": "Инфо",
+      "warn": "Warn",
+      "error": "Ошибка"
+    },
+    "copy": "Копировать",
+    "export": "Экспорт",
+    "copySuccess": "Логи скопированы",
+    "copyFail": "Ошибка копирования",
+    "exportFail": "Ошибка экспорта"
+  }
+}

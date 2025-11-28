@@ -1,7 +1,9 @@
 import { API } from './api';
 import { DEFAULT_CONFIG, DEFAULT_SEED } from './constants';
 import { Monet } from './theme';
-import locate from '../locate.json';
+
+// Import all locale JSONs. Vite will handle this.
+const localeModules = import.meta.glob('../locales/*.json');
 
 // Global state using Svelte 5 Runes
 export const store = $state({
@@ -19,10 +21,27 @@ export const store = $state({
   theme: 'dark',
   lang: 'en',
   seed: DEFAULT_SEED,
+  loadedLocale: null, // Stores the content of the loaded JSON
 
   // Getters
   get L() {
-    return locate[this.lang] || locate['en'];
+    // If locale is loaded, return it. Otherwise return a safe fallback or empty structure
+    // to prevent crashes during initial load.
+    return this.loadedLocale || this.getFallbackLocale();
+  },
+
+  // Helper for initial safe state (simplified English fallback)
+  // This prevents undefined errors before JSON is loaded
+  getFallbackLocale() {
+    return {
+        common: { appName: "Hybrid Mount", saving: "...", theme: "Theme", language: "Language" },
+        lang: { display: "English" },
+        tabs: { status: "Status", config: "Config", modules: "Modules", logs: "Logs" },
+        status: { storageTitle: "Storage", storageDesc: "", moduleTitle: "Modules", moduleActive: "Active", modeStats: "Stats", modeAuto: "Auto", modeMagic: "Magic" },
+        config: { title: "Config", verboseLabel: "Verbose", verboseOff: "Off", verboseOn: "On", forceExt4: "Force Ext4", enableNuke: "Nuke LKM", moduleDir: "Dir", tempDir: "Temp", mountSource: "Source", logFile: "Log", partitions: "Partitions", autoPlaceholder: "Auto", reload: "Reload", save: "Save", loadSuccess: "", loadError: "", loadDefault: "", saveSuccess: "", saveFailed: "" },
+        modules: { title: "Modules", desc: "", modeAuto: "Overlay", modeMagic: "Magic", scanning: "...", reload: "Refresh", save: "Save", empty: "Empty", scanError: "", saveSuccess: "", saveFailed: "", searchPlaceholder: "Search", filterLabel: "Filter", filterAll: "All" },
+        logs: { title: "Logs", loading: "...", refresh: "Refresh", empty: "Empty", copy: "Copy", copySuccess: "Copied", copyFail: "Failed", searchPlaceholder: "Search", filterLabel: "Filter", levels: { all: "All", info: "Info", warn: "Warn", error: "Error" } }
+    };
   },
 
   get modeStats() {
@@ -48,10 +67,27 @@ export const store = $state({
     Monet.apply(this.seed, newTheme === 'dark');
   },
 
+  async setLang(code) {
+    // Check if locale file exists
+    const path = `../locales/${code}.json`;
+    if (localeModules[path]) {
+      try {
+        const mod = await localeModules[path]();
+        this.loadedLocale = mod.default; // JSON module default export
+        this.lang = code;
+        localStorage.setItem('mm-lang', code);
+      } catch (e) {
+        console.error(`Failed to load locale: ${code}`, e);
+        // Fallback to English if load fails
+        if (code !== 'en') await this.setLang('en');
+      }
+    }
+  },
+
   async init() {
     // Load local storage
-    const savedLang = localStorage.getItem('mm-lang');
-    if (savedLang && locate[savedLang]) this.lang = savedLang;
+    const savedLang = localStorage.getItem('mm-lang') || 'en';
+    await this.setLang(savedLang);
     
     const savedTheme = localStorage.getItem('mm-theme');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -71,9 +107,13 @@ export const store = $state({
     this.loading.config = true;
     try {
       this.config = await API.loadConfig();
-      this.showToast(this.L.config.loadSuccess);
+      if (this.L && this.L.config) {
+          this.showToast(this.L.config.loadSuccess);
+      }
     } catch (e) {
-      this.showToast(this.L.config.loadError, 'error');
+      if (this.L && this.L.config) {
+          this.showToast(this.L.config.loadError, 'error');
+      }
     }
     this.loading.config = false;
   },
@@ -131,10 +171,8 @@ export const store = $state({
 
   async loadStatus() {
     this.loading.status = true;
-    // Load storage info and modules to calculate stats
     try {
       this.storage = await API.getStorageUsage();
-      // We also need module count for the dashboard
       if (this.modules.length === 0) {
         this.modules = await API.scanModules(this.config.moduledir);
       }

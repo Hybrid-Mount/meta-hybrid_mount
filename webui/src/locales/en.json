@@ -1,0 +1,85 @@
+{
+  "lang": { "display": "English" },
+  "common": {
+    "appName": "Hybrid Mount",
+    "saving": "Saving...",
+    "theme": "Toggle Theme",
+    "language": "Language"
+  },
+  "tabs": {
+    "status": "Status",
+    "config": "Config",
+    "modules": "Modules",
+    "logs": "Logs"
+  },
+  "status": {
+    "storageTitle": "Storage",
+    "storageDesc": "Usage of modules.img",
+    "moduleTitle": "Modules",
+    "moduleActive": "Active Modules",
+    "modeStats": "Mode Statistics",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount"
+  },
+  "config": {
+    "title": "Configuration",
+    "verboseLabel": "Verbose Log",
+    "verboseOff": "Off",
+    "verboseOn": "On",
+    "forceExt4": "Force Ext4 Mode",
+    "enableNuke": "Enable Nuke LKM (Stealth)",
+    "moduleDir": "Module Directory",
+    "tempDir": "Temp Directory",
+    "mountSource": "Mount Source",
+    "logFile": "Log File",
+    "partitions": "Partitions",
+    "autoPlaceholder": "Auto",
+    "reload": "Reload",
+    "save": "Save",
+    "loadSuccess": "Config loaded",
+    "loadError": "Failed to load config",
+    "loadDefault": "Using default config",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Failed to save"
+  },
+  "modules": {
+    "title": "Module Modes",
+    "desc": "Choose 'Magic Mount' if a module causes bootloops or issues with OverlayFS.",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "scanning": "Scanning...",
+    "reload": "Refresh",
+    "save": "Save Modes",
+    "empty": "No enabled modules found",
+    "scanError": "Failed to scan modules",
+    "saveSuccess": "Modes saved",
+    "saveFailed": "Failed to save modes",
+    "searchPlaceholder": "Search modules...",
+    "filterLabel": "Filter:",
+    "filterAll": "All"
+  },
+  "logs": {
+    "title": "System Logs",
+    "select": "File",
+    "current": "Current",
+    "old": "Previous",
+    "loading": "Loading logs...",
+    "refresh": "Refresh",
+    "empty": "Log is empty",
+    "readFailed": "Read failed",
+    "readException": "Error reading log",
+    "searchPlaceholder": "Search logs...",
+    "filterLabel": "Level:",
+    "levels": {
+      "all": "All",
+      "info": "Info",
+      "warn": "Warn",
+      "error": "Error"
+    },
+    "copy": "Copy",
+    "export": "Export",
+    "copySuccess": "Logs copied to clipboard",
+    "copyFail": "Failed to copy logs",
+    "exportFail": "Failed to export logs"
+  }
+}

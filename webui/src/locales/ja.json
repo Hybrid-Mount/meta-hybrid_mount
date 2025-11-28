@@ -1,0 +1,85 @@
+{
+  "lang": { "display": "日本語" },
+  "common": {
+    "appName": "Hybrid Mount",
+    "saving": "保存中...",
+    "theme": "テーマ切り替え",
+    "language": "言語"
+  },
+  "tabs": {
+    "status": "ステータス",
+    "config": "設定",
+    "modules": "モジュール",
+    "logs": "ログ"
+  },
+  "status": {
+    "storageTitle": "ストレージ",
+    "storageDesc": "modules.img の使用状況",
+    "moduleTitle": "モジュール",
+    "moduleActive": "有効なモジュール",
+    "modeStats": "モード統計",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount"
+  },
+  "config": {
+    "title": "設定",
+    "verboseLabel": "詳細ログ",
+    "verboseOff": "オフ",
+    "verboseOn": "オン",
+    "forceExt4": "Ext4 モードを強制",
+    "enableNuke": "Nuke LKM を有効化",
+    "moduleDir": "モジュールディレクトリ",
+    "tempDir": "一時ディレクトリ",
+    "mountSource": "マウントソース",
+    "logFile": "ログファイル",
+    "partitions": "パーティション",
+    "autoPlaceholder": "自動",
+    "reload": "再読み込み",
+    "save": "保存",
+    "loadSuccess": "設定を読み込みました",
+    "loadError": "設定の読み込みに失敗しました",
+    "loadDefault": "デフォルト設定を使用します",
+    "saveSuccess": "保存しました",
+    "saveFailed": "保存に失敗しました"
+  },
+  "modules": {
+    "title": "モジュールモード",
+    "desc": "OverlayFSでブートループや問題が発生する場合は、「Magic Mount」を選択してください。",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "scanning": "スキャン中...",
+    "reload": "更新",
+    "save": "モードを保存",
+    "empty": "有効なモジュールが見つかりません",
+    "scanError": "モジュールのスキャンに失敗しました",
+    "saveSuccess": "モードを保存しました",
+    "saveFailed": "モードの保存に失敗しました",
+    "searchPlaceholder": "モジュールを検索...",
+    "filterLabel": "フィルター:",
+    "filterAll": "すべて"
+  },
+  "logs": {
+    "title": "システムログ",
+    "select": "ファイル",
+    "current": "現在",
+    "old": "以前",
+    "loading": "ログを読み込み中...",
+    "refresh": "更新",
+    "empty": "ログは空です",
+    "readFailed": "読み込み失敗",
+    "readException": "ログ読み込みエラー",
+    "searchPlaceholder": "ログを検索...",
+    "filterLabel": "レベル:",
+    "levels": {
+      "all": "すべて",
+      "info": "情報",
+      "warn": "警告",
+      "error": "エラー"
+    },
+    "copy": "コピー",
+    "export": "エクスポート",
+    "copySuccess": "コピーしました",
+    "copyFail": "コピーに失敗しました",
+    "exportFail": "エクスポートに失敗しました"
+  }
+}

@@ -1,9 +1,8 @@
 <script>
   import { store } from '../lib/store.svelte';
   import { ICONS } from '../lib/constants';
-  import locate from '../locate.json';
-  
   import './NavBar.css';
+  
   let { activeTab, onTabChange } = $props();
   let showLangMenu = $state(false);
   
@@ -18,21 +17,35 @@
     { id: 'logs', icon: ICONS.description }
   ];
   
-  const languages = Object.keys(locate).map(code => ({
-    code,
-    name: locate[code]?.lang?.display || code.toUpperCase()
-  }));
+  // Generate supported languages list dynamically
+  // The glob import keys are like "../locales/en.json"
+  // We extract "en" from the filename.
+  // Note: We don't have the display name (e.g. "English") immediately available
+  // without loading the file. For simplicity, we use the code or a simple map.
+  const localeFiles = import.meta.glob('../locales/*.json');
   
-  // Svelte 5 Effect: Watch activeTab and scroll into view
+  // Hardcoded map for Display Names since we load JSONs lazily
+  const LANG_DISPLAY = {
+    en: 'English',
+    zh: '中文',
+    ja: '日本語',
+    ru: 'Русский'
+  };
+
+  const languages = Object.keys(localeFiles).map(path => {
+    const code = path.match(/\/([a-z]+)\.json$/)[1];
+    return {
+      code,
+      name: LANG_DISPLAY[code] || code.toUpperCase()
+    };
+  });
+  
   $effect(() => {
     if (activeTab && tabRefs[activeTab] && navContainer) {
       const tab = tabRefs[activeTab];
       const containerWidth = navContainer.clientWidth;
       const tabLeft = tab.offsetLeft;
       const tabWidth = tab.clientWidth;
-      
-      // Calculate position to center the tab
-      // Target Scroll = (Tab Left Offset) - (Half Container Width) + (Half Tab Width)
       const scrollLeft = tabLeft - (containerWidth / 2) + (tabWidth / 2);
       
       navContainer.scrollTo({
@@ -47,9 +60,8 @@
   }
 
   function setLang(code) {
-    store.lang = code;
+    store.setLang(code); // Async, but we don't need to await here
     showLangMenu = false;
-    localStorage.setItem('mm-lang', code);
   }
 </script>
 

@@ -1,0 +1,85 @@
+{
+  "lang": { "display": "中文" },
+  "common": {
+    "appName": "Hybrid Mount",
+    "saving": "保存中...",
+    "theme": "切换主题",
+    "language": "语言"
+  },
+  "tabs": {
+    "status": "状态",
+    "config": "配置",
+    "modules": "模块",
+    "logs": "日志"
+  },
+  "status": {
+    "storageTitle": "存储空间",
+    "storageDesc": "modules.img 使用情况",
+    "moduleTitle": "模块概览",
+    "moduleActive": "活跃模块",
+    "modeStats": "模式统计",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount"
+  },
+  "config": {
+    "title": "配置",
+    "verboseLabel": "详细日志",
+    "verboseOff": "关闭",
+    "verboseOn": "开启",
+    "forceExt4": "强制 Ext4 模式",
+    "enableNuke": "启用 Nuke LKM (隐蔽)",
+    "moduleDir": "模块路径",
+    "tempDir": "临时路径",
+    "mountSource": "挂载源名",
+    "logFile": "日志文件",
+    "partitions": "额外分区",
+    "autoPlaceholder": "自动",
+    "reload": "重载",
+    "save": "保存",
+    "loadSuccess": "配置已加载",
+    "loadError": "加载失败",
+    "loadDefault": "已加载默认配置",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败"
+  },
+  "modules": {
+    "title": "模块模式",
+    "desc": "如果模块导致无限重启或 OverlayFS 异常，请尝试切换为 Magic Mount。",
+    "modeAuto": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "scanning": "扫描中...",
+    "reload": "刷新",
+    "save": "保存配置",
+    "empty": "未找到已启用的模块",
+    "scanError": "扫描失败",
+    "saveSuccess": "模式已保存",
+    "saveFailed": "保存失败",
+    "searchPlaceholder": "搜索模块...",
+    "filterLabel": "筛选:",
+    "filterAll": "全部"
+  },
+  "logs": {
+    "title": "运行日志",
+    "select": "文件",
+    "current": "当前日志",
+    "old": "历史日志",
+    "loading": "日志加载中...",
+    "refresh": "刷新",
+    "empty": "日志为空",
+    "readFailed": "读取失败",
+    "readException": "读取异常",
+    "searchPlaceholder": "搜索日志...",
+    "filterLabel": "等级:",
+    "levels": {
+      "all": "全部",
+      "info": "信息",
+      "warn": "警告",
+      "error": "错误"
+    },
+    "copy": "复制",
+    "export": "导出",
+    "copySuccess": "日志已复制",
+    "copyFail": "复制失败",
+    "exportFail": "导出失败"
+  }
+}
