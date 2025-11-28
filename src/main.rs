@@ -12,7 +12,7 @@ mod defs;
 mod magic_mount;
 mod utils;
 
-use std::{io::Write, path::Path};
+use std::io::Write;
 
 use anyhow::{Context, Result};
 use env_logger::Builder;
@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     let config = load_config();
 
     let args: Vec<_> = std::env::args().collect();
-    if args[1] == "scan" {
+    if args.len() > 1 && args[1] == "scan" {
         let mut modules = Vec::new();
         for entry in config.moduledir.read_dir()?.flatten() {
             if !entry.file_type()?.is_dir() {
