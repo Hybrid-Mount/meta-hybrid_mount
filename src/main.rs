@@ -376,7 +376,11 @@ fn run() -> Result<()> {
     if let Some(command) = &cli.command {
         match command {
             Commands::GenConfig { output } => { Config::default().save_to_file(output)?; return Ok(()); },
-            Commands::ShowConfig => { println!("{:#?}", load_config(&cli)?); return Ok(()); },
+            Commands::ShowConfig => { 
+                let config = load_config(&cli)?;
+                println!("{}", serde_json::to_string(&config)?); 
+                return Ok(()); 
+            },
             Commands::Storage => { check_storage()?; return Ok(()); },
             Commands::Modules => { list_modules(&cli)?; return Ok(()); }
         }

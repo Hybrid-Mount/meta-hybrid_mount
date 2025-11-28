@@ -1,35 +1,6 @@
 import { exec } from 'kernelsu';
 import { DEFAULT_CONFIG, PATHS } from './constants';
 
-function parseKvConfig(text) {
-  try {
-    const result = { ...DEFAULT_CONFIG };
-    text.split('\n').forEach(line => {
-      line = line.trim();
-      if (!line || line.startsWith('#')) return;
-      
-      const eq = line.indexOf('=');
-      if (eq < 0) return;
-      
-      let key = line.slice(0, eq).trim();
-      let val = line.slice(eq + 1).trim();
-      
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      
-      if (key === 'moduledir') result.moduledir = val;
-      else if (key === 'tempdir') result.tempdir = val;
-      else if (key === 'mountsource') result.mountsource = val;
-      else if (key === 'verbose') result.verbose = (val === 'true');
-      else if (key === 'force_ext4') result.force_ext4 = (val === 'true');
-      else if (key === 'enable_nuke') result.enable_nuke = (val === 'true');
-      else if (key === 'partitions') result.partitions = val.split(',').map(s => s.trim()).filter(Boolean);
-    });
-    return result;
-  } catch (e) { return null; }
-}
-
 function serializeKvConfig(cfg) {
   const q = s => `"${s}"`;
   const lines = ['# Hybrid Mount Config', ''];
@@ -45,9 +16,22 @@ function serializeKvConfig(cfg) {
 
 export const API = {
   loadConfig: async () => {
-    const { errno, stdout } = await exec(`[ -f "${PATHS.CONFIG}" ] && cat "${PATHS.CONFIG}" || echo ""`);
-    if (errno !== 0) throw new Error('Failed to load config');
-    return (stdout.trim()) ? (parseKvConfig(stdout) || DEFAULT_CONFIG) : DEFAULT_CONFIG;
+    // Replaced manual file reading with backend CLI call
+    const cmd = "/data/adb/modules/meta-hybrid/meta-hybrid show-config";
+    try {
+      const { errno, stdout } = await exec(cmd);
+      if (errno === 0 && stdout) {
+        return JSON.parse(stdout);
+      } else {
+        console.warn("Config load returned non-zero or empty, using defaults");
+        return DEFAULT_CONFIG;
+      }
+    } catch (e) {
+      console.error("Failed to load config from backend:", e);
+      // Fallback or re-throw depending on policy. 
+      // Returning default prevents crash but might hide issues.
+      return DEFAULT_CONFIG; 
+    }
   },
 
   saveConfig: async (config) => {
