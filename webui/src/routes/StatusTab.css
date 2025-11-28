@@ -83,12 +83,10 @@
 }
 
 .stat-value {
-  /* Changed from 28px to 24px to balance numbers and text */
   font-size: 24px;
   font-weight: 500;
   color: var(--md-sys-color-primary);
   font-family: var(--md-ref-typeface-mono);
-  /* Ensure long text doesn't break layout */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

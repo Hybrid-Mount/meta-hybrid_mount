@@ -76,6 +76,7 @@ export const API = {
       
       if (errno === 0 && stdout) {
         const data = JSON.parse(stdout);
+        // Backend now returns the definitive type from the state file
         return {
           size: data.size || '-',
           used: data.used || '-',

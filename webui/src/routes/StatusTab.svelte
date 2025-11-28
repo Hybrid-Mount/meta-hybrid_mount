@@ -15,7 +15,7 @@
       <div style="display:flex; align-items:center; gap:8px;">
         <span class="storage-title">{store.L.status.storageTitle}</span>
         
-        {#if store.storage.type}
+        {#if store.storage.type && store.storage.type !== 'unknown'}
           <span class="storage-type-badge {store.storage.type === 'tmpfs' ? 'type-tmpfs' : 'type-ext4'}">
             {store.storage.type.toUpperCase()}
           </span>

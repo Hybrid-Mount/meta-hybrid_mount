@@ -17,8 +17,6 @@ use clap::{Parser, Subcommand};
 use config::{Config, CONFIG_FILE_DEFAULT};
 use rustix::mount::{unmount, UnmountFlags};
 use serde::Serialize;
-// Import procfs to check mount type
-use procfs::process::Process;
 
 #[derive(Parser, Debug)]
 #[command(name = "meta-hybrid", version, about = "Hybrid Mount Metamodule")]
@@ -319,21 +317,10 @@ fn check_storage() -> Result<()> {
         return Ok(());
     }
 
-    // Attempt to resolve symlinks to match what's in /proc/mounts
-    // If resolution fails, use original path
-    let canonical_path = fs::canonicalize(&path).unwrap_or(path.clone());
-
-    // Determine filesystem type from mountinfo
-    let mut fs_type = "unknown".to_string();
-    if let Ok(mounts) = Process::myself().and_then(|p| p.mountinfo()) {
-        for m in mounts.0 {
-            // Compare against resolved path
-            if m.mount_point == canonical_path {
-                fs_type = m.fs_type;
-                break;
-            }
-        }
-    }
+    // Direct read from state file - The Single Source of Truth
+    let fs_type = fs::read_to_string(defs::STORAGE_MODE_FILE)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
 
     let stats = rustix::fs::statvfs(&path).context("statvfs failed")?;
     let block_size = stats.f_frsize as u64;
@@ -439,6 +426,11 @@ fn run() -> Result<()> {
     // 2. Smart Storage Setup
     let storage_mode = setup_storage(&mnt_base, &img_path, config.force_ext4)?;
     
+    // PERSIST STATE: Write the decided mode to file
+    if let Err(e) = fs::write(defs::STORAGE_MODE_FILE, &storage_mode) {
+        log::warn!("Failed to write storage mode state: {}", e);
+    }
+    
     // 3. Populate Storage
     if let Err(e) = sync_active_modules(&config.moduledir, &mnt_base) {
         log::error!("Critical: Failed to sync modules: {:#}", e);
@@ -464,7 +456,7 @@ fn run() -> Result<()> {
     let extra_parts: Vec<&str> = config.partitions.iter().map(|s| s.as_str()).collect();
     all_partitions.extend(extra_parts);
 
-    // [FIX] Iterate by reference using &active_modules
+    // Iterate by reference using &active_modules
     for (module_id, content_path) in &active_modules {
         let mode = module_modes.get(module_id).map(|s| s.as_str()).unwrap_or("auto");
         if mode == "magic" {
@@ -490,7 +482,7 @@ fn run() -> Result<()> {
         }
     }
 
-    // [FIX] Capture count before move
+    // Capture count before move
     let magic_count = magic_mount_modules.len();
 
     // Phase B: Magic Mount

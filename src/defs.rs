@@ -11,6 +11,8 @@ pub const BASE_DIR: &str = "/data/adb/meta-hybrid/";
 // Runtime state directory (for communicating mount points to CLI)
 pub const RUN_DIR: &str = "/data/adb/meta-hybrid/run/";
 pub const MOUNT_POINT_FILE: &str = "/data/adb/meta-hybrid/run/mount.point";
+// Persist the decided storage mode (tmpfs/ext4) for CLI queries
+pub const STORAGE_MODE_FILE: &str = "/data/adb/meta-hybrid/run/storage.mode";
 
 // Log file path (Must match WebUI)
 pub const DAEMON_LOG_FILE: &str = "/data/adb/meta-hybrid/daemon.log";
