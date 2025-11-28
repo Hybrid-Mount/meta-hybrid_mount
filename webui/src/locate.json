@@ -64,7 +64,12 @@
         "info": "Info",
         "warn": "Warn",
         "error": "Error"
-      }
+      },
+      "copy": "Copy",
+      "export": "Export",
+      "copySuccess": "Logs copied to clipboard",
+      "copyFail": "Failed to copy logs",
+      "exportFail": "Failed to export logs"
     }
   },
   "zh": {
@@ -132,7 +137,12 @@
         "info": "信息",
         "warn": "警告",
         "error": "错误"
-      }
+      },
+      "copy": "复制",
+      "export": "导出",
+      "copySuccess": "日志已复制",
+      "copyFail": "复制失败",
+      "exportFail": "导出失败"
     }
   },
   "ja": {
@@ -200,7 +210,12 @@
         "info": "情報",
         "warn": "警告",
         "error": "エラー"
-      }
+      },
+      "copy": "コピー",
+      "export": "エクスポート",
+      "copySuccess": "コピーしました",
+      "copyFail": "コピーに失敗しました",
+      "exportFail": "エクスポートに失敗しました"
     }
   },
   "ru": {
@@ -268,7 +283,12 @@
         "info": "Инфо",
         "warn": "Warn",
         "error": "Ошибка"
-      }
+      },
+      "copy": "Копировать",
+      "export": "Экспорт",
+      "copySuccess": "Логи скопированы",
+      "copyFail": "Ошибка копирования",
+      "exportFail": "Ошибка экспорта"
     }
   }
 }
