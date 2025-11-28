@@ -101,11 +101,11 @@ fn update_module_prop(storage_mode: &str, nuke_active: bool, overlay_count: usiz
     let mode_str = if storage_mode == "tmpfs" { "Tmpfs" } else { "Ext4" };
     let status_emoji = if storage_mode == "tmpfs" { "🐾" } else { "💿" };
     
-    let nuke_str = if nuke_active { " | Pads : ON ✨" } else { "" };
+    let nuke_str = if nuke_active { " | 肉垫: 开启 ✨" } else { "" };
     
     // Construct the cute string
     let new_desc = format!(
-        "description=Running～ Nya～ ({}) {} | Overlay: {} | Magic: {}{}", 
+        "description=😋运行中喵～ ({}) {} | Overlay: {} | Magic: {}{}", 
         mode_str, status_emoji, overlay_count, magic_count, nuke_str
     );
 
@@ -205,7 +205,6 @@ fn try_load_nuke(mnt_point: &Path) -> bool {
         }
     };
 
-    // Use KptrRestrict Guard
     let _kptr_guard = utils::ScopedKptrRestrict::new();
 
     let cmd = Command::new("sh")
@@ -232,7 +231,7 @@ fn try_load_nuke(mnt_point: &Path) -> bool {
         .status();
 
     match status {
-        Ok(s) => {
+        Ok(_) => {
             // Success or EAGAIN (self-unload) is considered success for Nuke
             true
         },
@@ -435,8 +434,9 @@ fn run() -> Result<()> {
     let extra_parts: Vec<&str> = config.partitions.iter().map(|s| s.as_str()).collect();
     all_partitions.extend(extra_parts);
 
-    for (module_id, content_path) in active_modules {
-        let mode = module_modes.get(&module_id).map(|s| s.as_str()).unwrap_or("auto");
+    // [FIX] Iterate by reference using &active_modules
+    for (module_id, content_path) in &active_modules {
+        let mode = module_modes.get(module_id).map(|s| s.as_str()).unwrap_or("auto");
         if mode == "magic" {
             magic_mount_modules.insert(content_path.clone());
             log::info!("Module '{}' assigned to Magic Mount", module_id);
@@ -460,6 +460,9 @@ fn run() -> Result<()> {
         }
     }
 
+    // [FIX] Capture count before move
+    let magic_count = magic_mount_modules.len();
+
     // Phase B: Magic Mount
     if !magic_mount_modules.is_empty() {
         let tempdir = if let Some(t) = &config.tempdir { t.clone() } else { utils::select_temp_dir()? };
@@ -478,8 +481,8 @@ fn run() -> Result<()> {
         nuke_active = try_load_nuke(&mnt_base);
     }
 
-    // [NEW] Update module description with stats (Catgirl Mode)
-    let magic_count = magic_mount_modules.len();
+    // Update module description with stats (Catgirl Mode)
+    // active_modules is still valid because we iterated by reference earlier
     let overlay_count = active_modules.len().saturating_sub(magic_count);
     
     update_module_prop(&storage_mode, nuke_active, overlay_count, magic_count);
