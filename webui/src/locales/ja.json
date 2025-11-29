@@ -23,7 +23,8 @@
     "sysInfoTitle": "システム情報",
     "kernel": "カーネル",
     "selinux": "SELinux",
-    "mountBase": "マウントベース"
+    "mountBase": "マウントベース",
+    "activePartitions": "アクティブパーティション"
   },
   "config": {
     "title": "設定",

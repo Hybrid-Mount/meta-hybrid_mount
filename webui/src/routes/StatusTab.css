@@ -161,7 +161,6 @@
 .info-val {
   font-size: 13px;
   color: var(--md-sys-color-on-surface);
-  /* Allow wrapping for long kernel strings */
   white-space: normal;
   word-break: break-all;
   line-height: 1.4;
@@ -170,6 +169,35 @@
 .info-val.mono {
   font-family: var(--md-ref-typeface-mono);
   font-size: 12px;
+}
+
+/* Partition Status Grid */
+.partition-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.part-chip {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--md-ref-typeface-mono);
+  transition: all 0.3s;
+  border: 1px solid transparent;
+}
+
+.part-chip.active {
+  background-color: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border-color: var(--md-sys-color-primary);
+}
+
+.part-chip.inactive {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--md-sys-color-outline);
+  border-color: var(--md-sys-color-outline-variant);
 }
 
 /* Storage Type Badges */

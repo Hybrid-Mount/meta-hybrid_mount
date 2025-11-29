@@ -7,6 +7,11 @@
   onMount(() => {
     store.loadStatus();
   });
+
+  // Base list of partitions to check against
+  const BASE_PARTITIONS = ['system', 'vendor', 'product', 'system_ext', 'odm', 'oem'];
+  // Combine with user configured partitions
+  let displayPartitions = $derived([...new Set([...BASE_PARTITIONS, ...store.config.partitions])]);
 </script>
 
 <div class="dashboard-grid">
@@ -45,6 +50,17 @@
     <div class="stat-card">
       <div class="stat-value">{store.config.mountsource}</div>
       <div class="stat-label">{store.L.config.mountSource}</div>
+    </div>
+  </div>
+
+  <div class="mode-card">
+    <div class="storage-title" style="margin-bottom: 12px;">{store.L.status.activePartitions}</div>
+    <div class="partition-grid">
+      {#each displayPartitions as part}
+        <div class="part-chip {store.activePartitions.includes(part) ? 'active' : 'inactive'}">
+          {part}
+        </div>
+      {/each}
     </div>
   </div>
 

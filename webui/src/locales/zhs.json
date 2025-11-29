@@ -23,7 +23,8 @@
     "sysInfoTitle": "系统信息",
     "kernel": "内核版本",
     "selinux": "SELinux",
-    "mountBase": "挂载基点 (Mount Base)"
+    "mountBase": "挂载基点 (Mount Base)",
+    "activePartitions": "活跃分区"
   },
   "config": {
     "title": "配置",

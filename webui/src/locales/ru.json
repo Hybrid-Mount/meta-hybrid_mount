@@ -23,7 +23,8 @@
     "sysInfoTitle": "Системная информация",
     "kernel": "Ядро",
     "selinux": "SELinux",
-    "mountBase": "База монтирования"
+    "mountBase": "База монтирования",
+    "activePartitions": "Активные разделы"
   },
   "config": {
     "title": "Конфигурация",

@@ -23,7 +23,8 @@
     "sysInfoTitle": "Información del sistema",
     "kernel": "Núcleo",
     "selinux": "SELinux",
-    "mountBase": "Base de montaje"
+    "mountBase": "Base de montaje",
+    "activePartitions": "Particiones Activas"
   },
   "config": {
     "title": "Configuración",

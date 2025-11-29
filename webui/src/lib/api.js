@@ -117,6 +117,30 @@ export const API = {
     return { kernel: 'Unknown', selinux: 'Unknown', mountBase: 'Unknown' };
   },
 
+  // Check active mounts filtered by mount source name
+  getActiveMounts: async (sourceName) => {
+    try {
+      const src = sourceName || DEFAULT_CONFIG.mountsource;
+      const cmd = `mount | grep "${src}"`; 
+      const { errno, stdout } = await exec(cmd);
+      
+      const mountedParts = [];
+      if (errno === 0 && stdout) {
+        stdout.split('\n').forEach(line => {
+          const parts = line.split(' ');
+          if (parts.length >= 3 && parts[2].startsWith('/')) {
+            const partName = parts[2].substring(1);
+            if (partName) mountedParts.push(partName);
+          }
+        });
+      }
+      return mountedParts;
+    } catch (e) {
+      console.error("Mount check failed:", e);
+      return [];
+    }
+  },
+
   fetchSystemColor: async () => {
     try {
       const { stdout } = await exec('settings get secure theme_customization_overlay_packages');
