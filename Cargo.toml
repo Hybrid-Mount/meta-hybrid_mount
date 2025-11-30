@@ -6,7 +6,7 @@ name = "magic_mount_rs"
 version = "0.2.81"
 edition = "2024"
 description = "An implementation of a metamodule using Magic Mount, Based on MKSU, Template is from meta-overlay."
-authors = ["7a72", "Tools-cx-app"]
+authors = ["7a72", "Tools-cx-app", "YuzakiKokuban"]
 license = "GPL-3.0"
 
 [package.metadata.magic_mount_rs]
