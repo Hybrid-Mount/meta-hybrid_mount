@@ -24,11 +24,15 @@
       if (!res.ok) throw new Error('Failed to fetch list');
       
       const basicList = await res.json();
-      
-      const detailPromises = basicList.map(async (user) => {
-        try {
-            if (user.type === 'Bot') return { ...user, bio: 'Bot' };
 
+      const filteredList = basicList.filter(user => {
+        const isBotType = user.type === 'Bot';
+        const hasBotName = user.login.toLowerCase().includes('bot');
+        return !isBotType && !hasBotName;
+      });
+
+      const detailPromises = filteredList.map(async (user) => {
+        try {
             const detailRes = await fetch(user.url);
             if (detailRes.ok) {
                 const detail = await detailRes.json();
@@ -39,7 +43,6 @@
         }
         return user;
       });
-
       contributors = await Promise.all(detailPromises);
     } catch (e) {
       console.error(e);
@@ -72,6 +75,7 @@
         <svg viewBox="0 0 24 24" class="action-icon"><path d={ICONS.github} /></svg>
         <span class="action-label">{store.L.info.projectLink}</span>
     </a>
+  
     <a href={DONATE_LINK} 
        class="action-card"
        onclick={(e) => handleLink(e, DONATE_LINK)}>
@@ -90,7 +94,7 @@
                     <Skeleton width="48px" height="48px" borderRadius="50%" />
                     <div class="c-info">
                         <div class="skeleton-spacer">
-                            <Skeleton width="120px" height="16px" />
+                             <Skeleton width="120px" height="16px" />
                         </div>
                         <Skeleton width="200px" height="12px" />
                     </div>
