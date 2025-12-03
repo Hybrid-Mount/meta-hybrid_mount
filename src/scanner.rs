@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
@@ -18,10 +18,9 @@ pub struct ModuleInfo {
 }
 
 fn read_prop<P: AsRef<Path>>(path: P, key: &str) -> Option<String> {
-    let file = File::open(path).ok()?;
-    let reader = BufReader::new(file);
+    let file = fs::read_to_string(path).ok()?;
 
-    for line in reader.lines().flatten() {
+    for line in file.lines() {
         if line.starts_with(key) {
             if let Some((_, value)) = line.split_once('=') {
                 return Some(value.trim().to_string());
