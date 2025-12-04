@@ -32,6 +32,7 @@ def get_caption():
         return COMMIT_URL
     return msg
 
+
 async def send_telegram_message():
     async with TelegramClient(StringSession(BOT_CI_SESSION), api_id=API_ID, api_hash=API_HASH) as client:
         await client.start(bot_token=BOT_TOKEN)
@@ -41,11 +42,10 @@ async def send_telegram_message():
         print("[+] Sending")
         await client.send_file(
             entity=CHAT_ID,
+            caption=get_caption(),
             file=["./output/magic_mount_rs.zip"],
             parse_mode="markdown",
-            album=True
         )
-        await client.send_message(CHAT_ID, get_caption(), parse_mode="markdown")
 
 if __name__ == '__main__':
     asyncio.run(send_telegram_message())
