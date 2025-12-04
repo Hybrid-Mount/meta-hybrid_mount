@@ -114,10 +114,14 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git fetch origin master
           git checkout master
+
+          sed -i "s/version: 'v.*',/version: '${{ env.META_HYBRID_VERSION }}',/" webui/src/lib/store.svelte.js
           
           mv /tmp/update.json update.json
           mv /tmp/changelog.md changelog.md
           git add update.json changelog.md
+
+          git add update.json changelog.md webui/src/lib/store.svelte.js
           
           if ! git diff --staged --quiet; then
             git commit -m "[skip ci] Update metadata for ${{ env.META_HYBRID_VERSION }}"
