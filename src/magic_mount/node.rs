@@ -21,16 +21,16 @@ pub enum NodeFileType {
     Whiteout,
 }
 
-impl NodeFileType {
-    pub fn from_file_type(file_type: FileType) -> Option<Self> {
-        if file_type.is_file() {
-            Some(Self::RegularFile)
-        } else if file_type.is_dir() {
-            Some(Self::Directory)
-        } else if file_type.is_symlink() {
-            Some(Self::Symlink)
+impl From<FileType> for NodeFileType {
+    fn from(value: FileType) -> Self {
+        if value.is_file() {
+            Self::RegularFile
+        } else if value.is_dir() {
+            Self::Directory
+        } else if value.is_symlink() {
+            Self::Symlink
         } else {
-            None
+            Self::Whiteout
         }
     }
 }
@@ -209,7 +209,7 @@ impl Node {
             let file_type = if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
                 Some(NodeFileType::Whiteout)
             } else {
-                NodeFileType::from_file_type(metadata.file_type())
+                Some(NodeFileType::from(metadata.file_type()))
             };
             if let Some(file_type) = file_type {
                 let replace = if file_type == NodeFileType::Directory

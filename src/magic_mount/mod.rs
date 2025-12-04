@@ -238,8 +238,7 @@ where
                         NodeFileType::Whiteout => real_path.exists(),
                         _ => {
                             if let Ok(metadata) = real_path.symlink_metadata() {
-                                let file_type = NodeFileType::from_file_type(metadata.file_type())
-                                    .unwrap_or(NodeFileType::Whiteout);
+                                let file_type = NodeFileType::from(metadata.file_type());
                                 file_type != node.file_type || file_type == NodeFileType::Symlink
                             } else {
                                 // real path not exists
