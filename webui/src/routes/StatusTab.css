@@ -51,6 +51,17 @@
   font-size: 12px;
   opacity: 0.7;
   font-family: var(--md-ref-typeface-mono);
+  gap: 16px;
+}
+.storage-details > span:first-child {
+  white-space: nowrap;    
+  overflow: hidden;          
+  text-overflow: ellipsis;  
+  min-width: 0;              
+}
+.storage-details > span:last-child {
+  flex-shrink: 0;     
+  white-space: nowrap;   
 }
 .stats-row {
   display: grid;
