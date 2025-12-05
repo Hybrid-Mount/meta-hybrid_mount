@@ -2,7 +2,6 @@
   import { store } from '../lib/store.svelte';
   import { ICONS } from '../lib/constants';
   import './NavBar.css';
-
   let { activeTab, onTabChange } = $props();
   let showLangMenu = $state(false);
   let navContainer = $state();
@@ -17,8 +16,7 @@
     { id: 'logs', icon: ICONS.description },
     { id: 'info', icon: ICONS.info }
   ];
-
-  // Auto scroll active tab into view
+  
   $effect(() => {
     if (activeTab && tabRefs[activeTab] && navContainer) {
       const tab = tabRefs[activeTab];
@@ -37,7 +35,6 @@
   function toggleTheme() {
     let nextTheme;
     let toastMsg;
-
     if (store.theme === 'auto') {
       nextTheme = 'light';
       toastMsg = store.L.common.themeLight;
@@ -64,7 +61,6 @@
     showLangMenu = false;
   }
   
-  // Close menu when clicking outside
   function handleOutsideClick(e) {
     if (showLangMenu && 
         menuRef && !menuRef.contains(e.target) && 
@@ -89,7 +85,7 @@
         onclick={() => showLangMenu = !showLangMenu} 
         title={store.L.common.language}
       >
-        <svg viewBox="0 0 24 24"><path d={ICONS.translate} fill="currentColor"/></svg>
+       <svg viewBox="0 0 24 24"><path d={ICONS.translate} fill="currentColor"/></svg>
       </button>
     </div>
   </div>
@@ -110,7 +106,7 @@
         bind:this={tabRefs[tab.id]}
       >
         <svg viewBox="0 0 24 24"><path d={tab.icon}/></svg>
-        {store.L.tabs[tab.id]}
+        <span>{store.L.tabs[tab.id]}</span>
       </button>
     {/each}
   </nav>

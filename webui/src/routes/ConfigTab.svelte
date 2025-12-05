@@ -3,7 +3,8 @@
   import { ICONS, DEFAULT_CONFIG } from '../lib/constants';
   import './ConfigTab.css';
 
-  let partitionInput = $state(store.config.partitions.join(', '));
+  let partitionInput = $state('');
+  let initialConfigStr = $state('');
 
   // Validation Helpers
   const isValidPath = (p) => !p || (p.startsWith('/') && p.length > 1);
@@ -11,16 +12,42 @@
   let invalidModuleDir = $derived(!isValidPath(store.config.moduledir));
   let invalidTempDir = $derived(store.config.tempdir && !isValidPath(store.config.tempdir));
 
+  // Dirty state checking
+  let isDirty = $derived.by(() => {
+    if (!initialConfigStr) return false;
+    const currentPartitions = partitionInput.split(',').map(s => s.trim()).filter(Boolean);
+    const currentConfig = { ...store.config, partitions: currentPartitions };
+    return JSON.stringify(currentConfig) !== initialConfigStr;
+  });
+
+  // Init snapshot on load
+  $effect(() => {
+    if (!store.loading.config && store.config) {
+      if (!initialConfigStr || initialConfigStr === JSON.stringify(DEFAULT_CONFIG)) {
+        partitionInput = store.config.partitions.join(', ');
+        initialConfigStr = JSON.stringify(store.config);
+      }
+    }
+  });
+
   function save() {
     if (invalidModuleDir || invalidTempDir) {
       store.showToast(store.L.config.invalidPath, "error");
       return;
     }
-    // Parse partitions input back to array
     store.config.partitions = partitionInput.split(',').map(s => s.trim()).filter(Boolean);
-    store.saveConfig();
+    store.saveConfig().then(() => {
+        initialConfigStr = JSON.stringify(store.config);
+    });
   }
   
+  function reload() {
+    store.loadConfig().then(() => {
+        partitionInput = store.config.partitions.join(', ');
+        initialConfigStr = JSON.stringify(store.config);
+    });
+  }
+
   function resetTempDir() {
     store.config.tempdir = "";
   }
@@ -75,13 +102,13 @@
 <div class="bottom-actions">
   <button 
     class="btn-tonal" 
-    onclick={() => store.loadConfig()} 
+    onclick={reload}
     disabled={store.loading.config}
     title={store.L.config.reload}
   >
     <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.refresh} fill="currentColor"/></svg>
   </button>
-  <button class="btn-filled" onclick={save} disabled={store.saving.config}>
+  <button class="btn-filled" onclick={save} disabled={store.saving.config || !isDirty}>
     <svg viewBox="0 0 24 24" width="18" height="18"><path d={ICONS.save} fill="currentColor"/></svg>
     {store.saving.config ? store.L.common.saving : store.L.config.save}
   </button>

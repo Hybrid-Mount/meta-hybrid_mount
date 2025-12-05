@@ -15,11 +15,11 @@
   import './app.css';
   import './layout.css';
 
-  // Default tab is 'status'
   let activeTab = $state('status');
   let transitionDirection = $state(1);
   let touchStartX = 0;
   let touchEndX = 0;
+  let containerWidth = $state(0);
 
   const TABS = ['status', 'config', 'modules', 'logs', 'info'];
 
@@ -27,7 +27,6 @@
     const currentIndex = TABS.indexOf(activeTab);
     const newIndex = TABS.indexOf(id);
     if (currentIndex === newIndex) return;
-    
     transitionDirection = newIndex > currentIndex ? 1 : -1;
     activeTab = id;
   }
@@ -38,7 +37,9 @@
 
   function handleTouchEnd(e) {
     touchEndX = e.changedTouches[0].screenX;
-    const threshold = 50;
+    
+    // Use 33% of container width as threshold
+    const threshold = (containerWidth * 0.33) || 80;
     const diff = touchStartX - touchEndX;
     const currentIndex = TABS.indexOf(activeTab);
     
@@ -59,7 +60,10 @@
 <div class="app-root">
   <NavBar {activeTab} onTabChange={switchTab} />
 
-  <main class="main-content" ontouchstart={handleTouchStart} ontouchend={handleTouchEnd}>
+  <main class="main-content" 
+        bind:clientWidth={containerWidth}
+        ontouchstart={handleTouchStart} 
+        ontouchend={handleTouchEnd}>
     {#key activeTab}
       <div class="tab-pane" 
            in:fly={{ x: 30 * transitionDirection, duration: 250, delay: 90, easing: cubicOut }} 

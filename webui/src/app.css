@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
 /* Global variables and resets */
 :root {
   /* Basic shape variables */
@@ -8,9 +10,10 @@
   /* Elevation variables */
   --md-sys-elevation-1: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
   --md-sys-elevation-2: 0 1px 2px rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15);
+  --md-sys-elevation-3: 0 4px 8px 3px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.3);
 
   /* Typeface variables */
-  --md-ref-typeface-plain: Roboto, system-ui, -apple-system, sans-serif;
+  --md-ref-typeface-plain: 'Inter', Roboto, system-ui, -apple-system, sans-serif;
   --md-ref-typeface-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
@@ -50,17 +53,19 @@ button:active {
 }
 
 .btn-filled {
-  height: 48px;
-  padding: 0 24px;
-  border-radius: 24px;
+  height: 44px;
+  min-width: 90px;
+  padding: 0 20px;
+  border-radius: 12px;
   background-color: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
-  font-weight: 500;
+  font-weight: 600;
   font-size: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  box-shadow: var(--md-sys-elevation-1);
 }
 
 .btn-filled:disabled {
@@ -68,15 +73,18 @@ button:active {
   opacity: 0.12;
   color: var(--md-sys-color-surface);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-tonal {
-  height: 48px;
-  padding: 0 24px;
-  border-radius: 24px;
+  height: 44px;
+  min-width: 90px;
+  padding: 0 20px;
+  border-radius: 12px;
   background-color: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -120,7 +128,7 @@ button:active {
   height: 56px;
   background: transparent;
   border: 1px solid var(--md-sys-color-outline);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 0 16px;
   color: var(--md-sys-color-on-surface);
   font-size: 16px;
@@ -154,9 +162,10 @@ button:active {
   left: 0;
   right: 0;
   padding: 16px 24px calc(16px + env(safe-area-inset-bottom)) 24px;
-  background: linear-gradient(to top, var(--md-sys-color-surface) 80%, transparent);
+  background: linear-gradient(to top, var(--md-sys-color-surface) 85%, transparent);
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 12px;
   z-index: 50;
   pointer-events: none;
