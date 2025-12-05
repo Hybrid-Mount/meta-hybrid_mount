@@ -1,8 +1,15 @@
 import { DEFAULT_CONFIG } from './constants';
+import type { AppConfig, Module, StorageStatus, SystemInfo, DeviceInfo } from './types';
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const MOCK_STATE = {
+interface MockStateType {
+    modules: Module[];
+    config: AppConfig;
+    logs: string[];
+}
+
+const MOCK_STATE: MockStateType = {
     modules: [
         { id: "magisk_module_test", name: "Magisk Module", version: "1.0", author: "User", description: "A test module", mode: "auto", enabled: true },
         { id: "youtube_revanced", name: "YouTube ReVanced", version: "18.0.0", author: "ReVanced", description: "Extended YouTube", mode: "magic", enabled: true },
@@ -20,34 +27,34 @@ const MOCK_STATE = {
 };
 
 export const MockAPI = {
-    loadConfig: async () => {
+    loadConfig: async (): Promise<AppConfig> => {
         await delay(500);
         return MOCK_STATE.config;
     },
 
-    saveConfig: async (config) => {
+    saveConfig: async (config: AppConfig): Promise<void> => {
         await delay(800);
         MOCK_STATE.config = config;
         console.log("[Mock] Config Saved:", config);
     },
 
-    scanModules: async () => {
+    scanModules: async (): Promise<Module[]> => {
         await delay(1000);
         return MOCK_STATE.modules;
     },
 
-    saveModules: async (modules) => {
+    saveModules: async (modules: Module[]): Promise<void> => {
         await delay(600);
         MOCK_STATE.modules = modules;
         console.log("[Mock] Module Modes Saved:", modules.map(m => `${m.id}=${m.mode}`));
     },
 
-    readLogs: async () => {
+    readLogs: async (): Promise<string> => {
         await delay(400);
         return MOCK_STATE.logs.join('\n');
     },
 
-    getStorageUsage: async () => {
+    getStorageUsage: async (): Promise<StorageStatus> => {
         await delay(600);
         return {
             size: '3.8G',
@@ -57,7 +64,7 @@ export const MockAPI = {
         };
     },
 
-    getSystemInfo: async () => {
+    getSystemInfo: async (): Promise<SystemInfo> => {
         await delay(600);
         return {
             kernel: '5.10.177-android12-9-00001-g5d3f2a (Mock)',
@@ -67,7 +74,7 @@ export const MockAPI = {
         };
     },
 
-    getDeviceStatus: async () => {
+    getDeviceStatus: async (): Promise<DeviceInfo> => {
         await delay(500);
         return {
             model: 'Pixel 7 Pro (Mock)',
@@ -77,21 +84,21 @@ export const MockAPI = {
         };
     },
 
-    getVersion: async () => {
+    getVersion: async (): Promise<string> => {
         await delay(300);
         return "v1.0.1-r1-mock";
     },
 
-    getActiveMounts: async () => {
+    getActiveMounts: async (): Promise<string[]> => {
         return ['system', 'product'];
     },
 
-    openLink: async (url) => {
+    openLink: async (url: string): Promise<void> => {
         console.log("[Mock] Opening URL:", url);
         window.open(url, '_blank');
     },
 
-    fetchSystemColor: async () => {
+    fetchSystemColor: async (): Promise<string> => {
         await delay(200);
         return '#8FBC8F'; 
     }

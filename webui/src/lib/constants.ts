@@ -1,10 +1,11 @@
 import { RUST_PATHS } from './constants_gen.js';
+import type { AppConfig } from './types';
 
-export const DEFAULT_CONFIG = {
+export const DEFAULT_CONFIG: AppConfig = {
   moduledir: '/data/adb/modules',
   tempdir: '',
   mountsource: 'KSU',
-  logfile: RUST_PATHS.DAEMON_LOG || '/data/adb/meta-hybrid/daemon.log',
+  logfile: (RUST_PATHS as any).DAEMON_LOG || '/data/adb/meta-hybrid/daemon.log',
   verbose: false,
   partitions: [],
   force_ext4: false,
