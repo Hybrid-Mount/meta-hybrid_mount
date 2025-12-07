@@ -3,7 +3,7 @@ members = ["xtask"]
 
 [package]
 name = "magic_mount_rs"
-version = "1.0.3"
+version = "1.2.0"
 edition = "2024"
 description = "An implementation of a metamodule using Magic Mount, Based on MKSU, Template is from meta-overlay."
 authors = ["7a72", "Tools-cx-app", "YuzakiKokuban"]
