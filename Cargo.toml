@@ -21,7 +21,7 @@ chrono = "0.4"
 procfs = "0.17"
 env_logger = "0.11.8"
 mimalloc = { version = "0.1.48", features = ["no_thp", "override"] }
-rayon = "1.10"
+rayon = "1.11"
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
