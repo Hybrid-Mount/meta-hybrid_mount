@@ -2,7 +2,7 @@
 
 @font-face {
   font-family: 'Noto Sans SC';
-  src: url('./fonts/NotoSansSC.ttf') format('truetype-variations');
+  src: url('./fonts/NotoSansSC.woff2') format('truetype-variations');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
