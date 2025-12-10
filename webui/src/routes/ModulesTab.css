@@ -5,10 +5,9 @@
   padding-bottom: 24px;
 }
 
-/* Expressive List Item / Card */
 .rule-card {
   background: var(--md-sys-color-surface-container-low);
-  border-radius: 24px; /* Larger corners */
+  border-radius: 24px;
   overflow: hidden;
   transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
   border: none;
@@ -22,11 +21,14 @@
 
 .rule-card.expanded {
   background: var(--md-sys-color-surface-container);
-  /* Optional: slightly distinct color for expanded state */
+}
+
+.rule-card.dirty {
+  border: 1px solid var(--md-sys-color-primary);
 }
 
 .rule-main {
-  padding: 20px; /* More breathing room */
+  padding: 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -74,12 +76,11 @@
   font-size: 12px;
 }
 
-/* Modern Chip-like Badges */
 .mode-badge {
   font-size: 12px;
   font-weight: 500;
   padding: 6px 12px;
-  border-radius: 8px; /* Standard MD3 chip radius */
+  border-radius: 8px;
   text-transform: none;
   letter-spacing: 0;
   flex-shrink: 0;
@@ -100,7 +101,7 @@
 
 .rule-details {
   padding: 0 20px 20px 20px;
-  border-top: 1px solid rgba(0,0,0,0.05); /* Very subtle divider */
+  border-top: 1px solid rgba(0,0,0,0.05);
 }
 
 .module-desc {
@@ -147,17 +148,14 @@
   border-radius: 12px;
 }
 
-/* Expressive Search Bar */
 .search-container {
   display: flex;
   align-items: center;
   gap: 16px;
   margin-bottom: 20px;
   background-color: var(--md-sys-color-surface-container-high);
-  /* Full Pill Shape */
   border-radius: 9999px; 
   padding: 0 24px;
-  /* Taller search bar */
   height: 64px; 
   box-shadow: none;
   transition: background-color 0.2s;
@@ -235,4 +233,88 @@
   text-align: center;
   padding: 48px 24px;
   opacity: 0.6;
+}
+
+.paths-editor {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.paths-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.path-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.path-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.path-input {
+  flex: 1;
+  height: 40px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+}
+
+.path-mode-select {
+  width: 100px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--md-sys-color-outline);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+}
+
+.btn-icon.add-rule {
+  width: 32px;
+  height: 32px;
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.btn-icon.add-rule:hover {
+  transform: scale(1.05);
+  filter: brightness(0.95);
+}
+
+.btn-icon.add-rule:active {
+  transform: scale(0.95);
+}
+
+.btn-icon.delete {
+  color: var(--md-sys-color-error);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.empty-paths {
+  font-size: 13px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-style: italic;
+  padding-left: 4px;
 }

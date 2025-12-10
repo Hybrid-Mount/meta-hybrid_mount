@@ -1,13 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@100..900&family=Noto+Sans+TC:wght@100..900&display=swap');
-
-@font-face {
-  font-family: 'Noto Sans SC';
-  src: url('./fonts/NotoSansSC.woff2') format('truetype-variations');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   --md-sys-shape-corner-medium: 12px;
   --md-sys-shape-corner-large: 16px;
@@ -20,18 +10,9 @@
   --md-sys-elevation-3: 0 4px 8px 3px var(--md-sys-color-shadow), 0 1px 3px 0 var(--md-sys-color-shadow);
 
   --font-common: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-stack: 'Noto Sans SC', var(--font-common);
 
   --md-ref-typeface-plain: var(--font-stack);
   --md-ref-typeface-mono: 'JetBrains Mono', 'Fira Code', monospace;
-}
-
-:root:lang(zh-TW), :root:lang(zh-HK), :root:lang(zht) {
-  --font-stack: 'Noto Sans TC', 'Noto Sans SC', var(--font-common);
-}
-
-:root:lang(ja) {
-  --font-stack: 'Noto Sans JP', 'Noto Sans SC', var(--font-common);
 }
 
 * {

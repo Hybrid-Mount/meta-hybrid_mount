@@ -45,10 +45,11 @@
   flex-direction: column;
 }
 
-::-webkit-scrollbar {
-  width: 4px;
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
-::-webkit-scrollbar-thumb {
-  background: var(--md-sys-color-outline-variant);
-  border-radius: 2px;
+
+::-webkit-scrollbar {
+  display: none;
 }

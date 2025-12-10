@@ -1,6 +1,6 @@
 import { APP_VERSION } from './constants_gen';
 import { DEFAULT_CONFIG } from './constants';
-import type { AppConfig, DeviceInfo, Module, StorageStatus, SystemInfo } from './types';
+import type { AppConfig, DeviceInfo, Module, StorageStatus, SystemInfo, ModuleRules } from './types';
 
 // Mock delay to simulate network latency
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -26,6 +26,10 @@ export const MockAPI = {
         author: 'Developer',
         description: 'This is a mock module for testing.',
         mode: 'magic',
+        rules: { 
+            default_mode: 'magic', 
+            paths: { "system/fonts": "hymofs" } 
+        }
       },
       {
         id: 'overlay_module_2',
@@ -34,13 +38,22 @@ export const MockAPI = {
         author: 'Google',
         description: 'Changes system colors.',
         mode: 'auto',
+        rules: { 
+            default_mode: 'overlay', 
+            paths: {} 
+        }
       }
     ];
   },
 
-  async saveModules(modules: Module[]): Promise<void> {
+  async saveModuleRules(moduleId: string, rules: ModuleRules): Promise<void> {
     await delay(400);
-    console.log('[Mock] Modules saved:', modules);
+    console.log(`[Mock] Rules saved for ${moduleId}:`, rules);
+  },
+
+  // Deprecated but kept for interface compatibility if strictly typed elsewhere
+  async saveModules(modules: Module[]): Promise<void> {
+    console.warn("[Mock] saveModules is deprecated");
   },
 
   async readLogs(): Promise<string> {

@@ -11,13 +11,21 @@ export interface AppConfig {
   logfile?: string;
 }
 
+export type MountMode = 'overlay' | 'hymofs' | 'magic' | 'ignore';
+
+export interface ModuleRules {
+  default_mode: MountMode;
+  paths: Record<string, MountMode>;
+}
+
 export interface Module {
   id: string;
   name: string;
   version: string;
   author: string;
   description: string;
-  mode: 'auto' | 'magic' | 'hymofs';
+  mode: string;
+  rules: ModuleRules;
   enabled?: boolean;
   source_path?: string;
 }

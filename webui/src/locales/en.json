@@ -7,7 +7,8 @@
     "language": "Language",
     "themeAuto": "Auto (System)",
     "themeLight": "Light Mode",
-    "themeDark": "Dark Mode"
+    "themeDark": "Dark Mode",
+    "saveSuccess": "Saved successfully"
   },
   "tabs": {
     "status": "Status",
@@ -69,7 +70,27 @@
     "saveFailed": "Failed to save modes",
     "searchPlaceholder": "Search modules...",
     "filterLabel": "Filter:",
-    "filterAll": "All"
+    "filterAll": "All",
+    "author": "Author",
+    "unknown": "Unknown",
+    "defaultMode": "Default Strategy",
+    "pathRules": "Path Overrides",
+    "addRule": "Add Path Rule",
+    "noRules": "No path overrides defined.",
+    "noDesc": "No description",
+    "placeholder": "e.g. system/fonts",
+    "modes": {
+      "auto": "OverlayFS",
+      "magic": "Magic Mount",
+      "hymo": "HymoFS",
+      "ignore": "Disable (Ignore)",
+      "short": {
+        "auto": "Overlay",
+        "magic": "Magic",
+        "hymo": "HymoFS",
+        "ignore": "Ignore"
+      }
+    }
   },
   "logs": {
     "title": "System Logs",

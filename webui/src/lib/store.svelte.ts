@@ -180,8 +180,9 @@ const createStore = () => {
     savingModules = false;
   }
 
-  async function loadLogs() {
-    loadingLogs = true;
+  // 修改部分：添加 silent 参数
+  async function loadLogs(silent: boolean = false) {
+    if (!silent) loadingLogs = true;
     try {
       const rawLogs = await API.readLogs();
       logs = rawLogs.split('\n').map(line => {
@@ -239,7 +240,7 @@ const createStore = () => {
     saveModules,
 
     get logs() { return logs; },
-    loadLogs,
+    loadLogs, // 这里的导出不需要变，因为上面已经修改了函数定义
 
     get device() { return device; },
     get version() { return version; },

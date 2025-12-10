@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG, PATHS } from './constants';
 import { APP_VERSION } from './constants_gen';
 import { MockAPI } from './api.mock';
-import type { AppConfig, Module, StorageStatus, SystemInfo, DeviceInfo } from './types';
+import type { AppConfig, Module, StorageStatus, SystemInfo, DeviceInfo, ModuleRules } from './types';
 
 interface KsuExecResult {
   errno: number;
@@ -35,6 +35,25 @@ function formatBytes(bytes: number, decimals = 2): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
+function stringToHex(str: string): string {
+  let bytes: Uint8Array;
+  if (typeof TextEncoder !== 'undefined') {
+    const encoder = new TextEncoder();
+    bytes = encoder.encode(str);
+  } else {
+    bytes = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) {
+      bytes[i] = str.charCodeAt(i) & 0xFF;
+    }
+  }
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) {
+    const h = bytes[i].toString(16);
+    hex += (h.length === 1 ? '0' + h : h);
+  }
+  return hex;
+}
+
 const RealAPI = {
   loadConfig: async (): Promise<AppConfig> => {
     if (!ksuExec) return DEFAULT_CONFIG;
@@ -56,23 +75,7 @@ const RealAPI = {
   saveConfig: async (config: AppConfig): Promise<void> => {
     if (!ksuExec) throw new Error("No KSU environment");
     const jsonStr = JSON.stringify(config);
-    
-    let bytes: Uint8Array;
-    if (typeof TextEncoder !== 'undefined') {
-      const encoder = new TextEncoder();
-      bytes = encoder.encode(jsonStr);
-    } else {
-      bytes = new Uint8Array(jsonStr.length);
-      for (let i = 0; i < jsonStr.length; i++) {
-        bytes[i] = jsonStr.charCodeAt(i) & 0xFF;
-      }
-    }
-    
-    let hexPayload = '';
-    for (let i = 0; i < bytes.length; i++) {
-      const hex = bytes[i].toString(16);
-      hexPayload += (hex.length === 1 ? '0' + hex : hex);
-    }
+    const hexPayload = stringToHex(jsonStr);
 
     const cmd = `${PATHS.BINARY} save-config --payload ${hexPayload}`;
     const { errno, stderr } = await ksuExec(cmd);
@@ -96,21 +99,22 @@ const RealAPI = {
     return [];
   },
 
-  saveModules: async (modules: Module[]): Promise<void> => {
+  saveModuleRules: async (moduleId: string, rules: ModuleRules): Promise<void> => {
     if (!ksuExec) throw new Error("No KSU environment");
-    let content = "# Module Modes\n";
-    modules.forEach(m => { 
-      if (m.mode !== 'auto' && /^[a-zA-Z0-9_.-]+$/.test(m.id)) {
-        content += `${m.id}=${m.mode}\n`; 
-      }
-    });
     
-    const data = content.replace(/'/g, "'\\''");
-    const modeConfigPath = "/data/adb/meta-hybrid/module_mode.conf";
-    const cmd = `mkdir -p "$(dirname "${modeConfigPath}")" && printf '%s\n' '${data}' > "${modeConfigPath}"`;
-    
-    const { errno } = await ksuExec(cmd);
-    if (errno !== 0) throw new Error('Failed to save modes');
+    const jsonStr = JSON.stringify(rules);
+    const hexPayload = stringToHex(jsonStr);
+
+    const cmd = `${PATHS.BINARY} save-rules --module "${moduleId}" --payload "${hexPayload}"`;
+    const { errno, stderr } = await ksuExec(cmd);
+
+    if (errno !== 0) {
+      throw new Error(`Failed to save rules for ${moduleId}: ${stderr}`);
+    }
+  },
+
+  saveModules: async (modules: Module[]): Promise<void> => {
+    return; 
   },
 
   readLogs: async (logPath?: string, lines = 1000): Promise<string> => {
@@ -132,7 +136,6 @@ const RealAPI = {
       
       if (errno === 0 && stdout) {
         const state = JSON.parse(stdout);
-        
         return {
           type: state.storage_mode || 'unknown',
           percent: `${state.storage_percent ?? 0}%`,
