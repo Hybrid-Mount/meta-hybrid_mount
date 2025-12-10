@@ -13,6 +13,8 @@
   
   let displayPartitions = $derived([...new Set([...BUILTIN_PARTITIONS, ...(store.config?.partitions || [])])]);
   let storageLabel = $derived(store.storage?.type === 'tmpfs' ? store.systemInfo?.mountBase : store.L?.status?.storageDesc);
+  
+  let mountedCount = $derived(store.modules?.filter(m => m.is_mounted).length ?? 0);
 </script>
 
 <div class="dashboard-grid">
@@ -46,7 +48,7 @@
               <span class="storage-type-badge {store.storage.type === 'tmpfs' ? 'type-tmpfs' : 'type-ext4'}">
                 {store.storage.type?.toUpperCase()}
               </span>
-            {/if}
+             {/if}
         </div>
 
         <div class="storage-value-group">
@@ -74,7 +76,7 @@
         <Skeleton width="40px" height="32px" />
         <Skeleton width="60px" height="12px" style="margin-top: 8px" />
       {:else}
-        <div class="stat-value">{store.modules?.length ?? 0}</div>
+        <div class="stat-value">{mountedCount}</div>
         <div class="stat-label">{store.L?.status?.moduleActive ?? 'Active Modules'}</div>
       {/if}
     </div>

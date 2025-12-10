@@ -68,6 +68,8 @@ const createStore = () => {
   let modeStats = $derived.by((): ModeStats => {
     const stats = { auto: 0, magic: 0, hymofs: 0 };
     modules.forEach(m => {
+        if (!m.is_mounted) return;
+        
         if (m.mode === 'auto') stats.auto++;
         else if (m.mode === 'magic') stats.magic++;
         else if (m.mode === 'hymofs') stats.hymofs++;
@@ -180,7 +182,6 @@ const createStore = () => {
     savingModules = false;
   }
 
-  // 修改部分：添加 silent 参数
   async function loadLogs(silent: boolean = false) {
     if (!silent) loadingLogs = true;
     try {
@@ -240,7 +241,7 @@ const createStore = () => {
     saveModules,
 
     get logs() { return logs; },
-    loadLogs, // 这里的导出不需要变，因为上面已经修改了函数定义
+    loadLogs,
 
     get device() { return device; },
     get version() { return version; },

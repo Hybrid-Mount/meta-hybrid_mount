@@ -138,10 +138,14 @@ pub fn update_description(
         return;
     }
 
-    let nuke_str = if nuke_active { "Active" } else { "Inactive" };
-    let new_desc = format!(
-        "description=Status: [Overlay: {} | Magic: {} | Hymo: {}] | Backend: {} | Nuke: {}", 
-        overlay_count, magic_count, hymo_count, storage_mode, nuke_str
+    let mode_str = if storage_mode == "tmpfs" { "Tmpfs" } else { "Ext4" };
+    let status_emoji = if storage_mode == "tmpfs" { "🐾" } else { "💿" };
+    
+    let nuke_str = if nuke_active { " | 肉垫: 开启 ✨" } else { "" };
+    
+    let desc_text = format!(
+        "description=😋 运行中喵～ ({}) {} | Hymo: {} | Overlay: {} | Magic: {}{}", 
+        mode_str, status_emoji, hymo_count, overlay_count, magic_count, nuke_str
     );
 
     let mut lines = Vec::new();
@@ -150,7 +154,7 @@ pub fn update_description(
         for line in reader.lines() {
             if let Ok(l) = line {
                 if l.starts_with("description=") {
-                    lines.push(new_desc.clone());
+                    lines.push(desc_text.clone());
                 } else {
                     lines.push(l);
                 }
