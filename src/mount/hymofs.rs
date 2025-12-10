@@ -43,7 +43,7 @@ impl HymoFs {
     }
 
     pub fn add_rule(src: &Path, target: &Path, file_type: Option<u32>) -> Result<()> {
-        let type_str = file_type.map(|t| t.to_string()).unwrap_or_default();
+        let type_str = file_type.unwrap_or(0).to_string();
         let cmd = format!("add {} {} {}", src.display(), target.display(), type_str);
         Self::send_cmd(&cmd)
     }
@@ -66,6 +66,8 @@ impl HymoFs {
             return Ok(());
         }
 
+        Self::inject_dir(target_base)?;
+
         for entry in WalkDir::new(module_dir).min_depth(1) {
             let entry = entry?;
             let current_path = entry.path();
@@ -74,8 +76,10 @@ impl HymoFs {
             let target_path = target_base.join(relative_path);
             let file_type = entry.file_type();
 
-            if file_type.is_file() || file_type.is_symlink() {
+            if file_type.is_file() {
                 Self::add_rule(&target_path, current_path, Some(8))?;
+            } else if file_type.is_symlink() {
+                Self::add_rule(&target_path, current_path, Some(10))?;
             } else if file_type.is_char_device() {
                 let metadata = entry.metadata()?;
                 if metadata.rdev() == 0 {
