@@ -44,7 +44,12 @@
   <div class="top-bar-content">
     <h1 class="screen-title">{store.L?.common?.appName}</h1>
     <div class="top-actions">
-      <button class="btn-icon" onclick={toggleTheme} title={store.L?.common?.theme}>
+      <button
+        class="btn-icon"
+        onclick={toggleTheme}
+        title={store.L?.common?.theme}
+        aria-label={store.L?.common?.theme}
+      >
         <svg viewBox="0 0 24 24"><path d={getThemeIcon()} fill="currentColor"/></svg>
       </button>
       <button 
@@ -52,15 +57,31 @@
         bind:this={langButtonRef}
         onclick={() => showLangMenu = !showLangMenu} 
         title={store.L?.common?.language}
+        aria-label={store.L?.common?.language}
+        aria-haspopup="menu"
+        aria-expanded={showLangMenu}
+        aria-controls="language-menu"
       >
         <svg viewBox="0 0 24 24"><path d={ICONS.translate} fill="currentColor"/></svg>
       </button>
     </div>
   </div>
   {#if showLangMenu}
-    <div class="menu-dropdown" bind:this={menuRef}>
+    <div
+      id="language-menu"
+      class="menu-dropdown"
+      bind:this={menuRef}
+      role="menu"
+    >
       {#each store.availableLanguages ?? [] as l}
-        <button class="menu-item" onclick={() => setLang(l.code)}>{l.name}</button>
+        <button
+          class="menu-item"
+          onclick={() => setLang(l.code)}
+          role="menuitem"
+          aria-current={l.code === store.lang ? 'true' : undefined}
+        >
+          {l.name}
+        </button>
       {/each}
     </div>
   {/if}
