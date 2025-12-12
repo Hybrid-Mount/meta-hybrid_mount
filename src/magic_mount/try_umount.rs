@@ -22,24 +22,7 @@ pub fn send_unmountable<P>(target: P) -> Result<()>
 where
     P: AsRef<Path>,
 {
-    use std::process::Command;
-
     use rustix::path::Arg;
-
-    use crate::{defs::TMPFS_CANDIDATES, magic_mount::TEMP_DIR};
-
-    if let Some(p) = TEMP_DIR.get() {
-        let zn_status = match Command::new("pidof").args(["zn-daemon"]).output() {
-            Ok(s) => s.status.success(),
-            Err(_) => false,
-        };
-        for s in TMPFS_CANDIDATES {
-            if p.starts_with(*s) && !zn_status {
-                log::warn!("umount {} skip!", target.as_ref().display());
-                return Ok(());
-            }
-        }
-    }
 
     let path = CString::new(target.as_ref().as_str()?)?;
     let cmd = KsuAddTryUmount {
