@@ -28,7 +28,9 @@
     "kernel": "Ядро",
     "selinux": "SELinux",
     "mountBase": "База монтирования",
-    "activePartitions": "Активные разделы"
+    "activePartitions": "Активные разделы",
+    "health": "Здоровье системы",
+    "healthy": "Все проверки пройдены. Система в норме."
   },
   "config": {
     "title": "Конфигурация",
@@ -73,7 +75,12 @@
     "saveFailed": "Ошибка сохранения режимов",
     "searchPlaceholder": "Поиск модулей...",
     "filterLabel": "Фильтр:",
-    "filterAll": "Все"
+    "filterAll": "Все",
+    "checkConflicts": "Проверить конфликты",
+    "hideConflicts": "Скрыть конфликты",
+    "conflictsTitle": "Конфликты файлов",
+    "noConflicts": "Конфликтов не обнаружено.",
+    "conflictError": "Ошибка проверки"
   },
   "logs": {
     "title": "Системные логи",

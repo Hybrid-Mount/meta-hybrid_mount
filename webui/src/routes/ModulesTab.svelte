@@ -126,29 +126,29 @@
   <p class="desc-text" style="margin-bottom: 12px;">
     {store.L.modules?.desc}
   </p>
-  <button class="btn-tonal" style="width: 100%; height: 36px; font-size: 13px;" onclick={checkConflicts}>
-    {showConflicts ? 'Hide Conflicts' : 'Check Conflicts'}
+  <button class="btn-tonal conflict-btn" onclick={checkConflicts}>
+    {showConflicts ? (store.L.modules?.hideConflicts || 'Hide Conflicts') : (store.L.modules?.checkConflicts || 'Check Conflicts')}
   </button>
 </div>
 
 {#if showConflicts}
-    <div class="md3-card" transition:slide>
-        <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--md-sys-color-primary);">
-            File Conflicts
+    <div class="md3-card conflict-panel" transition:slide>
+        <div class="conflict-header">
+            {store.L.modules?.conflictsTitle || 'File Conflicts'}
         </div>
         {#if store.loading.conflicts}
             <Skeleton width="100%" height="24px" />
             <Skeleton width="100%" height="24px" />
         {:else if store.conflicts.length === 0}
-            <div style="font-size: 13px; opacity: 0.6;">No file conflicts detected.</div>
+            <div class="conflict-empty">{store.L.modules?.noConflicts || 'No file conflicts detected.'}</div>
         {:else}
-            <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div class="conflict-list">
                 {#each store.conflicts as conflict}
-                    <div style="font-size: 12px; background: rgba(0,0,0,0.03); padding: 8px; border-radius: 8px;">
-                        <div style="font-family: var(--md-ref-typeface-mono); margin-bottom: 4px;">
+                    <div class="conflict-item">
+                        <div class="conflict-path">
                             /{conflict.partition}/{conflict.relative_path}
                         </div>
-                        <div style="opacity: 0.7;">
+                        <div class="conflict-modules">
                             {conflict.contending_modules.join(' vs ')}
                         </div>
                     </div>

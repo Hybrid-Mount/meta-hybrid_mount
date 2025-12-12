@@ -29,7 +29,9 @@
     "kernel": "Kernel",
     "selinux": "SELinux",
     "mountBase": "Mount Base",
-    "activePartitions": "Active Partitions"
+    "activePartitions": "Active Partitions",
+    "health": "System Health",
+    "healthy": "All checks passed. System is healthy."
   },
   "config": {
     "title": "Configuration",
@@ -84,6 +86,11 @@
     "addRule": "Add Path Rule",
     "noRules": "No path overrides defined.",
     "noDesc": "No description",
+    "checkConflicts": "Check Conflicts",
+    "hideConflicts": "Hide Conflicts",
+    "conflictsTitle": "File Conflicts",
+    "noConflicts": "No file conflicts detected.",
+    "conflictError": "Failed to check conflicts",
     "placeholder": "e.g. system/fonts",
     "modes": {
       "auto": "OverlayFS",

@@ -29,7 +29,9 @@
     "kernel": "内核版本",
     "selinux": "SELinux",
     "mountBase": "挂载基点",
-    "activePartitions": "活跃分区"
+    "activePartitions": "活跃分区",
+    "health": "文件冲突检测",
+    "healthy": "所有检查通过，文件没有冲突。"
   },
   "config": {
     "title": "配置",
@@ -84,6 +86,11 @@
     "addRule": "添加规则",
     "noRules": "未定义路径规则",
     "noDesc": "暂无描述",
+    "checkConflicts": "检测文件冲突",
+    "hideConflicts": "隐藏冲突",
+    "conflictsTitle": "文件冲突列表",
+    "noConflicts": "未检测到文件冲突。",
+    "conflictError": "检测失败",
     "placeholder": "例如 system/fonts",
     "modes": {
       "auto": "OverlayFS",

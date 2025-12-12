@@ -239,10 +239,10 @@ const createStore = () => {
       try {
           conflicts = await API.getConflicts();
           if (conflicts.length === 0) {
-              showToast("No conflicts detected", "success");
+              showToast(L.modules?.noConflicts || "No conflicts detected", "success");
           }
       } catch (e) {
-          showToast("Failed to check conflicts", "error");
+          showToast(L.modules?.conflictError || "Failed to check conflicts", "error");
       }
       loadingConflicts = false;
   }

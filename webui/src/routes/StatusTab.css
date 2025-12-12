@@ -223,10 +223,6 @@
   flex-direction: column;
   gap: 12px;
 }
-.skeleton-row {
-  display: flex; 
-  justify-content: space-between;
-}
 .info-grid {
   display: flex;
   flex-direction: column;
@@ -297,4 +293,51 @@
 }
 .spacer {
   flex: 1;
+}
+
+/* System Health Card Styles */
+.health-message {
+  opacity: 0.6;
+  font-size: 14px;
+  padding: 8px 0;
+}
+.health-message.healthy {
+  color: var(--md-sys-color-primary);
+  opacity: 1;
+  font-weight: 500;
+}
+.diagnostic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.diagnostic-item {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  align-items: flex-start;
+  background: rgba(0,0,0,0.03);
+  padding: 10px;
+  border-radius: 12px;
+}
+.diag-level {
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-top: 2px;
+  min-width: 60px;
+}
+.diag-content {
+  flex: 1;
+  min-width: 0;
+}
+.diag-context {
+  font-weight: 600;
+  margin-bottom: 2px;
+  color: var(--md-sys-color-on-surface);
+}
+.diag-message {
+  opacity: 0.8;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.4;
 }

@@ -28,7 +28,9 @@
     "kernel": "核心版本",
     "selinux": "SELinux",
     "mountBase": "掛載基點 (Mount Base)",
-    "activePartitions": "活躍分區"
+    "activePartitions": "活躍分區",
+    "health": "系統健康度",
+    "healthy": "所有檢查通過，系統健康。"
   },
   "config": {
     "title": "設定",
@@ -73,7 +75,12 @@
     "saveFailed": "儲存失敗",
     "searchPlaceholder": "搜尋模組...",
     "filterLabel": "篩選:",
-    "filterAll": "全部"
+    "filterAll": "全部",
+    "checkConflicts": "檢測檔案衝突",
+    "hideConflicts": "隱藏衝突",
+    "conflictsTitle": "檔案衝突列表",
+    "noConflicts": "未檢測到檔案衝突。",
+    "conflictError": "檢測失敗"
   },
   "logs": {
     "title": "執行日誌",

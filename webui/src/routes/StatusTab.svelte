@@ -187,24 +187,24 @@
   </div>
 
   <div class="mode-card">
-      <div class="mode-title">System Health</div>
+      <div class="mode-title">{store.L?.status?.health ?? 'System Health'}</div>
       {#if store.loading.diagnostics}
         <div class="skeleton-group">
             <Skeleton width="100%" height="20px" />
             <Skeleton width="80%" height="20px" />
         </div>
       {:else if store.diagnostics.length === 0}
-        <div style="opacity: 0.6; font-size: 14px; padding: 8px 0;">All checks passed. System is healthy.</div>
+        <div class="health-message healthy">{store.L?.status?.healthy ?? 'All checks passed.'}</div>
       {:else}
-        <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="diagnostic-list">
             {#each store.diagnostics as issue}
-                <div style="display: flex; gap: 12px; font-size: 13px; align-items: start; background: rgba(0,0,0,0.03); padding: 8px; border-radius: 8px;">
-                    <div style="color: {getDiagColor(issue.level)}; font-weight: 700; font-size: 11px; text-transform: uppercase; margin-top: 2px;">
+                <div class="diagnostic-item">
+                    <div class="diag-level" style="color: {getDiagColor(issue.level)}">
                         {issue.level}
                     </div>
-                    <div style="flex: 1;">
-                        <div style="font-weight: 600; margin-bottom: 2px;">{issue.context}</div>
-                        <div style="opacity: 0.8;">{issue.message}</div>
+                    <div class="diag-content">
+                        <div class="diag-context">{issue.context}</div>
+                        <div class="diag-message">{issue.message}</div>
                     </div>
                 </div>
             {/each}
