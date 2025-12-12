@@ -4,7 +4,7 @@ mod try_umount;
 mod utils;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::cell::OnceCell;
+use std::sync::OnceLock;
 use std::{
     fs::{self, DirEntry, create_dir, read_dir, read_link},
     os::unix::fs::{MetadataExt, symlink},
@@ -30,7 +30,7 @@ use crate::{
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::magic_mount::try_umount::send_unmountable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-static TEMP_DIR: OnceCell<PathBuf> = OnceCell::new();
+static TEMP_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 struct MagicMount {
     node: Node,
