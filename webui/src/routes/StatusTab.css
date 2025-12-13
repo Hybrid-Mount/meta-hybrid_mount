@@ -101,24 +101,13 @@
 }
 .progress-container {
   margin-bottom: 16px;
-}
-.progress-track {
-  height: 16px;
-  background-color: rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  overflow: hidden;
   width: 100%;
 }
-.progress-track-skeleton {
-  background: transparent;
-}
-.progress-fill {
-  height: 100%;
-  background-color: currentColor; 
-  opacity: 0.8;
-  border-radius: 8px;
-  min-width: 16px;
-  transition: width 0.6s cubic-bezier(0.3, 0, 0, 1);
+md-linear-progress {
+  width: 100%;
+  --md-linear-progress-track-color: rgba(0,0,0,0.1);
+  --md-linear-progress-active-indicator-color: currentColor;
+  border-radius: 6px; 
 }
 .storage-details {
   display: flex;
@@ -271,31 +260,13 @@
   gap: 8px;
   margin-top: 4px;
 }
-.part-chip {
-  padding: 8px 16px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  font-family: var(--md-ref-typeface-mono);
-  transition: all 0.3s;
-  border: 1px solid transparent;
-}
-.part-chip.active {
-  background-color: var(--md-sys-color-secondary-container);
-  color: var(--md-sys-color-on-secondary-container);
-  border: none;
-}
-.part-chip.inactive {
-  background-color: var(--md-sys-color-surface-container-highest);
-  color: var(--md-sys-color-on-surface-variant);
-  border: none;
-  opacity: 0.7;
+.partition-chips {
+  pointer-events: none;
+  --md-filter-chip-container-shape: 12px;
 }
 .spacer {
   flex: 1;
 }
-
-/* System Health Card Styles */
 .health-message {
   opacity: 0.6;
   font-size: 14px;
@@ -340,4 +311,14 @@
   opacity: 0.8;
   color: var(--md-sys-color-on-surface-variant);
   line-height: 1.4;
+}
+md-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+.reboot-btn {
+  --md-filled-tonal-icon-button-container-color: var(--md-sys-color-error-container);
+  --md-filled-tonal-icon-button-icon-color: var(--md-sys-color-on-error-container);
+  --md-filled-tonal-icon-button-hover-state-layer-color: var(--md-sys-color-on-error-container);
 }

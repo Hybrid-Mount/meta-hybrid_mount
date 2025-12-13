@@ -161,7 +161,6 @@
   flex-wrap: nowrap;
   flex-shrink: 0;
   overflow: hidden; 
-  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   transition: background-color 0.2s;
   position: sticky;
   top: 0;
@@ -369,7 +368,6 @@
   background-color: var(--md-sys-color-surface-container);
   overflow: hidden;
   border: 1px solid var(--md-sys-color-outline-variant);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
   max-height: 80vh;
   position: absolute;
   top: calc(100% + 8px);

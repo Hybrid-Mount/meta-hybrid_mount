@@ -6,19 +6,30 @@
   import Skeleton from '../components/Skeleton.svelte';
   import BottomActions from '../components/BottomActions.svelte';
   import './StatusTab.css';
+  import '@material/web/progress/linear-progress.js';
+  import '@material/web/chips/chip-set.js';
+  import '@material/web/chips/filter-chip.js';
+  import '@material/web/iconbutton/filled-tonal-icon-button.js';
+  import '@material/web/icon/icon.js';
+  import { API } from '../lib/api';
 
   onMount(() => {
     store.loadStatus();
   });
-
+  
   let displayPartitions = $derived([...new Set([...BUILTIN_PARTITIONS, ...(store.config?.partitions || [])])]);
   let storageLabel = $derived(store.storage?.type === 'tmpfs' ? store.systemInfo?.mountBase : store.L?.status?.storageDesc);
   let mountedCount = $derived(store.modules?.filter(m => m.is_mounted).length ?? 0);
   
-  function getDiagColor(level) {
+  function getDiagColor(level: string) {
       if (level === 'Critical') return 'var(--md-sys-color-error)';
       if (level === 'Warning') return 'var(--md-sys-color-tertiary)';
       return 'var(--md-sys-color-primary)';
+  }
+
+  function getStoragePercent() {
+    if (!store.storage?.percent) return 0;
+    return parseFloat(store.storage.percent) / 100;
   }
 </script>
 
@@ -32,8 +43,8 @@
         </div>
         <Skeleton width="120px" height="64px" />
       </div>
-      <div class="progress-track progress-track-skeleton" style="margin-top: 24px;">
-         <Skeleton width="100%" height="12px" borderRadius="6px" />
+      <div class="progress-container">
+        <md-linear-progress indeterminate></md-linear-progress>
       </div>
       <div class="storage-details">
         <Skeleton width="150px" height="12px" />
@@ -44,7 +55,7 @@
         <div class="storage-info-col">
             <div class="storage-label-group">
                 <div class="storage-icon-circle">
-                   <svg viewBox="0 0 24 24"><path d={ICONS.storage} /></svg>
+                    <svg viewBox="0 0 24 24"><path d={ICONS.storage} /></svg>
                 </div>
                 <span class="storage-title">{store.L?.status?.storageTitle ?? 'Storage'}</span>
             </div>
@@ -53,17 +64,17 @@
                 {store.storage.type?.toUpperCase()}
               </span>
              {/if}
-         </div>
+          </div>
         <div class="storage-value-group">
             <span class="storage-value">{store.storage?.percent ?? '0%'}</span>
             <span class="storage-unit">Used</span>
         </div>
       </div>
+      
       <div class="progress-container">
-        <div class="progress-track">
-            <div class="progress-fill" style="width: {store.storage?.percent ?? '0%'}"></div>
-        </div>
+        <md-linear-progress value={getStoragePercent()}></md-linear-progress>
       </div>
+
       <div class="storage-details">
         <span class="detail-path">{storageLabel ?? ''}</span>
         <span class="detail-nums">{store.storage?.used} / {store.storage?.size}</span>
@@ -94,19 +105,24 @@
 
   <div class="mode-card">
     <div class="mode-title">{store.L?.status?.activePartitions ?? 'Partitions'}</div>
-    <div class="partition-grid">
-      {#if store.loading.status}
+    
+    {#if store.loading.status}
+      <div class="partition-grid">
         {#each Array(4) as _}
-          <Skeleton width="60px" height="24px" borderRadius="8px" />
+          <Skeleton width="60px" height="32px" borderRadius="8px" />
         {/each}
-      {:else}
+      </div>
+    {:else}
+      <md-chip-set class="partition-chips">
         {#each displayPartitions as part}
-          <div class="part-chip {(store.activePartitions || []).includes(part) ? 'active' : 'inactive'}">
-            {part}
-          </div>
+          <md-filter-chip 
+            label={part} 
+            selected={(store.activePartitions || []).includes(part)}
+            elevated
+          ></md-filter-chip>
         {/each}
-      {/if}
-    </div>
+      </md-chip-set>
+    {/if}
   </div>
 
   <div class="mode-card">
@@ -134,9 +150,7 @@
           <Skeleton width="50%" height="16px" />
         {:else}
           <span class="info-val {store.storage?.hymofs_available ? 'text-success' : 'text-disabled'}">
-            {store.storage?.hymofs_available ? 
-              `Active${store.storage.hymofs_version ? ` (v${store.storage.hymofs_version})` : ''}` : 
-              'Not Detected'}
+            {store.storage?.hymofs_available ? `Active${store.storage.hymofs_version ? ` (v${store.storage.hymofs_version})` : ''}` : 'Not Detected'}
           </span>
         {/if}
       </div>
@@ -211,17 +225,35 @@
         </div>
       {/if}
   </div>
-
 </div>
 
 <BottomActions>
   <div class="spacer"></div>
-  <button 
-    class="btn-tonal" 
-    onclick={() => store.loadStatus()} 
-    disabled={store.loading.status}
-    title={store.L?.logs?.refresh}
-  >
-    <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.refresh} fill="currentColor"/></svg>
-  </button>
+  <div style="display: flex; gap: 8px; align-items: center;">
+    <md-filled-tonal-icon-button 
+      class="reboot-btn"
+      onclick={() => API.reboot()}
+      title="Reboot"
+      role="button"
+      tabindex="0"
+      onkeydown={() => {}}
+    >
+      <md-icon>
+        <svg viewBox="0 0 24 24"><path d={ICONS.power} /></svg>
+      </md-icon>
+    </md-filled-tonal-icon-button>
+    
+    <md-filled-tonal-icon-button 
+      onclick={() => store.loadStatus()} 
+      disabled={store.loading.status}
+      title={store.L?.logs?.refresh}
+      role="button"
+      tabindex="0"
+      onkeydown={() => {}}
+    >
+      <md-icon>
+        <svg viewBox="0 0 24 24"><path d={ICONS.refresh} /></svg>
+      </md-icon>
+    </md-filled-tonal-icon-button>
+  </div>
 </BottomActions>

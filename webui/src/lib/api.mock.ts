@@ -128,5 +128,10 @@ export const MockAPI = {
   openLink(url: string): void {
     console.log('[Mock] Opening link:', url);
     window.open(url, '_blank');
+  },
+  async reboot(): Promise<void> {
+    console.log('[Mock] Rebooting...');
+    await delay(1000);
+    window.location.reload(); 
   }
 };

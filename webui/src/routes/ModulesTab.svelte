@@ -9,6 +9,9 @@
   import { API } from '../lib/api';
   import type { Module, MountMode } from '../lib/types';
   import './ModulesTab.css';
+  import '@material/web/iconbutton/filled-tonal-icon-button.js';
+  import '@material/web/button/filled-button.js';
+  import '@material/web/icon/icon.js';
 
   let searchQuery = $state('');
   let filterType = $state('all');
@@ -153,7 +156,7 @@
             transition:fly={{ y: -10, duration: 300, easing: cubicOut }}
         >
             <div class="conflict-header-row">
-                <div class="conflict-title">
+              <div class="conflict-title">
                     <svg viewBox="0 0 24 24" width="20" height="20" class="conflict-icon"><path d={ICONS.warning} fill="currentColor"/></svg>
                     {store.L.modules?.conflictsTitle || 'File Conflicts'}
                 </div>
@@ -167,7 +170,7 @@
                     <Skeleton width="100%" height="40px" />
                     <Skeleton width="100%" height="40px" />
                     <Skeleton width="80%" height="40px" />
-                </div>
+                 </div>
             {:else if store.conflicts.length === 0}
                 <div class="conflict-empty">
                     <svg viewBox="0 0 24 24" width="48" height="48" style="opacity: 0.2; margin-bottom: 8px;"><path d={ICONS.check} fill="currentColor"/></svg>
@@ -183,7 +186,7 @@
                             <div class="conflict-modules">
                                 {#each conflict.contending_modules as modName}
                                     <span class="module-capsule">{modName}</span>
-                                {/each}
+                                 {/each}
                             </div>
                         </div>
                     {/each}
@@ -275,19 +278,19 @@
             {getModeLabel(mod)}
           </div>
         </div>
-       
+        
         {#if expandedId === mod.id}
           <div class="rule-details" transition:slide={{ duration: 200, easing: cubicOut }}>
             <p class="module-desc">{mod.description || (store.L.modules?.noDesc ?? 'No description')}</p>
             <p class="module-meta">{store.L.modules?.author ?? 'Author'}: {mod.author || (store.L.modules?.unknown ?? 'Unknown')}</p>
             
             {#if !mod.is_mounted}
-                <div class="status-alert">
+                 <div class="status-alert">
                     <svg viewBox="0 0 24 24" width="16" height="16"><path d={ICONS.info} fill="currentColor"/></svg>
                     <span>This module is currently not mounted.</span>
                 </div>
             {/if}
-     
+             
             <div class="config-section">
               <div class="config-row">
                 <span class="config-label">{store.L.modules?.defaultMode ?? 'Default Strategy'}:</span>
@@ -308,13 +311,13 @@
 
               <div class="paths-editor">
                  <div class="paths-header">
-                     <span class="config-label">{store.L.modules?.pathRules ?? 'Path Overrides'}:</span>
+                    <span class="config-label">{store.L.modules?.pathRules ?? 'Path Overrides'}:</span>
                      <button class="btn-icon add-rule" onclick={() => addPathRule(mod)} title={store.L.modules?.addRule ?? 'Add Rule'}>
                          <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.add} fill="currentColor"/></svg>
                      </button>
                  </div>
                  
-                  {#if mod.rules.paths && Object.keys(mod.rules.paths).length > 0}
+                 {#if mod.rules.paths && Object.keys(mod.rules.paths).length > 0}
                      <div class="path-list">
                         {#each Object.entries(mod.rules.paths) as [path, mode]}
                             <div class="path-row">
@@ -338,10 +341,10 @@
                                     <option value="ignore">{store.L.modules?.modes?.short?.ignore ?? 'Ignore'}</option>
                                 </select>
                                 <button class="btn-icon delete" onclick={() => removePathRule(mod, path)} title="Remove rule">
-                                     <svg viewBox="0 0 24 24" width="18" height="18"><path d={ICONS.delete} fill="currentColor"/></svg>
+                                   <svg viewBox="0 0 24 24" width="18" height="18"><path d={ICONS.delete} fill="currentColor"/></svg>
                                 </button>
                             </div>
-                        {/each}
+                       {/each}
                     </div>
                  {:else}
                     <div class="empty-paths">{store.L.modules?.noRules ?? 'No path overrides defined.'}</div>
@@ -356,12 +359,27 @@
 {/if}
 
 <BottomActions>
-  <button class="btn-tonal" onclick={load} disabled={store.loading.modules} title={store.L.modules?.reload}>
-    <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.refresh} fill="currentColor"/></svg>
-  </button>
+  <md-filled-tonal-icon-button 
+    onclick={load} 
+    disabled={store.loading.modules}
+    title={store.L.modules?.reload}
+    role="button"
+    tabindex="0"
+    onkeydown={() => {}}
+  >
+    <md-icon><svg viewBox="0 0 24 24"><path d={ICONS.refresh} /></svg></md-icon>
+  </md-filled-tonal-icon-button>
+
   <div class="spacer"></div>
-  <button class="btn-filled" onclick={save} disabled={store.saving.modules || !isDirty}>
-    <svg width="18" height="18" viewBox="0 0 24 24"><path d={ICONS.save} fill="currentColor"/></svg>
+ 
+  <md-filled-button 
+    onclick={save} 
+    disabled={store.saving.modules || !isDirty}
+    role="button"
+    tabindex="0"
+    onkeydown={() => {}}
+  >
+    <md-icon slot="icon"><svg viewBox="0 0 24 24"><path d={ICONS.save} /></svg></md-icon>
     {store.saving.modules ? store.L.common?.saving : store.L.modules?.save}
-  </button>
+  </md-filled-button>
 </BottomActions>

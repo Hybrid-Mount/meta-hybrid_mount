@@ -2,6 +2,8 @@
   import { store } from '../lib/store.svelte';
   import { ICONS } from '../lib/constants';
   import './NavBar.css';
+  import '@material/web/icon/icon.js';
+  import '@material/web/ripple/ripple.js';
 
   interface Props {
     activeTab: string;
@@ -36,18 +38,21 @@
   });
 </script>
 
-<nav class="bottom-nav" bind:this={navContainer}
-     style:padding-bottom={store.fixBottomNav ? '48px' : 'max(16px, env(safe-area-inset-bottom, 0px))'}
->
-  {#each TABS as tab}
+<nav class="bottom-nav" bind:this={navContainer} style:padding-bottom={store.fixBottomNav ? '48px' : 'max(16px, env(safe-area-inset-bottom, 0px))'}>
+  {#each TABS as tab (tab.id)}
     <button 
       class="nav-tab {activeTab === tab.id ? 'active' : ''}" 
       onclick={() => onTabChange(tab.id)}
       bind:this={tabRefs[tab.id]}
       type="button"
     >
+      <md-ripple></md-ripple>
       <div class="icon-container">
-        <svg viewBox="0 0 24 24"><path d={tab.icon}/></svg>
+        <md-icon>
+          <svg viewBox="0 0 24 24">
+            <path d={tab.icon} style="transition: none" />
+          </svg>
+        </md-icon>
       </div>
       <span class="label">{store.L.tabs[tab.id as keyof typeof store.L.tabs]}</span>
     </button>

@@ -54,7 +54,6 @@ button:active {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: none;
 }
 .btn-filled:disabled {
   background-color: var(--md-sys-color-on-surface);

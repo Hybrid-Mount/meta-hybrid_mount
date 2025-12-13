@@ -272,6 +272,14 @@ const RealAPI = {
           console.error("Failed to get diagnostics:", e);
       }
       return [];
+  },
+  reboot: async (): Promise<void> => {
+    if (!ksuExec) return;
+    try {
+        await ksuExec('reboot');
+    } catch (e) {
+        console.error("Reboot failed", e);
+    }
   }
 };
 

@@ -1,9 +1,11 @@
 <script lang="ts">
   let { children } = $props();
 </script>
+
 <div class="bottom-actions-root">
   {@render children()}
 </div>
+
 <style>
   .bottom-actions-root {
     position: sticky;
@@ -20,7 +22,6 @@
   }
   :global(.bottom-actions-root > *) {
     pointer-events: auto;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
   }
   :global(.bottom-actions-root > .spacer) {
     flex: 1;

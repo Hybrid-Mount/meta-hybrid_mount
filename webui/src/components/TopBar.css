@@ -36,28 +36,8 @@
   right: 20px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   z-index: 50;
-}
-.btn-icon {
-  width: 48px;
-  height: 48px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  border-radius: 50%;
-  color: var(--md-sys-color-on-surface-variant);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.btn-icon:hover {
-  background-color: var(--md-sys-color-surface-variant);
-}
-.btn-icon svg {
-  width: 24px;
-  height: 24px;
 }
 .menu-dropdown {
   position: absolute;
@@ -88,4 +68,9 @@
 }
 .menu-item:hover {
   background: var(--md-sys-color-surface-variant);
+}
+md-icon svg {
+  fill: currentColor;
+  width: 24px;
+  height: 24px;
 }
