@@ -9,6 +9,10 @@
     "themeLight": "浅色模式",
     "themeDark": "深色模式",
     "saveSuccess": "保存成功"
+    "rebootTitle": "重启系统?",
+    "rebootConfirm": "你确定你想重启系统吗？",
+    "reboot": "重启",
+    "cancel": "取消"
   },
   "tabs": {
     "status": "状态",

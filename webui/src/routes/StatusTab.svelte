@@ -12,6 +12,8 @@
   import '@material/web/iconbutton/filled-tonal-icon-button.js';
   import '@material/web/icon/icon.js';
   import { API } from '../lib/api';
+  import '@material/web/dialog/dialog.js';
+  import '@material/web/button/text-button.js';
 
   onMount(() => {
     store.loadStatus();
@@ -20,6 +22,7 @@
   let displayPartitions = $derived([...new Set([...BUILTIN_PARTITIONS, ...(store.config?.partitions || [])])]);
   let storageLabel = $derived(store.storage?.type === 'tmpfs' ? store.systemInfo?.mountBase : store.L?.status?.storageDesc);
   let mountedCount = $derived(store.modules?.filter(m => m.is_mounted).length ?? 0);
+  let showRebootConfirm = $state(false);
   
   function getDiagColor(level: string) {
       if (level === 'Critical') return 'var(--md-sys-color-error)';
@@ -33,6 +36,39 @@
   }
 </script>
 
+<md-dialog open={showRebootConfirm} onclose={() => showRebootConfirm = false}>
+  <div slot="headline">{store.L?.common?.rebootTitle ?? 'Reboot System?'}</div>
+  <div slot="content">
+    {store.L?.common?.rebootConfirm ?? 'Are you sure you want to reboot the device?'}
+  </div>
+  <div slot="actions">
+    <md-text-button onclick={() => showRebootConfirm = false}>
+      {store.L?.common?.cancel ?? 'Cancel'}
+    </md-text-button>
+    <md-text-button onclick={() => { showRebootConfirm = false; API.reboot(); }}>
+      {store.L?.common?.reboot ?? 'Reboot'}
+    </md-text-button>
+  </div>
+</md-dialog>
+
+<BottomActions>
+  <div class="spacer"></div>
+  <div style="display: flex; gap: 8px; align-items: center;">
+    <md-filled-tonal-icon-button 
+      class="reboot-btn"
+      onclick={() => showRebootConfirm = true}
+      title="Reboot"
+      role="button"
+      tabindex="0"
+      onkeydown={() => {}}
+    >
+      <md-icon>
+        <svg viewBox="0 0 24 24"><path d={ICONS.power} /></svg>
+      </md-icon>
+    </md-filled-tonal-icon-button>
+    
+    </div>
+</BottomActions>
 <div class="dashboard-grid">
   <div class="storage-card">
     {#if store.loading.status}

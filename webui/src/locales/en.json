@@ -8,8 +8,12 @@
     "themeAuto": "Auto (System)",
     "themeLight": "Light Mode",
     "themeDark": "Dark Mode",
-    "saveSuccess": "Saved successfully"
-  },
+    "saveSuccess": "Saved successfully",
+    "rebootTitle": "Reboot System?",
+    "rebootConfirm": "Are you sure you want to reboot the device?",
+    "reboot": "Reboot",
+    "cancel": "Cancel"
+   },
   "tabs": {
     "status": "Status",
     "config": "Config",
