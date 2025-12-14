@@ -64,6 +64,7 @@
       <md-icon-button 
         onclick={addChip} 
         class="add-btn"
+        aria-label="Add item"
         role="button"
         tabindex="0"
         onkeydown={() => {}}
