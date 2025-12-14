@@ -28,13 +28,16 @@
     "kernel": "Núcleo",
     "selinux": "SELinux",
     "mountBase": "Base de montaje",
-    "activePartitions": "Particiones Activas"
+    "activePartitions": "Particiones Activas",
+    "health": "Salud del Sistema",
+    "healthy": "Todo correcto. El sistema está saludable."
   },
   "config": {
     "title": "Configuración",
     "verboseLabel": "Registro Detallado",
     "verboseOff": "No",
     "verboseOn": "Sí",
+    "dryRun": "Modo de Prueba (Dry Run)",
     "forceExt4": "Forzar Modo Ext4",
     "enableNuke": "Activar Paw Pad (Oculto)",
     "disableUmount": "Desactivar Separación de Espacio de Nombres",
@@ -52,7 +55,11 @@
     "loadError": "Error al cargar config",
     "loadDefault": "Usando config por defecto",
     "saveSuccess": "Guardado exitosamente",
-    "saveFailed": "Error al guardar"
+    "saveFailed": "Error al guardar",
+    "webui": "Ajustes WebUI",
+    "fixBottomNav": "Arreglar Nav. Inferior",
+    "fixBottomNavOn": "Arreglo activado",
+    "fixBottomNavOff": "Arreglo desactivado"
   },
   "modules": {
     "title": "Modos de Módulo",
@@ -68,7 +75,12 @@
     "saveFailed": "Error al guardar modos",
     "searchPlaceholder": "Buscar módulos...",
     "filterLabel": "Filtro:",
-    "filterAll": "Todos"
+    "filterAll": "Todos",
+    "checkConflicts": "Comprobar Conflictos",
+    "hideConflicts": "Ocultar Conflictos",
+    "conflictsTitle": "Conflictos de Archivos",
+    "noConflicts": "No se detectaron conflictos.",
+    "conflictError": "Fallo al comprobar"
   },
   "logs": {
     "title": "Registros del Sistema",

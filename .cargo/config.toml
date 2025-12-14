@@ -1,18 +1,14 @@
 [alias]
 xbuild = "run --package xbuild"
-
 [target.aarch64-linux-android]
 ar = "llvm-ar"
 linker = "aarch64-linux-android29-clang"
-
 [target.armv7-linux-androideabi]
 ar = "llvm-ar"
 linker = "armv7a-linux-androideabi29-clang"
-
 [target.x86_64-linux-android]
 ar = "llvm-ar"
 linker = "x86_64-linux-android29-clang"
-
 [target.riscv64-linux-android]
 ar = "llvm-ar"
 linker = "riscv64-linux-android35-clang"

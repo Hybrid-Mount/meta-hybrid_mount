@@ -1,0 +1,129 @@
+name: Bug Report / 错误报告
+description: Create a report to help us improve Meta-Hybrid Mount / 创建报告以帮助我们改进 Meta-Hybrid Mount
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please ensure you have checked existing issues before reporting.
+        请在报告之前确保您已检查过现有的 Issue。
+
+  - type: input
+    id: device
+    attributes:
+      label: Device Model & Android Version / 机型与安卓版本
+      description: e.g., Xiaomi 13, Android 14
+      placeholder: Xiaomi 13, Android 14 (HyperOS)
+    validations:
+      required: true
+
+  - type: input
+    id: kernel
+    attributes:
+      label: Kernel Version / 内核版本
+      description: Output of `uname -r` / `uname -r` 的输出结果
+      placeholder: 5.15.100-android14-11-g123456...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ksu_type
+    attributes:
+      label: KernelSU Type / KernelSU 类型
+      options:
+        - "GKI (Official Installer)"
+        - "LKM (Loadable Kernel Module)"
+        - "Legacy (Non-GKI / Custom Kernel)"
+        - "Other / 其它"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: susfs
+    attributes:
+      label: Is SUSFS Integrated? / 是否集成 SUSFS?
+      description: Do you use suSFS in your kernel or as a module? / 您的内核或模块环境中是否集成了 suSFS？
+      options:
+        - "Yes / 是"
+        - "No / 否"
+        - "Unknown / 不清楚"
+    validations:
+      required: true
+
+  - type: input
+    id: module_version
+    attributes:
+      label: Meta-Hybrid Version / 模块版本
+      description: The version of this module installed / 当前安装的模块版本
+      placeholder: v1.0.2-r1
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Issue Description / 问题描述
+      description: A clear and concise description of what the bug is. / 请清晰简洁地描述出现的问题。
+      placeholder: |
+        When I enabled module X, the system bootlooped...
+        当我也启用了模块 X 时，系统发生了无限重启...
+    validations:
+      required: true
+
+  - type: textarea
+    id: Reproduce
+    attributes:
+      label: Issue Reproduce / 问题复现
+      description: Describe how to reproduce the issue. / 描述如何复现该问题。
+      placeholder: |
+        1. Install module X
+        2. Reboot the device
+        3. Observe the bootloop
+        
+        1. 安装模块 X
+        2. 重启设备
+        3. 观察到无限重启
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Verbose Hybrid Mount Log / 详细运行日志
+      description: |
+        **CRITICAL / 重要**: 
+        1. Go to WebUI -> Config, enable **"Verbose Log"** and click Save.
+        2. Reboot or reproduce the issue.
+        3. Paste the content of `/data/adb/meta-hybrid/daemon.log` here.
+        
+        1. 请先在 WebUI -> Config (配置) 中开启 **"Verbose Log" (详细日志)** 并保存。
+        2. 重启或复现问题。
+        3. 将 `/data/adb/meta-hybrid/daemon.log` 的内容粘贴在下方。
+      render: shell
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Attachments / 附件
+        
+        **Please upload the following files by dragging and dropping them into the text area below:**
+        **请将以下文件拖拽到下方的文本框中上传：**
+        
+        1. **KernelSU Bugreport** (Required/必须): 
+           - Generate via KernelSU Manager -> Settings -> Bug Report.
+           - 请通过 KernelSU 管理器 -> 设置 -> 调试报告 生成。
+           
+        2. **Problematic Module Sample** (Required/必须):
+           - The module `.zip` file that caused the issue.
+           - 导致问题的模块 `.zip` 安装包。
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Upload Area / 上传区域
+      description: Drag & drop your KernelSU bugreport and module zip here. / 请将 KernelSU 调试报告和模块包拖拽至此处。
+    validations:
+      required: true

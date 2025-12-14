@@ -1,10 +1,14 @@
-use std::fs;
-use std::io::{BufRead, BufReader};
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
+use std::collections::HashSet;
 use anyhow::Result;
 use serde::Serialize;
-use crate::{conf::config, defs, core::state};
-
+use crate::conf::config::Config;
+use crate::core::inventory;
+use crate::defs;
+use crate::core::state::RuntimeState;
 #[derive(Serialize)]
 struct ModuleInfo {
     id: String,
@@ -13,117 +17,133 @@ struct ModuleInfo {
     author: String,
     description: String,
     mode: String,
+    is_mounted: bool,
+    rules: inventory::ModuleRules,
 }
-
-fn read_prop(path: &Path, key: &str) -> Option<String> {
+pub struct ModuleFile {
+    pub relative_path: PathBuf,
+    pub real_path: PathBuf,
+    pub file_type: fs::FileType,
+    pub is_whiteout: bool,
+    pub is_replace: bool,
+    pub is_replace_file: bool,
+}
+impl ModuleFile {
+    pub fn new(root: &Path, relative: &Path) -> Result<Self> {
+        let real_path = root.join(relative);
+        let metadata = fs::symlink_metadata(&real_path)?;
+        let file_type = metadata.file_type();
+        let is_whiteout = if file_type.is_char_device() {
+            metadata.rdev() == 0
+        } else {
+            false
+        };
+        let is_replace = if file_type.is_dir() {
+            real_path.join(defs::REPLACE_DIR_FILE_NAME).exists()
+        } else {
+            false
+        };
+        let file_name = real_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let is_replace_file = file_name == defs::REPLACE_DIR_FILE_NAME;
+        Ok(Self {
+            relative_path: relative.to_path_buf(),
+            real_path,
+            file_type,
+            is_whiteout,
+            is_replace,
+            is_replace_file,
+        })
+    }
+}
+pub fn print_list(config: &Config) -> Result<()> {
+    let modules = inventory::scan(&config.moduledir, config)?;
+    let state = RuntimeState::load().unwrap_or_default();
+    let mut mounted_ids = HashSet::new();
+    mounted_ids.extend(state.overlay_modules);
+    mounted_ids.extend(state.magic_modules);
+    mounted_ids.extend(state.hymo_modules);
+    let mut infos = Vec::new();
+    for m in modules {
+        let prop_path = m.source_path.join("module.prop");
+        let (name, version, author, description) = read_module_prop(&prop_path);
+        let mode_str = match m.rules.default_mode {
+            inventory::MountMode::Overlay => "auto",
+            inventory::MountMode::HymoFs => "hymofs",
+            inventory::MountMode::Magic => "magic",
+            inventory::MountMode::Ignore => "ignore",
+        };
+        infos.push(ModuleInfo {
+            id: m.id.clone(),
+            name,
+            version,
+            author,
+            description,
+            mode: mode_str.to_string(),
+            is_mounted: mounted_ids.contains(&m.id),
+            rules: m.rules,
+        });
+    }
+    println!("{}", serde_json::to_string(&infos)?);
+    Ok(())
+}
+fn read_module_prop(path: &Path) -> (String, String, String, String) {
+    let mut name = String::new();
+    let mut version = String::new();
+    let mut author = String::new();
+    let mut description = String::new();
     if let Ok(file) = fs::File::open(path) {
         let reader = BufReader::new(file);
-        for line in reader.lines().flatten() {
-            if line.starts_with(key) && line.chars().nth(key.len()) == Some('=') {
-                return Some(line[key.len() + 1..].to_string());
-            }
-        }
-    }
-    None
-}
-
-fn has_files_recursive(path: &Path) -> bool {
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let file_type = match entry.file_type() {
-                Ok(ft) => ft,
-                Err(_) => continue,
-            };
-
-            if file_type.is_dir() {
-                if has_files_recursive(&entry.path()) {
-                    return true;
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                if let Some((k, v)) = l.split_once('=') {
+                    let val = v.trim().to_string();
+                    match k.trim() {
+                        "name" => name = val,
+                        "version" => version = val,
+                        "author" => author = val,
+                        "description" => description = val,
+                        _ => {}
+                    }
                 }
-            } else {
-                return true;
             }
         }
     }
-    false
+    (name, version, author, description)
 }
-
-pub fn update_description(storage_mode: &str, nuke_active: bool, overlay_count: usize, magic_count: usize) {
-    let path = Path::new(defs::MODULE_PROP_FILE);
-    if !path.exists() { 
-        log::warn!("module.prop not found at {}, skipping description update", path.display());
-        return; 
+pub fn update_description(
+    storage_mode: &str, 
+    nuke_active: bool, 
+    overlay_count: usize, 
+    magic_count: usize, 
+    hymo_count: usize
+) {
+    let prop_path = Path::new(defs::MODULE_PROP_FILE);
+    if !prop_path.exists() {
+        return;
     }
-
     let mode_str = if storage_mode == "tmpfs" { "Tmpfs" } else { "Ext4" };
     let status_emoji = if storage_mode == "tmpfs" { "🐾" } else { "💿" };
-    
     let nuke_str = if nuke_active { " | 肉垫: 开启 ✨" } else { "" };
-    
-    let new_desc = format!(
-        "description=😋 运行中喵～ ({}) {} | Overlay: {} | Magic: {}{}", 
-        mode_str, status_emoji, overlay_count, magic_count, nuke_str
+    let desc_text = format!(
+        "description=😋 运行中喵～ ({}) {} | Hymo: {} | Overlay: {} | Magic: {}{}", 
+        mode_str, status_emoji, hymo_count, overlay_count, magic_count, nuke_str
     );
-
-    let mut new_lines = Vec::new();
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            for line in content.lines() {
-                if line.starts_with("description=") {
-                    new_lines.push(new_desc.clone());
+    let mut lines = Vec::new();
+    if let Ok(file) = fs::File::open(prop_path) {
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                if l.starts_with("description=") {
+                    lines.push(desc_text.clone());
                 } else {
-                    new_lines.push(line.to_string());
+                    lines.push(l);
                 }
-            }
-            if let Err(e) = fs::write(path, new_lines.join("\n")) {
-                log::error!("Failed to update module.prop: {}", e);
-            } else {
-                log::info!("Updated module.prop description (Meow!).");
-            }
-        },
-        Err(e) => log::error!("Failed to read module.prop: {}", e),
-    }
-}
-
-pub fn print_list(config: &config::Config) -> Result<()> {
-    let module_modes = config::load_module_modes();
-    let modules_dir = &config.moduledir;
-    let mut modules = Vec::new();
-
-    let state = state::RuntimeState::load().unwrap_or_default();
-    
-    let mut mnt_base = PathBuf::from(defs::FALLBACK_CONTENT_DIR);
-    if !state.mount_point.as_os_str().is_empty() {
-        mnt_base = state.mount_point;
-    }
-
-    if modules_dir.exists() {
-        for entry in fs::read_dir(modules_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if !path.is_dir() { continue; }
-            let id = entry.file_name().to_string_lossy().to_string();
-            if id == "meta-hybrid" || id == "lost+found" { continue; }
-            if path.join(defs::DISABLE_FILE_NAME).exists() || path.join(defs::REMOVE_FILE_NAME).exists() || path.join(defs::SKIP_MOUNT_FILE_NAME).exists() { continue; }
-
-            let has_content = defs::BUILTIN_PARTITIONS.iter().any(|p| {
-                let p_src = path.join(p);
-                let p_dst = mnt_base.join(&id).join(p);
-                (p_src.exists() && has_files_recursive(&p_src)) || 
-                (p_dst.exists() && has_files_recursive(&p_dst))
-            });
-
-            if has_content {
-                let prop_path = path.join("module.prop");
-                let name = read_prop(&prop_path, "name").unwrap_or_else(|| id.clone());
-                let version = read_prop(&prop_path, "version").unwrap_or_default();
-                let author = read_prop(&prop_path, "author").unwrap_or_default();
-                let description = read_prop(&prop_path, "description").unwrap_or_default();
-                let mode = module_modes.get(&id).cloned().unwrap_or_else(|| "auto".to_string());
-                modules.push(ModuleInfo { id, name, version, author, description, mode });
             }
         }
     }
-    modules.sort_by(|a, b| a.name.cmp(&b.name));
-    println!("{}", serde_json::to_string(&modules)?);
-    Ok(())
+    if let Ok(mut file) = OpenOptions::new().write(true).truncate(true).open(prop_path) {
+        for line in lines {
+            let _ = writeln!(file, "{}", line);
+        }
+    }
 }

@@ -1,73 +1,188 @@
-.switch-row {
+.config-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 24px;
+}
+.config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.full-width-field {
+  width: 100%;
+  --md-outlined-text-field-container-shape: 16px;
+}
+.config-card {
+  background-color: var(--md-sys-color-surface-container);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.storage-card-fixed {
+  flex-shrink: 0;
+  height: auto;
+  overflow: visible;
+}
+.card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 4px 0;
+  gap: 12px;
 }
-.md3-switch {
-  position: relative;
-  width: 52px;
-  height: 32px;
-  display: inline-block;
-}
-.md3-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.track {
-  position: absolute;
-  inset: 0;
-  background-color: var(--md-sys-color-surface-variant);
-  border-radius: 16px;
-  border: 2px solid var(--md-sys-color-outline);
-  transition: .3s;
-}
-.thumb {
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 6px;
-  bottom: 6px;
-  background-color: var(--md-sys-color-outline);
-  border-radius: 50%;
-  transition: .3s;
-}
-.md3-switch input:checked + .track {
-  background-color: var(--md-sys-color-primary);
-  border-color: var(--md-sys-color-primary);
-}
-.md3-switch input:checked + .track .thumb {
-  background-color: var(--md-sys-color-on-primary);
-  transform: translateX(20px);
-  width: 20px;
-  height: 20px;
-  bottom: 4px;
-  left: 4px;
-}
-.text-field.error input {
-  border-color: var(--md-sys-color-error);
-  color: var(--md-sys-color-error);
-}
-.text-field.error label {
-  color: var(--md-sys-color-error);
-}
-.icon-reset {
-  position: absolute;
-  right: 8px;
-  background: none;
-  border: none;
-  color: var(--md-sys-color-outline);
-  font-size: 14px;
-  cursor: pointer;
-  width: 32px;
-  height: 32px;
+.card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  z-index: 5;
 }
-.icon-reset:hover {
-  background-color: var(--md-sys-color-surface-variant);
+.card-text {
+  display: flex;
+  flex-direction: column;
+}
+.card-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+}
+.card-desc {
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.input-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.option-tile {
+  background-color: var(--md-sys-color-surface-container);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 110px;
+  gap: 12px;
+  transition: background-color 0.2s cubic-bezier(0.2, 0, 0, 1), transform 0.2s;
+  border: none;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+.option-tile.clickable {
+  cursor: pointer;
+}
+.option-tile.clickable:active {
+  transform: scale(0.98);
+}
+.tile-top {
+  display: flex;
+  align-items: flex-start;
+  pointer-events: none;
+}
+.tile-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s, color 0.2s;
+  background-color: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.tile-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  pointer-events: none;
+}
+.tile-label {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface);
+  line-height: 1.2;
+}
+.option-tile.static-input {
+  background-color: var(--md-sys-color-surface-container);
+  cursor: default;
+}
+.tile-input-overlay {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  color: var(--md-sys-color-on-surface);
+  font-weight: 600;
+  width: 100%;
+  padding: 4px 0;
+  outline: none;
+  font-size: 16px;
+  pointer-events: auto;
+}
+.tile-input-overlay:focus {
+  border-bottom-width: 2px;
+  border-bottom-color: var(--md-sys-color-primary);
+}
+.option-tile.primary.active {
+  background-color: var(--md-sys-color-primary-container);
+}
+.option-tile.primary.active .tile-icon {
+  background-color: var(--md-sys-color-on-primary-container);
+  color: var(--md-sys-color-primary-container);
+}
+.option-tile.primary.active .tile-label {
+  color: var(--md-sys-color-on-primary-container);
+}
+.option-tile.secondary.active {
+  background-color: var(--md-sys-color-secondary-container);
+}
+.option-tile.secondary.active .tile-icon {
+  background-color: var(--md-sys-color-on-secondary-container);
+  color: var(--md-sys-color-secondary-container);
+}
+.option-tile.secondary.active .tile-label {
+  color: var(--md-sys-color-on-secondary-container);
+}
+.option-tile.tertiary.active {
+  background-color: var(--md-sys-color-tertiary-container);
+}
+.option-tile.tertiary.active .tile-icon {
+  background-color: var(--md-sys-color-on-tertiary-container);
+  color: var(--md-sys-color-tertiary-container);
+}
+.option-tile.tertiary.active .tile-label {
+  color: var(--md-sys-color-on-tertiary-container);
+}
+.option-tile.error.active {
+  background-color: var(--md-sys-color-error-container);
+}
+.option-tile.error.active .tile-icon {
+  background-color: var(--md-sys-color-on-error-container);
+  color: var(--md-sys-color-error-container);
+}
+.option-tile.error.active .tile-label {
+  color: var(--md-sys-color-on-error-container);
+}
+.webui-label {
+    margin: 0 0 8px 8px;
+    font-size: 13px; 
+    font-weight: 500; 
+    color: var(--md-sys-color-primary); 
+    opacity: 0.8;
+}
+md-icon svg {
+  fill: currentColor;
+  width: 24px;
+  height: 24px;
 }

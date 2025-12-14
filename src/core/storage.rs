@@ -1,143 +1,189 @@
-// src/core/storage.rs
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::ffi::CString;
 use anyhow::{Context, Result, bail};
+use rustix::fs::Mode;
 use rustix::mount::{unmount, UnmountFlags};
-use crate::{defs, utils, core::state};
+use serde::Serialize;
+use crate::{defs, utils, mount::hymofs::HymoFs};
+use crate::core::state::RuntimeState;
 
-/// Represents an active storage backend
+const DEFAULT_SELINUX_CONTEXT: &str = "u:object_r:system_file:s0";
+const SELINUX_XATTR_KEY: &str = "security.selinux";
+
 pub struct StorageHandle {
     pub mount_point: PathBuf,
-    pub mode: String, // "tmpfs" or "ext4"
+    pub mode: String,
 }
 
-/// Sets up the storage backend (Tmpfs or Ext4 Image)
-pub fn setup(mnt_dir: &Path, image_path: &Path, force_ext4: bool) -> Result<StorageHandle> {
-    log::info!("Setting up storage at {}", mnt_dir.display());
+#[derive(Serialize)]
+struct StorageStatus {
+    #[serde(rename = "type")]
+    mode: String,
+    mount_point: String,
+    usage_percent: u8,
+    total_size: u64,
+    used_size: u64,
+    hymofs_available: bool,
+    hymofs_version: Option<i32>,
+}
 
-    if mnt_dir.exists() { 
-        let _ = unmount(mnt_dir, UnmountFlags::DETACH); 
-    }
-    utils::ensure_dir_exists(mnt_dir)?;
-
-    let mode = if !force_ext4 && try_setup_tmpfs(mnt_dir)? {
-        "tmpfs".to_string()
+pub fn get_usage(path: &Path) -> (u64, u64, u8) {
+    if let Ok(stat) = rustix::fs::statvfs(path) {
+        let total = stat.f_blocks * stat.f_frsize;
+        let free = stat.f_bfree * stat.f_frsize;
+        let used = total - free;
+        let percent = if total > 0 { (used * 100 / total) as u8 } else { 0 };
+        (total, used, percent)
     } else {
-        setup_ext4_image(mnt_dir, image_path)?
-    };
+        (0, 0, 0)
+    }
+}
+
+pub fn is_hymofs_active() -> bool {
+    HymoFs::is_available()
+}
+
+pub fn setup(mnt_base: &Path, img_path: &Path, force_ext4: bool, mount_source: &str) -> Result<StorageHandle> {
+    if utils::is_mounted(mnt_base) {
+        let _ = unmount(mnt_base, UnmountFlags::DETACH);
+    }
+    
+    fs::create_dir_all(mnt_base)?;
+
+    if !force_ext4 {
+        if try_setup_tmpfs(mnt_base, mount_source)? {
+            return Ok(StorageHandle {
+                mount_point: mnt_base.to_path_buf(),
+                mode: "tmpfs".to_string(),
+            });
+        }
+    }
+
+    setup_ext4_image(mnt_base, img_path)
+}
+
+fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
+    if utils::mount_tmpfs(target, mount_source).is_ok() {
+        if utils::is_xattr_supported(target) {
+            return Ok(true);
+        } else {
+            let _ = unmount(target, UnmountFlags::DETACH);
+        }
+    }
+    Ok(false)
+}
+
+fn setup_ext4_image(target: &Path, img_path: &Path) -> Result<StorageHandle> {
+    if !img_path.exists() {
+        if let Some(parent) = img_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        create_image(img_path).context("Failed to create modules.img")?;
+    }
+
+    if let Err(_) = utils::mount_image(img_path, target) {
+        if utils::repair_image(img_path).is_ok() {
+            utils::mount_image(img_path, target).context("Failed to mount modules.img after repair")?;
+        } else {
+            bail!("Failed to repair modules.img");
+        }
+    }
 
     Ok(StorageHandle {
-        mount_point: mnt_dir.to_path_buf(),
-        mode,
+        mount_point: target.to_path_buf(),
+        mode: "ext4".to_string(),
     })
 }
 
-fn try_setup_tmpfs(target: &Path) -> Result<bool> {
-    log::info!("Attempting Tmpfs mode...");
-    if let Err(e) = utils::mount_tmpfs(target) {
-        log::warn!("Tmpfs mount failed: {}. Falling back to Image.", e);
-        return Ok(false);
-    }
+fn create_image(path: &Path) -> Result<()> {
+    let status = Command::new("truncate")
+        .arg("-s").arg("2G")
+        .arg(path)
+        .status()?;
+    if !status.success() { bail!("Failed to allocate image file"); }
+    
+    let status = Command::new("mkfs.ext4")
+        .arg("-O").arg("^has_journal")
+        .arg(path)
+        .status()?;
+    if !status.success() { bail!("Failed to format image file"); }
 
-    if utils::is_xattr_supported(target) {
-        // Explicitly set the root context for Tmpfs.
-        if let Err(e) = utils::lsetfilecon(target, "u:object_r:system_file:s0") {
-            log::warn!("Failed to set root context on tmpfs: {}", e);
-        }
-        
-        log::info!("Tmpfs mode active (XATTR supported).");
-        Ok(true)
-    } else {
-        log::warn!("Tmpfs does NOT support XATTR. Unmounting...");
-        let _ = unmount(target, UnmountFlags::DETACH);
-        Ok(false)
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub fn finalize_storage_permissions(target: &Path) {
+    if let Err(e) = rustix::fs::chmod(target, Mode::from(0o755)) {
+        log::warn!("Failed to chmod storage root: {}", e);
+    }
+    if let Err(e) = rustix::fs::chown(target, Some(rustix::fs::Uid::from_raw(0)), Some(rustix::fs::Gid::from_raw(0))) {
+        log::warn!("Failed to chown storage root: {}", e);
+    }
+    if let Err(e) = set_selinux_context(target, DEFAULT_SELINUX_CONTEXT) {
+        log::warn!("Failed to set SELinux context: {}", e);
     }
 }
 
-fn setup_ext4_image(target: &Path, image_path: &Path) -> Result<String> {
-    log::info!("Falling back to Ext4 Image mode...");
-    if !image_path.exists() {
-        bail!("modules.img not found at {}", image_path.display());
-    }
+fn set_selinux_context(path: &Path, context: &str) -> Result<()> {
+    let c_path = CString::new(path.as_os_str().as_encoded_bytes())?;
+    let c_val = CString::new(context)?;
     
-    // Attempt to mount with auto-repair logic
-    if let Err(e) = utils::mount_image(image_path, target) {
-        log::warn!("Initial mount failed ({}), attempting image repair...", e);
-        
-        // Try to repair the image using e2fsck
-        utils::repair_image(image_path).context("Failed to repair image")?;
-        
-        // Retry mount
-        log::info!("Retrying mount after repair...");
-        utils::mount_image(image_path, target).context("Failed to mount modules.img after repair")?;
-    }
-
-    // Repair storage root permissions immediately after mount.
-    log::info!("Repairing storage root permissions...");
-    
-    // 1. Chmod 0755
-    use std::os::unix::fs::PermissionsExt;
-    let mut perms = std::fs::metadata(target)?.permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(target, perms)?;
-
-    // 2. Chown 0:0 (Root:Root)
-    use rustix::fs::{chown, Uid, Gid};
     unsafe {
-        chown(target, Some(Uid::from_raw(0)), Some(Gid::from_raw(0)))
-            .context("Failed to chown storage root")?;
+        let ret = libc::lsetxattr(
+            c_path.as_ptr(),
+            SELINUX_XATTR_KEY.as_ptr() as *const libc::c_char,
+            c_val.as_ptr() as *const libc::c_void,
+            c_val.as_bytes().len(),
+            0
+        );
+        if ret != 0 {
+            bail!("lsetxattr failed");
+        }
     }
-
-    // 3. Restore SELinux Context
-    utils::lsetfilecon(target, "u:object_r:system_file:s0")
-        .context("Failed to set SELinux context on storage root")?;
-        
-    log::info!("Image mode active and secured.");
-    Ok("ext4".to_string())
-}
-
-fn format_size(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = KB * 1024;
-    const GB: u64 = MB * 1024;
-    if bytes >= GB { format!("{:.1}G", bytes as f64 / GB as f64) }
-    else if bytes >= MB { format!("{:.0}M", bytes as f64 / MB as f64) }
-    else if bytes >= KB { format!("{:.0}K", bytes as f64 / KB as f64) }
-    else { format!("{}B", bytes) }
+    Ok(())
 }
 
 pub fn print_status() -> Result<()> {
-    let state = state::RuntimeState::load().unwrap_or_default();
-    
-    let path = if state.mount_point.as_os_str().is_empty() {
-        PathBuf::from(defs::FALLBACK_CONTENT_DIR)
+    let state = RuntimeState::load().ok();
+    let (mnt_base, expected_mode) = if let Some(ref s) = state {
+        (s.mount_point.clone(), s.storage_mode.clone())
     } else {
-        state.mount_point
+        (PathBuf::from(defs::FALLBACK_CONTENT_DIR), "unknown".to_string())
     };
-    
-    if !path.exists() {
-        println!("{{ \"error\": \"Not mounted\" }}");
-        return Ok(());
+
+    let mut mode = "unknown".to_string();
+    let mut total = 0;
+    let mut used = 0;
+    let mut percent = 0;
+
+    if utils::is_mounted(&mnt_base) {
+        if let Ok(stat) = rustix::fs::statvfs(&mnt_base) {
+            mode = if expected_mode != "unknown" {
+                expected_mode
+            } else {
+                "active".to_string()
+            };
+            total = stat.f_blocks * stat.f_frsize;
+            let free = stat.f_bfree * stat.f_frsize;
+            used = total - free;
+            if total > 0 {
+                percent = (used * 100 / total) as u8;
+            }
+        }
     }
 
-    let fs_type = if state.storage_mode.is_empty() {
-        "unknown".to_string()
-    } else {
-        state.storage_mode
+    let status = StorageStatus {
+        mode,
+        mount_point: mnt_base.to_string_lossy().to_string(),
+        usage_percent: percent,
+        total_size: total,
+        used_size: used,
+        hymofs_available: HymoFs::is_available(),
+        hymofs_version: HymoFs::get_version(),
     };
 
-    let stats = rustix::fs::statvfs(&path).context("statvfs failed")?;
-    let block_size = stats.f_frsize as u64;
-    let total_bytes = stats.f_blocks as u64 * block_size;
-    let free_bytes = stats.f_bfree as u64 * block_size;
-    let used_bytes = total_bytes.saturating_sub(free_bytes);
-    let percent = if total_bytes > 0 { (used_bytes as f64 / total_bytes as f64) * 100.0 } else { 0.0 };
-    
-    println!(
-        "{{ \"size\": \"{}\", \"used\": \"{}\", \"percent\": \"{:.0}%\", \"type\": \"{}\" }}",
-        format_size(total_bytes),
-        format_size(used_bytes),
-        percent,
-        fs_type
-    );
+    println!("{}", serde_json::to_string(&status)?);
     Ok(())
 }

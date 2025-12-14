@@ -2,9 +2,12 @@
   --md-sys-shape-corner-medium: 12px;
   --md-sys-shape-corner-large: 16px;
   --md-sys-shape-corner-full: 9999px;
-  --md-sys-elevation-1: 0 1px 2px rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15);
-  --md-sys-elevation-2: 0 1px 2px rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15);
-  --md-ref-typeface-plain: Roboto, system-ui, -apple-system, sans-serif;
+  --md-sys-color-shadow: #000000;
+  --md-sys-elevation-1: 0 1px 2px 0 var(--md-sys-color-shadow), 0 1px 3px 1px var(--md-sys-color-shadow);
+  --md-sys-elevation-2: 0 1px 2px 0 var(--md-sys-color-shadow), 0 2px 6px 2px var(--md-sys-color-shadow);
+  --md-sys-elevation-3: 0 4px 8px 3px var(--md-sys-color-shadow), 0 1px 3px 0 var(--md-sys-color-shadow);
+  --font-common: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --md-ref-typeface-plain: var(--font-stack);
   --md-ref-typeface-mono: 'JetBrains Mono', 'Fira Code', monospace;
 }
 * {
@@ -22,11 +25,15 @@ html, body, #app {
   font-family: var(--md-ref-typeface-plain);
   font-size: 16px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+input, select, textarea, button {
+  font-family: inherit;
 }
 button {
   border: none;
   cursor: pointer;
-  font-family: inherit;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
   white-space: nowrap;
@@ -35,12 +42,13 @@ button:active {
   transform: scale(0.96);
 }
 .btn-filled {
-  height: 48px;
-  padding: 0 24px;
-  border-radius: 24px;
+  height: 44px;
+  min-width: 90px;
+  padding: 0 20px;
+  border-radius: 12px;
   background-color: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
-  font-weight: 500;
+  font-weight: 600;
   font-size: 14px;
   display: inline-flex;
   align-items: center;
@@ -52,14 +60,17 @@ button:active {
   opacity: 0.12;
   color: var(--md-sys-color-surface);
   cursor: not-allowed;
+  box-shadow: none;
 }
 .btn-tonal {
-  height: 48px;
-  padding: 0 24px;
-  border-radius: 24px;
+  height: 44px;
+  min-width: 90px;
+  padding: 0 20px;
+  border-radius: 12px;
   background-color: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -80,13 +91,14 @@ button:active {
 }
 .md3-card {
   background-color: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-large);
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
   margin-bottom: 16px;
-  box-shadow: var(--md-sys-elevation-1);
+  box-shadow: none;
 }
 .text-field {
   position: relative;
@@ -94,31 +106,38 @@ button:active {
 .text-field input, .text-field select {
   width: 100%;
   height: 56px;
-  background: transparent;
+  background: var(--md-sys-color-surface-container-highest);
   border: 1px solid var(--md-sys-color-outline);
-  border-radius: 4px;
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  border-radius: 4px 4px 0 0;
   padding: 0 16px;
   color: var(--md-sys-color-on-surface);
   font-size: 16px;
   outline: none;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
   appearance: none;
 }
 .text-field input:focus, .text-field select:focus {
+  border-bottom: 2px solid var(--md-sys-color-primary);
   border-color: var(--md-sys-color-primary);
-  border-width: 2px;
-  padding-left: 15px;
-  padding-right: 15px;
+  background: var(--md-sys-color-surface-container-highest);
+  padding-left: 16px;
+  padding-right: 16px;
 }
 .text-field label {
   position: absolute;
-  top: -9px;
+  top: 8px;
   left: 12px;
-  background-color: var(--md-sys-color-surface-container);
+  background-color: transparent;
   padding: 0 4px;
   font-size: 12px;
-  color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-surface-variant);
   z-index: 1;
+  pointer-events: none;
+}
+.text-field input:focus ~ label,
+.text-field select:focus ~ label {
+  color: var(--md-sys-color-primary);
 }
 .bottom-actions {
   position: absolute;
@@ -126,14 +145,17 @@ button:active {
   left: 0;
   right: 0;
   padding: 16px 24px calc(16px + env(safe-area-inset-bottom)) 24px;
-  background: linear-gradient(to top, var(--md-sys-color-surface) 80%, transparent);
+  background: linear-gradient(to top, var(--md-sys-color-surface) 85%, transparent);
   display: flex;
   justify-content: flex-end;
+  align-items: center;
   gap: 12px;
   z-index: 50;
   pointer-events: none;
 }
 .bottom-actions button {
   pointer-events: auto;
-  box-shadow: var(--md-sys-elevation-2);
+}
+code, pre {
+  font-family: var(--md-ref-typeface-mono);
 }

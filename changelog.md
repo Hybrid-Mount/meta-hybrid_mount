@@ -1,5 +1,6 @@
-## v0.3.0-r1
+## v1.6.1
 
-Changes since v0.2.8-r13:
-* 	modified:   module/customize.sh
-* [skip ci] Update metadata for v0.2.8-r13
+Changes since v1.6.0:
+* webui: use @material/web for most tabs
+* Update KSU ioctl definition to match upstream implementation
+* chore(release): bump version to v1.6.0 [skip ci]

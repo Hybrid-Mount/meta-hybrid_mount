@@ -1,0 +1,76 @@
+.top-bar {
+  flex-shrink: 0;
+  background-color: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface);
+  height: 120px;
+  padding-top: max(0px, env(safe-area-inset-top, 0px));
+  transition: background-color 0.3s ease, height 0.3s ease;
+  position: relative;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: visible; 
+}
+.top-bar-content {
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+.screen-title {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  margin: 0;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: 0;
+  transform-origin: left bottom;
+  transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+  white-space: nowrap;
+}
+.top-actions {
+  position: absolute;
+  bottom: 20px; 
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 50;
+}
+.menu-dropdown {
+  position: absolute;
+  top: 100%; 
+  right: 0;
+  margin-top: 4px;
+  background: var(--md-sys-color-surface-container-high);
+  border-radius: 16px;
+  padding: 8px 0;
+  z-index: 1000;
+  min-width: 200px;
+  overflow: hidden; 
+}
+.menu-item {
+  width: 100%;
+  padding: 16px 24px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.menu-item:hover {
+  background: var(--md-sys-color-surface-variant);
+}
+md-icon svg {
+  fill: currentColor;
+  width: 24px;
+  height: 24px;
+}

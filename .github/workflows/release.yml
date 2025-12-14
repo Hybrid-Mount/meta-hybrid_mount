@@ -5,6 +5,15 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version Name (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      version_code:
+        description: 'Version Code (leave empty to use Run Number)'
+        required: false
+        default: ''
 
 jobs:
   release:
@@ -49,19 +58,33 @@ jobs:
           cache: 'npm'
           cache-dependency-path: webui/package-lock.json
 
-      - name: Set Release Version
+      - name: Update Version Numbers
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG_NAME="${{ github.ref_name }}"
+          # Simplify version determination logic
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG_NAME="${{ github.event.inputs.version_name }}"
+            # Use input version code or fallback to run number
+            VERSION_CODE="${{ github.event.inputs.version_code }}"
+            [[ -z "$VERSION_CODE" ]] && VERSION_CODE="${{ github.run_number }}"
           else
-            TAG_NAME="v0.0.0-manual.${{ github.run_number }}"
+            TAG_NAME="${{ github.ref_name }}"
+            VERSION_CODE="${{ github.run_number }}"
           fi
-          # 设置环境变量，xtask 会自动读取
+          
           echo "META_HYBRID_VERSION=$TAG_NAME" >> $GITHUB_ENV
+          echo "META_HYBRID_CODE=$VERSION_CODE" >> $GITHUB_ENV
+          
+          echo "Bumping to $TAG_NAME ($VERSION_CODE)"
+          
+          # Update module.prop
+          sed -i "s/^version=.*/version=$TAG_NAME/" module/module.prop
+          sed -i "s/^versionCode=.*/versionCode=$VERSION_CODE/" module/module.prop
+          
+          # Update Cargo.toml (strip 'v' prefix)
+          sed -i "0,/^version = .*/s//version = \"${TAG_NAME#v}\"/" Cargo.toml
 
       - name: Build Release Package
         run: |
-          # 编译所有架构并打包
           cargo run -p xtask -- build --release
 
       - name: Generate Changelog
@@ -71,23 +94,22 @@ jobs:
           ZIP_NAME=$(basename "$ZIP_FILE")
           REPO="${{ github.repository }}"
           TAG="${{ env.META_HYBRID_VERSION }}"
+          CODE="${{ env.META_HYBRID_CODE }}"
           
           echo "ZIP_PATH=output/$ZIP_NAME" >> $GITHUB_ENV
           
           DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
           CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/master/changelog.md"
           
-          # 生成 update.json 内容
           cat <<EOF > /tmp/update.json
           {
             "version": "$TAG",
-            "versionCode": ${{ github.run_number }},
+            "versionCode": $CODE,
             "zipUrl": "$DOWNLOAD_URL",
             "changelog": "$CHANGELOG_URL"
           }
           EOF
           
-          # 生成变更日志
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           echo "## $TAG" > /tmp/changelog.md
           echo "" >> /tmp/changelog.md
@@ -98,7 +120,7 @@ jobs:
             git log --pretty=format:"* %s" "$PREV_TAG..HEAD" >> /tmp/changelog.md
           fi
 
-      - name: Create Release
+      - name: Create Release (Local)
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
@@ -107,11 +129,25 @@ jobs:
           files: ${{ env.ZIP_PATH }}
           body_path: /tmp/changelog.md
 
-      - name: Push Update Info
+      - name: Create Remote Release (KernelSU-Repo)
+        uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
+          repository: KernelSU-Modules-Repo/meta-hybrid
+          tag_name: ${{ env.META_HYBRID_VERSION }}
+          draft: false
+          prerelease: false
+          files: ${{ env.ZIP_PATH }}
+          body_path: /tmp/changelog.md
+
+      - name: Commit and Push Changes
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Ensure we are on branch to push
           git fetch origin master
           git checkout master
 
@@ -119,11 +155,12 @@ jobs:
           
           mv /tmp/update.json update.json
           mv /tmp/changelog.md changelog.md
-          git add update.json changelog.md
-
-          git add update.json changelog.md webui/src/lib/store.svelte.js
           
+          git add update.json changelog.md
+          git add module/module.prop Cargo.toml
+          
+          # Only commit if there are changes
           if ! git diff --staged --quiet; then
-            git commit -m "[skip ci] Update metadata for ${{ env.META_HYBRID_VERSION }}"
+            git commit -m "chore(release): bump version to ${{ env.META_HYBRID_VERSION }} [skip ci]"
             git push origin master
           fi

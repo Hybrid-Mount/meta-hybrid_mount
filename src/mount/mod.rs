@@ -1,4 +1,5 @@
 pub mod magic;
 pub mod overlay;
 pub mod node;
-pub mod try_umount;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod hymofs;

@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           submodules: recursive
-          fetch-depth: 0 # 为了 git describe 能获取版本信息
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -49,21 +49,49 @@ jobs:
           cache: 'npm'
           cache-dependency-path: webui/package-lock.json
 
-      - name: Set Version Env
+      - name: Configure Version
         run: |
-          # 自动生成版本号，例如 v0.2.8-ci.42
-          BASE_VER="v0.2.8"
-          CI_VER="${BASE_VER}-ci.${{ github.run_number }}"
+          # Ensure tags are fetched for git describe
+          git fetch --tags
+          
+          # Get the latest tag, default to v0.0.0 if none
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          
+          # Get short commit hash
+          COMMIT_ID=$(git rev-parse --short HEAD)
+          
+          # Construct version string: Tag-CommitID
+          CI_VER="${LATEST_TAG}-${COMMIT_ID}"
+          
+          # CI always uses version code 0
+          CI_CODE=0
+          
           echo "META_HYBRID_VERSION=$CI_VER" >> $GITHUB_ENV
+          echo "META_HYBRID_CODE=$CI_CODE" >> $GITHUB_ENV
+          
+          echo "Building Version: $CI_VER (Code: $CI_CODE)"
+          
+          # Explicitly update module.prop to ensure the built zip contains correct info
+          sed -i "s/^version=.*/version=$CI_VER/" module/module.prop
+          sed -i "s/^versionCode=.*/versionCode=$CI_CODE/" module/module.prop
 
       - name: Build All
         run: |
-          # 一条命令搞定：WebUI + 多架构编译 + 打包
           cargo run -p xtask -- build --release
+
+      - name: Prepare Artifact
+        run: |
+          # Solve double compression: Unzip the build output to a folder
+          # GitHub upload-artifact will zip this folder, resulting in a single flashable zip
+          mkdir -p output/artifact_content
+          unzip output/*.zip -d output/artifact_content
+          
+          # Remove the original zip to save space/confusion
+          rm output/*.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v5
         with:
-          name: Meta-Hybrid-CI-Build
-          path: output/*.zip
+          name: Meta-Hybrid-CI-${{ env.META_HYBRID_VERSION }}
+          path: output/artifact_content/
           if-no-files-found: error

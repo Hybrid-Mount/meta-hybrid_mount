@@ -1,47 +1,23 @@
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    ffi::CString,
-    fmt,
-    fs::{DirEntry, FileType},
-    os::unix::fs::{FileTypeExt, MetadataExt},
-    path::{Path, PathBuf},
-};
-use anyhow::Result;
-use extattr::lgetxattr;
-use rustix::path::Arg;
-use crate::defs::{REPLACE_DIR_FILE_NAME, REPLACE_DIR_XATTR};
-
-#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+use std::{collections::HashMap, fs::FileType, path::PathBuf, fmt};
+use crate::core::modules::ModuleFile;
+#[derive(PartialEq, Eq, Hash, Clone, Debug, Copy)]
 pub enum NodeFileType {
     RegularFile,
     Directory,
     Symlink,
     Whiteout,
 }
-
-impl NodeFileType {
-    pub fn from_file_type(file_type: FileType) -> Option<Self> {
-        if file_type.is_file() {
-            Some(Self::RegularFile)
-        } else if file_type.is_dir() {
-            Some(Self::Directory)
+impl From<FileType> for NodeFileType {
+    fn from(file_type: FileType) -> Self {
+        if file_type.is_dir() {
+            Self::Directory
         } else if file_type.is_symlink() {
-            Some(Self::Symlink)
+            Self::Symlink
         } else {
-            None
+            Self::RegularFile
         }
     }
 }
-
-pub struct Node {
-    pub name: String,
-    pub file_type: NodeFileType,
-    pub children: HashMap<String, Self>,
-    pub module_path: Option<PathBuf>,
-    pub replace: bool,
-    pub skip: bool,
-}
-
 impl fmt::Display for NodeFileType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -52,7 +28,15 @@ impl fmt::Display for NodeFileType {
         }
     }
 }
-
+#[derive(Clone)]
+pub struct Node {
+    pub name: String,
+    pub file_type: NodeFileType,
+    pub children: HashMap<String, Self>,
+    pub module_path: Option<PathBuf>,
+    pub replace: bool,
+    pub skip: bool,
+}
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fn print_tree(
@@ -64,140 +48,104 @@ impl fmt::Debug for Node {
         ) -> fmt::Result {
             let connector = if is_root { "" } else if is_last { "└── " } else { "├── " };
             let name = if node.name.is_empty() { "/" } else { &node.name };
-            
             let mut flags = Vec::new();
             if node.replace { flags.push("REPLACE"); }
             if node.skip { flags.push("SKIP"); }
             let flag_str = if flags.is_empty() { String::new() } else { format!(" [{}]", flags.join("|")) };
-            
             let source_str = if let Some(p) = &node.module_path {
                 format!(" -> {}", p.display())
             } else {
                 String::new()
             };
-
             writeln!(f, "{}{}{} [{}]{}{}", prefix, connector, name, node.file_type, flag_str, source_str)?;
-
             let child_prefix = if is_root { "" } else if is_last { "    " } else { "│   " };
             let new_prefix = format!("{}{}", prefix, child_prefix);
-            
             let mut children: Vec<_> = node.children.values().collect();
             children.sort_by(|a, b| a.name.cmp(&b.name));
-            
             for (i, child) in children.iter().enumerate() {
                 let is_last_child = i == children.len() - 1;
                 print_tree(child, f, &new_prefix, is_last_child, false)?;
             }
             Ok(())
         }
-        
         print_tree(self, f, "", true, true)
     }
 }
-
 impl Node {
-    pub fn collect_module_files<P>(&mut self, module_dir: P) -> Result<bool>
-    where
-        P: AsRef<Path>,
-    {
-        let dir = module_dir.as_ref();
-        let mut has_file = false;
-        if let Ok(entries) = dir.read_dir() {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-
-                let node = match self.children.entry(name.clone()) {
-                    Entry::Occupied(o) => Some(o.into_mut()),
-                    Entry::Vacant(v) => Self::new_module(&name, &entry).map(|it| v.insert(it)),
-                };
-
-                if let Some(node) = node {
-                    has_file |= if node.file_type == NodeFileType::Directory {
-                        node.collect_module_files(dir.join(&node.name))? || node.replace
-                    } else {
-                        true
-                    }
-                }
-            }
-        }
-
-        Ok(has_file)
-    }
-
-    pub fn dir_is_replace<P>(path: P) -> Result<bool>
-    where
-        P: AsRef<Path>,
-    {
-        if let Ok(v) = lgetxattr(&path, REPLACE_DIR_XATTR) {
-            if String::from_utf8_lossy(&v) == "y" {
-                return Ok(true);
-            }
-        }
-
-        let c_path = CString::new(path.as_ref().as_str()?)?;
-        let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY) };
-
-        if fd < 0 {
-            return Ok(false);
-        }
-
-        let exists = unsafe {
-            let replace = CString::new(REPLACE_DIR_FILE_NAME)?;
-            let ret = libc::faccessat(fd, replace.as_ptr(), libc::F_OK, 0);
-            libc::close(fd);
-            ret
-        };
-
-        if exists == 0 { Ok(true) } else { Ok(false) }
-    }
-
     pub fn new_root<S>(name: S) -> Self
     where
-        S: AsRef<str> + Into<String>,
+        S: Into<String>,
     {
         Self {
             name: name.into(),
             file_type: NodeFileType::Directory,
-            children: HashMap::default(),
             module_path: None,
+            children: HashMap::new(),
             replace: false,
             skip: false,
         }
     }
-
-    pub fn new_module<S>(name: &S, entry: &DirEntry) -> Option<Self>
-    where
-        S: AsRef<str> + Into<String>,
-        std::string::String: for<'a> From<&'a S>,
-    {
-        if let Ok(metadata) = entry.metadata() {
+    pub fn collect_module_files(&mut self, root: &PathBuf) -> anyhow::Result<()> {
+        for entry in walkdir::WalkDir::new(root)
+            .min_depth(1)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
             let path = entry.path();
-            let file_type = if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
-                Some(NodeFileType::Whiteout)
-            } else {
-                NodeFileType::from_file_type(metadata.file_type())
-            };
-            if let Some(file_type) = file_type {
-                let replace = if file_type == NodeFileType::Directory {
-                    if let Ok(s) = Self::dir_is_replace(&path) {
-                        s
-                    } else {
-                        false
-                    }
+            let relative_path = path.strip_prefix(root)?;
+            let module_file = ModuleFile::new(root, relative_path)?;
+            if module_file.is_replace_file {
+                continue;
+            }
+            self.add_module_file(module_file);
+        }
+        Ok(())
+    }
+    fn add_module_file(&mut self, module_file: ModuleFile) {
+        let mut current_node = self;
+        let components: Vec<_> = module_file.relative_path.components().collect();
+        for (i, component) in components.iter().enumerate() {
+            let name = component.as_os_str().to_string_lossy().to_string();
+            let is_last = i == components.len() - 1;
+            if is_last {
+                let file_type = if module_file.is_whiteout {
+                    NodeFileType::Whiteout
                 } else {
-                    false
+                    NodeFileType::from(module_file.file_type)
                 };
-                return Some(Self {
-                    name: name.into(),
-                    file_type,
-                    children: HashMap::default(),
-                    module_path: Some(path),
-                    replace,
-                    skip: false,
-                });
+                let node = current_node
+                    .children
+                    .entry(name.clone())
+                    .or_insert_with(|| Node {
+                        name: name.clone(),
+                        file_type,
+                        module_path: None,
+                        children: HashMap::new(),
+                        replace: false,
+                        skip: false,
+                    });
+                if !module_file.is_whiteout {
+                    node.module_path = Some(module_file.real_path.clone());
+                    node.file_type = file_type;
+                } else {
+                    node.file_type = NodeFileType::Whiteout;
+                }
+                if module_file.is_replace {
+                    node.replace = true;
+                }
+            } else {
+                current_node = current_node
+                    .children
+                    .entry(name.clone())
+                    .or_insert_with(|| Node {
+                        name,
+                        file_type: NodeFileType::Directory,
+                        module_path: None,
+                        children: HashMap::new(),
+                        replace: false,
+                        skip: false,
+                    });
             }
         }
-
-        None
     }
 }

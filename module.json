@@ -1,0 +1,17 @@
+{
+    "metamodule": true,
+    "summary": "Next Generation Mounting Matemodule with OverlayFS, Magic Mount and HymoFS.",
+    "sourceUrl": "https://github.com/YuzakiKokuban/meta-hybrid_mount",
+    "additionalAuthors": [
+        {
+            "type": "add",
+            "name": "Tools-cx-app",
+            "link": "https://github.com/Tools-cx-app"
+        },
+        {
+            "type": "add",
+            "name": "Anatdx",
+            "link": "https://github.com/Anatdx"
+        }
+    ]
+}

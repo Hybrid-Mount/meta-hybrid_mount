@@ -28,13 +28,16 @@
     "kernel": "Ядро",
     "selinux": "SELinux",
     "mountBase": "База монтирования",
-    "activePartitions": "Активные разделы"
+    "activePartitions": "Активные разделы",
+    "health": "Здоровье системы",
+    "healthy": "Все проверки пройдены. Система в норме."
   },
   "config": {
     "title": "Конфигурация",
     "verboseLabel": "Подробный лог",
     "verboseOff": "Выкл.",
     "verboseOn": "Вкл.",
+    "dryRun": "Пробный запуск (Dry Run)",
     "forceExt4": "Принудительный Ext4",
     "enableNuke": "Включить Paw Pad (Скрытность)",
     "disableUmount": "Отключить разделение пространств имен",
@@ -52,7 +55,11 @@
     "loadError": "Ошибка загрузки конфига",
     "loadDefault": "Конфиг по умолчанию",
     "saveSuccess": "Успешно сохранено",
-    "saveFailed": "Ошибка сохранения"
+    "saveFailed": "Ошибка сохранения",
+    "webui": "Настройки WebUI",
+    "fixBottomNav": "Испр. навигации",
+    "fixBottomNavOn": "Исправление вкл.",
+    "fixBottomNavOff": "Исправление выкл."
   },
   "modules": {
     "title": "Режимы модулей",
@@ -68,7 +75,12 @@
     "saveFailed": "Ошибка сохранения режимов",
     "searchPlaceholder": "Поиск модулей...",
     "filterLabel": "Фильтр:",
-    "filterAll": "Все"
+    "filterAll": "Все",
+    "checkConflicts": "Проверить конфликты",
+    "hideConflicts": "Скрыть конфликты",
+    "conflictsTitle": "Конфликты файлов",
+    "noConflicts": "Конфликтов не обнаружено.",
+    "conflictError": "Ошибка проверки"
   },
   "logs": {
     "title": "Системные логи",

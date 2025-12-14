@@ -7,7 +7,8 @@
     "language": "语言",
     "themeAuto": "自动 (跟随系统)",
     "themeLight": "浅色模式",
-    "themeDark": "深色模式"
+    "themeDark": "深色模式",
+    "saveSuccess": "保存成功"
   },
   "tabs": {
     "status": "状态",
@@ -27,17 +28,22 @@
     "sysInfoTitle": "系统信息",
     "kernel": "内核版本",
     "selinux": "SELinux",
-    "mountBase": "挂载基点 (Mount Base)",
-    "activePartitions": "活跃分区"
+    "mountBase": "挂载基点",
+    "activePartitions": "活跃分区",
+    "health": "文件冲突检测",
+    "healthy": "所有检查通过，文件没有冲突。"
   },
   "config": {
     "title": "配置",
     "verboseLabel": "详细日志",
     "verboseOff": "关闭",
     "verboseOn": "开启",
+    "dryRun": "预演模式",
     "forceExt4": "强制 Ext4 模式",
-    "enableNuke": "启用肉垫 (隐蔽模式)",
+    "enableNuke": "启用肉垫",
     "disableUmount": "禁用Umount",
+    "allowUmountCoexistence": "允许Umount共存",
+    "coexistenceRequired": "需开启共存选项",
     "moduleDir": "模块路径",
     "tempDir": "临时路径",
     "mountSource": "挂载源名",
@@ -52,7 +58,11 @@
     "loadError": "加载失败",
     "loadDefault": "已加载默认配置",
     "saveSuccess": "保存成功",
-    "saveFailed": "保存失败"
+    "saveFailed": "保存失败",
+    "webui": "WebUI 设置",
+    "fixBottomNav": "三按钮导航栏适配",
+    "fixBottomNavOn": "已开启三按钮适配",
+    "fixBottomNavOff": "已关闭三按钮适配"
   },
   "modules": {
     "title": "模块模式",
@@ -68,7 +78,32 @@
     "saveFailed": "保存失败",
     "searchPlaceholder": "搜索模块...",
     "filterLabel": "筛选:",
-    "filterAll": "全部"
+    "filterAll": "全部",
+    "author": "作者",
+    "unknown": "未知",
+    "defaultMode": "默认策略",
+    "pathRules": "路径规则",
+    "addRule": "添加规则",
+    "noRules": "未定义路径规则",
+    "noDesc": "暂无描述",
+    "checkConflicts": "检测文件冲突",
+    "hideConflicts": "隐藏冲突",
+    "conflictsTitle": "文件冲突列表",
+    "noConflicts": "未检测到文件冲突。",
+    "conflictError": "检测失败",
+    "placeholder": "例如 system/fonts",
+    "modes": {
+      "auto": "OverlayFS",
+      "magic": "Magic Mount",
+      "hymo": "HymoFS",
+      "ignore": "禁用 (忽略)",
+      "short": {
+        "auto": "Overlay",
+        "magic": "Magic",
+        "hymo": "HymoFS",
+        "ignore": "忽略"
+      }
+    }
   },
   "logs": {
     "title": "运行日志",

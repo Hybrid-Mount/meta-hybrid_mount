@@ -7,7 +7,8 @@
     "language": "Language",
     "themeAuto": "Auto (System)",
     "themeLight": "Light Mode",
-    "themeDark": "Dark Mode"
+    "themeDark": "Dark Mode",
+    "saveSuccess": "Saved successfully"
   },
   "tabs": {
     "status": "Status",
@@ -28,16 +29,21 @@
     "kernel": "Kernel",
     "selinux": "SELinux",
     "mountBase": "Mount Base",
-    "activePartitions": "Active Partitions"
+    "activePartitions": "Active Partitions",
+    "health": "System Health",
+    "healthy": "All checks passed. System is healthy."
   },
   "config": {
     "title": "Configuration",
     "verboseLabel": "Verbose Log",
     "verboseOff": "Off",
     "verboseOn": "On",
-    "forceExt4": "Force Ext4 Mode",
-    "enableNuke": "Enable Paw Pad (Stealth)",
-    "disableUmount": "Disable Namespace Detach",
+    "dryRun": "Dry Run",
+    "forceExt4": "Ext4 Mode",
+    "enableNuke": "Enable Paw Pad",
+    "disableUmount": "Disable Umount",
+    "allowUmountCoexistence": "Allow Umount Coexistence",
+    "coexistenceRequired": "Coexistence option required",
     "moduleDir": "Module Directory",
     "tempDir": "Temp Directory",
     "mountSource": "Mount Source",
@@ -52,7 +58,11 @@
     "loadError": "Failed to load config",
     "loadDefault": "Using default config",
     "saveSuccess": "Saved successfully",
-    "saveFailed": "Failed to save"
+    "saveFailed": "Failed to save",
+    "webui": "WebUI Settings",
+    "fixBottomNav": "Fix Bottom Nav",
+    "fixBottomNavOn": "Bottom Nav Fix Enabled",
+    "fixBottomNavOff": "Bottom Nav Fix Disabled"
   },
   "modules": {
     "title": "Module Modes",
@@ -68,7 +78,32 @@
     "saveFailed": "Failed to save modes",
     "searchPlaceholder": "Search modules...",
     "filterLabel": "Filter:",
-    "filterAll": "All"
+    "filterAll": "All",
+    "author": "Author",
+    "unknown": "Unknown",
+    "defaultMode": "Default Strategy",
+    "pathRules": "Path Overrides",
+    "addRule": "Add Path Rule",
+    "noRules": "No path overrides defined.",
+    "noDesc": "No description",
+    "checkConflicts": "Check Conflicts",
+    "hideConflicts": "Hide Conflicts",
+    "conflictsTitle": "File Conflicts",
+    "noConflicts": "No file conflicts detected.",
+    "conflictError": "Failed to check conflicts",
+    "placeholder": "e.g. system/fonts",
+    "modes": {
+      "auto": "OverlayFS",
+      "magic": "Magic Mount",
+      "hymo": "HymoFS",
+      "ignore": "Disable (Ignore)",
+      "short": {
+        "auto": "Overlay",
+        "magic": "Magic",
+        "hymo": "HymoFS",
+        "ignore": "Ignore"
+      }
+    }
   },
   "logs": {
     "title": "System Logs",

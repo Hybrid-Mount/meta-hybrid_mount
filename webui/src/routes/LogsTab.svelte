@@ -1,14 +1,20 @@
-<script>
+<script lang="ts">
   import { store } from '../lib/store.svelte';
   import { ICONS } from '../lib/constants';
   import { onMount, tick, onDestroy } from 'svelte';
   import Skeleton from '../components/Skeleton.svelte';
+  import BottomActions from '../components/BottomActions.svelte';
   import './LogsTab.css';
+  import '@material/web/iconbutton/filled-tonal-icon-button.js';
+  import '@material/web/icon/icon.js';
+
   let searchLogQuery = $state('');
   let filterLevel = $state('all'); 
-  let logContainer;
+  let logContainer = $state<HTMLDivElement>();
   let autoRefresh = $state(false);
-  let refreshInterval;
+  let refreshInterval: any;
+  let userHasScrolledUp = $state(false);
+
   let filteredLogs = $derived(store.logs.filter(line => {
     const text = line.text.toLowerCase();
     const matchesSearch = text.includes(searchLogQuery.toLowerCase());
@@ -18,16 +24,31 @@
     }
     return matchesSearch && matchesLevel;
   }));
+
   async function scrollToBottom() {
-    if (logContainer && autoRefresh) { 
+    if (logContainer) { 
       await tick();
-      logContainer.scrollTop = logContainer.scrollHeight;
+      logContainer.scrollTo({ top: logContainer.scrollHeight, behavior: 'smooth' });
+      userHasScrolledUp = false;
     }
   }
+
+  function handleScroll(e: Event) {
+    const target = e.target as HTMLElement;
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    userHasScrolledUp = distanceToBottom > 50;
+  }
+
   async function refreshLogs(silent = false) {
     await store.loadLogs(silent);
-    if (!silent) scrollToBottom(); 
+    if (!silent && !userHasScrolledUp) {
+      if (logContainer) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
+    }
   }
+
   async function copyLogs() {
     if (filteredLogs.length === 0) return;
     const text = filteredLogs.map(l => l.text).join('\n');
@@ -38,6 +59,7 @@
       store.showToast(store.L.logs.copyFail, 'error');
     }
   }
+
   $effect(() => {
     if (autoRefresh) {
       refreshLogs(true); 
@@ -49,15 +71,18 @@
     }
     return () => { if (refreshInterval) clearInterval(refreshInterval); };
   });
+
   onMount(() => {
     refreshLogs(); 
   });
+
   onDestroy(() => {
     if (refreshInterval) clearInterval(refreshInterval);
   });
 </script>
+
 <div class="logs-controls">
-  <svg viewBox="0 0 24 24" width="20" height="20" style="fill: var(--md-sys-color-on-surface-variant)">
+  <svg viewBox="0 0 24 24" width="20" height="20" class="log-search-icon">
     <path d={ICONS.search} />
   </svg>
   <input 
@@ -66,12 +91,12 @@
     placeholder={store.L.logs.searchPlaceholder}
     bind:value={searchLogQuery}
   />
-  <div style="display:flex; align-items:center; gap:6px; margin-right:8px;">
-    <input type="checkbox" id="auto-refresh" bind:checked={autoRefresh} style="accent-color: var(--md-sys-color-primary);" />
-    <label for="auto-refresh" style="font-size: 12px; color: var(--md-sys-color-on-surface-variant); cursor: pointer; white-space: nowrap;">Auto</label>
+  <div class="log-auto-group">
+    <input type="checkbox" id="auto-refresh" bind:checked={autoRefresh} class="log-auto-checkbox" />
+    <label for="auto-refresh" class="log-auto-label">Auto</label>
   </div>
-  <div style="height: 16px; width: 1px; background: var(--md-sys-color-outline-variant); margin: 0 8px;"></div>
-  <span style="font-size: 12px; color: var(--md-sys-color-on-surface-variant); white-space: nowrap;">
+  <div class="log-divider"></div>
+  <span class="log-filter-label">
     {store.L.logs.filterLabel}
   </span>
   <select class="log-filter-select" bind:value={filterLevel}>
@@ -81,15 +106,16 @@
     <option value="error">{store.L.logs.levels.error}</option>
   </select>
 </div>
-<div class="log-container" bind:this={logContainer}>
+
+<div class="log-container" bind:this={logContainer} onscroll={handleScroll}>
   {#if store.loading.logs}
-    <div style="display:flex; flex-direction:column; gap:8px;">
+    <div class="log-skeleton-container">
       {#each Array(10) as _, i}
         <Skeleton width="{60 + (i % 3) * 20}%" height="14px" />
       {/each}
     </div>
   {:else if filteredLogs.length === 0}
-    <div style="padding: 20px; text-align: center;">
+    <div class="log-empty-state">
       {store.logs.length === 0 ? store.L.logs.empty : "No matching logs"}
     </div>
   {:else}
@@ -98,22 +124,44 @@
         <span class="log-{line.type}">{line.text}</span>
       </span>
     {/each}
-    <div style="text-align: center; padding: 12px; font-size: 11px; opacity: 0.5; border-top: 1px solid rgba(255,255,255,0.1); margin-top: 12px;">
+    <div class="log-footer">
       — Showing last 1000 lines —
     </div>
   {/if}
+  {#if userHasScrolledUp}
+    <button 
+      class="scroll-fab" 
+      onclick={scrollToBottom}
+      title="Scroll to bottom"
+    >
+     <svg viewBox="0 0 24 24" class="scroll-icon"><path d="M11 4h2v12l5.5-5.5 1.42 1.42L12 19.84l-7.92-7.92L5.5 10.5 11 16V4z" fill="currentColor"/></svg>
+      Latest
+    </button>
+  {/if}
 </div>
-<div class="bottom-actions">
-  <button class="btn-tonal" onclick={copyLogs} disabled={filteredLogs.length === 0} title={store.L.logs.copy}>
-    <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.copy} fill="currentColor"/></svg>
-  </button>
-  <div style="flex:1"></div>
-  <button 
-    class="btn-tonal" 
+
+<BottomActions>
+  <md-filled-tonal-icon-button 
+    onclick={copyLogs} 
+    disabled={filteredLogs.length === 0} 
+    title={store.L.logs.copy}
+    role="button"
+    tabindex="0"
+    onkeydown={() => {}}
+  >
+    <md-icon><svg viewBox="0 0 24 24"><path d={ICONS.copy} /></svg></md-icon>
+  </md-filled-tonal-icon-button>
+
+  <div class="spacer"></div>
+
+  <md-filled-tonal-icon-button 
     onclick={() => refreshLogs(false)} 
     disabled={store.loading.logs}
     title={store.L.logs.refresh}
+    role="button"
+    tabindex="0"
+    onkeydown={() => {}}
   >
-    <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.refresh} fill="currentColor"/></svg>
-  </button>
-</div>
+    <md-icon><svg viewBox="0 0 24 24"><path d={ICONS.refresh} /></svg></md-icon>
+  </md-filled-tonal-icon-button>
+</BottomActions>

@@ -28,13 +28,16 @@
     "kernel": "核心版本",
     "selinux": "SELinux",
     "mountBase": "掛載基點 (Mount Base)",
-    "activePartitions": "活躍分區"
+    "activePartitions": "活躍分區",
+    "health": "系統健康度",
+    "healthy": "所有檢查通過，系統健康。"
   },
   "config": {
     "title": "設定",
     "verboseLabel": "詳細日誌",
     "verboseOff": "關閉",
     "verboseOn": "開啟",
+    "dryRun": "預演模式 (Dry Run)",
     "forceExt4": "強制 Ext4 模式",
     "enableNuke": "啟用肉墊 (隱蔽模式)",
     "disableUmount": "禁用命名空間分離",
@@ -52,7 +55,11 @@
     "loadError": "載入失敗",
     "loadDefault": "已載入預設設定",
     "saveSuccess": "儲存成功",
-    "saveFailed": "儲存失敗"
+    "saveFailed": "儲存失敗",
+    "webui": "WebUI 設定",
+    "fixBottomNav": "三按鈕導航列適配",
+    "fixBottomNavOn": "已開啟三按鈕適配",
+    "fixBottomNavOff": "已關閉三按鈕適配"
   },
   "modules": {
     "title": "模組模式",
@@ -68,7 +75,12 @@
     "saveFailed": "儲存失敗",
     "searchPlaceholder": "搜尋模組...",
     "filterLabel": "篩選:",
-    "filterAll": "全部"
+    "filterAll": "全部",
+    "checkConflicts": "檢測檔案衝突",
+    "hideConflicts": "隱藏衝突",
+    "conflictsTitle": "檔案衝突列表",
+    "noConflicts": "未檢測到檔案衝突。",
+    "conflictError": "檢測失敗"
   },
   "logs": {
     "title": "執行日誌",

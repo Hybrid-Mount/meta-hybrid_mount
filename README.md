@@ -1,30 +1,88 @@
-# **Meta-Hybrid Mount**
+<img src="icon.svg" align="right" width="120" />
+
+# Meta-Hybrid Mount
 
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
+![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)
 
-> A Hybrid Mount metamodule for KernelSU/Magisk, implementing both OverlayFS and Magic Mount logic via a native Rust binary.
+**Meta-Hybrid Mount** is a next-generation hybrid mount metamodule designed for KernelSU. Written in native Rust, it intelligently combines **OverlayFS** and **Magic Mount** technologies to provide a more efficient, stable, and stealthy module management experience compared to traditional mounting solutions.
 
----
-
-<div align="center">
+This project includes a modern WebUI management interface built with Svelte, allowing users to monitor status, manage module modes, and view logs in real-time.
 
 **[ 🇨🇳 中文 (Chinese) ](README_ZH.md)**
 
-</div>
+---
+
+## ✨ Core Features
+
+### 🚀 True Hybrid Engine
+* **Smart Strategy**: Prioritizes **OverlayFS** to achieve optimal I/O performance and filesystem merging capabilities.
+* **Automatic Fallback**: Automatically and seamlessly falls back to the **Magic Mount** mechanism when OverlayFS mounting fails, the target is unsupported, or when forcibly specified by the user.
+* **Rust Native**: The core daemon is written in Rust, utilizing `rustix` for direct system calls, ensuring safety and high efficiency.
+
+### 🛡️ Diagnostics & Safety
+* **Conflict Monitor**: Detects and reports file path conflicts between different modules, helping you understand which module overrides which file.
+* **System Health**: Built-in diagnostics tool to identify dead symlinks, invalid mount points, and potential bootloop risks before they happen.
+* **Paw Pad (Stealth)**: Optional feature to remove `sysfs` traces, making the mount environment harder to detect.
+
+### 🔄 Smart Sync
+* **Fast Boot**: Abandons the inefficient pattern of full copying on every boot. The daemon compares `module.prop` checksums and only synchronizes new or modified modules.
+* **Dynamic TempDir**: Automatically identifies and utilizes existing empty system directories (e.g., `/debug_ramdisk`) as temporary mount points to minimize traces on `/data`.
+
+## 🖥️ WebUI
+
+The built-in WebUI allows you to:
+* **Dashboard**: View storage usage, kernel info, and mount mode statistics.
+* **Modules**: Manage per-module mount strategies (Overlay/Magic/HymoFS) and check for file conflicts.
+* **Config**: visually edit `config.toml` parameters.
+* **Logs**: Real-time daemon log viewer.
 
 ---
 
-## **Core Architecture**
+## 🔨 Build Guide
 
-* **True Hybrid Engine**:
-  * **Logic**: Written in Rust using `rustix` for direct syscalls, ensuring high performance and safety.
-  * **Mechanism**: Intelligently mixes **OverlayFS** and **Magic Mount**. It prioritizes OverlayFS for performance but automatically falls back to Magic Mount for specific modules or partitions if needed.
+This project uses Rust's `xtask` pattern for building, integrating the WebUI build process.
 
-* **Smart Sync (New)**:
-  * **Performance**: Implements an incremental synchronization strategy on boot. Instead of wiping and re-copying everything, it checks for changes in `module.prop`.
-  * **Speed**: Only modified or new modules are synced, drastically reducing boot time I/O overhead.
+### Requirements
+* **Rust**: Nightly toolchain (Recommended to use `rustup`)
+* **Android NDK**: Version r27+
+* **Node.js**: v20+ (For building WebUI)
+* **Java**: JDK 17 (For environment configuration)
 
-* **Smart Storage**:
-  * **Priority**: Prioritizes **Tmpfs** (memory-backed filesystem) for maximum speed and stealth.
-  * **Fallback**: Automatically detects if Tmpfs supports XATTR (required for SELinux). If not, it safely falls back to mounting a 2GB ext4 loop image (`modules.img`).
+### Build Commands
+
+1.  **Clone Repository**
+    ```bash
+    git clone --recursive [https://github.com/YuzakiKokuban/meta-hybrid_mount.git](https://github.com/YuzakiKokuban/meta-hybrid_mount.git)
+    cd meta-hybrid_mount
+    ```
+
+2.  **Execute Build**
+    Use `xtask` to automatically handle WebUI compilation, Rust cross-compilation, and Zip packaging:
+    ```bash
+    # Build Release version (Includes WebUI and binaries for all architectures)
+    cargo run -p xtask -- build --release
+    ```
+
+    The build artifacts will be located in the `output/` directory.
+
+3.  **Build Binaries Only (Skip WebUI)**
+    If you only modified Rust code, you can skip the WebUI build to save time:
+    ```bash
+    cargo run -p xtask -- build --release --skip-webui
+    ```
+
+### Supported Architectures
+The build script compiles the following architectures by default:
+* `aarch64-linux-android` (arm64)
+* `x86_64-linux-android` (x64)
+* `riscv64-linux-android` (riscv64)
+
+---
+
+## 🤝 Contributions & Credits
+
+* Thanks to all contributors in the open-source community.
+* Our sister project [Hymo](https://github.com/Anatdx/hymo)
+* This project is licensed under the GPL-3.0 License.

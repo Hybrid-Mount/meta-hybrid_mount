@@ -28,16 +28,19 @@
     "kernel": "カーネル",
     "selinux": "SELinux",
     "mountBase": "マウントベース",
-    "activePartitions": "アクティブパーティション"
+    "activePartitions": "アクティブパーティション",
+    "health": "システム健全性",
+    "healthy": "全チェック合格。システムは正常です。"
   },
   "config": {
     "title": "設定",
     "verboseLabel": "詳細ログ",
     "verboseOff": "オフ",
     "verboseOn": "オン",
+    "dryRun": "ドライランモード (Dry Run)",
     "forceExt4": "Ext4 モードを強制",
-    "enableNuke": "肉球を有効化 (ステルス)",
-    "disableUmount": "名前空間の分離を無効化",
+    "enableNuke": "肉球を有効化",
+    "disableUmount": "Umount無効化",
     "moduleDir": "モジュールディレクトリ",
     "tempDir": "一時ディレクトリ",
     "mountSource": "マウントソース",
@@ -52,7 +55,11 @@
     "loadError": "設定の読み込みに失敗しました",
     "loadDefault": "デフォルト設定を使用します",
     "saveSuccess": "保存しました",
-    "saveFailed": "保存に失敗しました"
+    "saveFailed": "保存に失敗しました",
+    "webui": "WebUI設定",
+    "fixBottomNav": "ナビゲーションバー調整",
+    "fixBottomNavOn": "調整を有効化しました",
+    "fixBottomNavOff": "調整を無効化しました"
   },
   "modules": {
     "title": "モジュールモード",
@@ -68,7 +75,12 @@
     "saveFailed": "モードの保存に失敗しました",
     "searchPlaceholder": "モジュールを検索...",
     "filterLabel": "フィルター:",
-    "filterAll": "すべて"
+    "filterAll": "すべて",
+    "checkConflicts": "競合をチェック",
+    "hideConflicts": "競合を隠す",
+    "conflictsTitle": "ファイル競合",
+    "noConflicts": "競合は検出されませんでした。",
+    "conflictError": "チェックに失敗しました"
   },
   "logs": {
     "title": "システムログ",

@@ -1,89 +1,72 @@
-.app-bar {
-  flex-shrink: 0;
-  background-color: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
-  z-index: 20;
-  padding-top: max(32px, env(safe-area-inset-top)); 
-  box-shadow: var(--md-sys-elevation-1);
-  transition: background-color 0.3s ease;
-  position: relative;
-}
-.app-bar-content {
-  height: 64px;
+.bottom-nav {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-}
-.screen-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 500;
-  color: var(--md-sys-color-on-surface);
-}
-.top-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.nav-tabs {
-  display: flex;
-  background-color: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  background-color: var(--md-sys-color-surface-container);
+  border-top: none;
+  box-shadow: none; 
+  padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  padding-top: 16px;
+  padding-left: 24px;
+  padding-right: 24px;
   overflow-x: auto;
   flex-shrink: 0;
-  scrollbar-width: none; 
-  -ms-overflow-style: none; 
+  -ms-overflow-style: none;
+  gap: 8px;
+  z-index: 100;
 }
-.nav-tabs::-webkit-scrollbar {
+.bottom-nav::-webkit-scrollbar {
   display: none;
 }
 .nav-tab {
   flex: 1;
-  min-width: 100px;
-  height: 48px;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+  background: transparent;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+}
+.icon-container {
+  width: 64px;
+  height: 32px;
+  border-radius: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--md-sys-color-on-surface-variant);
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
-  background: none;
-  cursor: pointer;
-  white-space: nowrap; 
+  transition: background-color 0.2s cubic-bezier(0.2, 0, 0, 1), width 0.2s;
+  pointer-events: none;
+}
+md-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  transition: fill 0.2s, transform 0.2s;
+}
+md-icon svg path {
+  transition: none !important;
+}
+.nav-tab.active .icon-container {
+  background-color: var(--md-sys-color-secondary-container);
+  width: 64px;
 }
 .nav-tab.active {
-  color: var(--md-sys-color-primary);
-  border-bottom-color: var(--md-sys-color-primary);
-}
-.nav-tab svg {
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-}
-.menu-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 16px;
-  background: var(--md-sys-color-surface-container-high);
-  border-radius: 8px;
-  padding: 8px 0;
-  box-shadow: var(--md-sys-elevation-2);
-  z-index: 1000;
-  min-width: 120px;
-  overflow: hidden;
-}
-.menu-item {
-  width: 100%;
-  padding: 12px 24px;
-  text-align: left;
-  background: none;
   color: var(--md-sys-color-on-surface);
-  cursor: pointer;
 }
-.menu-item:hover {
-  background: rgba(255,255,255,0.05);
+.nav-tab.active md-icon svg {
+  fill: var(--md-sys-color-on-secondary-container);
+}
+.nav-tab.active .label {
+  font-weight: 600;
+}
+.nav-tab:active .icon-container {
+  opacity: 0.8;
 }
