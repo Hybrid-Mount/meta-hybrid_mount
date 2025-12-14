@@ -48,6 +48,7 @@ export interface SystemInfo {
   mountBase: string;
   activeMounts: string[];
   zygisksuEnforce?: string;
+  nukeActive?: boolean;
 }
 
 export interface DeviceInfo {

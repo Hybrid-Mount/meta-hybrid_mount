@@ -55,7 +55,7 @@
         <div class="storage-info-col">
             <div class="storage-label-group">
                 <div class="storage-icon-circle">
-                    <svg viewBox="0 0 24 24"><path d={ICONS.storage} /></svg>
+                  <svg viewBox="0 0 24 24"><path d={ICONS.storage} /></svg>
                 </div>
                 <span class="storage-title">{store.L?.status?.storageTitle ?? 'Storage'}</span>
             </div>
@@ -64,7 +64,8 @@
                 {store.storage.type?.toUpperCase()}
               </span>
              {/if}
-          </div>
+      
+        </div>
         <div class="storage-value-group">
             <span class="storage-value">{store.storage?.percent ?? '0%'}</span>
             <span class="storage-unit">Used</span>
@@ -151,6 +152,16 @@
         {:else}
           <span class="info-val {store.storage?.hymofs_available ? 'text-success' : 'text-disabled'}">
             {store.storage?.hymofs_available ? `Active${store.storage.hymofs_version ? ` (v${store.storage.hymofs_version})` : ''}` : 'Not Detected'}
+          </span>
+        {/if}
+      </div>
+      <div class="info-item">
+        <span class="info-label">Stealth Mode</span>
+        {#if store.loading.status}
+          <Skeleton width="50%" height="16px" />
+        {:else}
+          <span class="info-val {store.systemInfo?.nukeActive ? 'text-success' : 'text-disabled'}">
+            {store.systemInfo?.nukeActive ? 'Active' : 'Inactive'}
           </span>
         {/if}
       </div>
