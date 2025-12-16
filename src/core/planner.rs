@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use anyhow::Result;
+use rayon::prelude::*;
 use serde::Serialize;
 use walkdir::WalkDir;
 use crate::{conf::config, defs, core::inventory::{Module, MountMode}};
@@ -44,36 +45,41 @@ pub struct ConflictReport {
 
 impl MountPlan {
     pub fn analyze_conflicts(&self) -> ConflictReport {
-        let mut conflicts = Vec::new();
-        for op in &self.overlay_ops {
-            let mut file_map: HashMap<String, Vec<String>> = HashMap::new();
-            for layer_path in &op.lowerdirs {
-                let module_id = layer_path.parent()
-                    .and_then(|p| p.file_name())
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "UNKNOWN".into());
+        let mut conflicts: Vec<ConflictEntry> = self.overlay_ops
+            .par_iter()
+            .flat_map(|op| {
+                let mut local_conflicts = Vec::new();
+                let mut file_map: HashMap<String, Vec<String>> = HashMap::new();
                 
-                for entry in WalkDir::new(layer_path).min_depth(1) {
-                    if let Ok(entry) = entry {
-                        if !entry.file_type().is_file() { continue; }
-                        if let Ok(rel) = entry.path().strip_prefix(layer_path) {
-                            let rel_str = rel.to_string_lossy().to_string();
-                            file_map.entry(rel_str).or_default().push(module_id.clone());
+                for layer_path in &op.lowerdirs {
+                    let module_id = layer_path.parent()
+                        .and_then(|p| p.file_name())
+                        .map(|s| s.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "UNKNOWN".into());
+                    
+                    for entry in WalkDir::new(layer_path).min_depth(1) {
+                        if let Ok(entry) = entry {
+                            if !entry.file_type().is_file() { continue; }
+                            if let Ok(rel) = entry.path().strip_prefix(layer_path) {
+                                let rel_str = rel.to_string_lossy().to_string();
+                                file_map.entry(rel_str).or_default().push(module_id.clone());
+                            }
                         }
                     }
                 }
-            }
 
-            for (rel_path, modules) in file_map {
-                if modules.len() > 1 {
-                    conflicts.push(ConflictEntry {
-                        partition: op.partition_name.clone(),
-                        relative_path: rel_path,
-                        contending_modules: modules,
-                    });
+                for (rel_path, modules) in file_map {
+                    if modules.len() > 1 {
+                        local_conflicts.push(ConflictEntry {
+                            partition: op.partition_name.clone(),
+                            relative_path: rel_path,
+                            contending_modules: modules,
+                        });
+                    }
                 }
-            }
-        }
+                local_conflicts
+            })
+            .collect();
 
         conflicts.sort_by(|a, b| {
             a.partition.cmp(&b.partition)
@@ -135,33 +141,43 @@ impl MountPlan {
     }
 }
 
+struct ModuleContribution {
+    id: String,
+    overlays: Vec<(String, PathBuf)>,
+    hymo_ops: Vec<HymoOperation>,
+    magic_path: Option<PathBuf>,
+}
+
 pub fn generate(
     config: &config::Config, 
     modules: &[Module], 
     storage_root: &Path
 ) -> Result<MountPlan> {
     let mut plan = MountPlan::default();
-    let mut overlay_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
-    let mut magic_paths = HashSet::new();
     
-    let mut overlay_ids = HashSet::new();
-    let mut hymo_ids = HashSet::new();
-    let mut magic_ids = HashSet::new();
-
     let mut target_partitions = defs::BUILTIN_PARTITIONS.to_vec();
     target_partitions.extend(config.partitions.iter().map(|s| s.as_str()));
+    let contributions: Vec<Option<ModuleContribution>> = modules
+        .par_iter()
+        .map(|module| {
+            let mut content_path = storage_root.join(&module.id);
+            if !content_path.exists() {
+                content_path = module.source_path.clone();
+            }
+            
+            if !content_path.exists() { return None; }
 
-    for module in modules {
-        let mut content_path = storage_root.join(&module.id);
-        if !content_path.exists() {
-            content_path = module.source_path.clone();
-        }
-        
-        if !content_path.exists() { continue; }
+            let mut contrib = ModuleContribution {
+                id: module.id.clone(),
+                overlays: Vec::new(),
+                hymo_ops: Vec::new(),
+                magic_path: None,
+            };
 
-        if let Ok(entries) = fs::read_dir(&content_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
+            let mut has_any_action = false;
+
+            if let Ok(entries) = fs::read_dir(&content_path) {
+                for entry in entries.flatten() {
                     let path = entry.path();
                     if !path.is_dir() { continue; }
                     
@@ -177,23 +193,21 @@ pub fn generate(
 
                     match mode {
                         MountMode::Overlay => {
-                            overlay_groups.entry(dir_name)
-                                .or_default()
-                                .push(path);
-                            overlay_ids.insert(module.id.clone());
+                            contrib.overlays.push((dir_name, path));
+                            has_any_action = true;
                         },
                         MountMode::HymoFs => {
                             let target_base = PathBuf::from("/").join(&dir_name);
-                            plan.hymo_ops.push(HymoOperation {
+                            contrib.hymo_ops.push(HymoOperation {
                                 module_id: module.id.clone(),
                                 source: path,
                                 target: target_base,
                             });
-                            hymo_ids.insert(module.id.clone());
+                            has_any_action = true;
                         },
                         MountMode::Magic => {
-                            magic_paths.insert(content_path.clone());
-                            magic_ids.insert(module.id.clone());
+                            contrib.magic_path = Some(content_path.clone());
+                            has_any_action = true;
                         },
                         MountMode::Ignore => {
                             log::debug!("Ignoring {}/{} per rule", module.id, dir_name);
@@ -201,9 +215,32 @@ pub fn generate(
                     }
                 }
             }
+
+            if has_any_action { Some(contrib) } else { None }
+        })
+        .collect();
+    let mut overlay_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    let mut magic_paths = HashSet::new();
+    let mut overlay_ids = HashSet::new();
+    let mut hymo_ids = HashSet::new();
+    let mut magic_ids = HashSet::new();
+
+    for contrib in contributions.into_iter().flatten() {
+        if let Some(path) = contrib.magic_path {
+            magic_paths.insert(path);
+            magic_ids.insert(contrib.id.clone());
+        }
+
+        for (part, path) in contrib.overlays {
+            overlay_groups.entry(part).or_default().push(path);
+            overlay_ids.insert(contrib.id.clone());
+        }
+
+        for op in contrib.hymo_ops {
+            plan.hymo_ops.push(op);
+            hymo_ids.insert(contrib.id.clone());
         }
     }
-
     for (part, layers) in overlay_groups {
         let initial_target_path = format!("/{}", part);
         let target_path_obj = Path::new(&initial_target_path);
