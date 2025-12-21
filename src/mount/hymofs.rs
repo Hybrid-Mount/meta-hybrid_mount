@@ -98,11 +98,7 @@ impl HymoFs {
         let file = Self::open_dev().ok()?;
         let mut version: i32 = 0;
         let ret = unsafe { ioc_get_version(file.as_raw_fd(), &mut version) };
-        if ret.is_err() {
-            None
-        } else {
-            Some(version)
-        }
+        if ret.is_err() { None } else { Some(version) }
     }
 
     pub fn clear() -> Result<()> {
@@ -218,14 +214,13 @@ impl HymoFs {
 
             match parts[0] {
                 "HymoFS" => {
-                    if parts.len() >= 3 {
-                        if parts[1] == "Protocol:" && status.protocol_version == 0 {
-                            status.protocol_version = parts[2].parse().unwrap_or(0);
-                        } else if parts[1] == "Config" && parts.get(2) == Some(&"Version:") {
-                            if let Some(ver_str) = parts.get(3) {
-                                status.config_version = ver_str.parse().unwrap_or(0);
-                            }
-                        }
+                    if parts.len() >= 3 && parts[1] == "Protocol:" && status.protocol_version == 0 {
+                        status.protocol_version = parts[2].parse().unwrap_or(0);
+                    } else if parts[1] == "Config"
+                        && parts.get(2) == Some(&"Version:")
+                        && let Some(ver_str) = parts.get(3)
+                    {
+                        status.config_version = ver_str.parse().unwrap_or(0);
                     }
                 }
                 "add" => {
@@ -291,12 +286,11 @@ impl HymoFs {
 
             if file_type.is_file() || file_type.is_symlink() {
                 pending_ops.push((true, target_path, current_path));
-            } else if file_type.is_char_device() {
-                if let Ok(metadata) = entry.metadata() {
-                    if metadata.rdev() == 0 {
-                        pending_ops.push((false, target_path, current_path));
-                    }
-                }
+            } else if file_type.is_char_device()
+                && let Ok(metadata) = entry.metadata()
+                && metadata.rdev() == 0
+            {
+                pending_ops.push((false, target_path, current_path));
             }
         }
 
@@ -344,18 +338,16 @@ impl HymoFs {
                 if let Err(e) = Self::delete_rule(&target_path.to_string_lossy()) {
                     warn!("Failed to delete rule for {}: {}", target_path.display(), e);
                 }
-            } else if file_type.is_char_device() {
-                if let Ok(metadata) = entry.metadata() {
-                    if metadata.rdev() == 0 {
-                        if let Err(e) = Self::delete_rule(&target_path.to_string_lossy()) {
-                            warn!(
-                                "Failed to delete hidden rule for {}: {}",
-                                target_path.display(),
-                                e
-                            );
-                        }
-                    }
-                }
+            } else if file_type.is_char_device()
+                && let Ok(metadata) = entry.metadata()
+                && metadata.rdev() == 0
+                && let Err(e) = Self::delete_rule(&target_path.to_string_lossy())
+            {
+                warn!(
+                    "Failed to delete hidden rule for {}: {}",
+                    target_path.display(),
+                    e
+                );
             }
         }
         Ok(())

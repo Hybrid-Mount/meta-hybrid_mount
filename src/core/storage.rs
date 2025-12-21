@@ -5,10 +5,10 @@ use std::{
     process::Command,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rustix::{
     fs::Mode,
-    mount::{unmount, UnmountFlags},
+    mount::{UnmountFlags, unmount},
 };
 use serde::Serialize;
 
@@ -77,12 +77,10 @@ pub fn setup(
 }
 
 fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
-    if utils::mount_tmpfs(target, mount_source).is_ok() {
-        if utils::is_xattr_supported(target) {
-            return Ok(true);
-        } else {
-            let _ = unmount(target, UnmountFlags::DETACH);
-        }
+    if utils::mount_tmpfs(target, mount_source).is_ok() && utils::is_xattr_supported(target) {
+        return Ok(true);
+    } else {
+        let _ = unmount(target, UnmountFlags::DETACH);
     }
     Ok(false)
 }
@@ -184,19 +182,19 @@ pub fn print_status() -> Result<()> {
     let mut used = 0;
     let mut percent = 0;
 
-    if utils::is_mounted(&mnt_base) {
-        if let Ok(stat) = rustix::fs::statvfs(&mnt_base) {
-            mode = if expected_mode != "unknown" {
-                expected_mode
-            } else {
-                "active".to_string()
-            };
-            total = stat.f_blocks * stat.f_frsize;
-            let free = stat.f_bfree * stat.f_frsize;
-            used = total - free;
-            if total > 0 {
-                percent = (used * 100 / total) as u8;
-            }
+    if utils::is_mounted(&mnt_base)
+        && let Ok(stat) = rustix::fs::statvfs(&mnt_base)
+    {
+        mode = if expected_mode != "unknown" {
+            expected_mode
+        } else {
+            "active".to_string()
+        };
+        total = stat.f_blocks * stat.f_frsize;
+        let free = stat.f_bfree * stat.f_frsize;
+        used = total - free;
+        if total > 0 {
+            percent = (used * 100 / total) as u8;
         }
     }
 

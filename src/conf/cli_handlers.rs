@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Serialize;
 
 use crate::{
     conf::{
         cli::Cli,
-        config::{Config, CONFIG_FILE_DEFAULT},
+        config::{CONFIG_FILE_DEFAULT, Config},
     },
     core::{executor, granary, inventory, modules, planner, storage, winnow},
     mount, utils,
@@ -64,10 +64,10 @@ pub fn handle_show_config(cli: &Cli) -> Result<()> {
 }
 
 pub fn handle_save_config(cli: &Cli, payload: &str) -> Result<()> {
-    if let Ok(old_config) = load_config(cli) {
-        if let Err(e) = granary::create_silo(&old_config, "Auto-Backup", "Pre-WebUI Save") {
-            log::warn!("Failed to create Granary backup: {}", e);
-        }
+    if let Ok(old_config) = load_config(cli)
+        && let Err(e) = granary::create_silo(&old_config, "Auto-Backup", "Pre-WebUI Save")
+    {
+        log::warn!("Failed to create Granary backup: {}", e);
     }
 
     let json_bytes = (0..payload.len())
@@ -223,12 +223,12 @@ pub fn handle_hymo_action(cli: &Cli, action: &str, value: Option<&str>) -> Resul
             }
         }
         "winnow-set" => {
-            if let Some(val) = value {
-                if let Some((path, id)) = val.split_once(':') {
-                    config.winnowing.set_rule(path, id);
-                    config.save_to_file(CONFIG_FILE_DEFAULT)?;
-                    println!("Winnowing rule set: {} -> {}", path, id);
-                }
+            if let Some(val) = value
+                && let Some((path, id)) = val.split_once(':')
+            {
+                config.winnowing.set_rule(path, id);
+                config.save_to_file(CONFIG_FILE_DEFAULT)?;
+                println!("Winnowing rule set: {} -> {}", path, id);
             }
         }
         _ => bail!("Unknown action: {}", action),
