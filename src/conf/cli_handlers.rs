@@ -11,7 +11,7 @@ use crate::core::{
     granary,
     winnow,
 };
-use crate::mount;
+use crate::{mount, utils};
 
 #[derive(Serialize)]
 struct DiagnosticIssueJson {
@@ -76,6 +76,9 @@ pub fn handle_save_config(cli: &Cli, payload: &str) -> Result<()> {
 }
 
 pub fn handle_save_rules(module: &str, payload: &str) -> Result<()> {
+    utils::validate_module_id(module)
+        .with_context(|| format!("Invalid module ID: {}", module))?;
+
     let json_bytes = (0..payload.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&payload[i..i + 2], 16))
