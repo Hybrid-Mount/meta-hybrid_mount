@@ -6,10 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rustix::mount::{
-    mount, mount_bind, mount_change, mount_move, mount_remount, unmount, MountFlags,
-    MountPropagationFlags, UnmountFlags,
+    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_bind, mount_change, mount_move,
+    mount_remount, unmount,
 };
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

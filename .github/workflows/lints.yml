@@ -1,0 +1,28 @@
+name: lints-check
+on:
+  pull_request:
+    branches: ["master"]
+    paths:
+      - 'src/**'
+      - 'Cargo.*'
+      - 'build.rs'
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  lints-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          targets: aarch64-linux-android
+          components: rustfmt, clippy
+      - name: Format codes
+        uses: LoliGothick/rustfmt-check@master
+        with:
+          token: ${{ github.token }}
+          working-directory: ./
+      - name: Clippy code
+        run: cargo clippy --all-targets -- -D warnings

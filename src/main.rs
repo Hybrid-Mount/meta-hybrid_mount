@@ -12,9 +12,9 @@ use std::path::{Path, PathBuf};
 use conf::{
     cli::{Cli, Commands},
     cli_handlers,
-    config::{Config, CONFIG_FILE_DEFAULT},
+    config::{CONFIG_FILE_DEFAULT, Config},
 };
-use core::{executor, granary, inventory, planner, winnow, OryzaEngine};
+use core::{OryzaEngine, executor, granary, inventory, planner, winnow};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -82,23 +82,23 @@ fn main() -> Result<()> {
         cli.dry_run,
     );
 
-    if !config.dry_run {
-        if let Err(e) = granary::engage_ratoon_protocol() {
-            log::error!("Failed to engage Ratoon Protocol: {}", e);
-        }
+    if !config.dry_run
+        && let Err(e) = granary::engage_ratoon_protocol()
+    {
+        log::error!("Failed to engage Ratoon Protocol: {}", e);
     }
 
-    if utils::check_zygisksu_enforce_status() {
-        if config.allow_umount_coexistence {
-            if config.verbose {
-                println!(">> ZygiskSU Enforce!=0 detected, but Umount Coexistence enabled. Respecting user config.");
-            }
-        } else {
-            if config.verbose {
-                println!(">> ZygiskSU Enforce!=0 detected. Forcing DISABLE_UMOUNT to TRUE.");
-            }
-            config.disable_umount = true;
+    if utils::check_zygisksu_enforce_status() && config.allow_umount_coexistence {
+        if config.verbose {
+            println!(
+                ">> ZygiskSU Enforce!=0 detected, but Umount Coexistence enabled. Respecting user config."
+            );
         }
+    } else {
+        if config.verbose {
+            println!(">> ZygiskSU Enforce!=0 detected. Forcing DISABLE_UMOUNT to TRUE.");
+        }
+        config.disable_umount = true;
     }
 
     if config.dry_run {

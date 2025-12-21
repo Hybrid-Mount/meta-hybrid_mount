@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     ffi::CString,
     fmt as std_fmt,
-    fs::{self, create_dir_all, remove_dir_all, remove_file, write, File},
+    fs::{self, File, create_dir_all, remove_dir_all, remove_file, write},
     io::Write,
     os::fd::RawFd,
     os::unix::fs::symlink,
@@ -12,21 +12,21 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use procfs::process::Process;
 use regex_lite::Regex;
 use rustix::{
     fs::ioctl_ficlone,
-    mount::{mount, MountFlags},
+    mount::{MountFlags, mount},
 };
 use tracing::{Event, Subscriber};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
+    EnvFilter,
     fmt::{self, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
     util::SubscriberInitExt,
-    EnvFilter,
 };
 
 use crate::defs::{self, TMPFS_CANDIDATES};
@@ -35,7 +35,7 @@ use crate::defs::{self, TMPFS_CANDIDATES};
 use nix::ioctl_write_ptr_bad;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use extattr::{lsetxattr, Flags as XattrFlags};
+use extattr::{Flags as XattrFlags, lsetxattr};
 
 const SELINUX_XATTR: &str = "security.selinux";
 
@@ -220,12 +220,12 @@ pub fn is_mounted<P: AsRef<Path>>(path: P) -> bool {
     let path_str = path.as_ref().to_string_lossy();
     let search = path_str.trim_end_matches('/');
 
-    if let Ok(process) = Process::myself() {
-        if let Ok(mountinfo) = process.mountinfo() {
-            return mountinfo
-                .into_iter()
-                .any(|m| m.mount_point.to_string_lossy() == search);
-        }
+    if let Ok(process) = Process::myself()
+        && let Ok(mountinfo) = process.mountinfo()
+    {
+        return mountinfo
+            .into_iter()
+            .any(|m| m.mount_point.to_string_lossy() == search);
     }
 
     if let Ok(content) = fs::read_to_string("/proc/mounts") {
@@ -275,10 +275,10 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
         .arg(image_path)
         .status()
         .context("Failed to execute e2fsck")?;
-    if let Some(code) = status.code() {
-        if code > 2 {
-            bail!("e2fsck failed with exit code: {}", code);
-        }
+    if let Some(code) = status.code()
+        && code > 2
+    {
+        bail!("e2fsck failed with exit code: {}", code);
     }
     Ok(())
 }

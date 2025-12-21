@@ -2,8 +2,7 @@ use std::{
     collections::HashSet,
     fs::{self, OpenOptions},
     io::{BufRead, BufReader, Write},
-    os::unix::fs::{FileTypeExt, MetadataExt},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use anyhow::Result;

@@ -21,24 +21,20 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
             let part_path = module.source_path.join(p);
             part_path.exists() && has_files_recursive(&part_path)
         });
-        if has_content {
-            if should_sync(&module.source_path, &dst) {
-                log::info!("Syncing module: {} (Updated/New)", module.id);
-                if dst.exists() {
-                    if let Err(e) = fs::remove_dir_all(&dst) {
-                        log::warn!("Failed to clean target dir for {}: {}", module.id, e);
-                    }
-                }
-                if let Err(e) = utils::sync_dir(&module.source_path, &dst) {
-                    log::error!("Failed to sync module {}: {}", module.id, e);
-                } else {
-                    repair_module_contexts(&dst, &module.id);
-                }
+        if has_content && should_sync(&module.source_path, &dst) {
+            log::info!("Syncing module: {} (Updated/New)", module.id);
+            if dst.exists()
+                && let Err(e) = fs::remove_dir_all(&dst)
+            {
+                log::warn!("Failed to clean target dir for {}: {}", module.id, e);
+            }
+            if let Err(e) = utils::sync_dir(&module.source_path, &dst) {
+                log::error!("Failed to sync module {}: {}", module.id, e);
             } else {
-                log::debug!("Skipping module: {} (Up-to-date)", module.id);
+                repair_module_contexts(&dst, &module.id);
             }
         } else {
-            log::debug!("Skipping empty module: {}", module.id);
+            log::debug!("Skipping module: {}", module.id);
         }
     });
     Ok(())
@@ -86,10 +82,10 @@ fn should_sync(src: &Path, dst: &Path) -> bool {
 fn repair_module_contexts(module_root: &Path, module_id: &str) {
     for part in defs::BUILTIN_PARTITIONS {
         let part_root = module_root.join(part);
-        if part_root.exists() {
-            if let Err(e) = recursive_context_repair(module_root, &part_root) {
-                log::warn!("Context repair failed for {}/{}: {}", module_id, part, e);
-            }
+        if part_root.exists()
+            && let Err(e) = recursive_context_repair(module_root, &part_root)
+        {
+            log::warn!("Context repair failed for {}/{}: {}", module_id, part, e);
         }
     }
 }
@@ -99,28 +95,27 @@ fn recursive_context_repair(base: &Path, current: &Path) -> Result<()> {
         return Ok(());
     }
     let file_name = current.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if file_name == "upperdir" || file_name == "workdir" {
-        if let Some(parent) = current.parent() {
-            if let Ok(ctx) = utils::lgetfilecon(parent) {
-                let _ = utils::lsetfilecon(current, &ctx);
-            }
-        }
+    if (file_name == "upperdir" || file_name == "workdir")
+        && let Some(parent) = current.parent()
+        && let Ok(ctx) = utils::lgetfilecon(parent)
+    {
+        let _ = utils::lsetfilecon(current, &ctx);
     } else {
         let relative = current.strip_prefix(base)?;
         let system_path = Path::new("/").join(relative);
         if system_path.exists() {
             let _ = utils::copy_path_context(&system_path, current);
-        } else if let Some(parent) = system_path.parent() {
-            if parent.exists() {
-                let _ = utils::copy_path_context(parent, current);
-            }
+        } else if let Some(parent) = system_path.parent()
+            && parent.exists()
+        {
+            let _ = utils::copy_path_context(parent, current);
         }
     }
-    if current.is_dir() {
-        if let Ok(entries) = fs::read_dir(current) {
-            for entry in entries.flatten() {
-                let _ = recursive_context_repair(base, &entry.path());
-            }
+    if current.is_dir()
+        && let Ok(entries) = fs::read_dir(current)
+    {
+        for entry in entries.flatten() {
+            let _ = recursive_context_repair(base, &entry.path());
         }
     }
     Ok(())
@@ -129,14 +124,8 @@ fn recursive_context_repair(base: &Path, current: &Path) -> Result<()> {
 fn has_files_recursive(path: &Path) -> bool {
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
-            if let Ok(ft) = entry.file_type() {
-                if ft.is_dir() {
-                    if has_files_recursive(&entry.path()) {
-                        return true;
-                    }
-                } else {
-                    return true;
-                }
+            if entry.file_type().is_ok() {
+                return true;
             }
         }
     }

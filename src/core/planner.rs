@@ -243,11 +243,7 @@ pub fn generate(
                 }
             }
 
-            if has_any_action {
-                Some(contrib)
-            } else {
-                None
-            }
+            if has_any_action { Some(contrib) } else { None }
         })
         .collect();
     let mut overlay_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
@@ -310,10 +306,10 @@ pub fn generate(
 }
 
 fn has_files(path: &Path) -> bool {
-    if let Ok(entries) = fs::read_dir(path) {
-        if entries.flatten().next().is_some() {
-            return true;
-        }
+    if let Ok(entries) = fs::read_dir(path)
+        && entries.flatten().next().is_some()
+    {
+        return true;
     }
     false
 }
