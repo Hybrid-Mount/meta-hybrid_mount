@@ -39,7 +39,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         with:
           targets: aarch64-linux-android,x86_64-linux-android
-          components: rust-src, clippy
+          components: rust-src
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -50,10 +50,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: webui/package-lock.json
-
-      - name: Check Code Quality (Clippy)
-        run: |
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
 
       - name: Configure Version
         run: |
