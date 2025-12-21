@@ -472,11 +472,6 @@ where
     Ok(())
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn send_unmountable<P>(_target: P) -> Result<()> {
-    Ok(())
-}
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn ksu_nuke_sysfs(target: &str) -> Result<()> {
     let c_path = CString::new(target)?;
