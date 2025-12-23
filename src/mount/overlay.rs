@@ -1,4 +1,5 @@
 use std::ffi::CString;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -76,20 +77,16 @@ pub fn bind_mount(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
     Ok(())
 }
 
-fn mount_overlay_child(
-    mount_point: &str,
+fn mount_overlay_on_path(
+    mount_point: &Path,
     relative: &str,
     module_roots: &[String],
-    stock_root: &str,
+    stock_root: &Path,
 ) -> Result<()> {
     if !module_roots
         .iter()
         .any(|lower| Path::new(&format!("{}{}", lower, relative)).exists())
     {
-        return bind_mount(stock_root, mount_point);
-    }
-
-    if !Path::new(stock_root).is_dir() {
         return Ok(());
     }
 
@@ -97,10 +94,8 @@ fn mount_overlay_child(
     for lower in module_roots {
         let lower_dir = format!("{}{}", lower, relative);
         let path = Path::new(&lower_dir);
-        if path.is_dir() {
+        if path.exists() {
             lower_dirs.push(lower_dir);
-        } else if path.exists() {
-            return Ok(());
         }
     }
 
@@ -108,10 +103,17 @@ fn mount_overlay_child(
         return Ok(());
     }
 
-    if let Err(e) = mount_overlayfs(&lower_dirs, stock_root, None, None, Path::new(mount_point)) {
+    if let Err(e) = mount_overlayfs(
+        &lower_dirs,
+        stock_root.to_str().unwrap(),
+        None,
+        None,
+        mount_point,
+    ) {
         warn!(
-            "failed to mount overlay child {}: {:#}, fallback to bind",
-            mount_point, e
+            "failed to mount overlay on {}: {:#}, fallback to bind",
+            mount_point.display(),
+            e
         );
         bind_mount(stock_root, mount_point)?;
     }
@@ -121,14 +123,61 @@ fn mount_overlay_child(
 pub fn mount_overlay(
     target: &str,
     module_roots: &[String],
-    workdir: Option<PathBuf>,
-    upperdir: Option<PathBuf>,
+    _workdir: Option<PathBuf>,
+    _upperdir: Option<PathBuf>,
     disable_umount: bool,
 ) -> Result<()> {
-    info!("mount overlay for {}", target);
+    info!("mount overlay for {} (subdirectory mode)", target);
 
     std::env::set_current_dir(target).with_context(|| format!("failed to chdir to {}", target))?;
-    let stock_root = ".";
+
+    let entries = fs::read_dir(".").with_context(|| "failed to read target directory")?;
+
+    let exclusions = [
+        "lost+found",
+        "odm",
+        "product",
+        "system_ext",
+        "vendor",
+        "apex",
+    ];
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+
+        let path = entry.path();
+        let file_name = entry.file_name();
+        let name_str = file_name.to_string_lossy();
+
+        if exclusions.iter().any(|&e| e == name_str) {
+            continue;
+        }
+
+        if let Ok(file_type) = entry.file_type() {
+            if !file_type.is_dir() {
+                continue;
+            }
+            if file_type.is_symlink() {
+                continue;
+            }
+        } else {
+            continue;
+        }
+
+        let relative_path = format!("/{}", name_str);
+        // Fix: Use &*name_str or .as_ref() to satisfy AsRef<Path>
+        let target_path = Path::new(target).join(&*name_str);
+        let stock_root_path = Path::new(".").join(&*name_str);
+
+        if let Err(e) =
+            mount_overlay_on_path(&target_path, &relative_path, module_roots, &stock_root_path)
+        {
+            warn!("Failed to mount child {}: {}", target_path.display(), e);
+        }
+    }
 
     let mounts = Process::myself()?
         .mountinfo()
@@ -146,25 +195,31 @@ pub fn mount_overlay(
     valid_mount_seq.sort();
     valid_mount_seq.dedup();
 
-    mount_overlayfs(
-        module_roots,
-        stock_root,
-        upperdir.as_deref(),
-        workdir.as_deref(),
-        Path::new(target),
-    )
-    .with_context(|| "mount overlayfs for root failed")?;
-
     for mount_point in valid_mount_seq {
         let relative: String = mount_point.replacen(target, "", 1);
-        let child_stock_root = format!("{}{}", stock_root, relative);
+        let path_obj = Path::new(&relative);
+
+        if let Some(first_component) = path_obj.components().next() {
+            if let Some(first_str) = first_component.as_os_str().to_str() {
+                let clean_name = first_str.trim_start_matches('/');
+                if exclusions.contains(&clean_name) {
+                    continue;
+                }
+            }
+        }
+
+        let child_stock_root = format!(".{}", relative);
 
         if !Path::new(&child_stock_root).exists() {
             continue;
         }
 
-        if let Err(e) = mount_overlay_child(mount_point, &relative, module_roots, &child_stock_root)
-        {
+        if let Err(e) = mount_overlay_on_path(
+            Path::new(mount_point),
+            &relative,
+            module_roots,
+            Path::new(&child_stock_root),
+        ) {
             warn!(
                 "failed to mount overlay for child {}: {:#}, revert",
                 mount_point, e
