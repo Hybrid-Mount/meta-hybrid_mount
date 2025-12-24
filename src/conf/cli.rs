@@ -46,10 +46,8 @@ pub enum Commands {
     Modules,
     Conflicts,
     Diagnostics,
-    #[command(name = "hymo-status")]
-    HymoStatus,
-    #[command(name = "hymo-action")]
-    HymoAction {
+    #[command(name = "system-action")]
+    SystemAction {
         #[arg(long)]
         action: String,
         #[arg(long)]

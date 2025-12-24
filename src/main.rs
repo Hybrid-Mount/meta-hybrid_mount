@@ -65,9 +65,8 @@ fn main() -> Result<()> {
             Commands::Modules => cli_handlers::handle_modules(&cli)?,
             Commands::Conflicts => cli_handlers::handle_conflicts(&cli)?,
             Commands::Diagnostics => cli_handlers::handle_diagnostics(&cli)?,
-            Commands::HymoStatus => cli_handlers::handle_hymo_status(&cli)?,
-            Commands::HymoAction { action, value } => {
-                cli_handlers::handle_hymo_action(&cli, action, value.as_deref())?
+            Commands::SystemAction { action, value } => {
+                cli_handlers::handle_system_action(&cli, action, value.as_deref())?
             }
         }
         return Ok(());

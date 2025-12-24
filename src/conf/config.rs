@@ -76,10 +76,6 @@ pub struct Config {
     #[serde(default)]
     pub dry_run: bool,
     #[serde(default)]
-    pub hymofs_stealth: bool,
-    #[serde(default)]
-    pub hymofs_debug: bool,
-    #[serde(default)]
     pub winnowing: WinnowingTable,
     #[serde(default)]
     pub granary: GranaryConfig,
@@ -126,8 +122,6 @@ impl Default for Config {
             disable_umount: false,
             allow_umount_coexistence: false,
             dry_run: false,
-            hymofs_stealth: true,
-            hymofs_debug: false,
             winnowing: WinnowingTable::default(),
             granary: GranaryConfig::default(),
         }

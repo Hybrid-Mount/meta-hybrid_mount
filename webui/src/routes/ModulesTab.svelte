@@ -39,7 +39,6 @@
       if (!initial) return false;
       return JSON.stringify(m.rules) !== initial;
   }));
-
   let isDirty = $derived(dirtyModules.length > 0);
 
   async function save() {
@@ -88,7 +87,6 @@
       
       const mode = mod.rules.default_mode;
       if (mode === 'magic') return m?.magic ?? 'Magic Mount';
-      if (mode === 'hymofs') return m?.hymo ?? 'HymoFS';
       if (mode === 'ignore') return m?.ignore ?? 'Ignore';
       return m?.auto ?? 'OverlayFS';
   }
@@ -146,7 +144,8 @@
         {store.L.modules?.desc}
       </p>
       <button class="btn-tonal conflict-btn" onclick={checkConflicts} class:active={showConflicts}>
-        {showConflicts ? (store.L.modules?.hideConflicts || 'Hide Conflicts') : (store.L.modules?.checkConflicts || 'Check Conflicts')}
+        {showConflicts ?
+            (store.L.modules?.hideConflicts || 'Hide Conflicts') : (store.L.modules?.checkConflicts || 'Check Conflicts')}
       </button>
     </div>
 
@@ -156,9 +155,11 @@
             transition:fly={{ y: -10, duration: 300, easing: cubicOut }}
         >
             <div class="conflict-header-row">
-              <div class="conflict-title">
+              
+                <div class="conflict-title">
                     <svg viewBox="0 0 24 24" width="20" height="20" class="conflict-icon"><path d={ICONS.warning} fill="currentColor"/></svg>
-                    {store.L.modules?.conflictsTitle || 'File Conflicts'}
+                    {store.L.modules?.conflictsTitle ||
+                    'File Conflicts'}
                 </div>
                 <button class="btn-icon-small" onclick={closeConflicts} title="Close">
                     <svg viewBox="0 0 24 24" width="18" height="18"><path d={ICONS.close} fill="currentColor"/></svg>
@@ -170,23 +171,26 @@
                     <Skeleton width="100%" height="40px" />
                     <Skeleton width="100%" height="40px" />
                     <Skeleton width="80%" height="40px" />
-                 </div>
+                </div>
             {:else if store.conflicts.length === 0}
                 <div class="conflict-empty">
                     <svg viewBox="0 0 24 24" width="48" height="48" style="opacity: 0.2; margin-bottom: 8px;"><path d={ICONS.check} fill="currentColor"/></svg>
-                    <div>{store.L.modules?.noConflicts || 'No file conflicts detected.'}</div>
+                    <div>{store.L.modules?.noConflicts ||
+                    'No file conflicts detected.'}</div>
                 </div>
             {:else}
                 <div class="conflict-list">
                     {#each store.conflicts as conflict}
                         <div class="conflict-item">
+    
                             <div class="conflict-path">
                                 /{conflict.partition}/{conflict.relative_path}
                             </div>
+               
                             <div class="conflict-modules">
                                 {#each conflict.contending_modules as modName}
                                     <span class="module-capsule">{modName}</span>
-                                 {/each}
+                                {/each}
                             </div>
                         </div>
                     {/each}
@@ -207,7 +211,8 @@
   <div class="filter-controls">
     <div class="checkbox-wrapper">
         <input type="checkbox" id="show-unmounted" bind:checked={showUnmounted} />
-        <label for="show-unmounted" title="Show unmounted modules">{store.L.modules?.filterAll ?? 'All'}</label>
+        <label for="show-unmounted" title="Show unmounted modules">{store.L.modules?.filterAll ??
+        'All'}</label>
     </div>
     <div class="vertical-divider"></div>
     <span class="filter-label-text">{store.L.modules?.filterLabel}</span>
@@ -215,9 +220,6 @@
       <option value="all">{store.L.modules?.filterAll}</option>
       <option value="auto">{store.L.modules?.modeAuto}</option>
       <option value="magic">{store.L.modules?.modeMagic}</option>
-      {#if store.storage?.hymofs_available}
-         <option value="hymofs">HymoFS</option>
-      {/if}
     </select>
   </div>
 </div>
@@ -227,7 +229,8 @@
     {#each Array(5) as _}
       <div class="rule-card">
         <div class="rule-info">
-           <div class="skeleton-group">
+   
+          <div class="skeleton-group">
             <Skeleton width="60%" height="20px" />
             <Skeleton width="40%" height="14px" />
           </div>
@@ -238,7 +241,8 @@
   </div>
 {:else if filteredModules.length === 0}
   <div class="empty-state">
-    {store.modules.length === 0 ? (store.L.modules?.empty ?? "No enabled modules found") : "No matching modules"}
+    {store.modules.length === 0 ?
+    (store.L.modules?.empty ?? "No enabled modules found") : "No matching modules"}
   </div>
 {:else}
   <div class="rules-list">
@@ -265,16 +269,9 @@
           <div class="mode-badge {
                !mod.is_mounted ? 'badge-none' :
                mod.rules.default_mode === 'magic' ? 'badge-magic' : 
-               mod.rules.default_mode === 'hymofs' ? 'badge-hymofs' : 
                'badge-auto'}"
-               style:background-color={
-                 !mod.is_mounted ? '' :
-                 mod.rules.default_mode === 'hymofs' ? 'var(--md-sys-color-primary-container)' : ''
-               }
-               style:color={
-                 !mod.is_mounted ? '' :
-                 mod.rules.default_mode === 'hymofs' ? 'var(--md-sys-color-on-primary-container)' : ''
-               }>
+               style:background-color={!mod.is_mounted ? '' : ''}
+               style:color={!mod.is_mounted ? '' : ''}>
             {getModeLabel(mod)}
           </div>
         </div>
@@ -285,34 +282,38 @@
             <p class="module-meta">{store.L.modules?.author ?? 'Author'}: {mod.author || (store.L.modules?.unknown ?? 'Unknown')}</p>
             
             {#if !mod.is_mounted}
-                 <div class="status-alert">
+                  <div class="status-alert">
                     <svg viewBox="0 0 24 24" width="16" height="16"><path d={ICONS.info} fill="currentColor"/></svg>
                     <span>This module is currently not mounted.</span>
                 </div>
             {/if}
-             
+      
             <div class="config-section">
               <div class="config-row">
-                <span class="config-label">{store.L.modules?.defaultMode ?? 'Default Strategy'}:</span>
+                <span class="config-label">{store.L.modules?.defaultMode ??
+                'Default Strategy'}:</span>
                 <div class="text-field compact-select">
                   <select 
                     bind:value={mod.rules.default_mode}
                     onclick={(e) => e.stopPropagation()}
                   >
-                    <option value="overlay">{store.L.modules?.modes?.auto ?? 'OverlayFS (Auto)'}</option>
-                    <option value="magic">{store.L.modules?.modes?.magic ?? 'Magic Mount'}</option>
-                    {#if store.storage?.hymofs_available}
-                      <option value="hymofs">{store.L.modules?.modes?.hymo ?? 'HymoFS'}</option>
-                    {/if}
-                    <option value="ignore">{store.L.modules?.modes?.ignore ?? 'Disable (Ignore)'}</option>
+  
+                    <option value="overlay">{store.L.modules?.modes?.auto ??
+                    'OverlayFS (Auto)'}</option>
+                    <option value="magic">{store.L.modules?.modes?.magic ??
+                    'Magic Mount'}</option>
+                    <option value="ignore">{store.L.modules?.modes?.ignore ??
+                    'Disable (Ignore)'}</option>
                   </select>
                 </div>
               </div>
 
               <div class="paths-editor">
                  <div class="paths-header">
-                    <span class="config-label">{store.L.modules?.pathRules ?? 'Path Overrides'}:</span>
-                     <button class="btn-icon add-rule" onclick={() => addPathRule(mod)} title={store.L.modules?.addRule ?? 'Add Rule'}>
+                  
+                     <span class="config-label">{store.L.modules?.pathRules ?? 'Path Overrides'}:</span>
+                     <button class="btn-icon add-rule" onclick={() => addPathRule(mod)} title={store.L.modules?.addRule ??
+                     'Add Rule'}>
                          <svg viewBox="0 0 24 24" width="20" height="20"><path d={ICONS.add} fill="currentColor"/></svg>
                      </button>
                  </div>
@@ -321,33 +322,38 @@
                      <div class="path-list">
                         {#each Object.entries(mod.rules.paths) as [path, mode]}
                             <div class="path-row">
+          
                                 <input 
                                     type="text" 
                                     class="path-input" 
                                     value={path} 
                                     onchange={(e) => updatePathKey(mod, path, e.currentTarget.value)}
-                                    placeholder={store.L.modules?.placeholder ?? "e.g. system/fonts"}
+                                    placeholder={store.L.modules?.placeholder ??
+                                    "e.g. system/fonts"}
                                 />
                                 <select 
                                     class="path-mode-select"
                                     value={mode}
                                     onchange={(e) => updatePathMode(mod, path, e.currentTarget.value as MountMode)}
                                 >
-                                    <option value="overlay">{store.L.modules?.modes?.short?.auto ?? 'Overlay'}</option>
-                                    <option value="magic">{store.L.modules?.modes?.short?.magic ?? 'Magic'}</option>
-                                    {#if store.storage?.hymofs_available}
-                                        <option value="hymofs">{store.L.modules?.modes?.short?.hymo ?? 'HymoFS'}</option>
-                                    {/if}
-                                    <option value="ignore">{store.L.modules?.modes?.short?.ignore ?? 'Ignore'}</option>
+                                    <option value="overlay">{store.L.modules?.modes?.short?.auto ??
+                                    'Overlay'}</option>
+                                    <option value="magic">{store.L.modules?.modes?.short?.magic ??
+                                    'Magic'}</option>
+                                    <option value="ignore">{store.L.modules?.modes?.short?.ignore ??
+                                    'Ignore'}</option>
                                 </select>
                                 <button class="btn-icon delete" onclick={() => removePathRule(mod, path)} title="Remove rule">
-                                   <svg viewBox="0 0 24 24" width="18" height="18"><path d={ICONS.delete} fill="currentColor"/></svg>
+                            
+                                    <svg viewBox="0 0 24 24" width="18" height="18"><path d={ICONS.delete} fill="currentColor"/></svg>
                                 </button>
                             </div>
                        {/each}
-                    </div>
+  
+                     </div>
                  {:else}
-                    <div class="empty-paths">{store.L.modules?.noRules ?? 'No path overrides defined.'}</div>
+                    <div class="empty-paths">{store.L.modules?.noRules ??
+                    'No path overrides defined.'}</div>
                  {/if}
               </div>
             </div>
@@ -374,12 +380,14 @@
  
   <md-filled-button 
     onclick={save} 
-    disabled={store.saving.modules || !isDirty}
+    disabled={store.saving.modules ||
+    !isDirty}
     role="button"
     tabindex="0"
     onkeydown={() => {}}
   >
     <md-icon slot="icon"><svg viewBox="0 0 24 24"><path d={ICONS.save} /></svg></md-icon>
-    {store.saving.modules ? store.L.common?.saving : store.L.modules?.save}
+    {store.saving.modules ?
+    store.L.common?.saving : store.L.modules?.save}
   </md-filled-button>
 </BottomActions>

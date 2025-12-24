@@ -31,7 +31,8 @@
   }
 
   function getDiagLabel(level: string) {
-      if (level === 'Critical') return store.L?.status?.diagCritical ?? level;
+      if (level === 'Critical') return store.L?.status?.diagCritical ??
+      level;
       if (level === 'Warning') return store.L?.status?.diagWarning ?? level;
       return store.L?.status?.diagInfo ?? level;
   }
@@ -49,7 +50,8 @@
 >
   <div slot="headline">{store.L?.common?.rebootTitle ?? 'Reboot System?'}</div>
   <div slot="content">
-    {store.L?.common?.rebootConfirm ?? 'Are you sure you want to reboot the device?'}
+    {store.L?.common?.rebootConfirm ??
+    'Are you sure you want to reboot the device?'}
   </div>
   <div slot="actions">
     <md-text-button 
@@ -58,15 +60,18 @@
       tabindex="0"
       onkeydown={() => {}}
     >
-      {store.L?.common?.cancel ?? 'Cancel'}
+      {store.L?.common?.cancel ??
+      'Cancel'}
     </md-text-button>
     <md-text-button 
-      onclick={() => { showRebootConfirm = false; API.reboot(); }}
+      onclick={() => { showRebootConfirm = false;
+      API.reboot(); }}
       role="button"
       tabindex="0"
       onkeydown={() => {}}
     >
-      {store.L?.common?.reboot ?? 'Reboot'}
+      {store.L?.common?.reboot ??
+      'Reboot'}
     </md-text-button>
   </div>
 </md-dialog>
@@ -82,7 +87,8 @@
         <Skeleton width="120px" height="64px" />
       </div>
       <div class="progress-container">
-        <md-linear-progress indeterminate></md-linear-progress>
+ 
+       <md-linear-progress indeterminate></md-linear-progress>
       </div>
       <div class="storage-details">
         <Skeleton width="150px" height="12px" />
@@ -93,19 +99,24 @@
         <div class="storage-info-col">
             <div class="storage-label-group">
                 <div class="storage-icon-circle">
-                    <svg viewBox="0 0 24 24"><path d={ICONS.storage} /></svg>
+ 
+                   <svg viewBox="0 0 24 24"><path d={ICONS.storage} /></svg>
                 </div>
-                <span class="storage-title">{store.L?.status?.storageTitle ?? 'Storage'}</span>
+                <span class="storage-title">{store.L?.status?.storageTitle ??
+                'Storage'}</span>
             </div>
             {#if store.storage?.type && store.storage.type !== 'unknown'}
               <span class="storage-type-badge {store.storage.type === 'tmpfs' ? 'type-tmpfs' : 'type-ext4'}">
                 {store.storage.type?.toUpperCase()}
               </span>
              {/if}
-        </div>
+      
+         </div>
         <div class="storage-value-group">
-            <span class="storage-value">{store.storage?.percent ?? '0%'}</span>
-            <span class="storage-unit">{store.L?.common?.used ?? 'Used'}</span>
+            <span class="storage-value">{store.storage?.percent ??
+            '0%'}</span>
+            <span class="storage-unit">{store.L?.common?.used ??
+            'Used'}</span>
         </div>
       </div>
       
@@ -114,7 +125,8 @@
       </div>
 
       <div class="storage-details">
-        <span class="detail-path">{storageLabel ?? ''}</span>
+        <span class="detail-path">{storageLabel ??
+        ''}</span>
         <span class="detail-nums">{store.storage?.used} / {store.storage?.size}</span>
       </div>
     {/if}
@@ -127,7 +139,8 @@
         <Skeleton width="60px" height="12px" style="margin-top: 8px" />
       {:else}
         <div class="stat-value">{mountedCount}</div>
-        <div class="stat-label">{store.L?.status?.moduleActive ?? 'Active Modules'}</div>
+        <div class="stat-label">{store.L?.status?.moduleActive ??
+        'Active Modules'}</div>
       {/if}
     </div>
     <div class="stat-card">
@@ -135,14 +148,17 @@
          <Skeleton width="40px" height="32px" />
          <Skeleton width="60px" height="12px" style="margin-top: 8px" />
       {:else}
-         <div class="stat-value">{store.config?.mountsource ?? '-'}</div>
-         <div class="stat-label">{store.L?.config?.mountSource ?? 'Mount Source'}</div>
+         <div class="stat-value">{store.config?.mountsource ??
+         '-'}</div>
+         <div class="stat-label">{store.L?.config?.mountSource ??
+         'Mount Source'}</div>
       {/if}
     </div>
   </div>
 
   <div class="mode-card">
-    <div class="mode-title">{store.L?.status?.activePartitions ?? 'Partitions'}</div>
+    <div class="mode-title">{store.L?.status?.activePartitions ??
+    'Partitions'}</div>
     
     {#if store.loading.status}
       <div class="partition-grid">
@@ -164,52 +180,45 @@
   </div>
 
   <div class="mode-card">
-    <div class="mode-title">{store.L?.status?.sysInfoTitle ?? 'System Info'}</div>
+    <div class="mode-title">{store.L?.status?.sysInfoTitle ??
+    'System Info'}</div>
     <div class="info-grid">
       <div class="info-item">
-        <span class="info-label">{store.L?.status?.kernel ?? 'Kernel'}</span>
+        <span class="info-label">{store.L?.status?.kernel ??
+        'Kernel'}</span>
         {#if store.loading.status}
           <Skeleton width="80%" height="16px" />
         {:else}
-          <span class="info-val">{store.systemInfo?.kernel || '-'}</span>
+          <span class="info-val">{store.systemInfo?.kernel ||
+          '-'}</span>
         {/if}
       </div>
       <div class="info-item">
-        <span class="info-label">{store.L?.status?.selinux ?? 'SELinux'}</span>
+        <span class="info-label">{store.L?.status?.selinux ??
+        'SELinux'}</span>
         {#if store.loading.status}
           <Skeleton width="40%" height="16px" />
         {:else}
-          <span class="info-val">{store.systemInfo?.selinux || '-'}</span>
-        {/if}
-      </div>
-      <div class="info-item">
-        <span class="info-label">HymoFS</span>
-        {#if store.loading.status}
-          <Skeleton width="50%" height="16px" />
-        {:else}
-          <span class="info-val {store.storage?.hymofs_available ? 'text-success' : 'text-disabled'}">
-            {#if store.storage?.hymofs_available}
-               {store.L?.status?.hymofsActive ?? 'Active'} 
-               {store.storage.hymofs_version ? `(v${store.storage.hymofs_version})` : ''}
-            {:else}
-               {store.L?.status?.hymofsNotDetected ?? 'Not Detected'}
-            {/if}
-          </span>
+          <span class="info-val">{store.systemInfo?.selinux ||
+          '-'}</span>
         {/if}
       </div>
       <div class="info-item full-width">
-        <span class="info-label">{store.L?.status?.mountBase ?? 'Mount Base'}</span>
+        <span class="info-label">{store.L?.status?.mountBase ??
+        'Mount Base'}</span>
         {#if store.loading.status}
           <Skeleton width="90%" height="16px" />
         {:else}
-          <span class="info-val mono">{store.systemInfo?.mountBase ?? '-'}</span>
+          <span class="info-val mono">{store.systemInfo?.mountBase ??
+          '-'}</span>
         {/if}
       </div>
     </div>
   </div>
 
   <div class="mode-card">
-    <div class="mode-title" style="margin-bottom: 8px;">{store.L?.status?.modeStats ?? 'Mode Stats'}</div>
+    <div class="mode-title" style="margin-bottom: 8px;">{store.L?.status?.modeStats ??
+    'Mode Stats'}</div>
     {#if store.loading.status}
       <div class="skeleton-group">
         <Skeleton width="100%" height="20px" />
@@ -220,41 +229,36 @@
       <div class="mode-row">
         <div class="mode-name">
           <div class="dot" style="background-color: var(--md-sys-color-secondary)"></div>
-          {store.L?.status?.modeAuto ?? 'Auto'}
+          {store.L?.status?.modeAuto ??
+          'Auto'}
         </div>
-        <span class="mode-count">{store.modeStats?.auto ?? 0}</span>
+        <span class="mode-count">{store.modeStats?.auto ??
+        0}</span>
       </div>
       <div class="mode-divider"></div>
       <div class="mode-row">
         <div class="mode-name">
           <div class="dot" style="background-color: var(--md-sys-color-tertiary)"></div>
-          {store.L?.status?.modeMagic ?? 'Magic'}
+          {store.L?.status?.modeMagic ??
+          'Magic'}
         </div>
-        <span class="mode-count">{store.modeStats?.magic ?? 0}</span>
+        <span class="mode-count">{store.modeStats?.magic ??
+        0}</span>
       </div>
-      
-      {#if store.storage?.hymofs_available}
-          <div class="mode-divider"></div>
-          <div class="mode-row">
-            <div class="mode-name">
-              <div class="dot" style="background-color: var(--md-sys-color-primary)"></div>
-              HymoFS
-            </div>
-            <span class="mode-count">{store.modeStats?.hymofs || 0}</span>
-          </div>
-      {/if}
     {/if}
   </div>
 
   <div class="mode-card">
-      <div class="mode-title">{store.L?.status?.health ?? 'System Health'}</div>
+      <div class="mode-title">{store.L?.status?.health ??
+      'System Health'}</div>
       {#if store.loading.diagnostics}
         <div class="skeleton-group">
             <Skeleton width="100%" height="20px" />
             <Skeleton width="80%" height="20px" />
         </div>
       {:else if store.diagnostics.length === 0}
-        <div class="health-message healthy">{store.L?.status?.healthy ?? 'All checks passed.'}</div>
+        <div class="health-message healthy">{store.L?.status?.healthy ??
+        'All checks passed.'}</div>
       {:else}
         <div class="diagnostic-list">
             {#each store.diagnostics as issue}

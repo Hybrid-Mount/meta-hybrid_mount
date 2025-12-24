@@ -13,13 +13,12 @@ use crate::{
     conf::config,
     core::planner::MountPlan,
     defs,
-    mount::{hymofs::HymoFs, magic, overlay},
+    mount::{magic, overlay},
     utils,
 };
 
 pub struct ExecutionResult {
     pub overlay_module_ids: Vec<String>,
-    pub hymo_module_ids: Vec<String>,
     pub magic_module_ids: Vec<String>,
 }
 
@@ -148,117 +147,10 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     let mut magic_queue = plan.magic_module_paths.clone();
     let mut global_success_map: HashMap<PathBuf, HashSet<String>> = HashMap::new();
     let mut final_overlay_ids = HashSet::new();
-    let mut final_hymo_ids = HashSet::new();
 
     plan.overlay_module_ids.iter().for_each(|id| {
         final_overlay_ids.insert(id.clone());
     });
-    plan.hymo_module_ids.iter().for_each(|id| {
-        final_hymo_ids.insert(id.clone());
-    });
-
-    if !plan.hymo_ops.is_empty() {
-        if HymoFs::is_available() {
-            log::info!(">> Phase 1: HymoFS Injection...");
-            if let Err(e) = HymoFs::clear() {
-                log::warn!("Failed to reset HymoFS rules: {}", e);
-            }
-            if let Err(e) = HymoFs::set_stealth(config.hymofs_stealth) {
-                log::warn!(
-                    "Failed to set HymoFS stealth mode to {}: {}",
-                    config.hymofs_stealth,
-                    e
-                );
-            }
-            if let Err(e) = HymoFs::set_debug(config.hymofs_debug) {
-                log::warn!(
-                    "Failed to set HymoFS debug mode to {}: {}",
-                    config.hymofs_debug,
-                    e
-                );
-            }
-
-            if let Err(e) = utils::ensure_dir_exists(defs::HYMO_MIRROR_DIR) {
-                log::warn!("Failed to create hymo mirror dir: {}", e);
-            }
-
-            for op in &plan.hymo_ops {
-                let part_name = op
-                    .target
-                    .file_name()
-                    .map(|s| s.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "unknown".to_string());
-
-                let mirror_base = Path::new(defs::HYMO_MIRROR_DIR).join(&op.module_id);
-                let mirror_partition = mirror_base.join(&part_name);
-
-                if let Err(e) = std::fs::create_dir_all(&mirror_partition) {
-                    log::warn!(
-                        "Failed to create mirror dir for {}/{}: {}",
-                        op.module_id,
-                        part_name,
-                        e
-                    );
-                    continue;
-                }
-
-                if let Err(e) = overlay::bind_mount(&op.source, &mirror_partition) {
-                    log::warn!("Failed to bind mount mirror for {}: {}", op.module_id, e);
-                    continue;
-                }
-
-                log::debug!(
-                    "Scanning {} (via mirror) -> {}",
-                    op.module_id,
-                    op.target.display()
-                );
-
-                let mut partial_failure = false;
-                for entry in WalkDir::new(&mirror_partition).min_depth(1).max_depth(1) {
-                    match entry {
-                        Ok(e) => {
-                            let file_name = e.file_name();
-                            let source_path = e.path();
-                            let target_child = op.target.join(file_name);
-                            if let Err(err) = HymoFs::inject_directory(&target_child, source_path) {
-                                log::warn!("Failed to inject {}: {}", target_child.display(), err);
-                                partial_failure = true;
-                            }
-                        }
-                        Err(err) => {
-                            log::warn!(
-                                "Error reading directory entry in {}: {}",
-                                mirror_partition.display(),
-                                err
-                            );
-                            partial_failure = true;
-                        }
-                    }
-                }
-
-                if !partial_failure {
-                    if let Some(root) = extract_module_root(&op.source) {
-                        global_success_map
-                            .entry(root)
-                            .or_default()
-                            .insert(part_name);
-                    }
-                } else {
-                    log::warn!("Partial injection failure for module {}", op.module_id);
-                }
-            }
-        } else {
-            log::warn!(
-                "!! HymoFS requested but kernel support is missing. Falling back to Magic Mount."
-            );
-            for op in &plan.hymo_ops {
-                if let Some(root) = extract_module_root(&op.source) {
-                    magic_queue.push(root);
-                }
-                final_hymo_ids.remove(&op.module_id);
-            }
-        }
-    }
 
     repair_rw_contexts();
 
@@ -385,17 +277,14 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     }
 
     let mut result_overlay = final_overlay_ids.into_iter().collect::<Vec<_>>();
-    let mut result_hymo = final_hymo_ids.into_iter().collect::<Vec<_>>();
     let mut result_magic = final_magic_ids;
 
     result_overlay.sort();
-    result_hymo.sort();
     result_magic.sort();
     result_magic.dedup();
 
     Ok(ExecutionResult {
         overlay_module_ids: result_overlay,
-        hymo_module_ids: result_hymo,
         magic_module_ids: result_magic,
     })
 }

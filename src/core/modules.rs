@@ -65,7 +65,6 @@ impl ModuleInfo {
 
         let mode_str = match m.rules.default_mode {
             MountMode::Overlay => "auto",
-            MountMode::HymoFs => "hymofs",
             MountMode::Magic => "magic",
             MountMode::Ignore => "ignore",
         };
@@ -126,7 +125,6 @@ pub fn print_list(config: &Config) -> Result<()> {
         .overlay_modules
         .iter()
         .chain(state.magic_modules.iter())
-        .chain(state.hymo_modules.iter())
         .map(|s| s.as_str())
         .collect();
     let infos: Vec<ModuleInfo> = modules
@@ -143,7 +141,6 @@ pub fn update_description(
     nuke_active: bool,
     overlay_count: usize,
     magic_count: usize,
-    hymo_count: usize,
 ) {
     let prop_path = Path::new(defs::MODULE_PROP_FILE);
     if !prop_path.exists() {
@@ -167,8 +164,8 @@ pub fn update_description(
     };
 
     let desc_text = format!(
-        "description=😋 运行中喵～ ({}) {} | Hymo: {} | Overlay: {} | Magic: {}{}",
-        mode_str, status_emoji, hymo_count, overlay_count, magic_count, nuke_str
+        "description=😋 运行中喵～ ({}) {} | Overlay: {} | Magic: {}{}",
+        mode_str, status_emoji, overlay_count, magic_count, nuke_str
     );
 
     let lines: Vec<String> = match fs::File::open(prop_path) {

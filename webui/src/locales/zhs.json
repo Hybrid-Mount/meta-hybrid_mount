@@ -43,9 +43,6 @@
     "activePartitions": "活跃分区",
     "health": "文件冲突检测",
     "healthy": "所有检查通过，文件没有冲突。",
-    "hymofsActive": "已激活",
-    "hymofsNotDetected": "未检测到",
-    "hymofsAvailable": "可用 (未启用)",
     "diagInfo": "信息",
     "diagWarning": "警告",
     "diagCritical": "严重错误"
@@ -61,8 +58,6 @@
     "disableUmount": "禁用Umount",
     "allowUmountCoexistence": "允许Umount共存",
     "coexistenceRequired": "需开启共存选项",
-    "hymoStealth": "HymoFS 隐身模式",
-    "hymoDebug": "HymoFS 调试",
     "moduleDir": "模块路径",
     "moduleDirDesc": "设置模块的存储位置",
     "mountSource": "挂载源名",
@@ -131,12 +126,10 @@
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
-      "hymo": "HymoFS",
       "ignore": "禁用 (忽略)",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
-        "hymo": "HymoFS",
         "ignore": "忽略"
       }
     }

@@ -130,7 +130,7 @@ const RealAPI: AppAPI = {
     throw new Error(stderr || "Log file not found");
   },
   getStorageUsage: async (): Promise<StorageStatus> => {
-    if (!ksuExec) return { size: '-', used: '-', percent: '0%', type: null, hymofs_available: false };
+    if (!ksuExec) return { size: '-', used: '-', percent: '0%', type: null };
     try {
       const stateFile = (PATHS as any).DAEMON_STATE || "/data/adb/meta-hybrid/run/daemon_state.json";
       const cmd = `cat "${stateFile}"`;
@@ -141,13 +141,11 @@ const RealAPI: AppAPI = {
           type: state.storage_mode || 'unknown',
           percent: `${state.storage_percent ?? 0}%`,
           size: formatBytes(state.storage_total ?? 0),
-          used: formatBytes(state.storage_used ?? 0),
-          hymofs_available: state.hymofs_available ?? false,
-          hymofs_version: state.hymofs_version
+          used: formatBytes(state.storage_used ?? 0)
         };
       }
     } catch (e) {}
-    return { size: '-', used: '-', percent: '0%', type: null, hymofs_available: false };
+    return { size: '-', used: '-', percent: '0%', type: null };
   },
   getSystemInfo: async (): Promise<SystemInfo> => {
     if (!ksuExec) return { kernel: '-', selinux: '-', mountBase: '-', activeMounts: [] };
@@ -245,32 +243,32 @@ const RealAPI: AppAPI = {
   getGranaryList: async (): Promise<Silo[]> => {
     if (!ksuExec) return [];
     try {
-        const { errno, stdout } = await ksuExec(`${PATHS.BINARY} hymo-action --action granary-list`);
+        const { errno, stdout } = await ksuExec(`${PATHS.BINARY} system-action --action granary-list`);
         if (errno === 0 && stdout) return JSON.parse(stdout);
     } catch {}
     return [];
   },
   createSilo: async (reason: string): Promise<void> => {
     if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} hymo-action --action granary-create --value "${reason}"`;
+    const cmd = `${PATHS.BINARY} system-action --action granary-create --value "${reason}"`;
     const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) throw new Error(stderr);
   },
   deleteSilo: async (siloId: string): Promise<void> => {
     if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} hymo-action --action granary-delete --value "${siloId}"`;
+    const cmd = `${PATHS.BINARY} system-action --action granary-delete --value "${siloId}"`;
     const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) throw new Error(stderr);
   },
   restoreSilo: async (siloId: string): Promise<void> => {
     if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} hymo-action --action granary-restore --value "${siloId}"`;
+    const cmd = `${PATHS.BINARY} system-action --action granary-restore --value "${siloId}"`;
     const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) throw new Error(stderr);
   },
   setWinnowingRule: async (path: string, moduleId: string): Promise<void> => {
     if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} hymo-action --action winnow-set --value "${path}:${moduleId}"`;
+    const cmd = `${PATHS.BINARY} system-action --action winnow-set --value "${path}:${moduleId}"`;
     const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) throw new Error(stderr);
   }

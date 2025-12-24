@@ -9,7 +9,7 @@ use crate::{
         config::{CONFIG_FILE_DEFAULT, Config},
     },
     core::{executor, granary, inventory, modules, planner, storage, winnow},
-    mount, utils,
+    utils,
 };
 
 #[derive(Serialize)]
@@ -152,50 +152,9 @@ pub fn handle_diagnostics(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_hymo_status(cli: &Cli) -> Result<()> {
-    let config = load_config(cli)?;
-    let status =
-        mount::hymofs::HymoFs::get_kernel_status().context("Failed to retrieve HymoFS status")?;
-
-    let json_val = serde_json::to_value(&status)?;
-    if let Some(json_obj) = json_val.as_object() {
-        let mut extended_obj = json_obj.clone();
-        extended_obj.insert(
-            "stealth_active".to_string(),
-            serde_json::Value::Bool(config.hymofs_stealth),
-        );
-        extended_obj.insert(
-            "debug_active".to_string(),
-            serde_json::Value::Bool(config.hymofs_debug),
-        );
-        println!("{}", serde_json::Value::Object(extended_obj));
-    } else {
-        println!("{}", json_val);
-    }
-    Ok(())
-}
-
-pub fn handle_hymo_action(cli: &Cli, action: &str, value: Option<&str>) -> Result<()> {
+pub fn handle_system_action(cli: &Cli, action: &str, value: Option<&str>) -> Result<()> {
     let mut config = load_config(cli)?;
     match action {
-        "set-stealth" => {
-            let enable = value.map(|s| s == "true").unwrap_or(false);
-            mount::hymofs::HymoFs::set_stealth(enable).context("Failed to set stealth mode")?;
-            config.hymofs_stealth = enable;
-            config.save_to_file(CONFIG_FILE_DEFAULT)?;
-            println!("Stealth mode set to {}", enable);
-        }
-        "set-debug" => {
-            let enable = value.map(|s| s == "true").unwrap_or(false);
-            mount::hymofs::HymoFs::set_debug(enable).context("Failed to set debug mode")?;
-            config.hymofs_debug = enable;
-            config.save_to_file(CONFIG_FILE_DEFAULT)?;
-            println!("Debug mode set to {}", enable);
-        }
-        "reorder-mounts" => {
-            mount::hymofs::HymoFs::reorder_mnt_id().context("Failed to reorder mount IDs")?;
-            println!("Mount IDs reordered.");
-        }
         "granary-list" => {
             let silos = granary::list_silos()?;
             let json = serde_json::to_string(&silos)?;

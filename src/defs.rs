@@ -27,4 +27,3 @@ pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 #[allow(dead_code)]
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
 pub const TMPFS_CANDIDATES: &[&str] = &["/debug_ramdisk", "/patch_hw", "/oem", "/root", "/sbin"];
-pub const HYMO_MIRROR_DIR: &str = "/dev/hymo_mirror";

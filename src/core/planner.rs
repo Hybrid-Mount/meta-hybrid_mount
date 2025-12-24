@@ -22,20 +22,11 @@ pub struct OverlayOperation {
     pub lowerdirs: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone)]
-pub struct HymoOperation {
-    pub module_id: String,
-    pub source: PathBuf,
-    pub target: PathBuf,
-}
-
 #[derive(Debug, Default)]
 pub struct MountPlan {
     pub overlay_ops: Vec<OverlayOperation>,
-    pub hymo_ops: Vec<HymoOperation>,
     pub magic_module_paths: Vec<PathBuf>,
     pub overlay_module_ids: Vec<String>,
-    pub hymo_module_ids: Vec<String>,
     pub magic_module_ids: Vec<String>,
 }
 
@@ -101,22 +92,9 @@ impl MountPlan {
     }
 
     pub fn print_visuals(&self) {
-        if self.overlay_ops.is_empty()
-            && self.magic_module_paths.is_empty()
-            && self.hymo_ops.is_empty()
-        {
+        if self.overlay_ops.is_empty() && self.magic_module_paths.is_empty() {
             log::info!(">> Empty plan. Standby mode.");
             return;
-        }
-
-        if !self.hymo_ops.is_empty() {
-            log::info!("[HymoFS Injection Protocol]");
-            let mut shown_modules = HashSet::new();
-            for op in &self.hymo_ops {
-                if shown_modules.insert(&op.module_id) {
-                    log::info!("├── [Inject] {}", op.module_id);
-                }
-            }
         }
 
         if !self.overlay_ops.is_empty() {
@@ -165,7 +143,6 @@ impl MountPlan {
 struct ModuleContribution {
     id: String,
     overlays: Vec<(String, PathBuf)>,
-    hymo_ops: Vec<HymoOperation>,
     magic_path: Option<PathBuf>,
 }
 
@@ -193,7 +170,6 @@ pub fn generate(
             let mut contrib = ModuleContribution {
                 id: module.id.clone(),
                 overlays: Vec::new(),
-                hymo_ops: Vec::new(),
                 magic_path: None,
             };
 
@@ -223,15 +199,6 @@ pub fn generate(
                             contrib.overlays.push((dir_name, path));
                             has_any_action = true;
                         }
-                        MountMode::HymoFs => {
-                            let target_base = PathBuf::from("/").join(&dir_name);
-                            contrib.hymo_ops.push(HymoOperation {
-                                module_id: module.id.clone(),
-                                source: path,
-                                target: target_base,
-                            });
-                            has_any_action = true;
-                        }
                         MountMode::Magic => {
                             contrib.magic_path = Some(content_path.clone());
                             has_any_action = true;
@@ -249,7 +216,6 @@ pub fn generate(
     let mut overlay_groups: HashMap<String, Vec<PathBuf>> = HashMap::new();
     let mut magic_paths = HashSet::new();
     let mut overlay_ids = HashSet::new();
-    let mut hymo_ids = HashSet::new();
     let mut magic_ids = HashSet::new();
 
     for contrib in contributions.into_iter().flatten() {
@@ -261,11 +227,6 @@ pub fn generate(
         for (part, path) in contrib.overlays {
             overlay_groups.entry(part).or_default().push(path);
             overlay_ids.insert(contrib.id.clone());
-        }
-
-        for op in contrib.hymo_ops {
-            plan.hymo_ops.push(op);
-            hymo_ids.insert(contrib.id.clone());
         }
     }
     for (part, layers) in overlay_groups {
@@ -307,11 +268,9 @@ pub fn generate(
 
     plan.overlay_module_ids = overlay_ids.into_iter().collect();
     plan.magic_module_ids = magic_ids.into_iter().collect();
-    plan.hymo_module_ids = hymo_ids.into_iter().collect();
 
     plan.overlay_module_ids.sort();
     plan.magic_module_ids.sort();
-    plan.hymo_module_ids.sort();
 
     Ok(plan)
 }

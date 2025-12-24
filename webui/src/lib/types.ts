@@ -13,14 +13,12 @@ export interface AppConfig {
   disable_umount: boolean;
   allow_umount_coexistence: boolean;
   dry_run: boolean;
-  hymofs_stealth: boolean;
-  hymofs_debug: boolean;
   logfile?: string;
   winnowing?: Record<string, string>;
   granary: GranaryConfig;
 }
 
-export type MountMode = 'overlay' | 'hymofs' | 'magic' | 'ignore';
+export type MountMode = 'overlay' | 'magic' | 'ignore';
 
 export interface ModuleRules {
   default_mode: MountMode;
@@ -46,8 +44,6 @@ export interface StorageStatus {
   percent: string;
   type: 'tmpfs' | 'ext4' | 'unknown' | null;
   error?: string;
-  hymofs_available: boolean;
-  hymofs_version?: number;
 }
 
 export interface SystemInfo {
@@ -80,14 +76,14 @@ export interface LanguageOption {
 export interface ModeStats {
   auto: number;
   magic: number;
-  hymofs: number;
 }
 
 export interface ConflictEntry {
-  path: string;
-  contenders: string[];
-  selected: string;
-  is_forced: boolean;
+  partition: string;
+  relative_path: string;
+  contending_modules: string[];
+  selected?: string;
+  is_forced?: boolean;
 }
 
 export interface Silo {

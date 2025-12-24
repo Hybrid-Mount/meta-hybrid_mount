@@ -15,7 +15,6 @@ use crate::{conf::config, defs};
 pub enum MountMode {
     #[default]
     Overlay,
-    HymoFs,
     Magic,
     Ignore,
 }

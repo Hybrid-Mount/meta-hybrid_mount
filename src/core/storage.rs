@@ -12,7 +12,7 @@ use rustix::{
 };
 use serde::Serialize;
 
-use crate::{core::state::RuntimeState, defs, mount::hymofs::HymoFs, utils};
+use crate::{core::state::RuntimeState, defs, utils};
 
 const DEFAULT_SELINUX_CONTEXT: &str = "u:object_r:system_file:s0";
 const SELINUX_XATTR_KEY: &str = "security.selinux";
@@ -30,8 +30,6 @@ struct StorageStatus {
     usage_percent: u8,
     total_size: u64,
     used_size: u64,
-    hymofs_available: bool,
-    hymofs_version: Option<i32>,
 }
 
 pub fn get_usage(path: &Path) -> (u64, u64, u8) {
@@ -48,10 +46,6 @@ pub fn get_usage(path: &Path) -> (u64, u64, u8) {
     } else {
         (0, 0, 0)
     }
-}
-
-pub fn is_hymofs_active() -> bool {
-    HymoFs::is_available()
 }
 
 pub fn setup(
@@ -210,8 +204,6 @@ pub fn print_status() -> Result<()> {
         usage_percent: percent,
         total_size: total,
         used_size: used,
-        hymofs_available: HymoFs::is_available(),
-        hymofs_version: HymoFs::get_version(),
     };
 
     println!("{}", serde_json::to_string(&status)?);

@@ -67,18 +67,6 @@ impl OryzaEngine<Init> {
         )?;
 
         log::info!(">> Storage Backend: [{}]", handle.mode.to_uppercase());
-        if self.config.hymofs_stealth && crate::mount::hymofs::HymoFs::is_available() {
-            if let Err(e) = crate::mount::hymofs::HymoFs::hide_overlay_xattrs(
-                &handle.mount_point.to_string_lossy(),
-            ) {
-                log::warn!("Failed to hide overlay xattrs on storage: {}", e);
-            } else {
-                log::info!(
-                    ">> HymoFS: Hidden overlay xattrs on {}",
-                    handle.mount_point.display()
-                );
-            }
-        }
 
         Ok(OryzaEngine {
             config: self.config,
@@ -167,11 +155,9 @@ impl OryzaEngine<Executed> {
             nuke_active,
             self.state.result.overlay_module_ids.len(),
             self.state.result.magic_module_ids.len(),
-            self.state.result.hymo_module_ids.len(),
         );
 
         let storage_stats = storage::get_usage(&self.state.handle.mount_point);
-        let hymofs_available = storage::is_hymofs_active();
         let active_mounts: Vec<String> = self
             .state
             .plan
@@ -185,11 +171,9 @@ impl OryzaEngine<Executed> {
             self.state.handle.mount_point,
             self.state.result.overlay_module_ids,
             self.state.result.magic_module_ids,
-            self.state.result.hymo_module_ids,
             nuke_active,
             active_mounts,
             storage_stats,
-            hymofs_available,
         );
 
         if let Err(e) = state.save() {

@@ -348,62 +348,6 @@ fn do_mount_overlay(
     Ok(())
 }
 
-fn do_bind_mount(
-    from: impl AsRef<Path>,
-    to: impl AsRef<Path>,
-    #[cfg(any(target_os = "linux", target_os = "android"))] disable_umount: bool,
-) -> Result<()> {
-    let tree = open_tree(
-        CWD,
-        from.as_ref(),
-        OpenTreeFlags::OPEN_TREE_CLOEXEC
-            | OpenTreeFlags::OPEN_TREE_CLONE
-            | OpenTreeFlags::AT_RECURSIVE,
-    )
-    .with_context(|| format!("open_tree failed for {}", from.as_ref().display()))?;
-
-    move_mount(
-        tree.as_fd(),
-        "",
-        CWD,
-        to.as_ref(),
-        MoveMountFlags::MOVE_MOUNT_F_EMPTY_PATH,
-    )
-    .with_context(|| format!("move_mount failed to {}", to.as_ref().display()))?;
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if !disable_umount {
-        let _ = send_unmountable(to.as_ref());
-    }
-    Ok(())
-}
-
-pub fn bind_mount(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
-    match do_bind_mount(
-        &from,
-        &to,
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        false,
-    ) {
-        Ok(_) => Ok(()),
-        Err(_) => {
-            mount(
-                from.as_ref(),
-                to.as_ref(),
-                "",
-                MountFlags::BIND | MountFlags::REC,
-                None,
-            )
-            .context("Legacy bind mount failed")?;
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            {
-                let _ = send_unmountable(to.as_ref());
-            }
-            Ok(())
-        }
-    }
-}
-
 fn mount_overlay_child(
     mount_point: &str,
     relative: &str,
