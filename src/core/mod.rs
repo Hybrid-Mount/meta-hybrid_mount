@@ -64,6 +64,7 @@ impl OryzaEngine<Init> {
             self.config.force_ext4,
             self.config.use_erofs,
             &self.config.mountsource,
+            self.config.disable_umount,
         )?;
 
         log::info!(">> Storage Backend: [{}]", handle.mode.to_uppercase());
@@ -85,7 +86,7 @@ impl OryzaEngine<StorageReady> {
 
         sync::perform_sync(&modules, &self.state.handle.mount_point)?;
 
-        self.state.handle.commit()?;
+        self.state.handle.commit(self.config.disable_umount)?;
 
         Ok(OryzaEngine {
             config: self.config,
