@@ -2,7 +2,7 @@ name: Manage License Headers
 
 on:
   schedule:
-    - cron: '0 0 * * 1'  # 每周一运行
+    - cron: '0 0 * * 1'
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
 
       - name: Run addlicense
         run: |
-          ~/go/bin/addlicense -v -c "Hybrid Mount Authors" -l gpl3 -y 2025 .
+          ~/go/bin/addlicense -v -c "Meta-Hybrid Mount Authors" -s -l GPL-3.0-or-later -y 2025 src xtask webui tools
 
       - name: Check for changes
         id: git-check

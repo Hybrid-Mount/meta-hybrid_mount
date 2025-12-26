@@ -1,3 +1,8 @@
+/**
+ * Copyright 2025 Meta-Hybrid Mount Authors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { DEFAULT_CONFIG, PATHS } from './constants';
 import { APP_VERSION } from './constants_gen';
 import { MockAPI } from './api.mock';

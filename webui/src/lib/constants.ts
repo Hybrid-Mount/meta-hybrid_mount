@@ -1,3 +1,8 @@
+/**
+ * Copyright 2025 Meta-Hybrid Mount Authors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { RUST_PATHS } from './constants_gen';
 import type { AppConfig } from './types';
 

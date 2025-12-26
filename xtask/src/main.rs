@@ -1,3 +1,6 @@
+// Copyright 2025 Meta-Hybrid Mount Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use fs_extra::dir::{self, CopyOptions};

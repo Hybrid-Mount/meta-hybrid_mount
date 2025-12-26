@@ -1,3 +1,8 @@
+/**
+ * Copyright 2025 Meta-Hybrid Mount Authors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { APP_VERSION } from './constants_gen';
 import { DEFAULT_CONFIG } from './constants';
 import type { AppConfig, DeviceInfo, Module, StorageStatus, SystemInfo, ModuleRules, ConflictEntry, DiagnosticIssue, Silo } from './types';

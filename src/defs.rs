@@ -1,3 +1,6 @@
+// Copyright 2025 Meta-Hybrid Mount Authors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 pub const HYBRID_MNT_DIR: &str = "/debug_ramdisk";
 
 pub const BASE_DIR: &str = "/data/adb/meta-hybrid/";
