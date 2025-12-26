@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::defs;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
+
 pub struct RuntimeState {
     pub timestamp: u64,
     pub pid: u32,
@@ -32,6 +33,7 @@ pub struct RuntimeState {
 
 impl RuntimeState {
     #[allow(clippy::too_many_arguments)]
+
     pub fn new(
         storage_mode: String,
         mount_point: PathBuf,
@@ -42,12 +44,16 @@ impl RuntimeState {
         storage_info: (u64, u64, u8),
     ) -> Self {
         let start = SystemTime::now();
+
         let timestamp = start
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+
         let pid = std::process::id();
+
         let zygisksu_enforce = crate::utils::check_zygisksu_enforce_status();
+
         Self {
             timestamp,
             pid,
@@ -63,17 +69,24 @@ impl RuntimeState {
             zygisksu_enforce,
         }
     }
+
     pub fn save(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
+
         fs::write(defs::STATE_FILE, json)?;
+
         Ok(())
     }
+
     pub fn load() -> Result<Self> {
         if !std::path::Path::new(defs::STATE_FILE).exists() {
             return Ok(Self::default());
         }
+
         let content = fs::read_to_string(defs::STATE_FILE)?;
+
         let state = serde_json::from_str(&content)?;
+
         Ok(state)
     }
 }

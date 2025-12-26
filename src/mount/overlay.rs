@@ -20,6 +20,7 @@ use crate::defs::{KSU_OVERLAY_SOURCE, RUN_DIR};
 use crate::try_umount::send_unmountable;
 
 const PAGE_LIMIT: usize = 4000;
+
 const MS_MOVE: u32 = 8192;
 
 enum StashedMount {
@@ -37,6 +38,7 @@ impl Drop for StagedMountGuard {
         if !self.committed {
             for path in self.mounts.iter().rev() {
                 let _ = unmount(path, UnmountFlags::DETACH);
+
                 let _ = fs::remove_dir(path);
             }
         }
@@ -46,6 +48,7 @@ impl Drop for StagedMountGuard {
 fn umount_dir(src: impl AsRef<Path>) -> Result<()> {
     unmount(src.as_ref(), UnmountFlags::DETACH)
         .with_context(|| format!("Failed to umount {}", src.as_ref().display()))?;
+
     Ok(())
 }
 
@@ -60,6 +63,7 @@ fn get_overlay_features() -> String {
         if !features.contains("redirect_dir") {
             features.push_str(",redirect_dir=on");
         }
+
         features.push_str(",metacopy=on");
     }
 
@@ -68,7 +72,9 @@ fn get_overlay_features() -> String {
 
 fn get_sub_mounts(parent: &str) -> Result<Vec<String>> {
     let file = fs::File::open("/proc/mounts").context("Failed to open /proc/mounts")?;
+
     let reader = BufReader::new(file);
+
     let mut sub_mounts = Vec::new();
 
     let parent_prefix = if parent.ends_with('/') {
@@ -79,10 +85,13 @@ fn get_sub_mounts(parent: &str) -> Result<Vec<String>> {
 
     for line in reader.lines() {
         let line = line?;
+
         let parts: Vec<&str> = line.split_whitespace().collect();
+
         if parts.len() < 2 {
             continue;
         }
+
         let mount_point = parts[1];
 
         if mount_point.starts_with(&parent_prefix)
@@ -94,11 +103,13 @@ fn get_sub_mounts(parent: &str) -> Result<Vec<String>> {
     }
 
     sub_mounts.sort_by_key(|a| a.len());
+
     Ok(sub_mounts)
 }
 
 fn clone_path_context(source: &Path, target: &Path) -> Result<()> {
     let mut buf = vec![0u8; 256];
+
     let name = "security.selinux";
 
     match getxattr(source, name, &mut buf) {
@@ -107,12 +118,14 @@ fn clone_path_context(source: &Path, target: &Path) -> Result<()> {
         }
         Err(rustix::io::Errno::RANGE) => {
             let mut large_buf = vec![0u8; 1024];
+
             if let Ok(len) = getxattr(source, name, &mut large_buf) {
                 let _ = setxattr(target, name, &large_buf[..len], XattrFlags::empty());
             }
         }
         _ => {}
     }
+
     Ok(())
 }
 
@@ -128,21 +141,26 @@ fn recursive_context_align(
     if current_module_path.is_dir() {
         for entry in fs::read_dir(current_module_path)? {
             let entry = entry?;
+
             recursive_context_align(target_base, module_base, &entry.path())?;
         }
     } else if let Ok(relative) = current_module_path.strip_prefix(module_base) {
         let target_path = target_base.join(relative);
+
         if target_path.exists() {
             let _ = clone_path_context(&target_path, current_module_path);
         }
     }
+
     Ok(())
 }
 
 fn align_overlay_contexts(target_root: &str, module_roots: &[String]) {
     let target_path = Path::new(target_root);
+
     for module_root in module_roots {
         let module_path = Path::new(module_root);
+
         if module_path.exists() {
             let _ = recursive_context_align(target_path, module_path, module_path);
         }
@@ -178,10 +196,12 @@ pub fn mount_overlayfs(
                 if upperdir.is_some() || workdir.is_some() {
                     return Err(e);
                 }
+
                 info!(
                     "Direct overlay mount failed (possibly due to length limits), switching to staged mount. Error: {}",
                     e
                 );
+
                 return mount_overlayfs_staged(
                     lower_dirs,
                     lowest,
@@ -190,6 +210,7 @@ pub fn mount_overlayfs(
                     disable_umount,
                 );
             }
+
             Err(e)
         }
     }
@@ -202,29 +223,39 @@ fn mount_overlayfs_staged(
     #[cfg(any(target_os = "linux", target_os = "android"))] disable_umount: bool,
 ) -> Result<()> {
     let mut batches: Vec<Vec<String>> = Vec::new();
+
     let mut current_batch: Vec<String> = Vec::new();
+
     let mut current_len = 0;
+
     const SAFE_CHUNK_SIZE: usize = 3500;
 
     for dir in lower_dirs {
         if current_len + dir.len() + 1 > SAFE_CHUNK_SIZE {
             batches.push(current_batch);
+
             current_batch = Vec::new();
+
             current_len = 0;
         }
+
         current_batch.push(dir.clone());
+
         current_len += dir.len() + 1;
     }
+
     if !current_batch.is_empty() {
         batches.push(current_batch);
     }
 
     let staging_root = Path::new(RUN_DIR).join("staging");
+
     if !staging_root.exists() {
         fs::create_dir_all(&staging_root).context("failed to create staging dir")?;
     }
 
     let mut current_base = lowest.to_string();
+
     let mut guard = StagedMountGuard {
         mounts: Vec::new(),
         committed: false,
@@ -242,8 +273,10 @@ fn mount_overlayfs_staged(
                 .as_nanos();
 
             let stage_dir = staging_root.join(format!("stage_{}_{}", timestamp, i));
+
             fs::create_dir_all(&stage_dir)
                 .with_context(|| format!("Failed to create stage dir {:?}", stage_dir))?;
+
             stage_dir
         };
 
@@ -265,11 +298,13 @@ fn mount_overlayfs_staged(
 
         if !is_last_layer {
             guard.mounts.push(target_path.clone());
+
             current_base = target_path.to_string_lossy().to_string();
         }
     }
 
     guard.committed = true;
+
     Ok(())
 }
 
@@ -283,6 +318,7 @@ fn do_mount_overlay(
     let upperdir_s = upperdir
         .filter(|up| up.exists())
         .map(|e| e.display().to_string());
+
     let workdir_s = workdir
         .filter(|wd| wd.exists())
         .map(|e| e.display().to_string());
@@ -291,26 +327,31 @@ fn do_mount_overlay(
 
     let result = (|| {
         let fs = fsopen("overlay", FsOpenFlags::FSOPEN_CLOEXEC)?;
+
         let fs = fs.as_fd();
 
         fsconfig_set_string(fs, "lowerdir", lowerdir_config)?;
 
         if let (Some(upperdir), Some(workdir)) = (&upperdir_s, &workdir_s) {
             fsconfig_set_string(fs, "upperdir", upperdir)?;
+
             fsconfig_set_string(fs, "workdir", workdir)?;
         }
 
         if extra_features.contains("redirect_dir") {
             let _ = fsconfig_set_string(fs, "redirect_dir", "on");
         }
+
         if extra_features.contains("metacopy") {
             let _ = fsconfig_set_string(fs, "metacopy", "on");
         }
 
         fsconfig_set_string(fs, "source", KSU_OVERLAY_SOURCE)?;
+
         fsconfig_create(fs)?;
 
         let mount = fsmount(fs, FsMountFlags::FSMOUNT_CLOEXEC, MountAttrFlags::empty())?;
+
         move_mount(
             mount.as_fd(),
             "",
@@ -322,6 +363,7 @@ fn do_mount_overlay(
 
     if let Err(fsopen_err) = result {
         let mut data = format!("lowerdir={lowerdir_config}");
+
         if let (Some(upperdir), Some(workdir)) = (upperdir_s, workdir_s) {
             data = format!("{data},upperdir={upperdir},workdir={workdir}");
         }
@@ -357,6 +399,7 @@ fn mount_overlay_child(
 ) -> Result<()> {
     let has_modification = module_roots.iter().any(|lower| {
         let path = Path::new(lower).join(relative.trim_start_matches('/'));
+
         path.exists()
     });
 
@@ -375,8 +418,10 @@ fn mount_overlay_child(
             StashedMount::Legacy(path) => {
                 #[allow(clippy::useless_conversion)]
                 let flags = MountFlags::from_bits_retain(MS_MOVE.into());
+
                 mount(&path, mount_point, "", flags, None)
                     .with_context(|| format!("legacy move mount failed to {}", mount_point))?;
+
                 let _ = fs::remove_dir(path);
             }
         }
@@ -385,12 +430,15 @@ fn mount_overlay_child(
         if !disable_umount {
             let _ = send_unmountable(mount_point);
         }
+
         return Ok(());
     }
 
     let mut lower_dirs: Vec<String> = vec![];
+
     for lower in module_roots {
         let path = Path::new(lower).join(relative.trim_start_matches('/'));
+
         if path.is_dir() {
             lower_dirs.push(path.display().to_string());
         } else if path.exists() {
@@ -420,6 +468,7 @@ fn mount_overlay_child(
             "failed to overlay child {mount_point}: {:#}, fallback to bind mount",
             e
         );
+
         match stock {
             StashedMount::Modern(fd) => {
                 move_mount(
@@ -433,7 +482,9 @@ fn mount_overlay_child(
             StashedMount::Legacy(path) => {
                 #[allow(clippy::useless_conversion)]
                 let flags = MountFlags::from_bits_retain(MS_MOVE.into());
+
                 mount(&path, mount_point, "", flags, None)?;
+
                 let _ = fs::remove_dir(path);
             }
         }
@@ -445,6 +496,7 @@ fn mount_overlay_child(
     } else if let StashedMount::Legacy(path) = stock {
         let _ = fs::remove_dir(path);
     }
+
     Ok(())
 }
 
@@ -463,6 +515,7 @@ pub fn mount_overlay(
     let stock_root = format!("/proc/self/fd/{}", root_file.as_raw_fd());
 
     let mut all_child_mounts = Vec::new();
+
     match get_sub_mounts(target_root) {
         Ok(sub_mounts) => {
             if !sub_mounts.is_empty() {
@@ -471,6 +524,7 @@ pub fn mount_overlay(
                     target_root, sub_mounts
                 );
             }
+
             all_child_mounts = sub_mounts;
         }
         Err(e) => {
@@ -479,10 +533,12 @@ pub fn mount_overlay(
     }
 
     let mut stashed_mounts = Vec::new();
+
     let stash_base = Path::new(RUN_DIR).join("stash");
 
     for mount_point in &all_child_mounts {
         let relative = mount_point.replacen(target_root, "", 1);
+
         let relative_clean = relative.trim_start_matches('/');
 
         match open_tree(
@@ -500,13 +556,16 @@ pub fn mount_overlay(
                     "open_tree failed for {}: {}, falling back to legacy stash",
                     mount_point, e
                 );
+
                 let stash_path = stash_base.join(relative_clean);
+
                 if let Err(err) = fs::create_dir_all(&stash_path) {
                     warn!(
                         "Failed to create stash dir {}: {}",
                         stash_path.display(),
                         err
                     );
+
                     continue;
                 }
 
@@ -518,8 +577,10 @@ pub fn mount_overlay(
                     None,
                 ) {
                     warn!("Legacy stash failed for {}: {}", mount_point, err);
+
                     continue;
                 }
+
                 stashed_mounts.push((
                     mount_point.clone(),
                     relative,
@@ -553,6 +614,7 @@ pub fn mount_overlay(
                 "failed to restore child mount {mount_point}: {:#}, revert overlay on {}",
                 e, target_root
             );
+
             if let Err(umount_err) = umount_dir(target_root) {
                 log::error!(
                     "CRITICAL: Failed to revert overlay on {}: {}",
@@ -560,8 +622,10 @@ pub fn mount_overlay(
                     umount_err
                 );
             }
+
             bail!("Child mount restoration failed: {}", e);
         }
     }
+
     Ok(())
 }

@@ -19,6 +19,7 @@ use conf::{
 use core::{OryzaEngine, executor, granary, inventory, planner, winnow};
 
 #[global_allocator]
+
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn load_config(cli: &Cli) -> Result<Config> {
@@ -71,10 +72,12 @@ fn main() -> Result<()> {
                 cli_handlers::handle_system_action(&cli, action, value.as_deref())?
             }
         }
+
         return Ok(());
     }
 
     let mut config = load_config(&cli)?;
+
     config.merge_with_cli(
         cli.moduledir.clone(),
         cli.mountsource.clone(),
@@ -100,6 +103,7 @@ fn main() -> Result<()> {
             if config.verbose {
                 println!(">> ZygiskSU Enforce!=0 detected. Forcing DISABLE_UMOUNT to TRUE.");
             }
+
             config.disable_umount = true;
         }
     }
@@ -114,24 +118,31 @@ fn main() -> Result<()> {
             .init();
 
         log::info!(":: DRY-RUN / DIAGNOSTIC MODE ::");
+
         let module_list =
             inventory::scan(&config.moduledir, &config).context("Inventory scan failed")?;
+
         log::info!(">> Inventory: Found {} modules", module_list.len());
 
         let plan = planner::generate(&config, &module_list, &config.moduledir)
             .context("Plan generation failed")?;
+
         plan.print_visuals();
 
         log::info!(">> Analyzing File Conflicts...");
+
         let report = plan.analyze_conflicts();
+
         if report.details.is_empty() {
             log::info!("   No file conflicts detected. Clean.");
         } else {
             log::warn!("!! DETECTED {} FILE CONFLICTS !!", report.details.len());
 
             let winnowed = winnow::sift_conflicts(report.details, &config.winnowing);
+
             for c in winnowed {
                 let status = if c.is_forced { "(FORCED)" } else { "" };
+
                 log::warn!(
                     "   [{}] {} <== {:?} >> Selected: {} {}",
                     "CONFLICT",
@@ -144,12 +155,16 @@ fn main() -> Result<()> {
         }
 
         log::info!(">> Running System Diagnostics...");
+
         let issues = executor::diagnose_plan(&plan);
+
         let mut critical_count = 0;
+
         for issue in issues {
             match issue.level {
                 core::executor::DiagnosticLevel::Critical => {
                     log::error!("[CRITICAL][{}] {}", issue.context, issue.message);
+
                     critical_count += 1;
                 }
                 core::executor::DiagnosticLevel::Warning => {
@@ -166,11 +181,14 @@ fn main() -> Result<()> {
                 ">> ❌ DIAGNOSTICS FAILED: {} critical issues found.",
                 critical_count
             );
+
             log::error!(">> Mounting now would likely result in a bootloop.");
+
             std::process::exit(1);
         } else {
             log::info!(">> ✅ Diagnostics passed. System looks healthy.");
         }
+
         return Ok(());
     }
 
@@ -178,11 +196,13 @@ fn main() -> Result<()> {
         .context("Failed to initialize logging")?;
 
     let camouflage_name = utils::random_kworker_name();
+
     if let Err(e) = utils::camouflage_process(&camouflage_name) {
         log::warn!("Failed to camouflage process: {:#}", e);
     }
 
     log::info!(">> Initializing Meta-Hybrid Mount Daemon...");
+
     log::debug!("Process camouflaged as: {}", camouflage_name);
 
     if let Ok(version) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
@@ -197,6 +217,7 @@ fn main() -> Result<()> {
         .with_context(|| format!("Failed to create run directory: {}", defs::RUN_DIR))?;
 
     let mnt_base = PathBuf::from(defs::HYBRID_MNT_DIR);
+
     let img_path = Path::new(defs::BASE_DIR).join("modules.img");
 
     if let Err(e) = granary::create_silo(&config, "Boot Backup", "Automatic Pre-Mount") {

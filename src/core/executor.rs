@@ -53,6 +53,7 @@ struct OverlayResult {
 
 fn repair_rw_contexts() {
     let rw_root = Path::new(defs::SYSTEM_RW_DIR);
+
     if !rw_root.exists() {
         return;
     }
@@ -61,6 +62,7 @@ fn repair_rw_contexts() {
 
     for part in defs::BUILTIN_PARTITIONS {
         let part_dir = rw_root.join(part);
+
         let reference_path = Path::new("/").join(part);
 
         if part_dir.exists() && reference_path.exists() {
@@ -81,10 +83,12 @@ fn repair_rw_contexts() {
                 }
                 _ => {
                     let context = "u:object_r:system_file:s0";
+
                     log::warn!(
                         "chcon --reference failed, trying explicit context {}",
                         context
                     );
+
                     let _ = Command::new("chcon")
                         .arg("-R")
                         .arg(context)
@@ -98,8 +102,10 @@ fn repair_rw_contexts() {
 
 pub fn diagnose_plan(plan: &MountPlan) -> Vec<DiagnosticIssue> {
     let mut issues = Vec::new();
+
     for op in &plan.overlay_ops {
         let target = Path::new(&op.target);
+
         if !target.exists() {
             issues.push(DiagnosticIssue {
                 level: DiagnosticLevel::Critical,
@@ -108,20 +114,24 @@ pub fn diagnose_plan(plan: &MountPlan) -> Vec<DiagnosticIssue> {
             });
         }
     }
+
     let all_layers: Vec<(String, &PathBuf)> = plan
         .overlay_ops
         .iter()
         .flat_map(|op| {
             op.lowerdirs.iter().map(move |path| {
                 let mod_id = extract_id(path).unwrap_or_else(|| "unknown".into());
+
                 (mod_id, path)
             })
         })
         .collect();
+
     for (mod_id, layer_path) in all_layers {
         if !layer_path.exists() {
             continue;
         }
+
         for entry in WalkDir::new(layer_path).into_iter().flatten() {
             if entry.path_is_symlink()
                 && let Ok(target) = std::fs::read_link(entry.path())
@@ -140,12 +150,15 @@ pub fn diagnose_plan(plan: &MountPlan) -> Vec<DiagnosticIssue> {
             }
         }
     }
+
     issues
 }
 
 pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionResult> {
     let mut magic_queue = plan.magic_module_paths.clone();
+
     let mut global_success_map: HashMap<PathBuf, HashSet<String>> = HashMap::new();
+
     let mut final_overlay_ids = HashSet::new();
 
     plan.overlay_module_ids.iter().for_each(|id| {
@@ -167,8 +180,11 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
                 .collect();
 
             let rw_root = Path::new(defs::SYSTEM_RW_DIR);
+
             let part_rw = rw_root.join(&op.partition_name);
+
             let upper = part_rw.join("upperdir");
+
             let work = part_rw.join("workdir");
 
             let (upper_opt, work_opt) = if upper.exists() && work.exists() {
@@ -195,28 +211,36 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
                     op.target,
                     e
                 );
+
                 let mut local_magic = Vec::new();
+
                 let mut local_fallback_ids = Vec::new();
+
                 for layer_path in &op.lowerdirs {
                     if let Some(root) = extract_module_root(layer_path) {
                         local_magic.push(root.clone());
+
                         if let Some(id) = extract_id(layer_path) {
                             local_fallback_ids.push(id);
                         }
                     }
                 }
+
                 return OverlayResult {
                     magic_roots: local_magic,
                     fallback_ids: local_fallback_ids,
                     success_records: Vec::new(),
                 };
             }
+
             let mut successes = Vec::new();
+
             for layer_path in &op.lowerdirs {
                 if let Some(root) = extract_module_root(layer_path) {
                     successes.push((root, op.partition_name.clone()));
                 }
             }
+
             OverlayResult {
                 magic_roots: Vec::new(),
                 fallback_ids: Vec::new(),
@@ -227,9 +251,11 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
 
     for res in overlay_results {
         magic_queue.extend(res.magic_roots);
+
         for id in res.fallback_ids {
             final_overlay_ids.remove(&id);
         }
+
         for (root, partition) in res.success_records {
             global_success_map
                 .entry(root)
@@ -239,7 +265,9 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     }
 
     magic_queue.sort();
+
     magic_queue.dedup();
+
     let mut final_magic_ids = Vec::new();
 
     if !magic_queue.is_empty() {
@@ -259,6 +287,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
         if !tempdir.exists() {
             std::fs::create_dir_all(&tempdir)?;
         }
+
         utils::mount_tmpfs(&tempdir, "tmpfs")?;
 
         if let Err(e) = magic::mount_partitions(
@@ -270,6 +299,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
             config.disable_umount,
         ) {
             log::error!("Magic Mount critical failure: {:#}", e);
+
             final_magic_ids.clear();
         }
 
@@ -277,10 +307,13 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     }
 
     let mut result_overlay = final_overlay_ids.into_iter().collect::<Vec<_>>();
+
     let mut result_magic = final_magic_ids;
 
     result_overlay.sort();
+
     result_magic.sort();
+
     result_magic.dedup();
 
     Ok(ExecutionResult {

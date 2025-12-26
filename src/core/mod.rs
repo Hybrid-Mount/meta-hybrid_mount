@@ -79,6 +79,7 @@ impl OryzaEngine<Init> {
 impl OryzaEngine<StorageReady> {
     pub fn scan_and_sync(mut self) -> Result<OryzaEngine<ModulesReady>> {
         let modules = inventory::scan(&self.config.moduledir, &self.config)?;
+
         log::info!(
             ">> Inventory Scan: Found {} enabled modules.",
             modules.len()
@@ -140,13 +141,16 @@ impl OryzaEngine<Planned> {
 impl OryzaEngine<Executed> {
     pub fn finalize(self) -> Result<()> {
         let mut nuke_active = false;
+
         if self.state.handle.mode == "ext4" && self.config.enable_nuke {
             log::info!(">> Engaging Paw Pad Protocol (Stealth)...");
+
             match try_umount::ksu_nuke_sysfs(
                 self.state.handle.mount_point.to_string_lossy().as_ref(),
             ) {
                 Ok(_) => {
                     log::info!(">> Success: Paw Pad active. Sysfs traces purged.");
+
                     nuke_active = true;
                 }
                 Err(e) => {
@@ -163,6 +167,7 @@ impl OryzaEngine<Executed> {
         );
 
         let storage_stats = storage::get_usage(&self.state.handle.mount_point);
+
         let active_mounts: Vec<String> = self
             .state
             .plan
@@ -188,6 +193,7 @@ impl OryzaEngine<Executed> {
         granary::disengage_ratoon_protocol();
 
         log::info!(">> System operational. Mount sequence complete.");
+
         Ok(())
     }
 }

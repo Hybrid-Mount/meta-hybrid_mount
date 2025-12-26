@@ -19,6 +19,7 @@ use crate::{
 };
 
 #[derive(Default)]
+
 struct ModuleProp {
     name: String,
     version: String,
@@ -29,10 +30,12 @@ struct ModuleProp {
 impl From<&Path> for ModuleProp {
     fn from(path: &Path) -> Self {
         let mut prop = ModuleProp::default();
+
         if let Ok(file) = fs::File::open(path) {
             for line in BufReader::new(file).lines().map_while(Result::ok) {
                 if let Some((k, v)) = line.split_once('=') {
                     let val = v.trim().to_string();
+
                     match k.trim() {
                         "name" => prop.name = val,
                         "version" => prop.version = val,
@@ -43,11 +46,13 @@ impl From<&Path> for ModuleProp {
                 }
             }
         }
+
         prop
     }
 }
 
 #[derive(Serialize)]
+
 struct ModuleInfo {
     id: String,
     name: String,
@@ -94,7 +99,9 @@ pub struct ModuleFile {
 impl ModuleFile {
     pub fn new(root: &Path, relative: &Path) -> Result<Self> {
         let real_path = root.join(relative);
+
         let metadata = fs::symlink_metadata(&real_path)?;
+
         let file_type = metadata.file_type();
 
         let is_whiteout = file_type.is_char_device() && metadata.rdev() == 0;
@@ -120,19 +127,23 @@ impl ModuleFile {
 
 pub fn print_list(config: &Config) -> Result<()> {
     let modules = inventory::scan(&config.moduledir, config)?;
+
     let state = RuntimeState::load().unwrap_or_default();
+
     let mounted_ids: HashSet<&str> = state
         .overlay_modules
         .iter()
         .chain(state.magic_modules.iter())
         .map(|s| s.as_str())
         .collect();
+
     let infos: Vec<ModuleInfo> = modules
         .into_iter()
         .map(|m| ModuleInfo::new(m, &mounted_ids))
         .collect();
 
     println!("{}", serde_json::to_string(&infos)?);
+
     Ok(())
 }
 
@@ -143,6 +154,7 @@ pub fn update_description(
     magic_count: usize,
 ) {
     let prop_path = Path::new(defs::MODULE_PROP_FILE);
+
     if !prop_path.exists() {
         return;
     }

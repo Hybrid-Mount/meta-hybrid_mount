@@ -6,6 +6,7 @@ use super::config::CONFIG_FILE_DEFAULT;
 
 #[derive(Parser, Debug)]
 #[command(name = "meta-hybrid", version, about = "Hybrid Mount Metamodule")]
+
 pub struct Cli {
     #[arg(short = 'c', long = "config")]
     pub config: Option<PathBuf>,
@@ -24,6 +25,7 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+
 pub enum Commands {
     GenConfig {
         #[arg(short = 'o', long = "output", default_value = CONFIG_FILE_DEFAULT)]

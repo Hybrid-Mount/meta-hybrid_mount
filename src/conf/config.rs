@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub const CONFIG_FILE_DEFAULT: &str = "/data/adb/meta-hybrid/config.toml";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+
 pub struct WinnowingTable {
     #[serde(flatten)]
     pub rules: HashMap<String, String>,
@@ -18,6 +19,7 @@ pub struct WinnowingTable {
 impl WinnowingTable {
     pub fn get_preferred_module(&self, file_path: &Path) -> Option<String> {
         let path_str = file_path.to_string_lossy().to_string();
+
         self.rules.get(&path_str).cloned()
     }
 
@@ -27,12 +29,14 @@ impl WinnowingTable {
     }
 
     #[allow(dead_code)]
+
     pub fn remove_rule(&mut self, file_path: &str) {
         self.rules.remove(file_path);
     }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+
 pub struct GranaryConfig {
     #[serde(default = "default_max_backups")]
     pub max_backups: usize,
@@ -43,6 +47,7 @@ pub struct GranaryConfig {
 fn default_max_backups() -> usize {
     20
 }
+
 fn default_retention_days() -> u64 {
     0
 }
@@ -57,6 +62,7 @@ impl Default for GranaryConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+
 pub struct Config {
     #[serde(default = "default_moduledir")]
     pub moduledir: PathBuf,
@@ -97,6 +103,7 @@ where
 {
     #[derive(Deserialize)]
     #[serde(untagged)]
+
     enum StringOrVec {
         String(String),
         Vec(Vec<String>),
@@ -134,7 +141,9 @@ impl Default for Config {
 impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = fs::read_to_string(path.as_ref()).context("failed to read config file")?;
+
         let config: Config = toml::from_str(&content).context("failed to parse config file")?;
+
         Ok(config)
     }
 
@@ -144,10 +153,13 @@ impl Config {
 
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let content = toml::to_string_pretty(self).context("failed to serialize config")?;
+
         if let Some(parent) = path.as_ref().parent() {
             fs::create_dir_all(parent).context("failed to create config directory")?;
         }
+
         fs::write(path.as_ref(), content).context("failed to write config file")?;
+
         Ok(())
     }
 
@@ -162,15 +174,19 @@ impl Config {
         if let Some(dir) = moduledir {
             self.moduledir = dir;
         }
+
         if let Some(source) = mountsource {
             self.mountsource = source;
         }
+
         if verbose {
             self.verbose = true;
         }
+
         if !partitions.is_empty() {
             self.partitions = partitions;
         }
+
         if dry_run {
             self.dry_run = true;
         }
