@@ -2,9 +2,9 @@ mod conf;
 mod core;
 mod defs;
 mod mount;
-mod utils;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod try_umount;
+mod utils;
 
 use anyhow::{Context, Result};
 use clap::Parser;

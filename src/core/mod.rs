@@ -12,7 +12,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::{conf::config::Config,try_umount};
+use crate::{conf::config::Config, try_umount};
 
 pub struct Init;
 
@@ -142,7 +142,9 @@ impl OryzaEngine<Executed> {
         let mut nuke_active = false;
         if self.state.handle.mode == "ext4" && self.config.enable_nuke {
             log::info!(">> Engaging Paw Pad Protocol (Stealth)...");
-            match try_umount::ksu_nuke_sysfs(self.state.handle.mount_point.to_string_lossy().as_ref()) {
+            match try_umount::ksu_nuke_sysfs(
+                self.state.handle.mount_point.to_string_lossy().as_ref(),
+            ) {
                 Ok(_) => {
                     log::info!(">> Success: Paw Pad active. Sysfs traces purged.");
                     nuke_active = true;

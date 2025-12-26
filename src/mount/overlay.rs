@@ -17,7 +17,7 @@ use rustix::{
 
 use crate::defs::{KSU_OVERLAY_SOURCE, RUN_DIR};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::utils::send_unmountable;
+use crate::try_umount::send_unmountable;
 
 const PAGE_LIMIT: usize = 4000;
 const MS_MOVE: u32 = 8192;

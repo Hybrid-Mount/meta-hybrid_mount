@@ -14,6 +14,7 @@ pub enum NodeFileType {
     Symlink,
     Whiteout,
 }
+
 impl From<FileType> for NodeFileType {
     fn from(file_type: FileType) -> Self {
         if file_type.is_dir() {
@@ -25,6 +26,7 @@ impl From<FileType> for NodeFileType {
         }
     }
 }
+
 impl fmt::Display for NodeFileType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -35,6 +37,7 @@ impl fmt::Display for NodeFileType {
         }
     }
 }
+
 #[derive(Clone)]
 pub struct Node {
     pub name: String,
@@ -44,6 +47,7 @@ pub struct Node {
     pub replace: bool,
     pub skip: bool,
 }
+
 impl fmt::Debug for Node {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fn print_tree(
@@ -106,6 +110,7 @@ impl fmt::Debug for Node {
         print_tree(self, f, "", true, true)
     }
 }
+
 impl Node {
     pub fn new_root<S>(name: S) -> Self
     where
@@ -120,6 +125,7 @@ impl Node {
             skip: false,
         }
     }
+
     pub fn collect_module_files(&mut self, root: &PathBuf) -> anyhow::Result<()> {
         for entry in walkdir::WalkDir::new(root)
             .min_depth(1)
@@ -136,6 +142,7 @@ impl Node {
         }
         Ok(())
     }
+
     fn add_module_file(&mut self, module_file: ModuleFile) {
         let mut current_node = self;
         let components: Vec<Component> = module_file.relative_path.components().collect();

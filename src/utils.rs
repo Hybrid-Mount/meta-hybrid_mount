@@ -6,7 +6,7 @@ use std::{
     os::unix::fs::{PermissionsExt, symlink},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{ OnceLock},
+    sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
 
