@@ -1,28 +1,9 @@
-use crate::try_umount::DRIVER_FD;
-
-const KSU_INSTALL_MAGIC1: u32 = 0xDEADBEEF;
-const KSU_INSTALL_MAGIC2: u32 = 0xCAFEBABE;
+use crate::ksu::{get_fd, magic::KSU_IOCTL_GET_INFO};
 
 #[repr(C)]
 struct GetInfoCmd {
     version: u32,
     flags: u32,
-}
-
-fn grab_fd() -> i32 {
-    let mut fd = -1;
-
-    unsafe {
-        libc::syscall(
-            libc::SYS_reboot,
-            KSU_INSTALL_MAGIC1,
-            KSU_INSTALL_MAGIC2,
-            0,
-            &mut fd,
-        );
-    };
-
-    fd
 }
 
 fn info() -> Option<GetInfoCmd> {
@@ -31,7 +12,7 @@ fn info() -> Option<GetInfoCmd> {
         flags: 0,
     };
 
-    let fd = *DRIVER_FD.get_or_init(grab_fd());
+    let fd = get_fd();
     let ret = unsafe { libc::ioctl(fd as libc::c_int, KSU_IOCTL_GET_INFO, &mut cmd) };
 
     if ret < 0 { None } else { Some(cmd) }

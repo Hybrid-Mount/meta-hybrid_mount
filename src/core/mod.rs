@@ -15,7 +15,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::{conf::config::Config, try_umount};
+use crate::conf::config::Config;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::ksu::try_umount;
 
 pub struct Init;
 
@@ -151,6 +153,7 @@ impl OryzaEngine<Executed> {
     pub fn finalize(self) -> Result<()> {
         let mut nuke_active = false;
 
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         if self.state.handle.mode == "ext4" && self.config.enable_nuke {
             log::info!(">> Engaging Paw Pad Protocol (Stealth)...");
 

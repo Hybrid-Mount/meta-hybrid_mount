@@ -13,7 +13,7 @@ use rustix::{fd::AsFd, fs::CWD, mount::*};
 use crate::defs::KSU_OVERLAY_SOURCE;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::try_umount::send_unmountable;
+use crate::ksu::try_umount::send_unmountable;
 
 pub fn mount_overlayfs(
     lower_dirs: &[String],
