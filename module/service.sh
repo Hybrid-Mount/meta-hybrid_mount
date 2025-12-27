@@ -1,4 +1,3 @@
-
 MODDIR="${0%/*}"
 BASE_DIR="/data/adb/meta-hybrid"
 LOG_FILE="$BASE_DIR/daemon.log"
@@ -25,6 +24,6 @@ chmod 755 "$BINARY"
 EXIT_CODE=$?
 log "Hybrid Mount exited with code $EXIT_CODE"
 if [ "$EXIT_CODE" = "0" ]; then
-    /data/adb/ksud kernel notify-module-mounted
+    
 fi
 exit $EXIT_CODE
