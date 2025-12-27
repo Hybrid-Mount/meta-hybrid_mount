@@ -19,6 +19,6 @@
   "dependencies": {
     "@material/material-color-utilities": "^0.3.0",
     "@material/web": "^2.4.1",
-    "kernelsu": "^2.1.1"
+    "kernelsu": "^3.0.0"
   }
 }
