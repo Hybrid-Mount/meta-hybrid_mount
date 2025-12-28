@@ -32,7 +32,8 @@ use extattr::{Flags as XattrFlags, lgetxattr, llistxattr, lsetxattr};
 
 const SELINUX_XATTR: &str = "security.selinux";
 const OVERLAY_OPAQUE_XATTR: &str = "trusted.overlay.opaque";
-const DEFAULT_CONTEXT: &str = "u:object_r:system_file:s0";
+const CONTEXT_SYSTEM: &str = "u:object_r:system_file:s0";
+const CONTEXT_VENDOR: &str = "u:object_r:vendor_file:s0";
 const OVERLAY_TEST_XATTR: &str = "trusted.overlay.test";
 
 #[allow(dead_code)]
@@ -137,11 +138,11 @@ fn copy_extended_attributes(src: &Path, dst: &Path) -> Result<()> {
     {
         if let Ok(mut ctx) = lgetfilecon(src) {
             if ctx.contains("u:object_r:rootfs:s0") {
-                ctx = DEFAULT_CONTEXT.to_string();
+                ctx = CONTEXT_SYSTEM.to_string();
             }
             let _ = lsetfilecon(dst, &ctx);
         } else {
-            let _ = lsetfilecon(dst, DEFAULT_CONTEXT);
+            let _ = lsetfilecon(dst, CONTEXT_SYSTEM);
         }
         if let Ok(opaque) = lgetxattr(src, OVERLAY_OPAQUE_XATTR) {
             let _ = lsetxattr(dst, OVERLAY_OPAQUE_XATTR, &opaque, XattrFlags::empty());
@@ -199,14 +200,14 @@ pub fn lgetfilecon<P: AsRef<Path>>(path: P) -> Result<String> {
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn lgetfilecon<P: AsRef<Path>>(_path: P) -> Result<String> {
-    Ok(DEFAULT_CONTEXT.to_string())
+    Ok(CONTEXT_SYSTEM.to_string())
 }
 
 pub fn copy_path_context<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> Result<()> {
     let context = if src.as_ref().exists() {
-        lgetfilecon(&src).unwrap_or_else(|_| DEFAULT_CONTEXT.to_string())
+        lgetfilecon(&src).unwrap_or_else(|_| CONTEXT_SYSTEM.to_string())
     } else {
-        DEFAULT_CONTEXT.to_string()
+        CONTEXT_SYSTEM.to_string()
     };
     lsetfilecon(dst, &context)
 }
@@ -381,6 +382,14 @@ fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
     Ok(())
 }
 
+fn get_context_for_path(path: &Path) -> &'static str {
+    let path_str = path.to_string_lossy();
+    if path_str.starts_with("/vendor") || path_str.starts_with("/odm") {
+        return CONTEXT_VENDOR;
+    }
+    CONTEXT_SYSTEM
+}
+
 fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
     if let Some(name) = current.file_name().and_then(|n| n.to_str())
         && (name == "upperdir" || name == "workdir")
@@ -399,7 +408,8 @@ fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
     {
         copy_path_context(parent, current)?;
     } else {
-        lsetfilecon(current, DEFAULT_CONTEXT)?;
+        let target_context = get_context_for_path(&system_path);
+        lsetfilecon(current, target_context)?;
     }
     Ok(())
 }
