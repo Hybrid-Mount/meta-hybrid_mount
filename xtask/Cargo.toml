@@ -7,9 +7,7 @@ version = "0.1.0"
 edition = "2021"
 [dependencies]
 anyhow = "1.0"
-base64 = "0.22.1"
 clap = { version = "4.5", features = ["derive"] }
 fs_extra = "1.3"
-ksusig = { git = "https://github.com/Kernel-SU/ksusig", version = "0.3.0" }
 tempfile = "3.24.0"
 zip = "7.0"
