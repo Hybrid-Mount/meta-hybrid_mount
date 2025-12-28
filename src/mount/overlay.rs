@@ -205,12 +205,7 @@ pub fn mount_overlay(
         std::env::set_current_dir(&root_path)
             .with_context(|| format!("failed to chdir to {root_path}"))?;
 
-        let stock_root_base = ".";
-
-        let root_file = std::fs::File::open(stock_root_base)
-            .with_context(|| format!("failed to open target root {}", root_path))?;
-        let stock_root_fd_path = format!("/proc/self/fd/{}", root_file.as_raw_fd());
-
+        let stock_root = ".";
         let mounts = Process::myself()?
             .mountinfo()
             .with_context(|| "get mountinfo")?;
@@ -230,7 +225,7 @@ pub fn mount_overlay(
 
         mount_overlayfs(
             &module_roots,
-            &stock_root_fd_path,
+            &root_path,
             upperdir,
             workdir,
             &root_path,
@@ -242,7 +237,7 @@ pub fn mount_overlay(
         for mount_point in mount_seq {
             let relative = mount_point.replacen(&root_path, "", 1);
             let relative_clean = relative.trim_start_matches('/');
-            let stock_root = format!("{}/{}", stock_root_fd_path, relative_clean);
+            let stock_root = format!("{}/{}", stock_root, relative_clean);
 
             if !Path::new(&stock_root).exists() {
                 continue;
