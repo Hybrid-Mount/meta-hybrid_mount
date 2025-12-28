@@ -2,7 +2,6 @@ use anyhow::{Context, Result, bail};
 use log::{info, warn};
 use std::{
     ffi::CString,
-    os::fd::AsRawFd,
     path::{Path, PathBuf},
     thread,
 };
