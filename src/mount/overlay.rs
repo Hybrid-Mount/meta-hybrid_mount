@@ -234,9 +234,13 @@ pub fn mount_overlay(
         .with_context(|| "mount overlayfs for root failed")?;
 
         for mount_point in mount_seq {
+            if mount_point.is_empty() {
+                continue;
+            }
+
             let relative = mount_point.replacen(&root_path, "", 1);
-            let relative_clean = relative.trim_start_matches('/');
-            let stock_root = format!("{}/{}", stock_root, relative_clean);
+            let relative = relative.trim_start_matches("/");
+            let stock_root = format!("{}/{}", stock_root, relative);
 
             if !Path::new(&stock_root).exists() {
                 continue;
@@ -244,7 +248,7 @@ pub fn mount_overlay(
 
             if let Err(e) = mount_overlay_child(
                 &mount_point,
-                relative_clean,
+                relative,
                 &module_roots,
                 &stock_root,
                 #[cfg(any(target_os = "linux", target_os = "android"))]
