@@ -1,0 +1,32 @@
+.chip-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: 8px;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chip-input-field {
+  flex: 1;
+  min-width: 80px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--md-sys-color-on-surface);
+  outline: none;
+  height: 32px;
+  font-family: var(--md-ref-typeface-plain);
+}
+
+.add-btn {
+  width: 32px;
+  height: 32px;
+  --md-icon-button-icon-color: var(--md-sys-color-primary);
+}

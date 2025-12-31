@@ -1,16 +1,18 @@
-/**
- * Copyright 2025 Meta-Hybrid Mount Authors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 .skeleton {
-  background-color: var(--md-sys-color-surface-variant);
-  opacity: 0.3;
-  animation: pulse 1.5s infinite ease-in-out;
-  flex-shrink: 0;
+  background: linear-gradient(
+    90deg,
+    var(--md-sys-color-surface-container-highest) 25%,
+    var(--md-sys-color-surface-container-high) 50%,
+    var(--md-sys-color-surface-container-highest) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite linear;
+  width: var(--skeleton-width, 100%);
+  height: var(--skeleton-height, 20px);
+  border-radius: var(--skeleton-radius, 12px);
 }
-@keyframes pulse {
-  0% { opacity: 0.1; }
-  50% { opacity: 0.3; }
-  100% { opacity: 0.1; }
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }

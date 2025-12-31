@@ -340,3 +340,14 @@ md-icon svg {
   --md-filled-tonal-icon-button-icon-color: var(--md-sys-color-on-error-container);
   --md-filled-tonal-icon-button-hover-state-layer-color: var(--md-sys-color-on-error-container);
 }
+md-dialog.transparent-scrim {
+  --md-dialog-scrim-color: transparent;
+  --md-sys-color-scrim: transparent;
+}
+.skeleton-col { display: flex; flex-direction: column; gap: 8px; }
+.mt-8 { margin-top: 8px; }
+.mb-8 { margin-bottom: 8px; }
+.action-row { display: flex; gap: 8px; align-items: center; }
+
+.dot.secondary { background-color: var(--md-sys-color-secondary); }
+.dot.tertiary { background-color: var(--md-sys-color-tertiary); }

@@ -77,3 +77,7 @@ md-icon svg {
   width: 24px;
   height: 24px;
 }
+.lang-btn-container {
+  position: relative;
+  display: inline-flex;
+}

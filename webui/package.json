@@ -9,8 +9,6 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^6.2.1",
-    "svelte": "^5.46.1",
     "svelte-check": "^4.3.5",
     "tslib": "^2.8.1",
     "typescript": "^5.9.3",
@@ -19,6 +17,8 @@
   "dependencies": {
     "@material/material-color-utilities": "^0.3.0",
     "@material/web": "^2.4.1",
-    "kernelsu": "^3.0.0"
+    "kernelsu": "^3.0.0",
+    "solid-js": "^1.9.10",
+    "vite-plugin-solid": "^2.11.10"
   }
 }
