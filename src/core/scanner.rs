@@ -7,11 +7,11 @@ use anyhow::Result;
 
 use crate::defs::{DISABLE_FILE_NAME, REMOVE_FILE_NAME, SKIP_MOUNT_FILE_NAME};
 
-#[derive(PartialEq, Eq, Hash, PartialOrd)]
+#[derive(PartialEq, Eq, Hash, Clone, PartialOrd)]
 pub struct ModuleInfo {
-    magic_mount: bool,
-    overlayfs: bool,
-    id: String,
+    pub magic_mount: bool,
+    pub overlayfs: bool,
+    pub id: String,
 }
 
 pub struct ModuleScanner {

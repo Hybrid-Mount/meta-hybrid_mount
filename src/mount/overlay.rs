@@ -11,7 +11,7 @@ use log::{info, warn};
 use procfs::process::Process;
 use rustix::{fd::AsFd, fs::CWD, mount::*};
 
-use crate::defs::KSU_OVERLAY_SOURCE;
+use crate::defs::{KSU_OVERLAY_SOURCE, SYSTEM_RW_DIR};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::try_umount::send_unmountable;
 
@@ -176,6 +176,42 @@ fn mount_overlay_child(
         )?;
     }
     Ok(())
+}
+
+pub fn mount_partition(
+    partition_name: &str,
+    lowerdir: &Vec<String>,
+    #[cfg(any(target_os = "linux", target_os = "android"))] disable_umount: bool,
+) -> Result<()> {
+    if lowerdir.is_empty() {
+        warn!("partition: {partition_name} lowerdir is empty");
+        return Ok(());
+    }
+
+    let partition = format!("/{partition_name}");
+
+    // if /partition is a symlink and linked to /system/partition, then we don't need to overlay it separately
+    if Path::new(&partition).read_link().is_ok() {
+        warn!("partition: {partition} is a symlink");
+        return Ok(());
+    }
+
+    let mut workdir = None;
+    let mut upperdir = None;
+    let system_rw_dir = Path::new(SYSTEM_RW_DIR);
+    if system_rw_dir.exists() {
+        workdir = Some(system_rw_dir.join(partition_name).join("workdir"));
+        upperdir = Some(system_rw_dir.join(partition_name).join("upperdir"));
+    }
+
+    mount_overlay(
+        &partition,
+        lowerdir,
+        workdir,
+        upperdir,
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        disable_umount,
+    )
 }
 
 pub fn mount_overlay(
