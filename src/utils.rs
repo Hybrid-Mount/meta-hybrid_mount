@@ -269,18 +269,35 @@ pub fn is_xattr_supported(path: &Path) -> bool {
     supported
 }
 
-pub fn is_overlay_xattr_supported(path: &Path) -> Result<()> {
+pub fn is_overlay_xattr_supported(path: &Path) -> bool {
     let test_file = path.join(".overlay_xattr_test");
     if let Err(e) = write(&test_file, b"test") {
         log::debug!("XATTR Check: Failed to create test file: {}", e);
-        return Ok(());
+        return false;
     }
 
-    lsetxattr(path, OVERLAY_TEST_XATTR, "y", XattrFlags::empty())
-        .with_context(|| "Failed to test overlay support".to_string())?;
-    let _ = remove_file(test_file);
+    let c_path = match CString::new(test_file.as_os_str().as_encoded_bytes()) {
+        Ok(c) => c,
+        Err(_) => {
+            let _ = remove_file(&test_file);
+            return false;
+        }
+    };
+    let c_key = CString::new(OVERLAY_TEST_XATTR).unwrap();
+    let c_val = CString::new("y").unwrap();
 
-    Ok(())
+    let supported = unsafe {
+        let ret = libc::lsetxattr(
+            c_path.as_ptr(),
+            c_key.as_ptr(),
+            c_val.as_ptr() as *const libc::c_void,
+            c_val.as_bytes().len(),
+            0,
+        );
+        ret == 0
+    };
+    let _ = remove_file(test_file);
+    supported
 }
 
 pub fn is_mounted<P: AsRef<Path>>(path: P) -> bool {
