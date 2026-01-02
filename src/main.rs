@@ -47,6 +47,17 @@ fn load_config() -> Result<Config> {
 fn main() -> Result<()> {
     let mut config = load_config()?;
 
+    #[cfg(all(target_os = "android", target_arch = "aarch64"))]
+    {
+        use log::LevelFilter;
+
+        android_logger::init_once(
+            android_logger::Config::default()
+                .with_max_level(LevelFilter::Trace)
+                .with_tag("Meta-Hybrid"),
+        );
+    }
+
     let args: Vec<_> = std::env::args().collect();
 
     if args.len() > 1 {
