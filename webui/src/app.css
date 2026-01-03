@@ -1,3 +1,8 @@
+/**
+ * Copyright 2025 Meta-Hybrid Mount Authors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 :root {
   --md-sys-shape-corner-medium: 12px;
   --md-sys-shape-corner-large: 16px;

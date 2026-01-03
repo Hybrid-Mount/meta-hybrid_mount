@@ -11,7 +11,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::{conf::config::Config, defs};
+use crate::{conf::config::Config, defs, utils};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Silo {
@@ -135,7 +135,7 @@ pub fn create_silo(config: &Config, label: &str, reason: &str) -> Result<String>
 
     let json = serde_json::to_string_pretty(&silo)?;
 
-    fs::write(&file_path, json)?;
+    utils::atomic_write(&file_path, json)?;
 
     if let Err(e) = prune_silos(config) {
         log::warn!("Failed to prune granary: {}", e);
@@ -200,19 +200,19 @@ pub fn restore_silo(id: &str) -> Result<()> {
     if let Some(raw) = &silo.raw_config {
         log::info!(">> Restoring config from RAW content (preserving comments)...");
 
-        fs::write(crate::conf::config::CONFIG_FILE_DEFAULT, raw)?;
+        utils::atomic_write(crate::conf::config::CONFIG_FILE_DEFAULT, raw)?;
     } else {
         log::info!(">> Raw config missing, restoring from struct snapshot...");
 
         let toml_str = toml::to_string(&silo.config_snapshot)?;
 
-        fs::write(crate::conf::config::CONFIG_FILE_DEFAULT, toml_str)?;
+        utils::atomic_write(crate::conf::config::CONFIG_FILE_DEFAULT, toml_str)?;
     }
 
     if let Some(state) = &silo.raw_state {
         log::info!(">> Restoring state from snapshot...");
 
-        fs::write(crate::defs::STATE_FILE, state)?;
+        utils::atomic_write(crate::defs::STATE_FILE, state)?;
     } else {
         log::warn!(">> No state snapshot found in this Silo. Skipping state restore.");
     }

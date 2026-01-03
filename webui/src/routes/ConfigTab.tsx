@@ -1,3 +1,8 @@
+/**
+ * Copyright 2025 Meta-Hybrid Mount Authors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { createSignal, createEffect, createMemo, Show, For } from 'solid-js';
 import { store } from '../lib/store';
 import { ICONS } from '../lib/constants';

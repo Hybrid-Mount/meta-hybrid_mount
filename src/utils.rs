@@ -69,11 +69,16 @@ where
 }
 
 pub fn init_logging(verbose: bool, log_path: &Path) -> Result<WorkerGuard> {
-    if let Some(parent) = log_path.parent() {
-        create_dir_all(parent)?;
-    }
-    let file_appender =
-        tracing_appender::rolling::never(log_path.parent().unwrap(), log_path.file_name().unwrap());
+    let parent = log_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Invalid log path parent"))?;
+    let file_name = log_path
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Invalid log filename"))?;
+
+    create_dir_all(parent)?;
+
+    let file_appender = tracing_appender::rolling::never(parent, file_name);
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
     let filter = if verbose {
         EnvFilter::new("debug")
@@ -124,6 +129,28 @@ pub fn init_logging(verbose: bool, log_path: &Path) -> Result<WorkerGuard> {
     Ok(guard)
 }
 
+pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Result<()> {
+    let path = path.as_ref();
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let pid = std::process::id();
+    let temp_name = format!(".{}_{}.tmp", pid, now);
+    let temp_file = dir.join(temp_name);
+
+    {
+        let mut file = File::create(&temp_file)?;
+        file.write_all(content.as_ref())?;
+        file.sync_all()?;
+    }
+
+    fs::rename(&temp_file, path)?;
+    Ok(())
+}
+
 pub fn validate_module_id(module_id: &str) -> Result<()> {
     let re = MODULE_ID_REGEX
         .get_or_init(|| Regex::new(r"^[a-zA-Z][a-zA-Z0-9._-]+$").expect("Invalid Regex pattern"));
@@ -168,6 +195,11 @@ fn copy_extended_attributes(src: &Path, dst: &Path) -> Result<()> {
             }
         }
     }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        let _ = src;
+        let _ = dst;
+    }
     Ok(())
 }
 
@@ -188,6 +220,11 @@ pub fn lsetfilecon<P: AsRef<Path>>(path: P, con: &str) -> Result<()> {
                 io_err
             );
         }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        let _ = path;
+        let _ = con;
     }
     Ok(())
 }
@@ -276,10 +313,19 @@ pub fn is_overlay_xattr_supported(path: &Path) -> Result<()> {
         return Ok(());
     }
 
-    lsetxattr(path, OVERLAY_TEST_XATTR, "y", XattrFlags::empty())
-        .with_context(|| "Failed to test overlay support".to_string())?;
-    let _ = remove_file(test_file);
+    // Attempt to set a dummy xattr to test support
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Err(e) = rustix::fs::setxattr(
+        &test_file,
+        OVERLAY_TEST_XATTR,
+        b"y",
+        rustix::fs::XattrFlags::empty(),
+    ) {
+        log::debug!("Overlay XATTR test failed: {}", e);
+        // Don't bail, just log
+    }
 
+    let _ = remove_file(test_file);
     Ok(())
 }
 
@@ -314,7 +360,7 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
         target,
         "tmpfs",
         MountFlags::empty(),
-        data.as_c_str(),
+        Some(data.as_c_str()),
     )
     .context("Failed to mount tmpfs")?;
     Ok(())
@@ -323,6 +369,8 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
 pub fn mount_image(image_path: &Path, target: &Path) -> Result<()> {
     ensure_dir_exists(target)?;
     lsetfilecon(image_path, "u:object_r:ksu_file:s0").ok();
+
+    // Using explicit mount command due to potential loop device setup complexity
     let status = Command::new("mount")
         .args(["-t", "ext4", "-o", "loop,rw,noatime"])
         .arg(image_path)

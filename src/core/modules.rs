@@ -3,8 +3,8 @@
 
 use std::{
     collections::HashSet,
-    fs::{self, OpenOptions},
-    io::{BufRead, BufReader, Write},
+    fs::{self},
+    io::{BufRead, BufReader},
     os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
 };
@@ -20,7 +20,7 @@ use crate::{
         inventory::{self, MountMode},
         state::RuntimeState,
     },
-    defs,
+    defs, utils,
 };
 
 #[derive(Default)]
@@ -213,13 +213,8 @@ pub fn update_description(
         Err(_) => return,
     };
 
-    if let Ok(mut file) = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .open(prop_path)
-    {
-        for line in lines {
-            let _ = writeln!(file, "{}", line);
-        }
+    let content = lines.join("\n");
+    if let Err(e) = utils::atomic_write(prop_path, format!("{}\n", content)) {
+        log::warn!("Failed to update module description: {}", e);
     }
 }

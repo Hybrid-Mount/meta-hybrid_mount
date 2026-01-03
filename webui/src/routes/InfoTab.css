@@ -171,3 +171,21 @@ md-icon svg {
   width: 24px;
   height: 24px;
 }
+
+.dev-logo .logo-base-track {
+    stroke-width: 8px;
+    opacity: 0.1;
+}
+
+.dev-logo .logo-arc {
+    stroke-width: 8px;
+}
+
+.dev-logo .logo-arc-error {
+    stroke: var(--md-sys-color-error);
+    stroke-dasharray: 10 14;
+}
+
+.dev-logo .logo-arc-inner {
+    stroke: var(--md-sys-color-outline);
+}

@@ -7,7 +7,6 @@ use std::{
 };
 
 use anyhow::Result;
-use rayon::prelude::*;
 use rustix::mount::UnmountFlags;
 use walkdir::WalkDir;
 
@@ -114,9 +113,10 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
 
     log::info!(">> Phase 1: OverlayFS Execution...");
 
+    // Changed from par_iter() to iter() to ensure thread safety when modifying CWD
     let overlay_results: Vec<OverlayResult> = plan
         .overlay_ops
-        .par_iter()
+        .iter()
         .map(|op| {
             let lowerdir_strings: Vec<String> = op
                 .lowerdirs

@@ -1,4 +1,9 @@
-import { createSignal, onMount, Show, For } from 'solid-js';
+/**
+ * Copyright 2025 Meta-Hybrid Mount Authors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import { createSignal, onMount, Show, For, createMemo } from 'solid-js';
 import { store } from '../lib/store';
 import { API } from '../lib/api';
 import { ICONS } from '../lib/constants';
@@ -31,6 +36,10 @@ export default function InfoTab() {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal(false);
   const [version, setVersion] = createSignal(store.version);
+
+  const isDev = createMemo(() => {
+    return !/^v\d+\.\d+\.\d+$/.test(version());
+  });
 
   onMount(async () => {
     try {
@@ -104,17 +113,39 @@ export default function InfoTab() {
     <div class="info-container">
       <div class="project-header">
         <div class="app-logo">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="50" class="logo-base-track" />
-            <circle cx="60" cy="60" r="38" class="logo-base-track" />
-            <circle cx="60" cy="60" r="26" class="logo-base-track" />
-            
-            <path d="M60 10 A 50 50 0 0 1 110 60" class="logo-arc logo-arc-outer" />
-            <path d="M60 98 A 38 38 0 0 1 60 22" class="logo-arc logo-arc-mid" />
-            <path d="M34 60 A 26 26 0 1 1 86 60" class="logo-arc logo-arc-inner" />
-            
-            <circle cx="60" cy="60" r="10" class="logo-core" />
-          </svg>
+          <Show when={!isDev()} fallback={
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" class="dev-logo">
+              <circle cx="60" cy="60" r="50" class="logo-base-track" />
+              <circle cx="60" cy="60" r="38" class="logo-base-track" />
+              <circle cx="60" cy="60" r="26" class="logo-base-track" />
+              
+              <g style={{ "transform-origin": "center", transform: "rotate(-45deg)" }}>
+                <path d="M 60 10 A 50 50 0 1 1 10 60" class="logo-arc logo-arc-outer" />
+              </g>
+
+              <g style={{ "transform-origin": "center", transform: "rotate(135deg)" }}>
+                 <path d="M 60 22 A 38 38 0 0 1 60 98" class="logo-arc logo-arc-mid logo-arc-error" />
+              </g>
+              
+              <g style={{ "transform-origin": "center", transform: "rotate(270deg)" }}>
+                <path d="M 60 34 A 26 26 0 1 1 47 82.5" class="logo-arc logo-arc-inner" />
+              </g>
+              
+              <circle cx="60" cy="60" r="10" class="logo-core" />
+            </svg>
+          }>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" class="logo-base-track" />
+              <circle cx="60" cy="60" r="38" class="logo-base-track" />
+              <circle cx="60" cy="60" r="26" class="logo-base-track" />
+              
+              <path d="M60 10 A 50 50 0 0 1 110 60" class="logo-arc logo-arc-outer" />
+              <path d="M60 98 A 38 38 0 0 1 60 22" class="logo-arc logo-arc-mid" />
+              <path d="M34 60 A 26 26 0 1 1 86 60" class="logo-arc logo-arc-inner" />
+              
+              <circle cx="60" cy="60" r="10" class="logo-core" />
+            </svg>
+          </Show>
         </div>
         <span class="app-name">{store.L.common.appName}</span>
         <span class="app-version">{version()}</span>

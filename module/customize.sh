@@ -35,7 +35,15 @@ fi
 IMG_FILE="$BASE_DIR/modules.img"
 if [ -f "$IMG_FILE" ]; then
   ui_print "- Existing modules.img found, keeping it."
+else
+  ui_print "- Creating 2G modules.img (ext4, no journal)..."
+  truncate -s 2G "$IMG_FILE"
+  if ! mkfs.ext4 -O ^has_journal "$IMG_FILE"; then
+    ui_print "! Failed to format modules.img using system mkfs.ext4"
+    rm -f "$IMG_FILE"
+  fi
 fi
+
 if [ -z "$KSU" ]; then
   touch /data/adb/.litemode_enable
   chmod 600 /data/adb/.litemode_enable

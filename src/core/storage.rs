@@ -4,7 +4,6 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use anyhow::{Context, Result, bail};
@@ -13,7 +12,6 @@ use rustix::{
     mount::{UnmountFlags, unmount},
 };
 use serde::Serialize;
-use walkdir::WalkDir;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::try_umount::send_unmountable;
@@ -89,7 +87,7 @@ pub fn get_usage(path: &Path) -> (u64, u64, u8) {
 pub fn setup(
     mnt_base: &Path,
     img_path: &Path,
-    moduledir: &Path,
+    _moduledir: &Path,
     force_ext4: bool,
     use_erofs: bool,
     mount_source: &str,
@@ -116,10 +114,6 @@ pub fn setup(
 
         try_hide(mnt_base);
 
-        if img_path.exists() {
-            let _ = fs::remove_file(img_path);
-        }
-
         return Ok(StorageHandle {
             mount_point: mnt_base.to_path_buf(),
             mode: "erofs_staging".to_string(),
@@ -129,12 +123,6 @@ pub fn setup(
 
     if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
         try_hide(mnt_base);
-
-        if img_path.exists()
-            && let Err(e) = fs::remove_file(img_path)
-        {
-            log::warn!("Failed to remove unused modules.img: {}", e);
-        }
 
         let erofs_path = img_path.with_extension("erofs");
 
@@ -149,7 +137,7 @@ pub fn setup(
         });
     }
 
-    let handle = setup_ext4_image(mnt_base, img_path, moduledir)?;
+    let handle = setup_ext4_image(mnt_base, img_path)?;
 
     try_hide(mnt_base);
 
@@ -168,13 +156,12 @@ fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
     Ok(false)
 }
 
-fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<StorageHandle> {
+fn setup_ext4_image(target: &Path, img_path: &Path) -> Result<StorageHandle> {
     if !img_path.exists() {
-        if let Some(parent) = img_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        create_image(img_path, moduledir).context("Failed to create modules.img")?;
+        bail!(
+            "Modules image not found at {} and automatic creation (mkfs.ext4) has been disabled.",
+            img_path.display()
+        );
     }
 
     if utils::mount_image(img_path, target).is_err() {
@@ -191,50 +178,6 @@ fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<
         mode: "ext4".to_string(),
         backing_image: Some(img_path.to_path_buf()),
     })
-}
-
-fn create_image(path: &Path, moduledir: &Path) -> Result<()> {
-    let mut total_size: u64 = 0;
-
-    if moduledir.exists() {
-        for entry in WalkDir::new(moduledir).into_iter().flatten() {
-            if entry.metadata().map(|m| m.is_file()).unwrap_or(false) {
-                total_size += entry.metadata().unwrap().len();
-            }
-        }
-    }
-
-    const OVERHEAD: u64 = 64 * 1024 * 1024;
-
-    const GRANULARITY: u64 = 5 * 1024 * 1024;
-
-    let target_raw = total_size + OVERHEAD;
-
-    let aligned_size = target_raw.div_ceil(GRANULARITY) * GRANULARITY;
-
-    let size_str = format!("{}", aligned_size);
-
-    let status = Command::new("truncate")
-        .arg("-s")
-        .arg(&size_str)
-        .arg(path)
-        .status()?;
-
-    if !status.success() {
-        bail!("Failed to allocate image file");
-    }
-
-    let status = Command::new("mkfs.ext4")
-        .arg("-O")
-        .arg("^has_journal")
-        .arg(path)
-        .status()?;
-
-    if !status.success() {
-        bail!("Failed to format image file");
-    }
-
-    Ok(())
 }
 
 #[allow(dead_code)]

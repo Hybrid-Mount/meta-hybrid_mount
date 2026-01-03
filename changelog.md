@@ -1,8 +1,6 @@
-## v2.0.0
+## v2.0.11
 
-Changes since v1.9.55:
-* chore(deps): bump serde_json from 1.0.147 to 1.0.148 (#96)
-* workflow: use pnpm
-* feat(ui): optimize animations and ux
-* webui: rewrite webui with solidjs
-* chore(release): bump version to v1.9.55 [skip ci]
+Changes since v2.0.1:
+* fix: use correct mkfs.erofs path
+* feat(webui): add dynamic logo for development versions
+* chore(release): bump version to v2.0.1 [skip ci]
