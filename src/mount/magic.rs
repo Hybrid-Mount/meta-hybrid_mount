@@ -1,6 +1,3 @@
-// Copyright 2025 Meta-Hybrid Mount Authors
-// SPDX-License-Identifier: GPL-3.0-or-later
-
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, DirEntry, create_dir, read_dir, read_link},
@@ -135,13 +132,12 @@ fn process_module(
         }
 
         let path_of_root = Path::new("/").join(partition);
-        let path_of_system = Path::new("/system").join(partition);
 
         if path_of_root.is_dir() {
             let name = partition.clone();
             let mod_part = path.join(partition);
-            // Fix: Collapsed if statement to satisfy clippy
-            if mod_part.is_dir() && (!path_of_system.exists() || path_of_system.is_symlink()) {
+
+            if mod_part.is_dir() {
                 let node = root
                     .children
                     .entry(name)
