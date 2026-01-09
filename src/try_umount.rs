@@ -3,7 +3,7 @@ use std::{
     sync::{LazyLock, Mutex, OnceLock},
 };
 
-use anyhow::{Result};
+use anyhow::Result;
 use ksu::{NukeExt4Sysfs, TryUmount};
 
 pub static TMPFS: OnceLock<String> = OnceLock::new();
@@ -20,7 +20,8 @@ where
 }
 
 pub fn commit() -> Result<()> {
-    let mut list = LIST.lock()
+    let mut list = LIST
+        .lock()
         .map_err(|_| anyhow::anyhow!("Failed to lock unmount list"))?;
     list.flags(2);
     list.umount()?;

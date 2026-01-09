@@ -23,6 +23,7 @@ use rustix::{
     mount::{MountFlags, mount},
 };
 use tracing::{Event, Subscriber};
+#[cfg(target_os = "android")]
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
     EnvFilter,
@@ -88,10 +89,27 @@ pub fn init_logging(verbose: bool, log_path: &Path) -> Result<WorkerGuard> {
         .with_writer(non_blocking)
         .event_format(SimpleFormatter);
 
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(file_layer)
-        .init();
+    let registry = tracing_subscriber::registry().with(filter).with(file_layer);
+
+    #[cfg(target_os = "android")]
+    {
+        let android_layer =
+            tracing_android::layer("HybridMount")
+                .unwrap()
+                .with_filter(if verbose {
+                    EnvFilter::new("debug")
+                } else {
+                    EnvFilter::new("info")
+                });
+
+        registry.with(android_layer).init();
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        registry.init();
+    }
+
     tracing_log::LogTracer::init().ok();
 
     let log_path_buf = log_path.to_path_buf();
@@ -132,7 +150,6 @@ fn get_random_string() -> String {
     if let Ok(mut file) = File::open("/dev/urandom") {
         let _ = file.read_exact(&mut buf);
     } else {
-        // Fallback if urandom fails (unlikely)
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -146,7 +163,6 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
     let path = path.as_ref();
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
 
-    // Retry loop for temp file creation
     for _ in 0..3 {
         let suffix = get_random_string();
         let target_name = path
@@ -165,7 +181,7 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
             Ok(mut file) => {
                 file.write_all(content.as_ref())?;
                 file.sync_all()?;
-                drop(file); // Ensure file is closed before rename
+                drop(file);
                 fs::rename(&temp_file, path)?;
                 return Ok(());
             }
@@ -428,13 +444,7 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
 }
 
 fn find_system_binary(name: &str) -> String {
-    let paths = [
-        "/system/bin",
-        "/sbin",
-        "/usr/bin",
-        "/bin",
-        "/vendor/bin",
-    ];
+    let paths = ["/system/bin", "/sbin", "/usr/bin", "/bin", "/vendor/bin"];
 
     for dir in paths {
         let p = Path::new(dir).join(name);

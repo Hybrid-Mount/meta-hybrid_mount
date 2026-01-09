@@ -25,7 +25,9 @@ pub fn mount_overlayfs(
     #[cfg(any(target_os = "linux", target_os = "android"))] _disable_umount: bool,
 ) -> Result<()> {
     let escape_path = |s: &str| -> String {
-        s.replace('\\', "\\\\").replace(':', "\\:").replace(',', "\\,")
+        s.replace('\\', "\\\\")
+            .replace(':', "\\:")
+            .replace(',', "\\,")
     };
 
     let lowerdir_config = lower_dirs
