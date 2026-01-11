@@ -116,7 +116,6 @@ impl MagicMount {
         mount_bind(module_path, target).with_context(|| {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if self.umount {
-                // tell ksu about this mount
                 let _ = send_unmountable(target);
             }
             format!(
@@ -126,7 +125,6 @@ impl MagicMount {
             )
         })?;
 
-        // we should use MS_REMOUNT | MS_BIND | MS_xxx to change mount flags
         if let Err(e) = mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "") {
             tracing::warn!("make file {} ro: {e:#?}", target.display());
         }
@@ -152,7 +150,6 @@ impl MagicMount {
                             let file_type = NodeFileType::from(metadata.file_type());
                             file_type != self.node.file_type || file_type == NodeFileType::Symlink
                         } else {
-                            // real path not exists
                             true
                         }
                     }
@@ -249,14 +246,12 @@ impl MagicMount {
                     self.path.display()
                 )
             })?;
-            // make private to reduce peer group count
             if let Err(e) = mount_change(&self.path, MountPropagationFlags::PRIVATE) {
                 tracing::warn!("make dir {} private: {e:#?}", self.path.display());
             }
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if self.umount {
-                // tell ksu about this one too
                 let _ = send_unmountable(&self.path);
             }
         }
@@ -324,6 +319,11 @@ where
 
         mount(mount_source, &tmp_dir, "tmpfs", MountFlags::empty(), None).context("mount tmp")?;
         mount_change(&tmp_dir, MountPropagationFlags::PRIVATE).context("make tmp private")?;
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if umount {
+            let _ = send_unmountable(&tmp_dir);
+        }
 
         let ret = MagicMount::new(
             &root,

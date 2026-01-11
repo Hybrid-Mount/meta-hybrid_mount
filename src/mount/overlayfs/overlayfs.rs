@@ -14,7 +14,7 @@ use rustix::{
     },
 };
 
-use crate::mount::overlayfs::utils::umount_dir;
+use crate::{mount::overlayfs::utils::umount_dir, try_umount::send_unmountable};
 
 pub fn mount_overlayfs(
     lower_dirs: &[String],
@@ -159,6 +159,7 @@ fn mount_overlay_child(
         tracing::warn!("failed: {:#}, fallback to bind mount", e);
         bind_mount(stock_root, mount_point)?;
     }
+    let _ = send_unmountable(mount_point);
     Ok(())
 }
 
