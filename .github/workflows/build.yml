@@ -75,15 +75,6 @@ jobs:
         run: |
           cargo run -p xtask -- build --release --arch arm64
 
-      - name: Notify Telegram (CI)
-        if: success()
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          chmod +x notify
-          ./notify "37" "日常耕作 🌱 (Daily Tilling)"
-
       - name: Prepare Artifact
         run: |
           mkdir -p output/artifact_content
