@@ -40,9 +40,11 @@ impl ModuleRules {
             match fs::read_to_string(&internal_config) {
                 Ok(content) => match serde_json::from_str::<ModuleRules>(&content) {
                     Ok(r) => rules = r,
-                    Err(e) => log::warn!("Failed to parse rules for module '{}': {}", module_id, e),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse rules for module '{}': {}", module_id, e)
+                    }
                 },
-                Err(e) => log::warn!("Failed to read rule file for '{}': {}", module_id, e),
+                Err(e) => tracing::warn!("Failed to read rule file for '{}': {}", module_id, e),
             }
         }
 
@@ -58,9 +60,13 @@ impl ModuleRules {
 
                         rules.paths.extend(user_rules.paths);
                     }
-                    Err(e) => log::warn!("Failed to parse user rules for '{}': {}", module_id, e),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse user rules for '{}': {}", module_id, e)
+                    }
                 },
-                Err(e) => log::warn!("Failed to read user rule file for '{}': {}", module_id, e),
+                Err(e) => {
+                    tracing::warn!("Failed to read user rule file for '{}': {}", module_id, e)
+                }
             }
         }
 

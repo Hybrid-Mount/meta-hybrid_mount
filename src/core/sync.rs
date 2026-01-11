@@ -13,13 +13,13 @@ use crate::{
 };
 
 pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
-    log::info!("Starting smart module sync to {}", target_base.display());
+    tracing::info!("Starting smart module sync to {}", target_base.display());
 
     prune_orphaned_modules(modules, target_base)?;
 
     modules.par_iter().for_each(|module| {
         if matches!(module.rules.default_mode, MountMode::Magic) {
-            log::debug!("Skipping sync for Magic Mount module: {}", module.id);
+            tracing::debug!("Skipping sync for Magic Mount module: {}", module.id);
 
             return;
         }
@@ -33,20 +33,20 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
         });
 
         if has_content && should_sync(&module.source_path, &dst) {
-            log::info!("Syncing module: {} (Updated/New)", module.id);
+            tracing::info!("Syncing module: {} (Updated/New)", module.id);
 
             if dst.exists()
                 && let Err(e) = fs::remove_dir_all(&dst)
             {
-                log::warn!("Failed to clean target dir for {}: {}", module.id, e);
+                tracing::warn!("Failed to clean target dir for {}: {}", module.id, e);
             }
 
             if let Err(e) = utils::sync_dir(&module.source_path, &dst, true) {
-                log::error!("Failed to sync module {}: {}", module.id, e);
+                tracing::error!("Failed to sync module {}: {}", module.id, e);
             } else {
                 // Apply trusted.overlay.opaque xattrs if .replace files exist
                 if let Err(e) = apply_overlay_opaque_flags(&dst) {
-                    log::warn!(
+                    tracing::warn!(
                         "Failed to apply overlay opaque xattrs for {}: {}",
                         module.id,
                         e
@@ -54,7 +54,7 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
                 }
             }
         } else {
-            log::debug!("Skipping module: {}", module.id);
+            tracing::debug!("Skipping module: {}", module.id);
         }
     });
 
@@ -67,7 +67,7 @@ fn apply_overlay_opaque_flags(root: &Path) -> Result<()> {
         if entry.file_type().is_file() && entry.file_name() == defs::REPLACE_DIR_FILE_NAME {
             if let Some(parent) = entry.path().parent() {
                 utils::set_overlay_opaque(parent)?;
-                log::debug!("Set overlay opaque xattr on: {}", parent.display());
+                tracing::debug!("Set overlay opaque xattr on: {}", parent.display());
             }
         }
     }
@@ -91,14 +91,14 @@ fn prune_orphaned_modules(modules: &[Module], target_base: &Path) -> Result<()> 
         let name = name_os.to_string_lossy();
 
         if name != "lost+found" && name != "meta-hybrid" && !active_ids.contains(name.as_ref()) {
-            log::info!("Pruning orphaned module storage: {}", name);
+            tracing::info!("Pruning orphaned module storage: {}", name);
 
             if path.is_dir() {
                 if let Err(e) = fs::remove_dir_all(&path) {
-                    log::warn!("Failed to remove orphan dir {}: {}", name, e);
+                    tracing::warn!("Failed to remove orphan dir {}: {}", name, e);
                 }
             } else if let Err(e) = fs::remove_file(&path) {
-                log::warn!("Failed to remove orphan file {}: {}", name, e);
+                tracing::warn!("Failed to remove orphan file {}: {}", name, e);
             }
         }
     });

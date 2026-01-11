@@ -111,7 +111,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
         final_overlay_ids.insert(id.clone());
     });
 
-    log::info!(">> Phase 1: OverlayFS Execution...");
+    tracing::info!(">> Phase 1: OverlayFS Execution...");
 
     // Changed from par_iter() to iter() to ensure thread safety when modifying CWD
     let overlay_results: Vec<OverlayResult> = plan
@@ -138,7 +138,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
                 (None, None)
             };
 
-            log::info!(
+            tracing::info!(
                 "Mounting {} [OVERLAY] (Layers: {})",
                 op.target,
                 lowerdir_strings.len()
@@ -151,7 +151,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
                 upper_opt,
                 config.disable_umount,
             ) {
-                log::warn!(
+                tracing::warn!(
                     "OverlayFS failed for {}: {}. Triggering fallback.",
                     op.target,
                     e
@@ -225,7 +225,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
             }
         }
 
-        log::info!(
+        tracing::info!(
             ">> Phase 2: Magic Mount (Fallback) using {}",
             tempdir.display()
         );
@@ -244,7 +244,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
             global_success_map,
             config.disable_umount,
         ) {
-            log::error!("Magic Mount critical failure: {:#}", e);
+            tracing::error!("Magic Mount critical failure: {:#}", e);
 
             final_magic_ids.clear();
         }
@@ -256,7 +256,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     if !config.disable_umount
         && let Err(e) = crate::try_umount::commit()
     {
-        log::warn!("Final try_umount commit failed: {}", e);
+        tracing::warn!("Final try_umount commit failed: {}", e);
     }
 
     let mut result_overlay = final_overlay_ids.into_iter().collect::<Vec<_>>();

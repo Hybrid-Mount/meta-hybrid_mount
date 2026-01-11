@@ -145,12 +145,12 @@ pub fn setup(
 fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
     if utils::mount_tmpfs(target, mount_source).is_ok() {
         if utils::is_overlay_xattr_supported(target) {
-            log::info!("Tmpfs mounted and supports xattrs (CONFIG_TMPFS_XATTR=y).");
+            tracing::info!("Tmpfs mounted and supports xattrs (CONFIG_TMPFS_XATTR=y).");
             return Ok(true);
         } else {
-            log::warn!("Tmpfs mounted but XATTRs (trusted.*) are NOT supported.");
-            log::warn!(">> Your kernel likely lacks CONFIG_TMPFS_XATTR=y.");
-            log::warn!(">> Falling back to legacy Ext4 image mode.");
+            tracing::warn!("Tmpfs mounted but XATTRs (trusted.*) are NOT supported.");
+            tracing::warn!(">> Your kernel likely lacks CONFIG_TMPFS_XATTR=y.");
+            tracing::warn!(">> Falling back to legacy Ext4 image mode.");
             let _ = unmount(target, UnmountFlags::DETACH);
         }
     }
@@ -185,7 +185,7 @@ fn setup_ext4_image(target: &Path, img_path: &Path) -> Result<StorageHandle> {
 #[allow(dead_code)]
 pub fn finalize_storage_permissions(target: &Path) {
     if let Err(e) = rustix::fs::chmod(target, Mode::from(0o755)) {
-        log::warn!("Failed to chmod storage root: {}", e);
+        tracing::warn!("Failed to chmod storage root: {}", e);
     }
 
     if let Err(e) = rustix::fs::chown(
@@ -193,11 +193,11 @@ pub fn finalize_storage_permissions(target: &Path) {
         Some(rustix::fs::Uid::from_raw(0)),
         Some(rustix::fs::Gid::from_raw(0)),
     ) {
-        log::warn!("Failed to chown storage root: {}", e);
+        tracing::warn!("Failed to chown storage root: {}", e);
     }
 
     if let Err(e) = utils::lsetfilecon(target, DEFAULT_SELINUX_CONTEXT) {
-        log::warn!("Failed to set SELinux context: {}", e);
+        tracing::warn!("Failed to set SELinux context: {}", e);
     }
 }
 

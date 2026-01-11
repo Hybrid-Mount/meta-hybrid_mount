@@ -73,7 +73,7 @@ pub fn handle_save_config(cli: &Cli, payload: &str) -> Result<()> {
     if let Ok(old_config) = load_config(cli)
         && let Err(e) = granary::create_silo(&old_config, "Auto-Backup", "Pre-WebUI Save")
     {
-        log::warn!("Failed to create Granary backup: {}", e);
+        tracing::warn!("Failed to create Granary backup: {}", e);
     }
 
     let json_bytes = (0..payload.len())

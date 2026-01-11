@@ -25,7 +25,7 @@ use rustix::{
 use tracing::{Event, Subscriber};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
-    EnvFilter, Layer,
+    EnvFilter,
     fmt::{self, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -112,13 +112,20 @@ pub fn init_logging(
             None
         };
 
+        // Initialize registry with file layer first
+        let registry = registry.with(file_layer);
+
+        // Apply Android layer conditionally to avoid type inference issues
         #[cfg(target_os = "android")]
-        let android_layer = tracing_android::layer("HybridMount").ok();
+        {
+            let android_layer = tracing_android::layer("HybridMount").ok();
+            registry.with(android_layer).init();
+        }
 
         #[cfg(not(target_os = "android"))]
-        let android_layer: Option<tracing_subscriber::fmt::Layer<_, _, _, _>> = None;
-
-        registry.with(file_layer).with(android_layer).init();
+        {
+            registry.init();
+        }
     }
 
     tracing_log::LogTracer::init().ok();

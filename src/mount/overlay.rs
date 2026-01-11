@@ -8,9 +8,9 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use log::{info, warn};
 use procfs::process::Process;
 use rustix::{fd::AsFd, fs::CWD, mount::*};
+use tracing::{info, warn};
 
 use crate::defs::KSU_OVERLAY_SOURCE;
 #[cfg(any(target_os = "linux", target_os = "android"))]

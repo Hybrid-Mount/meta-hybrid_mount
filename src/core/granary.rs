@@ -56,16 +56,16 @@ pub fn engage_ratoon_protocol() -> Result<()> {
             .context("Failed to sync Ratoon counter to disk")?;
     }
 
-    log::info!(">> Ratoon Protocol: Boot counter at {}", count);
+    tracing::info!(">> Ratoon Protocol: Boot counter at {}", count);
 
     if count >= 3 {
-        log::error!(">> RATOON TRIGGERED: Detected potential bootloop (3 failed boots).");
+        tracing::error!(">> RATOON TRIGGERED: Detected potential bootloop (3 failed boots).");
 
-        log::warn!(">> Executing emergency rollback from Granary...");
+        tracing::warn!(">> Executing emergency rollback from Granary...");
 
         match restore_latest_silo() {
             Ok(silo_id) => {
-                log::info!(">> Rollback successful. Resetting counter.");
+                tracing::info!(">> Rollback successful. Resetting counter.");
 
                 let _ = fs::remove_file(path);
 
@@ -76,11 +76,11 @@ pub fn engage_ratoon_protocol() -> Result<()> {
                 );
 
                 if let Err(e) = fs::write(RATOON_RESCUE_NOTICE, notice) {
-                    log::warn!("Failed to write rescue notice: {}", e);
+                    tracing::warn!("Failed to write rescue notice: {}", e);
                 }
             }
             Err(e) => {
-                log::error!(
+                tracing::error!(
                     ">> Rollback failed: {}. Disabling all modules as last resort.",
                     e
                 );
@@ -101,16 +101,16 @@ pub fn disengage_ratoon_protocol() {
 
     if path.exists() {
         if let Err(e) = fs::remove_file(path) {
-            log::warn!("Failed to reset Ratoon counter: {}", e);
+            tracing::warn!("Failed to reset Ratoon counter: {}", e);
         } else {
-            log::debug!("Ratoon Protocol: Counter reset. Boot successful.");
+            tracing::debug!("Ratoon Protocol: Counter reset. Boot successful.");
         }
     }
 }
 
 pub fn create_silo(config: &Config, label: &str, reason: &str) -> Result<String> {
     if let Err(e) = fs::create_dir_all(GRANARY_DIR) {
-        log::warn!("Failed to create granary dir: {}", e);
+        tracing::warn!("Failed to create granary dir: {}", e);
     }
 
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -138,7 +138,7 @@ pub fn create_silo(config: &Config, label: &str, reason: &str) -> Result<String>
     utils::atomic_write(&file_path, json)?;
 
     if let Err(e) = prune_silos(config) {
-        log::warn!("Failed to prune granary: {}", e);
+        tracing::warn!("Failed to prune granary: {}", e);
     }
 
     Ok(id)
@@ -176,7 +176,7 @@ pub fn delete_silo(id: &str) -> Result<()> {
     if file_path.exists() {
         fs::remove_file(&file_path)?;
 
-        log::info!("Deleted Silo: {}", id);
+        tracing::info!("Deleted Silo: {}", id);
 
         Ok(())
     } else {
@@ -195,14 +195,14 @@ pub fn restore_silo(id: &str) -> Result<()> {
 
     let silo: Silo = serde_json::from_str(&content)?;
 
-    log::info!(">> Restoring Silo: {} ({})", silo.id, silo.label);
+    tracing::info!(">> Restoring Silo: {} ({})", silo.id, silo.label);
 
     if let Some(raw) = &silo.raw_config {
-        log::info!(">> Restoring config from RAW content (preserving comments)...");
+        tracing::info!(">> Restoring config from RAW content (preserving comments)...");
 
         utils::atomic_write(crate::conf::config::CONFIG_FILE_DEFAULT, raw)?;
     } else {
-        log::info!(">> Raw config missing, restoring from struct snapshot...");
+        tracing::info!(">> Raw config missing, restoring from struct snapshot...");
 
         let toml_str = toml::to_string(&silo.config_snapshot)?;
 
@@ -210,11 +210,11 @@ pub fn restore_silo(id: &str) -> Result<()> {
     }
 
     if let Some(state) = &silo.raw_state {
-        log::info!(">> Restoring state from snapshot...");
+        tracing::info!(">> Restoring state from snapshot...");
 
         utils::atomic_write(crate::defs::STATE_FILE, state)?;
     } else {
-        log::warn!(">> No state snapshot found in this Silo. Skipping state restore.");
+        tracing::warn!(">> No state snapshot found in this Silo. Skipping state restore.");
     }
 
     Ok(())
@@ -264,7 +264,7 @@ fn prune_silos(config: &Config) -> Result<()> {
             let path = Path::new(GRANARY_DIR).join(format!("{}.json", silo.id));
 
             if let Err(e) = fs::remove_file(&path) {
-                log::warn!("Failed to delete old silo {}: {}", silo.id, e);
+                tracing::warn!("Failed to delete old silo {}: {}", silo.id, e);
             } else {
                 deleted_count += 1;
             }
@@ -272,7 +272,7 @@ fn prune_silos(config: &Config) -> Result<()> {
     }
 
     if deleted_count > 0 {
-        log::info!("Granary Prune: Deleted {} old snapshots.", deleted_count);
+        tracing::info!("Granary Prune: Deleted {} old snapshots.", deleted_count);
     }
 
     Ok(())
