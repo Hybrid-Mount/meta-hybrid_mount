@@ -9,7 +9,6 @@ pub const REMOVE_FILE_NAME: &str = "remove";
 pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
 pub const SYSTEM_RW_DIR: &str = "/data/adb/meta-hybrid/rw";
 pub const MODULE_PROP_FILE: &str = "/data/adb/modules/meta-hybrid/module.prop";
-pub const MODULES_DIR: &str = "/data/adb/modules";
 pub const BUILTIN_PARTITIONS: &[&str] = &[
     "system",
     "vendor",

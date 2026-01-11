@@ -218,20 +218,6 @@ pub fn check_zygisksu_enforce_status() -> bool {
         .unwrap_or(false)
 }
 
-pub fn ensure_clean_dir<P>(dir: P) -> Result<()>
-where
-    P: AsRef<Path>,
-{
-    let path = dir.as_ref();
-    tracing::debug!("ensure_clean_dir: {}", path.display());
-    if path.exists() {
-        tracing::debug!("ensure_clean_dir: {} exists, remove it", path.display());
-        std::fs::remove_dir_all(path)?;
-    }
-    create_dir_all(path)?;
-    Ok(())
-}
-
 fn copy_extended_attributes(src: &Path, dst: &Path) -> Result<()> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {

@@ -214,10 +214,11 @@ fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
 fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<StorageHandle> {
     if !img_path.exists() || check_image(img_path).is_err() {
         tracing::info!("Modules image missing or corrupted. Fallback to creation.");
-        if img_path.exists() {
-            if let Err(e) = fs::remove_file(img_path) {
-                tracing::warn!("Failed to remove old image: {}", e);
-            }
+
+        if img_path.exists()
+            && let Err(e) = fs::remove_file(img_path)
+        {
+            tracing::warn!("Failed to remove old image: {}", e);
         }
 
         tracing::info!("- Preparing image");
