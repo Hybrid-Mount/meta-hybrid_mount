@@ -17,7 +17,7 @@ use crate::try_umount::send_unmountable;
 use crate::{
     core::state::RuntimeState,
     defs,
-    mount::overlayfs::{overlayfs, utils as overlay_utils},
+    mount::overlayfs::{self, utils as overlay_utils},
     utils,
 };
 
@@ -26,9 +26,13 @@ const DEFAULT_SELINUX_CONTEXT: &str = "u:object_r:system_file:s0";
 #[derive(Debug, Clone)]
 pub enum OverlayLayout {
     Contained,
-    Split { rw_base: PathBuf },
+    Split {
+        rw_base: PathBuf,
+    },
     #[allow(dead_code)]
-    Direct { rw_base: PathBuf },
+    Direct {
+        rw_base: PathBuf,
+    },
 }
 
 pub struct StorageHandle {
@@ -160,7 +164,7 @@ pub fn setup(
     if use_erofs && utils::is_erofs_supported() {
         let erofs_path = img_path.with_extension("erofs");
 
-        overlayfs::mount_tmpfs(mnt_base, mount_source)?;
+        utils::mount_tmpfs(mnt_base, mount_source)?;
 
         try_hide(mnt_base);
 
@@ -197,7 +201,7 @@ pub fn setup(
 }
 
 fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
-    if overlayfs::mount_tmpfs(target, mount_source).is_ok() {
+    if utils::mount_tmpfs(target, mount_source).is_ok() {
         if utils::is_overlay_xattr_supported(target) {
             tracing::info!("Tmpfs mounted and supports xattrs (CONFIG_TMPFS_XATTR=y).");
             return Ok(true);
@@ -266,11 +270,7 @@ fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<
         }
     }
 
-    tracing::info!(
-        "mounted {} to {}",
-        img_path.display(),
-        target.display()
-    );
+    tracing::info!("mounted {} to {}", img_path.display(), target.display());
 
     // Ensure correct context for all files in the mounted image
     for dir_entry in WalkDir::new(target).parallelism(jwalk::Parallelism::Serial) {

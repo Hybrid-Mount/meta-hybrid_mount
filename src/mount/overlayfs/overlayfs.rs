@@ -1,6 +1,5 @@
 use std::{
     ffi::CString,
-    fs::create_dir,
     os::fd::AsFd,
     path::{Path, PathBuf},
 };
@@ -10,9 +9,8 @@ use procfs::process::Process;
 use rustix::{
     fs::CWD,
     mount::{
-        FsMountFlags, FsOpenFlags, MountAttrFlags, MountFlags, MountPropagationFlags,
-        MoveMountFlags, OpenTreeFlags, fsconfig_create, fsconfig_set_string, fsmount, fsopen,
-        mount, mount_change, move_mount, open_tree,
+        FsMountFlags, FsOpenFlags, MountAttrFlags, MountFlags, MoveMountFlags, fsconfig_create,
+        fsconfig_set_string, fsmount, fsopen, mount, move_mount,
     },
 };
 
@@ -85,67 +83,13 @@ pub fn mount_overlayfs(
     Ok(())
 }
 
-#[allow(dead_code)]
-pub fn mount_devpts(dest: impl AsRef<Path>, mount_source: &str) -> Result<()> {
-    create_dir(dest.as_ref())?;
-    mount(
-        mount_source,
-        dest.as_ref(),
-        "devpts",
-        MountFlags::empty(),
-        Some(CString::new("newinstance")?.as_c_str()),
-    )?;
-    mount_change(dest.as_ref(), MountPropagationFlags::PRIVATE).context("make devpts private")?;
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub fn mount_tmpfs(dest: impl AsRef<Path>, mount_source: &str) -> Result<()> {
-    tracing::info!(
-        "mount tmpfs on {} (source: {})",
-        dest.as_ref().display(),
-        mount_source
-    );
-    match fsopen("tmpfs", FsOpenFlags::FSOPEN_CLOEXEC) {
-        Result::Ok(fs) => {
-            let fs = fs.as_fd();
-            fsconfig_set_string(fs, "source", mount_source)?;
-            fsconfig_create(fs)?;
-            let mount = fsmount(fs, FsMountFlags::FSMOUNT_CLOEXEC, MountAttrFlags::empty())?;
-            move_mount(
-                mount.as_fd(),
-                "",
-                CWD,
-                dest.as_ref(),
-                MoveMountFlags::MOVE_MOUNT_F_EMPTY_PATH,
-            )?;
-        }
-        _ => {
-            use rustix::mount::{MountFlags, mount};
-
-            mount(
-                mount_source,
-                dest.as_ref(),
-                "tmpfs",
-                MountFlags::empty(),
-                None,
-            )?;
-        }
-    }
-    mount_change(dest.as_ref(), MountPropagationFlags::PRIVATE).context("make tmpfs private")?;
-    let pts_dir = format!("{}/pts", dest.as_ref().display());
-    if let Err(e) = mount_devpts(pts_dir, mount_source) {
-        tracing::warn!("do devpts mount failed: {}", e);
-    }
-    Ok(())
-}
-
 pub fn bind_mount(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
     tracing::info!(
         "bind mount {} -> {}",
         from.as_ref().display(),
         to.as_ref().display()
     );
+    use rustix::mount::{OpenTreeFlags, open_tree};
     match open_tree(
         CWD,
         from.as_ref(),
