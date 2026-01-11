@@ -46,7 +46,7 @@ export default function ChipInput(props: Props) {
 
   return (
     <div class="chip-input-wrapper">
-      <md-chip-set>
+      <md-chip-set style={{"margin-bottom": props.values.length > 0 ? "8px" : "0px"}}>
         <For each={props.values}>
           {(val, i) => (
             <md-input-chip 

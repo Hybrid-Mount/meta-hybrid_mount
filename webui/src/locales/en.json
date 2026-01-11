@@ -85,6 +85,7 @@
     "fixBottomNavOn": "Bottom Nav Fix Enabled",
     "fixBottomNavOff": "Bottom Nav Fix Disabled",
     "granarySettings": "Granary Settings",
+    "granarySettingsDesc": "Backup retention strategy",
     "maxBackups": "Max Backups",
     "maxBackupsDesc": "Max number of snapshots to retain.",
     "retentionDays": "Retention Days",
