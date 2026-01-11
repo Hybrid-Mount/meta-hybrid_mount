@@ -1,6 +1,6 @@
 {
-  "version": "v2.0.25",
-  "versionCode": 119,
-  "zipUrl": "https://github.com/Hybrid-Mount/meta-hybrid_mount/releases/download/v2.0.25/Meta-Hybrid-v2.0.25.zip",
+  "version": "v2.0.3",
+  "versionCode": 120,
+  "zipUrl": "https://github.com/Hybrid-Mount/meta-hybrid_mount/releases/download/v2.0.3/Meta-Hybrid-v2.0.3.zip",
   "changelog": "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/master/changelog.md"
 }
