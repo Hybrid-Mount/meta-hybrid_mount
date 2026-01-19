@@ -1,6 +1,6 @@
 {
   "lang": {
-    "display": "中文"
+    "display": "简体中文"
   },
   "common": {
     "appName": "Hybrid Mount",
@@ -41,20 +41,20 @@
     "mountBase": "挂载基点",
     "activePartitions": "活跃分区",
     "health": "文件冲突检测",
-    "healthy": "所有检查通过，文件没有冲突。",
+    "healthy": "所有检查通过，文件没有冲突.",
     "diagInfo": "信息",
     "diagWarning": "警告",
     "diagCritical": "严重错误",
-    "hymofsActive": "Active",
-    "hymofsNotDetected": "Not Detected"
+    "hymofsActive": "活跃",
+    "hymofsNotDetected": "未检测"
   },
   "config": {
     "title": "配置",
     "verboseLabel": "详细日志",
     "verboseOff": "关闭",
     "verboseOn": "开启",
-    "forceExt4": "Ext4 Mode",
-    "useErofs": "EROFS Mode",
+    "forceExt4": "Ext4 模式",
+    "useErofs": "EROFS 模式",
     "disableUmount": "禁用Umount",
     "allowUmountCoexistence": "允许Umount共存",
     "coexistenceRequired": "需开启共存选项",
@@ -81,16 +81,16 @@
     "fixBottomNav": "三按钮导航栏适配",
     "fixBottomNavOn": "已开启三按钮适配",
     "fixBottomNavOff": "已关闭三按钮适配",
-    "granarySettings": "粮仓设置 (备份策略)",
-    "granarySettingsDesc": "Backup retention strategy",
+    "granarySettings": "粮仓设置",
+    "granarySettingsDesc": "备份保留策略",
     "maxBackups": "最大保留数量",
-    "maxBackupsDesc": "超过此数量的旧备份将被自动删除。",
+    "maxBackupsDesc": "超过此数量的旧备份将被自动删除",
     "retentionDays": "保留天数",
-    "retentionDaysDesc": "自动删除 N 天前的旧备份 (0 表示不限制)。"
+    "retentionDaysDesc": "自动删除 N 天前的旧备份 (0 表示不限制)"
   },
   "modules": {
     "title": "模块模式",
-    "desc": "如果模块导致无限重启或 OverlayFS 异常，\n请尝试切换为 Magic Mount。",
+    "desc": "如果模块导致无限重启或 OverlayFS 异常，\n请尝试切换为 Magic Mount",
     "modeAuto": "OverlayFS",
     "modeMagic": "Magic Mount",
     "scanning": "扫描中...",
@@ -108,7 +108,7 @@
     "defaultMode": "默认策略",
     "pathRules": "路径规则",
     "addRule": "添加规则",
-    "noRules": "未定义路径规则",
+    "noRules": "未定义路径规则.",
     "noDesc": "暂无描述",
     "placeholder": "例如 system/fonts",
     "modes": {
@@ -139,7 +139,7 @@
     "createSuccess": "备份已创建",
     "manualBackup": "手动备份",
     "dialogRestoreTitle": "恢复快照",
-    "dialogRestoreContent": "恢复到 {label} 将覆盖当前配置。",
+    "dialogRestoreContent": "恢复到 {label} 将覆盖当前配置",
     "restore": "恢复",
     "dialogDeleteTitle": "删除快照",
     "dialogDeleteContent": "确定要永久删除 {label} 吗？",
@@ -147,7 +147,7 @@
     "dialogCreateTitle": "新建备份",
     "dialogCreateLabel": "备注",
     "emptyTitle": "粮仓空空如也",
-    "emptyDesc": "暂无配置快照。",
+    "emptyDesc": "暂无配置快照",
     "restoreAction": "恢复此快照",
     "restoring": "恢复中...",
     "create": "新建备份"
