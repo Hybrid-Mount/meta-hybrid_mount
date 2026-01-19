@@ -17,7 +17,9 @@
     "cancel": "Cancelar",
     "refresh": "Refrescar",
     "confirm": "Confirmar",
-    "saving_btn": "Guardando..."
+    "saving_btn": "Guardando...",
+    "used": "Used",
+    "saved": "Saved"
   },
   "tabs": {
     "status": "Estado",
@@ -59,10 +61,14 @@
     "allowUmountCoexistence": "Permitir Coexistencia",
     "coexistenceRequired": "Opción de coexistencia requerida",
     "moduleDir": "Dir. Módulos",
+    "moduleDirDesc": "Set the directory where modules are stored",
     "mountSource": "Fuente Montaje",
     "mountSourceDesc": "Espacio de nombres global (p. ej. KSU)",
+    "hybrid_mnt_dir": "Mount Point Path",
+    "hybrid_mnt_dir_desc": "Temporary directory for OverlayFS mounting",
     "logFile": "Archivo Log",
     "partitions": "Particiones",
+    "partitionsDesc": "Add partitions to mount",
     "autoPlaceholder": "Auto",
     "reload": "Recargar",
     "save": "Guardar",
@@ -71,6 +77,7 @@
     "resetConfigTitle": "¿Restablecer Config?",
     "resetConfigConfirm": "Esto restablecerá toda la configuración. ¿Continuar?",
     "invalidPath": "Ruta inválida detectada",
+    "invalidModuleDir": "Invalid Path",
     "loadSuccess": "Configuración cargada",
     "loadError": "Error al cargar config",
     "loadDefault": "Usando config por defecto",
@@ -86,7 +93,15 @@
     "maxBackups": "Máx. Copias",
     "maxBackupsDesc": "Número máximo de copias a conservar.",
     "retentionDays": "Días de Retención",
-    "retentionDaysDesc": "Eliminar copias de más de N días (0 = ilimitado)."
+    "retentionDaysDesc": "Eliminar copias de más de N días (0 = ilimitado).",
+    "overlayMode": "Overlay Mode",
+    "overlayModeDesc": "Select backing storage strategy",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "Read-only compressed. High performance, space saving."
   },
   "modules": {
     "title": "Modos de Módulo",
@@ -100,6 +115,8 @@
     "scanError": "Error al escanear módulos",
     "saveSuccess": "Modos guardados",
     "saveFailed": "Error al guardar modos",
+    "noConflicts": "No conflicts detected",
+    "conflictError": "Failed to check conflicts",
     "searchPlaceholder": "Buscar módulos...",
     "filterLabel": "Filtro:",
     "filterAll": "Todos",
@@ -115,12 +132,16 @@
       "auto": "OverlayFS",
       "magic": "Magic Mount",
       "ignore": "Deshabilitar",
+      "none": "Unmounted",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
         "ignore": "Ignorar"
       }
     }
+  },
+  "logs": {
+    "refresh": "Refresh"
   },
   "info": {
     "title": "Acerca de",

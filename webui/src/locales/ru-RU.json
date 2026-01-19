@@ -17,7 +17,9 @@
     "cancel": "Отмена",
     "refresh": "Обновить",
     "confirm": "ОК",
-    "saving_btn": "Сохр..."
+    "saving_btn": "Сохр...",
+    "used": "Used",
+    "saved": "Saved"
   },
   "tabs": {
     "status": "Статус",
@@ -59,10 +61,14 @@
     "allowUmountCoexistence": "Разрешить сосуществование",
     "coexistenceRequired": "Требуется включить сосуществование",
     "moduleDir": "Путь модулей",
+    "moduleDirDesc": "Set the directory where modules are stored",
     "mountSource": "Источник монтирования",
     "mountSourceDesc": "Глобальное пространство имен (напр. KSU)",
+    "hybrid_mnt_dir": "Mount Point Path",
+    "hybrid_mnt_dir_desc": "Temporary directory for OverlayFS mounting",
     "logFile": "Файл лога",
     "partitions": "Разделы",
+    "partitionsDesc": "Add partitions to mount",
     "autoPlaceholder": "Авто",
     "reload": "Обновить",
     "save": "Сохранить",
@@ -71,6 +77,7 @@
     "resetConfigTitle": "Сбросить настройки?",
     "resetConfigConfirm": "Это действие сбросит все настройки бэкенда. Продолжить?",
     "invalidPath": "Обнаружен недопустимый путь",
+    "invalidModuleDir": "Invalid Path",
     "loadSuccess": "Конфигурация загружена",
     "loadError": "Ошибка загрузки конфига",
     "loadDefault": "Конфиг по умолчанию",
@@ -86,7 +93,15 @@
     "maxBackups": "Макс. резервных копий",
     "maxBackupsDesc": "Максимальное количество хранимых снимков.",
     "retentionDays": "Срок хранения (дней)",
-    "retentionDaysDesc": "Удалять снимки старше N дней (0 = безлимит)."
+    "retentionDaysDesc": "Удалять снимки старше N дней (0 = безлимит).",
+    "overlayMode": "Overlay Mode",
+    "overlayModeDesc": "Select backing storage strategy",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "Read-only compressed. High performance, space saving."
   },
   "modules": {
     "title": "Режимы модулей",
@@ -100,6 +115,8 @@
     "scanError": "Ошибка сканирования модулей",
     "saveSuccess": "Режимы сохранены",
     "saveFailed": "Ошибка сохранения режимов",
+    "noConflicts": "No conflicts detected",
+    "conflictError": "Failed to check conflicts",
     "searchPlaceholder": "Поиск модулей...",
     "filterLabel": "Фильтр:",
     "filterAll": "Все",
@@ -115,12 +132,16 @@
       "auto": "OverlayFS",
       "magic": "Magic Mount",
       "ignore": "Отключено",
+      "none": "Unmounted",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
         "ignore": "Ignore"
       }
     }
+  },
+  "logs": {
+    "refresh": "Refresh"
   },
   "info": {
     "title": "О проекте",

@@ -17,7 +17,9 @@
     "cancel": "Скасувати",
     "refresh": "Оновити",
     "confirm": "Підтвердити",
-    "saving_btn": "Збереження..."
+    "saving_btn": "Збереження...",
+    "used": "Used",
+    "saved": "Saved"
   },
   "tabs": {
     "status": "Статус",
@@ -59,10 +61,14 @@
     "allowUmountCoexistence": "Дозволити співіснування Umount",
     "coexistenceRequired": "Потрібна опція співіснування",
     "moduleDir": "Каталог модулів",
+    "moduleDirDesc": "Set the directory where modules are stored",
     "mountSource": "Джерело монтування",
     "mountSourceDesc": "Глобальний простір імен (наприклад, KSU)",
+    "hybrid_mnt_dir": "Mount Point Path",
+    "hybrid_mnt_dir_desc": "Temporary directory for OverlayFS mounting",
     "logFile": "Файл логу",
     "partitions": "Додаткові розділи",
+    "partitionsDesc": "Add partitions to mount",
     "autoPlaceholder": "Авто",
     "reload": "Перезавантажити",
     "save": "Зберегти",
@@ -71,6 +77,7 @@
     "resetConfigTitle": "Скинути конфігурацію?",
     "resetConfigConfirm": "Це скине всі налаштування до значень за замовчуванням. Продовжити?",
     "invalidPath": "Виявлено недійсний шлях",
+    "invalidModuleDir": "Invalid Path",
     "loadSuccess": "Конфігурацію завантажено",
     "loadError": "Не вдалося завантажити конфігурацію",
     "loadDefault": "Використовується конфігурація за замовчуванням",
@@ -86,7 +93,15 @@
     "maxBackups": "Максимум резервних копій",
     "maxBackupsDesc": "Старіші резервні копії понад цю кількість будуть автоматично видалені.",
     "retentionDays": "Термін зберігання (дні)",
-    "retentionDaysDesc": "Видаляти резервні копії старші за N днів (0 = без обмежень)."
+    "retentionDaysDesc": "Видаляти резервні копії старші за N днів (0 = без обмежень).",
+    "overlayMode": "Overlay Mode",
+    "overlayModeDesc": "Select backing storage strategy",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "Read-only compressed. High performance, space saving."
   },
   "modules": {
     "title": "Режими модулів",
@@ -100,6 +115,8 @@
     "scanError": "Не вдалося просканувати модулі",
     "saveSuccess": "Режими модулів збережено",
     "saveFailed": "Не вдалося зберегти режими модулів",
+    "noConflicts": "No conflicts detected",
+    "conflictError": "Failed to check conflicts",
     "searchPlaceholder": "Пошук модулів...",
     "filterLabel": "Фільтр:",
     "filterAll": "Усі",
@@ -115,12 +132,16 @@
       "auto": "OverlayFS",
       "magic": "Magic Mount",
       "ignore": "Вимкнено (ігнорувати)",
+      "none": "Unmounted",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
         "ignore": "Ігнор"
       }
     }
+  },
+  "logs": {
+    "refresh": "Refresh"
   },
   "info": {
     "title": "Про проєкт",
