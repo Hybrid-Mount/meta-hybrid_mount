@@ -181,7 +181,7 @@ const createGlobalStore = () => {
       const data = await API.loadConfig();
       setConfig(data);
     } catch (e) {
-      showToast('Failed to load config', 'error');
+      showToast(L().config?.loadError || 'Failed to load config', 'error');
     }
     setLoadingConfig(false);
   }
@@ -192,7 +192,7 @@ const createGlobalStore = () => {
       await API.saveConfig(config());
       showToast(L().common?.saved || 'Saved', 'success');
     } catch (e) {
-      showToast('Failed to save config', 'error');
+      showToast(L().config?.saveFailed || 'Failed to save config', 'error');
     }
     setSavingConfig(false);
   }
@@ -204,7 +204,7 @@ const createGlobalStore = () => {
       await loadConfig();
       showToast(L().config?.resetSuccess || 'Config reset to defaults', 'success');
     } catch (e) {
-      showToast('Failed to reset config', 'error');
+      showToast(L().config?.saveFailed || 'Failed to reset config', 'error');
     }
     setSavingConfig(false);
   }
@@ -215,7 +215,7 @@ const createGlobalStore = () => {
       const data = await API.scanModules(config().moduledir);
       setModules(data);
     } catch (e) {
-      showToast('Failed to load modules', 'error');
+      showToast(L().modules?.scanError || 'Failed to load modules', 'error');
     }
     setLoadingModules(false);
   }
@@ -226,7 +226,7 @@ const createGlobalStore = () => {
       await API.saveModules(modules());
       showToast(L().common?.saved || 'Saved', 'success');
     } catch (e) {
-      showToast('Failed to save module modes', 'error');
+      showToast(L().modules?.saveFailed || 'Failed to save module modes', 'error');
     }
     setSavingModules(false);
   }
@@ -235,7 +235,7 @@ const createGlobalStore = () => {
     if (!silent) setLoadingLogs(true);
     try {
       const rawLogs = await API.readLogs();
-      const parsed = rawLogs.split('\n').map(line => {
+      const parsed = rawLogs.split('\n').map((line: string) => {
         const text = line.replace(/^[\d-]{10}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?\s*/, '');
         let type: LogEntry['type'] = 'info';
         if (text.includes('[E]') || text.includes('[ERROR]')) type = 'error';
@@ -245,7 +245,7 @@ const createGlobalStore = () => {
       });
       setLogs(parsed);
     } catch (e) {
-      setLogs([{ text: "Failed to load logs.", type: 'error' }]);
+      setLogs([{ text: L().logs?.readFailed || "Failed to load logs.", type: 'error' }]);
     }
     setLoadingLogs(false);
   }

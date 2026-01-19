@@ -40,7 +40,7 @@ export const MockAPI = {
     await delay(500);
     console.log('[Mock] Config reset to defaults');
   },
-  async scanModules(dir: string): Promise<Module[]> {
+  async scanModules(_dir: string): Promise<Module[]> {
     await delay(600);
     return [
       {
@@ -88,7 +88,7 @@ export const MockAPI = {
     await delay(400);
     console.log(`[Mock] Rules saved for ${moduleId}:`, rules);
   },
-  async saveModules(modules: Module[]): Promise<void> {
+  async saveModules(_modules: Module[]): Promise<void> {
     console.warn("[Mock] saveModules is deprecated");
   },
   async readLogs(): Promise<string> {
