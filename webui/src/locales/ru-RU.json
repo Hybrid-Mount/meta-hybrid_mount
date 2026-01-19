@@ -1,5 +1,7 @@
 {
-  "lang": { "display": "Русский" },
+  "lang": {
+    "display": "Русский"
+  },
   "common": {
     "appName": "Hybrid Mount",
     "saving": "Сохранение...",
@@ -13,10 +15,8 @@
     "rebootConfirm": "Вы уверены, что хотите перезагрузить устройство?",
     "reboot": "Перезагрузить",
     "cancel": "Отмена",
-    "used": "Исп.",
-    "confirm": "ОК",
-    "path": "Путь",
     "refresh": "Обновить",
+    "confirm": "ОК",
     "saving_btn": "Сохр..."
   },
   "tabs": {
@@ -25,8 +25,7 @@
     "modules": "Модули",
     "logs": "Логи",
     "info": "Инфо",
-    "granary": "Архив",
-    "winnowing": "Отсев"
+    "granary": "Архив"
   },
   "status": {
     "storageTitle": "Хранилище",
@@ -43,26 +42,22 @@
     "activePartitions": "Активные разделы",
     "health": "Здоровье системы",
     "healthy": "Все проверки пройдены. Система в норме.",
-    "hymofsActive": "Активен",
-    "hymofsNotDetected": "Не обнаружен",
     "diagInfo": "Инфо",
     "diagWarning": "Внимание",
-    "diagCritical": "Критично"
+    "diagCritical": "Критично",
+    "hymofsActive": "Активен",
+    "hymofsNotDetected": "Не обнаружен"
   },
   "config": {
     "title": "Конфигурация",
     "verboseLabel": "Подробный лог",
     "verboseOff": "Выкл.",
     "verboseOn": "Вкл.",
-    "dryRun": "Пробный запуск (Dry Run)",
     "forceExt4": "Принудительный Ext4",
     "useErofs": "Режим EROFS",
-    "enableNuke": "Включить Paw Pad (Скрытность)",
     "disableUmount": "Отключить Umount",
     "allowUmountCoexistence": "Разрешить сосуществование",
     "coexistenceRequired": "Требуется включить сосуществование",
-    "hymoStealth": "HymoFS Стелс",
-    "hymoDebug": "HymoFS Отладка",
     "moduleDir": "Путь модулей",
     "mountSource": "Источник монтирования",
     "mountSourceDesc": "Глобальное пространство имен (напр. KSU)",
@@ -87,6 +82,7 @@
     "fixBottomNavOn": "Исправление вкл.",
     "fixBottomNavOff": "Исправление выкл.",
     "granarySettings": "Настройки архива",
+    "granarySettingsDesc": "Backup retention strategy",
     "maxBackups": "Макс. резервных копий",
     "maxBackupsDesc": "Максимальное количество хранимых снимков.",
     "retentionDays": "Срок хранения (дней)",
@@ -114,48 +110,17 @@
     "addRule": "Добавить правило",
     "noRules": "Нет правил",
     "noDesc": "Нет описания",
-    "checkConflicts": "Проверить конфликты",
-    "hideConflicts": "Скрыть конфликты",
-    "conflictsTitle": "Конфликты файлов",
-    "noConflicts": "Конфликтов не обнаружено.",
-    "conflictError": "Ошибка проверки",
     "placeholder": "напр. system/fonts",
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
-      "hymo": "HymoFS",
       "ignore": "Отключено",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
-        "hymo": "HymoFS",
         "ignore": "Ignore"
       }
     }
-  },
-  "logs": {
-    "title": "Системные логи",
-    "select": "Файл",
-    "current": "Текущий",
-    "old": "Предыдущий",
-    "loading": "Загрузка логов...",
-    "refresh": "Обновить",
-    "empty": "Лог пуст",
-    "readFailed": "Ошибка чтения",
-    "readException": "Ошибка при чтении лога",
-    "searchPlaceholder": "Поиск логов...",
-    "filterLabel": "Уровень:",
-    "levels": {
-      "all": "Все",
-      "info": "Инфо",
-      "warn": "Warn",
-      "error": "Ошибка"
-    },
-    "copy": "Копировать",
-    "export": "Экспорт",
-    "copySuccess": "Логи скопированы",
-    "copyFail": "Ошибка копирования",
-    "exportFail": "Ошибка экспорта"
   },
   "info": {
     "title": "О проекте",
@@ -186,13 +151,5 @@
     "restoreAction": "Восстановить",
     "restoring": "Загрузка...",
     "create": "Создать"
-  },
-  "winnowing": {
-    "title": "Отсев",
-    "searchPlaceholder": "Поиск путей...",
-    "emptyTitle": "Чисто",
-    "emptyDesc": "Конфликтов нет.",
-    "conflictPath": "Путь конфликта",
-    "selectProvider": "Выбрать модуль"
   }
 }

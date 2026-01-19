@@ -1,5 +1,7 @@
 {
-  "lang": { "display": "中文" },
+  "lang": {
+    "display": "中文"
+  },
   "common": {
     "appName": "Hybrid Mount",
     "saving": "保存中...",
@@ -13,10 +15,8 @@
     "rebootConfirm": "你确定你想重启系统吗？",
     "reboot": "重启",
     "cancel": "取消",
-    "used": "已用",
-    "confirm": "确认",
-    "path": "路径",
     "refresh": "刷新",
+    "confirm": "确认",
     "saving_btn": "保存中..."
   },
   "tabs": {
@@ -25,8 +25,7 @@
     "modules": "模块",
     "logs": "日志",
     "info": "关于",
-    "granary": "粮仓",
-    "winnowing": "风选"
+    "granary": "粮仓"
   },
   "status": {
     "storageTitle": "存储空间",
@@ -45,33 +44,25 @@
     "healthy": "所有检查通过，文件没有冲突。",
     "diagInfo": "信息",
     "diagWarning": "警告",
-    "diagCritical": "严重错误"
+    "diagCritical": "严重错误",
+    "hymofsActive": "Active",
+    "hymofsNotDetected": "Not Detected"
   },
   "config": {
     "title": "配置",
     "verboseLabel": "详细日志",
     "verboseOff": "关闭",
     "verboseOn": "开启",
-    "dryRun": "预演模式",
-    "overlayMode": "Overlay 模式",
-    "overlayModeDesc": "选择底层存储策略",
-    "mode_tmpfs": "Tmpfs",
-    "mode_tmpfsDesc": "基于 RAM，I/O 最快，重启不保存数据",
-    "mode_ext4": "Ext4",
-    "mode_ext4Desc": "节省内存，使用 Loop 设备",
-    "mode_erofs": "EROFS",
-    "mode_erofsDesc": "高性能只读文件系统，极大节省空间",
-    "enableNuke": "启用肉垫",
+    "forceExt4": "Ext4 Mode",
+    "useErofs": "EROFS Mode",
     "disableUmount": "禁用Umount",
     "allowUmountCoexistence": "允许Umount共存",
     "coexistenceRequired": "需开启共存选项",
     "moduleDir": "模块路径",
-    "moduleDirDesc": "设置模块的存储位置",
     "mountSource": "挂载源名",
     "mountSourceDesc": "全局挂载源命名空间 (例如 KSU)",
     "logFile": "日志文件",
     "partitions": "额外分区",
-    "partitionsDesc": "添加需要挂载的额外分区",
     "autoPlaceholder": "自动",
     "reload": "重载",
     "save": "保存",
@@ -90,16 +81,12 @@
     "fixBottomNav": "三按钮导航栏适配",
     "fixBottomNavOn": "已开启三按钮适配",
     "fixBottomNavOff": "已关闭三按钮适配",
-    "coexistenceWarning": "必须先开启共存选项才能禁用 Umount",
-    "pathPlaceholder": "请输入路径...",
-    "invalidModuleDir": "模块路径无效",
     "granarySettings": "粮仓设置 (备份策略)",
+    "granarySettingsDesc": "Backup retention strategy",
     "maxBackups": "最大保留数量",
     "maxBackupsDesc": "超过此数量的旧备份将被自动删除。",
     "retentionDays": "保留天数",
-    "retentionDaysDesc": "自动删除 N 天前的旧备份 (0 表示不限制)。",
-    "hybrid_mnt_dir": "挂载点路径",
-    "hybrid_mnt_dir_desc": "指定用于挂载的临时目录路径，确保该路径存在且为空目录。"
+    "retentionDaysDesc": "自动删除 N 天前的旧备份 (0 表示不限制)。"
   },
   "modules": {
     "title": "模块模式",
@@ -123,15 +110,7 @@
     "addRule": "添加规则",
     "noRules": "未定义路径规则",
     "noDesc": "暂无描述",
-    "checkConflicts": "检测文件冲突",
-    "hideConflicts": "隐藏冲突",
-    "conflictsTitle": "文件冲突列表",
-    "noConflicts": "未检测到文件冲突。",
-    "conflictError": "检测失败",
     "placeholder": "例如 system/fonts",
-    "statusMounted": "已挂载",
-    "statusUnmounted": "未挂载",
-    "unmountedMsg": "此模块当前未挂载。",
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
@@ -142,30 +121,6 @@
         "ignore": "忽略"
       }
     }
-  },
-  "logs": {
-    "title": "运行日志",
-    "select": "文件",
-    "current": "当前日志",
-    "old": "历史日志",
-    "loading": "日志加载中...",
-    "refresh": "刷新",
-    "empty": "日志为空",
-    "readFailed": "读取失败",
-    "readException": "读取异常",
-    "searchPlaceholder": "搜索日志...",
-    "filterLabel": "等级:",
-    "levels": {
-      "all": "全部",
-      "info": "信息",
-      "warn": "警告",
-      "error": "错误"
-    },
-    "copy": "复制",
-    "export": "导出",
-    "copySuccess": "日志已复制",
-    "copyFail": "复制失败",
-    "exportFail": "导出失败"
   },
   "info": {
     "title": "关于项目",
@@ -196,13 +151,5 @@
     "restoreAction": "恢复此快照",
     "restoring": "恢复中...",
     "create": "新建备份"
-  },
-  "winnowing": {
-    "title": "风选",
-    "searchPlaceholder": "搜索路径...",
-    "emptyTitle": "一尘不染",
-    "emptyDesc": "未检测到文件冲突。",
-    "conflictPath": "冲突路径",
-    "selectProvider": "选择提供者"
   }
 }

@@ -1,5 +1,7 @@
 {
-  "lang": { "display": "Español" },
+  "lang": {
+    "display": "Español"
+  },
   "common": {
     "appName": "Hybrid Mount",
     "saving": "Guardando...",
@@ -13,10 +15,8 @@
     "rebootConfirm": "¿Está seguro de que desea reiniciar?",
     "reboot": "Reiniciar",
     "cancel": "Cancelar",
-    "used": "Usado",
-    "confirm": "Confirmar",
-    "path": "Ruta",
     "refresh": "Refrescar",
+    "confirm": "Confirmar",
     "saving_btn": "Guardando..."
   },
   "tabs": {
@@ -25,8 +25,7 @@
     "modules": "Módulos",
     "logs": "Registros",
     "info": "Info",
-    "granary": "Granero",
-    "winnowing": "Cribado"
+    "granary": "Granero"
   },
   "status": {
     "storageTitle": "Almacenamiento",
@@ -43,26 +42,22 @@
     "activePartitions": "Particiones Activas",
     "health": "Salud del Sistema",
     "healthy": "Todo correcto. El sistema está saludable.",
-    "hymofsActive": "Activo",
-    "hymofsNotDetected": "No detectado",
     "diagInfo": "Info",
     "diagWarning": "Aviso",
-    "diagCritical": "Crítico"
+    "diagCritical": "Crítico",
+    "hymofsActive": "Activo",
+    "hymofsNotDetected": "No detectado"
   },
   "config": {
     "title": "Configuración",
     "verboseLabel": "Registro Detallado",
     "verboseOff": "No",
     "verboseOn": "Sí",
-    "dryRun": "Modo de Prueba (Dry Run)",
     "forceExt4": "Forzar Modo Ext4",
     "useErofs": "Modo EROFS",
-    "enableNuke": "Activar Paw Pad (Oculto)",
     "disableUmount": "Desactivar Umount",
     "allowUmountCoexistence": "Permitir Coexistencia",
     "coexistenceRequired": "Opción de coexistencia requerida",
-    "hymoStealth": "HymoFS Sigiloso",
-    "hymoDebug": "HymoFS Depuración",
     "moduleDir": "Dir. Módulos",
     "mountSource": "Fuente Montaje",
     "mountSourceDesc": "Espacio de nombres global (p. ej. KSU)",
@@ -87,6 +82,7 @@
     "fixBottomNavOn": "Arreglo activado",
     "fixBottomNavOff": "Arreglo desactivado",
     "granarySettings": "Ajustes de Granero",
+    "granarySettingsDesc": "Backup retention strategy",
     "maxBackups": "Máx. Copias",
     "maxBackupsDesc": "Número máximo de copias a conservar.",
     "retentionDays": "Días de Retención",
@@ -114,48 +110,17 @@
     "addRule": "Añadir Regla",
     "noRules": "Sin reglas",
     "noDesc": "Sin descripción",
-    "checkConflicts": "Comprobar Conflictos",
-    "hideConflicts": "Ocultar Conflictos",
-    "conflictsTitle": "Conflictos de Archivos",
-    "noConflicts": "No se detectaron conflictos.",
-    "conflictError": "Fallo al comprobar",
     "placeholder": "ej. system/fonts",
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
-      "hymo": "HymoFS",
       "ignore": "Deshabilitar",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
-        "hymo": "HymoFS",
         "ignore": "Ignorar"
       }
     }
-  },
-  "logs": {
-    "title": "Registros del Sistema",
-    "select": "Archivo",
-    "current": "Actual",
-    "old": "Anterior",
-    "loading": "Cargando registros...",
-    "refresh": "Refrescar",
-    "empty": "El registro está vacío",
-    "readFailed": "Fallo de lectura",
-    "readException": "Error al leer registro",
-    "searchPlaceholder": "Buscar registros...",
-    "filterLabel": "Nivel:",
-    "levels": {
-      "all": "Todos",
-      "info": "Info",
-      "warn": "Aviso",
-      "error": "Error"
-    },
-    "copy": "Copiar",
-    "export": "Exportar",
-    "copySuccess": "Registros copiados",
-    "copyFail": "Fallo al copiar",
-    "exportFail": "Fallo al exportar"
   },
   "info": {
     "title": "Acerca de",
@@ -186,13 +151,5 @@
     "restoreAction": "Restaurar",
     "restoring": "Restaurando...",
     "create": "Crear"
-  },
-  "winnowing": {
-    "title": "Cribado",
-    "searchPlaceholder": "Buscar rutas...",
-    "emptyTitle": "Limpio",
-    "emptyDesc": "Sin conflictos.",
-    "conflictPath": "Ruta del conflicto",
-    "selectProvider": "Seleccionar"
   }
 }

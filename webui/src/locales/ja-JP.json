@@ -1,5 +1,7 @@
 {
-  "lang": { "display": "日本語" },
+  "lang": {
+    "display": "日本語"
+  },
   "common": {
     "appName": "Hybrid Mount",
     "saving": "保存中...",
@@ -13,10 +15,8 @@
     "rebootConfirm": "デバイスを再起動しますか？",
     "reboot": "再起動",
     "cancel": "キャンセル",
-    "used": "使用済み",
-    "confirm": "確認",
-    "path": "パス",
     "refresh": "更新",
+    "confirm": "確認",
     "saving_btn": "保存中..."
   },
   "tabs": {
@@ -25,8 +25,7 @@
     "modules": "モジュール",
     "logs": "ログ",
     "info": "情報",
-    "granary": "保管庫",
-    "winnowing": "選別"
+    "granary": "保管庫"
   },
   "status": {
     "storageTitle": "ストレージ",
@@ -43,26 +42,22 @@
     "activePartitions": "アクティブパーティション",
     "health": "システム健全性",
     "healthy": "全チェック合格。システムは正常です。",
-    "hymofsActive": "有効",
-    "hymofsNotDetected": "未検出",
     "diagInfo": "情報",
     "diagWarning": "警告",
-    "diagCritical": "致命的"
+    "diagCritical": "致命的",
+    "hymofsActive": "有効",
+    "hymofsNotDetected": "未検出"
   },
   "config": {
     "title": "設定",
     "verboseLabel": "詳細ログ",
     "verboseOff": "オフ",
     "verboseOn": "オン",
-    "dryRun": "ドライランモード (Dry Run)",
     "forceExt4": "Ext4 モードを強制",
     "useErofs": "EROFS モード",
-    "enableNuke": "肉球を有効化",
     "disableUmount": "Umount無効化",
     "allowUmountCoexistence": "共存を許可",
     "coexistenceRequired": "共存オプションが必要です",
-    "hymoStealth": "HymoFS ステルス",
-    "hymoDebug": "HymoFS デバッグ",
     "moduleDir": "モジュールディレクトリ",
     "mountSource": "マウントソース",
     "mountSourceDesc": "グローバルマウントソース名前空間 (例: KSU)",
@@ -87,6 +82,7 @@
     "fixBottomNavOn": "調整を有効化しました",
     "fixBottomNavOff": "調整を無効化しました",
     "granarySettings": "保管庫設定 (バックアップ)",
+    "granarySettingsDesc": "Backup retention strategy",
     "maxBackups": "最大保持数",
     "maxBackupsDesc": "保持するスナップショットの最大数です。",
     "retentionDays": "保持期間 (日)",
@@ -114,48 +110,17 @@
     "addRule": "ルール追加",
     "noRules": "ルールなし",
     "noDesc": "説明なし",
-    "checkConflicts": "競合をチェック",
-    "hideConflicts": "競合を隠す",
-    "conflictsTitle": "ファイル競合",
-    "noConflicts": "競合は検出されませんでした。",
-    "conflictError": "チェックに失敗しました",
     "placeholder": "例: system/fonts",
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
-      "hymo": "HymoFS",
       "ignore": "無効化",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
-        "hymo": "HymoFS",
         "ignore": "無視"
       }
     }
-  },
-  "logs": {
-    "title": "システムログ",
-    "select": "ファイル",
-    "current": "現在",
-    "old": "以前",
-    "loading": "ログを読み込み中...",
-    "refresh": "更新",
-    "empty": "ログは空です",
-    "readFailed": "読み込み失敗",
-    "readException": "ログ読み込みエラー",
-    "searchPlaceholder": "ログを検索...",
-    "filterLabel": "レベル:",
-    "levels": {
-      "all": "すべて",
-      "info": "情報",
-      "warn": "警告",
-      "error": "エラー"
-    },
-    "copy": "コピー",
-    "export": "エクスポート",
-    "copySuccess": "コピーしました",
-    "copyFail": "コピーに失敗しました",
-    "exportFail": "エクスポートに失敗しました"
   },
   "info": {
     "title": "アプリについて",
@@ -186,13 +151,5 @@
     "restoreAction": "復元する",
     "restoring": "復元中...",
     "create": "作成"
-  },
-  "winnowing": {
-    "title": "選別",
-    "searchPlaceholder": "パスを検索...",
-    "emptyTitle": "問題なし",
-    "emptyDesc": "競合は検出されませんでした。",
-    "conflictPath": "競合パス",
-    "selectProvider": "提供元を選択"
   }
 }
