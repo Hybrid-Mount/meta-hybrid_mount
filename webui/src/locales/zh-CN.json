@@ -17,7 +17,9 @@
     "cancel": "取消",
     "refresh": "刷新",
     "confirm": "确认",
-    "saving_btn": "保存中..."
+    "saving_btn": "保存中...",
+    "used": "已使用",
+    "saved": "已保存"
   },
   "tabs": {
     "status": "状态",
@@ -59,10 +61,14 @@
     "allowUmountCoexistence": "允许Umount共存",
     "coexistenceRequired": "需开启共存选项",
     "moduleDir": "模块路径",
+    "moduleDirDesc": "设置模块储存的路径",
     "mountSource": "挂载源名",
     "mountSourceDesc": "全局挂载源命名空间 (例如 KSU)",
+    "hybrid_mnt_dir": "设置挂载点路径",
+    "hybrid_mnt_dir_desc": "OverlayFS的临时路径",
     "logFile": "日志文件",
     "partitions": "额外分区",
+    "partitionsDesc": "添加额外挂载分区",
     "autoPlaceholder": "自动",
     "reload": "重载",
     "save": "保存",
@@ -71,6 +77,7 @@
     "resetConfigTitle": "重置配置?",
     "resetConfigConfirm": "此操作将重置所有后端设置恢复默认，是否继续？",
     "invalidPath": "检测到无效路径",
+    "invalidModuleDir": "路径不可用",
     "loadSuccess": "配置已加载",
     "loadError": "加载失败",
     "loadDefault": "已加载默认配置",
@@ -86,7 +93,15 @@
     "maxBackups": "最大保留数量",
     "maxBackupsDesc": "超过此数量的旧备份将被自动删除",
     "retentionDays": "保留天数",
-    "retentionDaysDesc": "自动删除 N 天前的旧备份 (0 表示不限制)"
+    "retentionDaysDesc": "自动删除 N 天前的旧备份 (0 表示不限制)",
+    "overlayMode": "OverlayFS模式切换",
+    "overlayModeDesc": "选择存储方式",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "基于内存，I/O性能优秀，重启即焚",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "节省内存，使用 Loop 设备",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "高性能只读文件系统，极大节省空间"
   },
   "modules": {
     "title": "模块模式",
@@ -100,6 +115,8 @@
     "scanError": "扫描失败",
     "saveSuccess": "模式已保存",
     "saveFailed": "保存失败",
+    "noConflicts": "未检测到冲突",
+    "conflictError": "检测冲突失败",
     "searchPlaceholder": "搜索模块...",
     "filterLabel": "筛选:",
     "filterAll": "全部",
@@ -115,12 +132,16 @@
       "auto": "OverlayFS",
       "magic": "Magic Mount",
       "ignore": "禁用 (忽略)",
+      "none": "未挂载",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
         "ignore": "忽略"
       }
     }
+  },
+  "logs": {
+    "refresh": "刷新"
   },
   "info": {
     "title": "关于项目",

@@ -17,7 +17,9 @@
     "cancel": "キャンセル",
     "refresh": "更新",
     "confirm": "確認",
-    "saving_btn": "保存中..."
+    "saving_btn": "保存中...",
+    "used": "Used",
+    "saved": "Saved"
   },
   "tabs": {
     "status": "ステータス",
@@ -59,10 +61,14 @@
     "allowUmountCoexistence": "共存を許可",
     "coexistenceRequired": "共存オプションが必要です",
     "moduleDir": "モジュールディレクトリ",
+    "moduleDirDesc": "Set the directory where modules are stored",
     "mountSource": "マウントソース",
     "mountSourceDesc": "グローバルマウントソース名前空間 (例: KSU)",
+    "hybrid_mnt_dir": "Mount Point Path",
+    "hybrid_mnt_dir_desc": "Temporary directory for OverlayFS mounting",
     "logFile": "ログファイル",
     "partitions": "パーティション",
+    "partitionsDesc": "Add partitions to mount",
     "autoPlaceholder": "自動",
     "reload": "再読み込み",
     "save": "保存",
@@ -71,6 +77,7 @@
     "resetConfigTitle": "設定をリセット？",
     "resetConfigConfirm": "すべての設定を初期化します。よろしいですか？",
     "invalidPath": "無効なパスが検出されました",
+    "invalidModuleDir": "Invalid Path",
     "loadSuccess": "設定を読み込みました",
     "loadError": "設定の読み込みに失敗しました",
     "loadDefault": "デフォルト設定を使用します",
@@ -86,7 +93,15 @@
     "maxBackups": "最大保持数",
     "maxBackupsDesc": "保持するスナップショットの最大数です。",
     "retentionDays": "保持期間 (日)",
-    "retentionDaysDesc": "N日以上前のスナップショットを削除 (0 = 無制限)。"
+    "retentionDaysDesc": "N日以上前のスナップショットを削除 (0 = 無制限)。",
+    "overlayMode": "Overlay Mode",
+    "overlayModeDesc": "Select backing storage strategy",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "Read-only compressed. High performance, space saving."
   },
   "modules": {
     "title": "モジュールモード",
@@ -100,6 +115,8 @@
     "scanError": "モジュールのスキャンに失敗しました",
     "saveSuccess": "モードを保存しました",
     "saveFailed": "モードの保存に失敗しました",
+    "noConflicts": "No conflicts detected",
+    "conflictError": "Failed to check conflicts",
     "searchPlaceholder": "モジュールを検索...",
     "filterLabel": "フィルター:",
     "filterAll": "すべて",
@@ -115,12 +132,16 @@
       "auto": "OverlayFS",
       "magic": "Magic Mount",
       "ignore": "無効化",
+      "none": "Unmounted",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
         "ignore": "無視"
       }
     }
+  },
+  "logs": {
+    "refresh": "Refresh"
   },
   "info": {
     "title": "アプリについて",

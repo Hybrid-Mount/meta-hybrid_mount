@@ -17,7 +17,9 @@
     "cancel": "取消",
     "refresh": "重新整理",
     "confirm": "確認",
-    "saving_btn": "儲存中..."
+    "saving_btn": "儲存中...",
+    "used": "Used",
+    "saved": "Saved"
   },
   "tabs": {
     "status": "狀態",
@@ -59,10 +61,14 @@
     "allowUmountCoexistence": "允許Umount共存",
     "coexistenceRequired": "需開啟共存選項",
     "moduleDir": "模組路徑",
+    "moduleDirDesc": "Set the directory where modules are stored",
     "mountSource": "掛載來源",
     "mountSourceDesc": "全域掛載來源命名空間 (例如 KSU)",
+    "hybrid_mnt_dir": "Mount Point Path",
+    "hybrid_mnt_dir_desc": "Temporary directory for OverlayFS mounting",
     "logFile": "日誌檔案",
     "partitions": "額外分區",
+    "partitionsDesc": "Add partitions to mount",
     "autoPlaceholder": "自動",
     "reload": "重載",
     "save": "儲存",
@@ -71,6 +77,7 @@
     "resetConfigTitle": "重置設定?",
     "resetConfigConfirm": "此操作將重置所有後端設定恢復預設，是否繼續？",
     "invalidPath": "檢測到無效路徑",
+    "invalidModuleDir": "Invalid Path",
     "loadSuccess": "設定已載入",
     "loadError": "載入失敗",
     "loadDefault": "已載入預設設定",
@@ -86,7 +93,15 @@
     "maxBackups": "最大保留數量",
     "maxBackupsDesc": "超過此數量的舊備份將被自動刪除。",
     "retentionDays": "保留天數",
-    "retentionDaysDesc": "自動刪除 N 天前的舊備份 (0 表示不限制)。"
+    "retentionDaysDesc": "自動刪除 N 天前的舊備份 (0 表示不限制)。",
+    "overlayMode": "Overlay Mode",
+    "overlayModeDesc": "Select backing storage strategy",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "Read-only compressed. High performance, space saving."
   },
   "modules": {
     "title": "模組模式",
@@ -100,6 +115,8 @@
     "scanError": "掃描失敗",
     "saveSuccess": "模式已儲存",
     "saveFailed": "儲存失敗",
+    "noConflicts": "No conflicts detected",
+    "conflictError": "Failed to check conflicts",
     "searchPlaceholder": "搜尋模組...",
     "filterLabel": "篩選:",
     "filterAll": "全部",
@@ -115,12 +132,16 @@
       "auto": "OverlayFS",
       "magic": "Magic Mount",
       "ignore": "禁用 (忽略)",
+      "none": "Unmounted",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
         "ignore": "忽略"
       }
     }
+  },
+  "logs": {
+    "refresh": "Refresh"
   },
   "info": {
     "title": "關於專案",
