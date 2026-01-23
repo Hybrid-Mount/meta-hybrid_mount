@@ -1,4 +1,3 @@
-// src/core/planner.rs
 // Copyright 2025 Meta-Hybrid Mount Authors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -61,6 +60,7 @@ pub struct AnalysisReport {
     pub diagnostics: Vec<DiagnosticIssue>,
 }
 
+#[allow(clippy::collapsible_if)]
 impl MountPlan {
     pub fn analyze(&self) -> AnalysisReport {
         let results: Vec<(Vec<ConflictEntry>, Vec<DiagnosticIssue>)> = self
@@ -92,7 +92,7 @@ impl MountPlan {
                         if entry.path_is_symlink() {
                             if let Ok(target) = std::fs::read_link(entry.path()) {
                                 if target.is_absolute() && !target.exists() {
-                                     local_diagnostics.push(DiagnosticIssue {
+                                    local_diagnostics.push(DiagnosticIssue {
                                         level: DiagnosticLevel::Warning,
                                         context: module_id.clone(),
                                         message: format!(
@@ -148,9 +148,9 @@ impl MountPlan {
 
 // 辅助结构：用于在队列中传递处理任务
 struct ProcessingItem {
-    module_source: PathBuf,    // 模块内的源路径 (e.g. /data/adb/modules/mod1/system/vendor)
-    system_target: PathBuf,    // 系统上的目标路径 (e.g. /system/vendor)
-    partition_label: String,   // 归属的分区名 (e.g. "vendor")
+    module_source: PathBuf, // 模块内的源路径 (e.g. /data/adb/modules/mod1/system/vendor)
+    system_target: PathBuf, // 系统上的目标路径 (e.g. /system/vendor)
+    partition_label: String, // 归属的分区名 (e.g. "vendor")
 }
 
 pub fn generate(
@@ -164,7 +164,7 @@ pub fn generate(
     // Key: 最终的系统绝对路径 (e.g. "/vendor/bin")
     // Value: 模块内的源路径列表
     let mut overlay_groups: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
-    
+
     let mut overlay_ids = HashSet::new();
     let mut magic_ids = HashSet::new();
 
@@ -176,33 +176,38 @@ pub fn generate(
         if !content_path.exists() {
             content_path = module.source_path.clone();
         }
-        if !content_path.exists() { continue; }
+        if !content_path.exists() {
+            continue;
+        }
 
         // 检查 Magic Mount 模式
         // 如果模块规则强制某些目录使用 Magic Mount，这里简化处理，假设混合模式下主要处理 Overlay
         // 实际实现中，应该先过滤掉 Magic Mount 的目录
         // 这里为了简化，我们先只处理 Overlay 逻辑，Magic Mount 逻辑保留在原处或需单独收集
-        
+
         // 遍历模块根目录
         if let Ok(entries) = fs::read_dir(&content_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if !path.is_dir() { continue; }
-
-                let dir_name = entry.file_name().to_string_lossy().to_string();
-                
-                // 检查是否在处理范围内
-                if !defs::BUILTIN_PARTITIONS.contains(&dir_name.as_str()) 
-                   && !config.partitions.contains(&dir_name) {
+                if !path.is_dir() {
                     continue;
                 }
-                
+
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+
+                // 检查是否在处理范围内
+                if !defs::BUILTIN_PARTITIONS.contains(&dir_name.as_str())
+                    && !config.partitions.contains(&dir_name)
+                {
+                    continue;
+                }
+
                 // 检查挂载模式
                 let mode = module.rules.get_mode(&dir_name);
                 if matches!(mode, MountMode::Magic) {
                     magic_ids.insert(module.id.clone());
                     // Magic mount logic would go here separately or fallback
-                    continue; 
+                    continue;
                 }
                 if matches!(mode, MountMode::Ignore) {
                     continue;
@@ -219,7 +224,11 @@ pub fn generate(
                 });
 
                 while let Some(item) = queue.pop_front() {
-                    let ProcessingItem { module_source, system_target, partition_label } = item;
+                    let ProcessingItem {
+                        module_source,
+                        system_target,
+                        partition_label,
+                    } = item;
 
                     // 1. 检查系统目标是否存在
                     if !system_target.exists() {
@@ -235,19 +244,22 @@ pub fn generate(
                                 target
                             } else {
                                 // 处理相对软链接
-                                system_target.parent().unwrap_or(Path::new("/")).join(target)
+                                system_target
+                                    .parent()
+                                    .unwrap_or(Path::new("/"))
+                                    .join(target)
                             }
-                        },
+                        }
                         Err(_) => system_target.clone(), // 不是软链接，保持原样
                     };
-                    
+
                     // 规范化路径 (去除 .. 和 .)
                     let canonical_target = if resolved_target.exists() {
-                         // 使用 canonicalize 获取最真实的物理路径
-                         match resolved_target.canonicalize() {
-                             Ok(p) => p,
-                             Err(_) => resolved_target,
-                         }
+                        // 使用 canonicalize 获取最真实的物理路径
+                        match resolved_target.canonicalize() {
+                            Ok(p) => p,
+                            Err(_) => resolved_target,
+                        }
                     } else {
                         resolved_target
                     };
@@ -255,12 +267,13 @@ pub fn generate(
                     // 3. 检查是否需要拆解 (Controlled Depth)
                     // 条件：是敏感分区 (vendor, odm...) 或者 是 /system (为了防止遮盖 /system 下的软链接)
                     // 注意：如果 canonical_target 变成了 /vendor，而 /vendor 在敏感列表中，则会触发拆解
-                    
-                    let target_name = canonical_target.file_name()
+
+                    let target_name = canonical_target
+                        .file_name()
                         .map(|s| s.to_string_lossy())
                         .unwrap_or_default();
-                    
-                    let should_split = sensitive_partitions.contains(target_name.as_ref()) 
+
+                    let should_split = sensitive_partitions.contains(target_name.as_ref())
                         || target_name == "system"; // 总是尝试拆解 /system 以发现内部的软链接
 
                     if should_split {
@@ -273,7 +286,7 @@ pub fn generate(
                                     continue;
                                 }
                                 let sub_name = sub_entry.file_name();
-                                
+
                                 queue.push_back(ProcessingItem {
                                     module_source: sub_path,
                                     system_target: canonical_target.join(sub_name), // 下钻一层
@@ -283,7 +296,10 @@ pub fn generate(
                         }
                     } else {
                         // 不需要拆解，直接作为挂载点
-                        overlay_groups.entry(canonical_target).or_default().push(module_source);
+                        overlay_groups
+                            .entry(canonical_target)
+                            .or_default()
+                            .push(module_source);
                     }
                 }
             }
@@ -293,14 +309,16 @@ pub fn generate(
     // 2. 生成 MountPlan
     for (target_path, layers) in overlay_groups {
         let target_str = target_path.to_string_lossy().to_string();
-        
+
         // 最终安全检查：不要挂载在非目录上
         if !target_path.is_dir() {
             continue;
         }
 
         // 推测 partition_name (仅用于显示或冲突检测)
-        let partition_name = target_path.iter().nth(1)
+        let partition_name = target_path
+            .iter()
+            .nth(1)
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
@@ -317,14 +335,4 @@ pub fn generate(
     plan.magic_module_ids.sort();
 
     Ok(plan)
-}
-
-fn has_files(path: &Path) -> bool {
-    if let Ok(entries) = fs::read_dir(path)
-        && entries.flatten().next().is_some()
-    {
-        return true;
-    }
-
-    false
 }
