@@ -1,17 +1,17 @@
 // Copyright 2026 Hybrid Mount Authors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::path::Path;
+use std::{fs::File, path::Path};
 
 use anyhow::{Context, Result, bail};
 use serde::Serialize;
 
 use crate::{
     conf::{
-        cli::Cli,
+        cli::{Cli, PoaceaeAction},
         config::{CONFIG_FILE_DEFAULT, Config},
     },
-    core::{granary, inventory, modules, planner, storage},
+    core::{granary, inventory, modules, planner, poaceae, storage}, // Added poaceae
 };
 
 #[derive(Serialize)]
@@ -229,5 +229,59 @@ pub fn handle_system_action(cli: &Cli, action: &str, value: Option<&str>) -> Res
         _ => bail!("Unknown action: {}", action),
     }
 
+    Ok(())
+}
+
+pub fn handle_poaceae(target_path: &str, action: &PoaceaeAction) -> Result<()> {
+    let file = File::open(target_path)
+        .with_context(|| format!("Failed to open PoaceaeFS root at {}", target_path))?;
+
+    match action {
+        PoaceaeAction::Hide { name } => {
+            poaceae::hide(&file, name)?;
+            println!("Hidden: {}", name);
+        }
+        PoaceaeAction::Unhide { name } => {
+            poaceae::unhide(&file, name)?;
+            println!("Unhidden: {}", name);
+        }
+        PoaceaeAction::Redirect { src, dst } => {
+            poaceae::redirect(&file, src, dst)?;
+            println!("Redirected: {} -> {}", src, dst);
+        }
+        PoaceaeAction::Unredirect { src } => {
+            poaceae::unredirect(&file, src)?;
+            println!("Removed redirect: {}", src);
+        }
+        PoaceaeAction::Spoof {
+            name,
+            uid,
+            gid,
+            mode,
+            mtime,
+        } => {
+            poaceae::spoof(&file, name, *uid, *gid, *mode, *mtime)?;
+            println!(
+                "Spoofed: {} (uid={}, gid={}, mode={:o})",
+                name, uid, gid, mode
+            );
+        }
+        PoaceaeAction::Unspoof { name } => {
+            poaceae::unspoof(&file, name)?;
+            println!("Removed spoof: {}", name);
+        }
+        PoaceaeAction::Merge { src, target } => {
+            poaceae::merge(&file, src, target)?;
+            println!("Merged: {} -> {}", src, target);
+        }
+        PoaceaeAction::Unmerge { src } => {
+            poaceae::unmerge(&file, src)?;
+            println!("Removed merge: {}", src);
+        }
+        PoaceaeAction::Trust { gid } => {
+            poaceae::set_trust(&file, *gid)?;
+            println!("Trusted GID set to: {}", gid);
+        }
+    }
     Ok(())
 }

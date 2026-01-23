@@ -88,6 +88,7 @@ fn main() -> Result<()> {
             Commands::SystemAction { action, value } => {
                 cli_handlers::handle_system_action(&cli, action, value.as_deref())?
             }
+            Commands::Poaceae { target, action } => cli_handlers::handle_poaceae(target, action)?,
         }
 
         return Ok(());

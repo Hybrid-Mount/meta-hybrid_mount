@@ -23,7 +23,9 @@ where
     }
 
     let path_str = target.as_ref().to_string_lossy().to_string();
-    let mut history = HISTORY.lock().unwrap();
+    let mut history = HISTORY
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Failed to lock history mutex"))?;
 
     if history.contains(&path_str) {
         log::debug!("Ignored duplicate umount request: {}", path_str);
@@ -31,7 +33,9 @@ where
     }
 
     history.insert(path_str);
-    LIST.lock().unwrap().add(target);
+    LIST.lock()
+        .map_err(|_| anyhow::anyhow!("Failed to lock umount list"))?
+        .add(target);
     Ok(())
 }
 

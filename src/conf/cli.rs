@@ -54,4 +54,54 @@ pub enum Commands {
         #[arg(long)]
         value: Option<String>,
     },
+    Poaceae {
+        #[arg(short, long, default_value = "/data/adb/poaceaefs_mount")]
+        target: String,
+
+        #[command(subcommand)]
+        action: PoaceaeAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PoaceaeAction {
+    Hide {
+        name: String,
+    },
+    Unhide {
+        name: String,
+    },
+    Redirect {
+        src: String,
+        #[arg(long)]
+        dst: String,
+    },
+    Unredirect {
+        src: String,
+    },
+    Spoof {
+        name: String,
+        #[arg(long, default_value_t = 0)]
+        uid: u32,
+        #[arg(long, default_value_t = 0)]
+        gid: u32,
+        #[arg(long, default_value_t = 0)]
+        mode: u16,
+        #[arg(long, default_value_t = 0)]
+        mtime: u64,
+    },
+    Unspoof {
+        name: String,
+    },
+    Merge {
+        src: String,
+        #[arg(long)]
+        target: String,
+    },
+    Unmerge {
+        src: String,
+    },
+    Trust {
+        gid: u32,
+    },
 }

@@ -6,6 +6,7 @@ pub mod granary;
 pub mod inventory;
 pub mod modules;
 pub mod planner;
+pub mod poaceae;
 pub mod state;
 pub mod storage;
 pub mod sync;
