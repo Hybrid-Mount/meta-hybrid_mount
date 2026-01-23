@@ -61,4 +61,3 @@ pub const SENSITIVE_PARTITIONS: &[&str] = &[
 
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
-pub const SOFT_REBOOT_MARKER: &str = "/data/adb/meta-hybrid/run/soft_reboot_pending";
