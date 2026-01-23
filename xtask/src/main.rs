@@ -307,8 +307,6 @@ fn compile_core(release: bool, arch: Arch) -> Result<()> {
         "build",
         "-Z",
         "build-std",
-        "-Z",
-        "trim-paths",
     ])
     .env("RUSTFLAGS", "-C default-linker-libraries");
     if release {
