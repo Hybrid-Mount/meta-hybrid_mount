@@ -392,11 +392,7 @@ fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
     let current_ctx = lgetfilecon(current).ok();
     if let Some(ctx) = &current_ctx {
         if !ctx.is_empty() && ctx != CONTEXT_ROOTFS && ctx != "u:object_r:unlabeled:s0" {
-            log::debug!(
-                "Keeping module context for {}: {}",
-                current.display(),
-                ctx
-            );
+            log::debug!("Keeping module context for {}: {}", current.display(), ctx);
             return Ok(());
         }
     }
