@@ -212,6 +212,7 @@ pub fn lgetfilecon<P: AsRef<Path>>(_path: P) -> Result<String> {
     unimplemented!();
 }
 
+#[allow(dead_code)]
 pub fn copy_path_context<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> Result<()> {
     let mut context = if src.as_ref().exists() {
         lgetfilecon(&src).unwrap_or_else(|_| CONTEXT_SYSTEM.to_string())
@@ -380,21 +381,22 @@ fn guess_context_by_path(path: &Path) -> &'static str {
 }
 
 fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
-    if let Some(name) = current.file_name().and_then(|n| n.to_str()) {
-        if (name == "upperdir" || name == "workdir")
-            && let Some(parent) = current.parent()
-            && let Ok(ctx) = lgetfilecon(parent)
-        {
-            return lsetfilecon(current, &ctx);
-        }
+    if let Some(name) = current.file_name().and_then(|n| n.to_str())
+        && (name == "upperdir" || name == "workdir")
+        && let Some(parent) = current.parent()
+        && let Ok(ctx) = lgetfilecon(parent)
+    {
+        return lsetfilecon(current, &ctx);
     }
 
     let current_ctx = lgetfilecon(current).ok();
-    if let Some(ctx) = &current_ctx {
-        if !ctx.is_empty() && ctx != CONTEXT_ROOTFS && ctx != "u:object_r:unlabeled:s0" {
-            log::debug!("Keeping module context for {}: {}", current.display(), ctx);
-            return Ok(());
-        }
+    if let Some(ctx) = &current_ctx
+        && !ctx.is_empty()
+        && ctx != CONTEXT_ROOTFS
+        && ctx != "u:object_r:unlabeled:s0"
+    {
+        log::debug!("Keeping module context for {}: {}", current.display(), ctx);
+        return Ok(());
     }
 
     let system_path = Path::new("/").join(relative);
@@ -411,14 +413,14 @@ fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
         && parent.exists()
     {
         // 尝试继承父目录
-        if let Ok(parent_ctx) = lgetfilecon(parent) {
-            if parent_ctx != CONTEXT_ROOTFS {
-                let guessed = guess_context_by_path(&system_path);
-                if guessed == CONTEXT_HAL && parent_ctx == CONTEXT_VENDOR {
-                    return lsetfilecon(current, CONTEXT_HAL);
-                }
-                return lsetfilecon(current, &parent_ctx);
+        if let Ok(parent_ctx) = lgetfilecon(parent)
+            && parent_ctx != CONTEXT_ROOTFS
+        {
+            let guessed = guess_context_by_path(&system_path);
+            if guessed == CONTEXT_HAL && parent_ctx == CONTEXT_VENDOR {
+                return lsetfilecon(current, CONTEXT_HAL);
             }
+            return lsetfilecon(current, &parent_ctx);
         }
     }
 
