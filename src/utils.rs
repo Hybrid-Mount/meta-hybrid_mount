@@ -3,7 +3,7 @@
 
 use std::{
     ffi::CString,
-    fs::{self, File, create_dir_all, remove_dir_all, remove_file, write},
+    fs::{self, create_dir_all, remove_dir_all, remove_file, write, File},
     io::Write,
     os::unix::{
         ffi::OsStrExt,
@@ -11,18 +11,18 @@ use std::{
     },
     path::Path,
     process::{Command, Stdio},
-    sync::{OnceLock, atomic::AtomicBool},
+    sync::{atomic::AtomicBool, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use extattr::{Flags as XattrFlags, lgetxattr, llistxattr, lsetxattr};
+use extattr::{lgetxattr, llistxattr, lsetxattr, Flags as XattrFlags};
 use procfs::process::Process;
 use regex_lite::Regex;
 use rustix::{
     fs::ioctl_ficlone,
-    mount::{MountFlags, mount},
+    mount::{mount, MountFlags},
 };
 use walkdir::WalkDir;
 
@@ -359,18 +359,18 @@ fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
 
 fn guess_context_by_path(path: &Path) -> &'static str {
     let path_str = path.to_string_lossy();
-    
+
     if path_str.starts_with("/vendor") || path_str.starts_with("/odm") {
         if path_str.contains("/lib/") || path_str.contains("/lib64/") || path_str.ends_with(".so") {
             return CONTEXT_HAL;
         }
-        
+
         if path_str.contains("/bin/") {
-             return CONTEXT_VENDOR_EXEC; 
+            return CONTEXT_VENDOR_EXEC;
         }
 
         if path_str.contains("/firmware") {
-            return CONTEXT_VENDOR; 
+            return CONTEXT_VENDOR;
         }
 
         return CONTEXT_VENDOR;
@@ -392,7 +392,11 @@ fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
     let current_ctx = lgetfilecon(current).ok();
     if let Some(ctx) = &current_ctx {
         if !ctx.is_empty() && ctx != CONTEXT_ROOTFS && ctx != "u:object_r:unlabeled:s0" {
-            log::debug!("Keeping module context for {}: {}", current.display(), ctx);
+            log::debug!(
+                "Keeping module context for {}: {}",
+                current.display(),
+                ctx
+            );
             return Ok(());
         }
     }
@@ -407,16 +411,18 @@ fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
             };
             return lsetfilecon(current, target_ctx);
         }
-    } else if let Some(parent) = system_path.parent() && parent.exists() {
+    } else if let Some(parent) = system_path.parent()
+        && parent.exists()
+    {
         // 尝试继承父目录
         if let Ok(parent_ctx) = lgetfilecon(parent) {
-             if parent_ctx != CONTEXT_ROOTFS {
-                 let guessed = guess_context_by_path(&system_path);
-                 if guessed == CONTEXT_HAL && parent_ctx == CONTEXT_VENDOR {
-                     return lsetfilecon(current, CONTEXT_HAL);
-                 }
-                 return lsetfilecon(current, &parent_ctx);
-             }
+            if parent_ctx != CONTEXT_ROOTFS {
+                let guessed = guess_context_by_path(&system_path);
+                if guessed == CONTEXT_HAL && parent_ctx == CONTEXT_VENDOR {
+                    return lsetfilecon(current, CONTEXT_HAL);
+                }
+                return lsetfilecon(current, &parent_ctx);
+            }
         }
     }
 
