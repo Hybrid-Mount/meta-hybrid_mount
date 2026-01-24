@@ -3,7 +3,7 @@
 
 use std::{
     ffi::CString,
-    fs::{self, create_dir_all, remove_dir_all, remove_file, write, File},
+    fs::{self, File, create_dir_all, remove_dir_all, remove_file, write},
     io::Write,
     os::unix::{
         ffi::OsStrExt,
@@ -11,18 +11,18 @@ use std::{
     },
     path::Path,
     process::{Command, Stdio},
-    sync::{atomic::AtomicBool, OnceLock},
+    sync::{OnceLock, atomic::AtomicBool},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use extattr::{lgetxattr, llistxattr, lsetxattr, Flags as XattrFlags};
+use extattr::{Flags as XattrFlags, lgetxattr, llistxattr, lsetxattr};
 use procfs::process::Process;
 use regex_lite::Regex;
 use rustix::{
     fs::ioctl_ficlone,
-    mount::{mount, MountFlags},
+    mount::{MountFlags, mount},
 };
 use walkdir::WalkDir;
 
