@@ -1,7 +1,7 @@
 // Copyright 2025 Meta-Hybrid Mount Authors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-pub const DEFAULT_HYBRID_MNT_DIR: &str = "/mnt/vendor/hybrid_mnt";
+pub const DEFAULT_HYBRID_MNT_DIR: &str = "/mnt/hybrid_mnt";
 pub const MODULES_IMG_FILE: &str = "/data/adb/meta-hybrid/modules.img";
 pub const RUN_DIR: &str = "/data/adb/meta-hybrid/run/";
 pub const STATE_FILE: &str = "/data/adb/meta-hybrid/run/daemon_state.json";
