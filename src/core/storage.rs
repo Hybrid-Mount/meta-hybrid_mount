@@ -253,6 +253,8 @@ fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<
     utils::lsetfilecon(img_path, "u:object_r:ksu_file:s0").ok();
 
     log::info!("- Mounting image");
+
+    utils::ensure_dir_exists(target)?;
     if overlay_utils::AutoMountExt4::try_new(img_path, target, false).is_err() {
         if utils::repair_image(img_path).is_ok() {
             overlay_utils::AutoMountExt4::try_new(img_path, target, false)
