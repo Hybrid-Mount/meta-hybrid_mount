@@ -146,11 +146,10 @@ impl MountPlan {
     }
 }
 
-// 辅助结构：用于在队列中传递处理任务
 struct ProcessingItem {
-    module_source: PathBuf, // 模块内的源路径 (e.g. /data/adb/modules/mod1/system/vendor)
-    system_target: PathBuf, // 系统上的目标路径 (e.g. /system/vendor)
-    partition_label: String, // 归属的分区名 (e.g. "vendor")
+    module_source: PathBuf,
+    system_target: PathBuf,
+    partition_label: String,
 }
 
 pub fn generate(
@@ -160,15 +159,11 @@ pub fn generate(
 ) -> Result<MountPlan> {
     let mut plan = MountPlan::default();
 
-    // 1. 收集所有 overlay 任务 (按最终的目标路径聚合)
-    // Key: 最终的系统绝对路径 (e.g. "/vendor/bin")
-    // Value: 模块内的源路径列表
     let mut overlay_groups: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
 
     let mut overlay_ids = HashSet::new();
     let mut magic_ids = HashSet::new();
 
-    // 预处理敏感分区列表，方便查询
     let sensitive_partitions: HashSet<&str> = defs::SENSITIVE_PARTITIONS.iter().cloned().collect();
 
     for module in modules {
@@ -180,12 +175,6 @@ pub fn generate(
             continue;
         }
 
-        // 检查 Magic Mount 模式
-        // 如果模块规则强制某些目录使用 Magic Mount，这里简化处理，假设混合模式下主要处理 Overlay
-        // 实际实现中，应该先过滤掉 Magic Mount 的目录
-        // 这里为了简化，我们先只处理 Overlay 逻辑，Magic Mount 逻辑保留在原处或需单独收集
-
-        // 遍历模块根目录
         if let Ok(entries) = fs::read_dir(&content_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -195,14 +184,12 @@ pub fn generate(
 
                 let dir_name = entry.file_name().to_string_lossy().to_string();
 
-                // 检查是否在处理范围内
                 if !defs::BUILTIN_PARTITIONS.contains(&dir_name.as_str())
                     && !config.partitions.contains(&dir_name)
                 {
                     continue;
                 }
 
-                // 检查挂载模式
                 let mode = module.rules.get_mode(&dir_name);
                 if matches!(mode, MountMode::Magic) {
                     magic_ids.insert(module.id.clone());
@@ -215,7 +202,6 @@ pub fn generate(
 
                 overlay_ids.insert(module.id.clone());
 
-                // 使用队列进行路径解析和拆解
                 let mut queue = VecDeque::new();
                 queue.push_back(ProcessingItem {
                     module_source: path.clone(),
@@ -230,32 +216,25 @@ pub fn generate(
                         partition_label,
                     } = item;
 
-                    // 1. 检查系统目标是否存在
                     if !system_target.exists() {
-                        // 如果目标不存在，无法挂载 Overlay (除非父目录支持，这里保守跳过)
                         continue;
                     }
 
-                    // 2. 软链接解析 (核心逻辑：操作粒度优化)
-                    // 如果 /system/vendor 是软链接，我们需要获取它指向的真实路径 /vendor
                     let resolved_target = match fs::read_link(&system_target) {
                         Ok(target) => {
                             if target.is_absolute() {
                                 target
                             } else {
-                                // 处理相对软链接
                                 system_target
                                     .parent()
                                     .unwrap_or(Path::new("/"))
                                     .join(target)
                             }
                         }
-                        Err(_) => system_target.clone(), // 不是软链接，保持原样
+                        Err(_) => system_target.clone(),
                     };
 
-                    // 规范化路径 (去除 .. 和 .)
                     let canonical_target = if resolved_target.exists() {
-                        // 使用 canonicalize 获取最真实的物理路径
                         match resolved_target.canonicalize() {
                             Ok(p) => p,
                             Err(_) => resolved_target,
@@ -263,10 +242,6 @@ pub fn generate(
                     } else {
                         resolved_target
                     };
-
-                    // 3. 检查是否需要拆解 (Controlled Depth)
-                    // 条件：是敏感分区 (vendor, odm...) 或者 是 /system (为了防止遮盖 /system 下的软链接)
-                    // 注意：如果 canonical_target 变成了 /vendor，而 /vendor 在敏感列表中，则会触发拆解
 
                     let target_name = canonical_target
                         .file_name()
@@ -306,7 +281,6 @@ pub fn generate(
         }
     }
 
-    // 2. 生成 MountPlan
     for (target_path, layers) in overlay_groups {
         let target_str = target_path.to_string_lossy().to_string();
 
@@ -315,7 +289,6 @@ pub fn generate(
             continue;
         }
 
-        // 推测 partition_name (仅用于显示或冲突检测)
         let partition_name = target_path
             .iter()
             .nth(1)

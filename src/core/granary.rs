@@ -151,7 +151,7 @@ pub fn list_snapshots() -> Result<Vec<Snapshot>> {
         }
     }
 
-    snapshots.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    snapshots.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
     Ok(snapshots)
 }
 

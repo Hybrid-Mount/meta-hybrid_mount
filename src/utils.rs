@@ -30,6 +30,9 @@ const SELINUX_XATTR: &str = "security.selinux";
 const OVERLAY_OPAQUE_XATTR: &str = "trusted.overlay.opaque";
 const CONTEXT_SYSTEM: &str = "u:object_r:system_file:s0";
 const CONTEXT_VENDOR: &str = "u:object_r:vendor_file:s0";
+const CONTEXT_HAL: &str = "u:object_r:same_process_hal_file:s0";
+const CONTEXT_VENDOR_EXEC: &str = "u:object_r:vendor_file:s0";
+const CONTEXT_ROOTFS: &str = "u:object_r:rootfs:s0";
 
 pub static KSU: AtomicBool = AtomicBool::new(false);
 
@@ -211,6 +214,7 @@ pub fn lgetfilecon<P: AsRef<Path>>(_path: P) -> Result<String> {
     unimplemented!();
 }
 
+#[allow(dead_code)]
 pub fn copy_path_context<S: AsRef<Path>, D: AsRef<Path>>(src: S, dst: D) -> Result<()> {
     let mut context = if src.as_ref().exists() {
         lgetfilecon(&src).unwrap_or_else(|_| CONTEXT_SYSTEM.to_string())
@@ -356,11 +360,25 @@ fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
     Ok(())
 }
 
-fn get_context_for_path(path: &Path) -> &'static str {
+fn guess_context_by_path(path: &Path) -> &'static str {
     let path_str = path.to_string_lossy();
+
     if path_str.starts_with("/vendor") || path_str.starts_with("/odm") {
+        if path_str.contains("/lib/") || path_str.contains("/lib64/") || path_str.ends_with(".so") {
+            return CONTEXT_HAL;
+        }
+
+        if path_str.contains("/bin/") {
+            return CONTEXT_VENDOR_EXEC;
+        }
+
+        if path_str.contains("/firmware") {
+            return CONTEXT_VENDOR;
+        }
+
         return CONTEXT_VENDOR;
     }
+
     CONTEXT_SYSTEM
 }
 
@@ -373,19 +391,43 @@ fn apply_system_context(current: &Path, relative: &Path) -> Result<()> {
         return lsetfilecon(current, &ctx);
     }
 
-    let system_path = Path::new("/").join(relative);
+    let current_ctx = lgetfilecon(current).ok();
+    if let Some(ctx) = &current_ctx
+        && !ctx.is_empty()
+        && ctx != CONTEXT_ROOTFS
+        && ctx != "u:object_r:unlabeled:s0"
+    {
+        log::debug!("Keeping module context for {}: {}", current.display(), ctx);
+        return Ok(());
+    }
 
+    let system_path = Path::new("/").join(relative);
     if system_path.exists() {
-        copy_path_context(&system_path, current)?;
+        if let Ok(sys_ctx) = lgetfilecon(&system_path) {
+            let target_ctx = if sys_ctx == CONTEXT_ROOTFS {
+                CONTEXT_SYSTEM
+            } else {
+                &sys_ctx
+            };
+            return lsetfilecon(current, target_ctx);
+        }
     } else if let Some(parent) = system_path.parent()
         && parent.exists()
     {
-        copy_path_context(parent, current)?;
-    } else {
-        let target_context = get_context_for_path(&system_path);
-        lsetfilecon(current, target_context)?;
+        // 尝试继承父目录
+        if let Ok(parent_ctx) = lgetfilecon(parent)
+            && parent_ctx != CONTEXT_ROOTFS
+        {
+            let guessed = guess_context_by_path(&system_path);
+            if guessed == CONTEXT_HAL && parent_ctx == CONTEXT_VENDOR {
+                return lsetfilecon(current, CONTEXT_HAL);
+            }
+            return lsetfilecon(current, &parent_ctx);
+        }
     }
-    Ok(())
+
+    let target_context = guess_context_by_path(&system_path);
+    lsetfilecon(current, target_context)
 }
 
 fn native_cp_r(src: &Path, dst: &Path, relative: &Path, repair: bool) -> Result<()> {
@@ -433,10 +475,10 @@ fn native_cp_r(src: &Path, dst: &Path, relative: &Path, repair: bool) -> Result<
             reflink_or_copy(&src_path, &dst_path)?;
         }
 
+        let _ = copy_extended_attributes(&src_path, &dst_path);
+
         if repair {
             let _ = apply_system_context(&dst_path, &next_relative);
-        } else {
-            let _ = copy_extended_attributes(&src_path, &dst_path);
         }
     }
     Ok(())
