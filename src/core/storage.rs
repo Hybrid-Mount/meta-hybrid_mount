@@ -357,4 +357,3 @@ pub fn print_status() -> Result<()> {
 
     Ok(())
 }
-
