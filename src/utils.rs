@@ -3,7 +3,7 @@
 
 use std::{
     ffi::CString,
-    fs::{self, File, create_dir_all, remove_dir_all, remove_file, write},
+    fs::{self, File, OpenOptions, create_dir_all, remove_dir_all, remove_file, write},
     io::Write,
     os::unix::{
         ffi::OsStrExt,
@@ -104,9 +104,11 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
     let temp_file = dir.join(temp_name);
 
     {
-        let mut file = File::create(&temp_file)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_file)?;
         file.write_all(content.as_ref())?;
-        file.sync_all()?;
     }
 
     fs::rename(&temp_file, path)?;
