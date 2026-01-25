@@ -243,7 +243,6 @@ pub fn generate(
                         resolved_target
                     };
 
-
                     let target_name = canonical_target
                         .file_name()
                         .map(|s| s.to_string_lossy())
