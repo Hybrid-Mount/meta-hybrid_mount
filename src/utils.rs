@@ -4,7 +4,7 @@
 use std::{
     ffi::CString,
     fs::{self, File, OpenOptions, create_dir_all, remove_dir_all, remove_file, write},
-    io::Write,
+    io::{Read, Write},
     os::unix::{
         ffi::OsStrExt,
         fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink},
@@ -91,16 +91,20 @@ pub fn init_logging(verbose: bool) -> Result<()> {
     Ok(())
 }
 
+fn get_random_hex(bytes: usize) -> Result<String> {
+    let mut file = File::open("/dev/urandom")?;
+    let mut buf = vec![0u8; bytes];
+    file.read_exact(&mut buf)?;
+    Ok(buf.iter().map(|b| format!("{:02x}", b)).collect())
+}
+
 pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Result<()> {
     let path = path.as_ref();
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let pid = std::process::id();
-    let temp_name = format!(".{}_{}.tmp", pid, now);
+    // Use 8 bytes of randomness (16 hex chars)
+    let random_suffix = get_random_hex(8).context("Failed to generate random suffix")?;
+    let temp_name = format!(".tmp_{}", random_suffix);
     let temp_file = dir.join(temp_name);
 
     {
@@ -109,6 +113,8 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
             .create_new(true)
             .open(&temp_file)?;
         file.write_all(content.as_ref())?;
+        // Ensure data is flushed to disk
+        file.sync_all()?;
     }
 
     fs::rename(&temp_file, path)?;
@@ -621,4 +627,41 @@ pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::env;
+
+    #[test]
+    fn test_get_random_hex() {
+        let hex1 = get_random_hex(8).unwrap();
+        let hex2 = get_random_hex(8).unwrap();
+
+        assert_eq!(hex1.len(), 16);
+        assert_eq!(hex2.len(), 16);
+        assert_ne!(hex1, hex2);
+
+        // Ensure it only contains hex characters
+        assert!(hex1.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_atomic_write() {
+        let temp_dir = env::temp_dir().join(format!("test_atomic_write_{}", std::process::id()));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let file_path = temp_dir.join("test_file.txt");
+        let content = b"Hello, World!";
+
+        atomic_write(&file_path, content).unwrap();
+
+        assert!(file_path.exists());
+        let read_content = fs::read(&file_path).unwrap();
+        assert_eq!(read_content, content);
+
+        fs::remove_dir_all(&temp_dir).unwrap();
+    }
 }
