@@ -8,7 +8,6 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail, ensure};
-use jwalk::WalkDir;
 use rustix::{
     fs::Mode,
     mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount as umount},
@@ -266,12 +265,6 @@ fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<
     }
 
     log::info!("mounted {} to {}", img_path.display(), target.display());
-
-    for dir_entry in WalkDir::new(target).parallelism(jwalk::Parallelism::Serial) {
-        if let Some(path) = dir_entry.ok().map(|dir_entry| dir_entry.path()) {
-            let _ = utils::lsetfilecon(&path, DEFAULT_SELINUX_CONTEXT);
-        }
-    }
 
     Ok(StorageHandle {
         mount_point: target.to_path_buf(),
