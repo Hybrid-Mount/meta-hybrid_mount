@@ -4,7 +4,7 @@
 use std::{
     ffi::CString,
     fs::{self, File, OpenOptions, create_dir_all, remove_dir_all, remove_file, write},
-    io::Write,
+    io::{Read, Write},
     os::unix::{
         ffi::OsStrExt,
         fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink},
@@ -91,16 +91,25 @@ pub fn init_logging(verbose: bool) -> Result<()> {
     Ok(())
 }
 
+pub fn read_urandom(len: usize) -> Result<Vec<u8>> {
+    let mut file = File::open("/dev/urandom").context("Failed to open /dev/urandom")?;
+    let mut buf = vec![0u8; len];
+    file.read_exact(&mut buf).context("Failed to read from /dev/urandom")?;
+    Ok(buf)
+}
+
 pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Result<()> {
     let path = path.as_ref();
     let dir = path.parent().unwrap_or_else(|| Path::new("."));
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let pid = std::process::id();
-    let temp_name = format!(".{}_{}.tmp", pid, now);
+    let random_suffix = read_urandom(8).map(|bytes| {
+        bytes
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>()
+    })?;
+
+    let temp_name = format!(".{}.tmp", random_suffix);
     let temp_file = dir.join(temp_name);
 
     {
@@ -109,6 +118,7 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
             .create_new(true)
             .open(&temp_file)?;
         file.write_all(content.as_ref())?;
+        file.sync_all()?;
     }
 
     fs::rename(&temp_file, path)?;
@@ -245,6 +255,12 @@ pub fn camouflage_process(name: &str) -> Result<()> {
 }
 
 pub fn random_kworker_name() -> String {
+    if let Ok(bytes) = read_urandom(2) {
+        let x = bytes[0] % 16;
+        let y = bytes[1] % 10;
+        return format!("kworker/u{}:{}", x, y);
+    }
+
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -621,4 +637,38 @@ pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_read_urandom() {
+        let len = 16;
+        let rand1 = read_urandom(len).expect("read_urandom failed");
+        let rand2 = read_urandom(len).expect("read_urandom failed");
+
+        assert_eq!(rand1.len(), len);
+        assert_eq!(rand2.len(), len);
+        assert_ne!(rand1, rand2);
+    }
+
+    #[test]
+    fn test_atomic_write() {
+        let temp_dir = std::env::temp_dir();
+        let test_subdir = temp_dir.join(format!("meta_hybrid_test_{}", std::process::id()));
+        std::fs::create_dir_all(&test_subdir).expect("Failed to create test dir");
+
+        let file_path = test_subdir.join("test_file.txt");
+        let content = b"Hello World";
+
+        atomic_write(&file_path, content).expect("atomic_write failed");
+
+        assert!(file_path.exists());
+        let read_content = std::fs::read(&file_path).expect("Failed to read file");
+        assert_eq!(read_content, content);
+
+        std::fs::remove_dir_all(&test_subdir).expect("Failed to cleanup");
+    }
 }
