@@ -21,7 +21,7 @@ procfs = "0.17"
 mimalloc = { version = "0.1.48", features = ["no_thp", "override"] }
 rayon = "1.10"
 walkdir = "2.5.0"
-nix = { version = "0.30.1", features = ["fs", "ioctl", "mount"] }
+nix = { version = "0.31.1", features = ["fs", "ioctl", "mount"] }
 regex-lite = "0.1.8"
 ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.1.0" }
 cfg_aliases = "0.2.1"
