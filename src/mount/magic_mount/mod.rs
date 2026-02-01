@@ -319,11 +319,6 @@ where
         mount(mount_source, &tmp_dir, "tmpfs", MountFlags::empty(), None).context("mount tmp")?;
         mount_change(&tmp_dir, MountPropagationFlags::PRIVATE).context("make tmp private")?;
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        if umount {
-            let _ = send_umountable(&tmp_dir);
-        }
-
         let ret = MagicMount::new(
             &root,
             Path::new("/"),
