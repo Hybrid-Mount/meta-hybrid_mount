@@ -1,5 +1,4 @@
-// Copyright 2025 Meta-Hybrid Mount Authors
-// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright 2026 https://github.com/KernelSU-Modules-Repo/meta-overlayfs and https://github.com/bmax121/APatch
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs;

@@ -1,3 +1,5 @@
+// Copyright 2026 https://github.com/Tools-cx-app/meta-magic_mount
+
 mod utils;
 
 use std::{

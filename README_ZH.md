@@ -79,6 +79,14 @@
     cargo run -p xtask -- build --release --skip-webui
     ```
 
+
+### 致谢
+
+*  [5ec1cff/KernelSU](https://github.com/5ec1cff/KernelSU/blob/52f1f575ce2bd0ca46ebf644fd00a838af9f344e/userspace/ksud/src/magic_mount.rs)：原始实现
+*  [Tools-cx-app/meta-magic_mount](https://github.com/Tools-cx-app/meta-magic_mount)：magic mount 部分
+* [KernelSU-Modules-Repo/meta-overlayfs](https://github.com/KernelSU-Modules-Repo/meta-overlayfs) overlayfs 参考
+* [bmax121/APatch](https://github.com/bmax121/APatch/blob/8e4b71ada83e06c02cf03b23debe9bf7c9dc1e9e/apd/src/mount.rs) overlayfs 参考
+
 ---
 
 ## 协议

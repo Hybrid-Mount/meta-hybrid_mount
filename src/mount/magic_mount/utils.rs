@@ -1,5 +1,4 @@
-// Copyright 2025 Meta-Hybrid Mount Authors
-// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright 2026 https://github.com/Tools-cx-app/meta-magic_mount
 
 use std::{
     collections::HashSet,

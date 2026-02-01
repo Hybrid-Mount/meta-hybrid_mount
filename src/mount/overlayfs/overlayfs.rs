@@ -1,3 +1,5 @@
+// Copyright 2026 https://github.com/KernelSU-Modules-Repo/meta-overlayfs
+
 use std::{
     ffi::CString,
     os::fd::AsFd,
