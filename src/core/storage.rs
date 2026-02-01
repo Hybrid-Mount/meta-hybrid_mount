@@ -16,7 +16,7 @@ use crate::{
     core::state::RuntimeState,
     defs,
     mount::overlayfs::utils as overlay_utils,
-    sys::mount::is_mounted,
+    sys::{mount::is_mounted, nuke},
     utils::{self, ensure_dir_exists, lsetfilecon},
 };
 
@@ -57,6 +57,8 @@ impl StorageHandle {
 
             mount_erofs_image(image_path, final_target)
                 .context("Failed to mount finalized EROFS image")?;
+
+            nuke::nuke_path(image_path);
 
             if let Err(e) = mount_change(final_target, MountPropagationFlags::PRIVATE) {
                 log::warn!("Failed to make EROFS storage private: {}", e);
@@ -273,6 +275,8 @@ fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<
             bail!("Failed to repair modules.img");
         }
     }
+
+    nuke::nuke_path(img_path);
 
     for dir_entry in WalkDir::new(target).parallelism(jwalk::Parallelism::Serial) {
         if let Some(path) = dir_entry.ok().map(|dir_entry| dir_entry.path()) {
