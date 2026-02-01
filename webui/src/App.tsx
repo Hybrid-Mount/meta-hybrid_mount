@@ -12,7 +12,6 @@ import StatusTab from "./routes/StatusTab.tsx";
 import ConfigTab from "./routes/ConfigTab.tsx";
 import ModulesTab from "./routes/ModulesTab.tsx";
 import InfoTab from "./routes/InfoTab.tsx";
-import GranaryTab from "./routes/GranaryTab.tsx";
 
 export default function App() {
   const [activeTab, setActiveTab] = createSignal("status");
@@ -27,7 +26,7 @@ export default function App() {
   let touchStartY = 0;
 
   const visibleTabs = createMemo(() => {
-    return ["status", "config", "modules", "granary", "info"];
+    return ["status", "config", "modules", "info"];
   });
 
   const baseTranslateX = createMemo(() => {
@@ -155,14 +154,6 @@ export default function App() {
             >
               <div class="page-scroller">
                 <ModulesTab />
-              </div>
-            </div>
-            <div
-              class="swipe-page"
-              style={{ width: `${100 / visibleTabs().length}%` }}
-            >
-              <div class="page-scroller">
-                <GranaryTab />
               </div>
             </div>
             <div

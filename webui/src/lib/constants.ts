@@ -14,10 +14,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   partitions: [],
   disable_umount: false,
   allow_umount_coexistence: false,
-  backup: {
-    max_backups: 20,
-    retention_days: 0,
-  },
   hybrid_mnt_dir: "/debug_ramdisk",
   overlay_mode: "tmpfs",
 };

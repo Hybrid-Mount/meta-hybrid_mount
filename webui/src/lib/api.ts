@@ -14,7 +14,6 @@ import type {
   DeviceInfo,
   ConflictEntry,
   DiagnosticIssue,
-  Silo,
   ModuleRules,
 } from "./types";
 
@@ -83,10 +82,6 @@ interface AppAPI {
   getConflicts: () => Promise<ConflictEntry[]>;
   getDiagnostics: () => Promise<DiagnosticIssue[]>;
   reboot: () => Promise<void>;
-  getGranaryList: () => Promise<Silo[]>;
-  createSilo: (reason: string) => Promise<void>;
-  deleteSilo: (siloId: string) => Promise<void>;
-  restoreSilo: (siloId: string) => Promise<void>;
   readLogs: () => Promise<string>;
 }
 
@@ -314,36 +309,6 @@ const RealAPI: AppAPI = {
   reboot: async (): Promise<void> => {
     if (!ksuExec) return;
     await ksuExec("reboot");
-  },
-  getGranaryList: async (): Promise<Silo[]> => {
-    if (!ksuExec) return [];
-    try {
-      const { errno, stdout } = await ksuExec(
-        `${PATHS.BINARY} system-action --action granary-list`,
-      );
-      if (errno === 0 && stdout) return JSON.parse(stdout);
-    } catch {
-      // ignore
-    }
-    return [];
-  },
-  createSilo: async (reason: string): Promise<void> => {
-    if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} system-action --action granary-create --value "${reason}"`;
-    const { errno, stderr } = await ksuExec(cmd);
-    if (errno !== 0) throw new Error(stderr);
-  },
-  deleteSilo: async (siloId: string): Promise<void> => {
-    if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} system-action --action granary-delete --value "${siloId}"`;
-    const { errno, stderr } = await ksuExec(cmd);
-    if (errno !== 0) throw new Error(stderr);
-  },
-  restoreSilo: async (siloId: string): Promise<void> => {
-    if (!ksuExec) return;
-    const cmd = `${PATHS.BINARY} system-action --action granary-restore --value "${siloId}"`;
-    const { errno, stderr } = await ksuExec(cmd);
-    if (errno !== 0) throw new Error(stderr);
   },
 };
 

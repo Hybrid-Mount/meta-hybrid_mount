@@ -3,11 +3,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-export interface BackupConfig {
-  max_backups: number;
-  retention_days: number;
-}
-
 export interface ModuleRules {
   default_mode: MountMode;
   paths: Record<string, string>;
@@ -25,7 +20,6 @@ export interface AppConfig {
   disable_umount: boolean;
   allow_umount_coexistence: boolean;
   logfile?: string;
-  backup: BackupConfig;
 }
 
 export type MountMode = "overlay" | "magic" | "ignore";
@@ -90,16 +84,6 @@ export interface ConflictEntry {
   partition: string;
   relative_path: string;
   contending_modules: string[];
-}
-
-export interface Silo {
-  id: string;
-  timestamp: number;
-  label: string;
-  reason: string;
-  config_snapshot: AppConfig;
-  raw_config?: string;
-  raw_state?: string;
 }
 
 export interface DiagnosticIssue {
