@@ -3,3 +3,4 @@
 **/.DS_Store
 /.vscode
 webui/src/lib/constants_gen.js
+**.bak
