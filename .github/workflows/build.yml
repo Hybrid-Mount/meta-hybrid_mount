@@ -4,25 +4,30 @@ on:
   push:
     branches:
       - 'dev'
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - 'notify'
-      - 'tools/notify/**'
+    paths:
+      - 'src/**'
+      - 'Cargo.*'
+      - 'module/**'
+      - 'webui/**'
+      - 'xtask/**'
+      - 'build.rs'
+      - '.github/workflows/build.yml'
   pull_request:
     branches:
-      dev
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
-      - 'notify'
-      - 'tools/notify/**'
+      - 'dev'
+    paths:
+      - 'src/**'
+      - 'Cargo.*'
+      - 'module/**'
+      - 'webui/**'
+      - 'xtask/**'
+      - 'build.rs'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
 
     steps:
       - name: Checkout Code
@@ -30,9 +35,6 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
