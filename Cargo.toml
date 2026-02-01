@@ -23,7 +23,7 @@ rayon = "1.11"
 walkdir = "2.5.0"
 nix = { version = "0.31.1", features = ["fs", "ioctl", "mount"] }
 regex-lite = "0.1.8"
-ksu = { git = "https://github.com/Hybrid-Mount/ksu.git", version = "0.1.0" }
+ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.1.0" }
 cfg_aliases = "0.2.1"
 jwalk = "0.8.1"
 log = "0.4.29"
