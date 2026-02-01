@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::defs;
+use crate::{defs, utils::fs::xattr};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RuntimeState {
@@ -27,6 +27,8 @@ pub struct RuntimeState {
     pub storage_percent: u8,
     #[serde(default)]
     pub zygisksu_enforce: bool,
+    #[serde(default)]
+    pub tmpfs_xattr_supported: bool,
 }
 
 impl RuntimeState {
@@ -49,6 +51,7 @@ impl RuntimeState {
         let pid = std::process::id();
 
         let zygisksu_enforce = crate::utils::check_zygisksu_enforce_status();
+        let tmpfs_xattr_supported = xattr::is_overlay_xattr_supported().unwrap_or(false);
 
         Self {
             timestamp,
@@ -62,6 +65,7 @@ impl RuntimeState {
             storage_used: storage_info.1,
             storage_percent: storage_info.2,
             zygisksu_enforce,
+            tmpfs_xattr_supported,
         }
     }
 

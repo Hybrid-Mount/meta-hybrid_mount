@@ -124,13 +124,21 @@ export default function ConfigTab() {
   const availableModes = createMemo(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const storageModes = (store.storage as any)?.supported_modes;
+    let modes: OverlayMode[];
+
     if (storageModes && Array.isArray(storageModes)) {
-      return storageModes as OverlayMode[];
+      modes = storageModes as OverlayMode[];
+    } else {
+      modes =
+        store.systemInfo?.supported_overlay_modes ??
+        (["tmpfs", "ext4", "erofs"] as OverlayMode[]);
     }
-    return (
-      store.systemInfo?.supported_overlay_modes ??
-      (["tmpfs", "ext4", "erofs"] as OverlayMode[])
-    );
+
+    if (store.systemInfo?.tmpfs_xattr_supported === false) {
+      modes = modes.filter((m) => m !== "tmpfs");
+    }
+
+    return modes;
   });
 
   const MODE_DESCS: Record<OverlayMode, string> = {

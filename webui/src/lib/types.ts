@@ -53,6 +53,7 @@ export interface SystemInfo {
   activeMounts: string[];
   zygisksuEnforce?: string;
   supported_overlay_modes?: OverlayMode[];
+  tmpfs_xattr_supported?: boolean;
 }
 
 export interface DeviceInfo {
