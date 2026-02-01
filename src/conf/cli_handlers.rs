@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use serde::Serialize;
 
 use crate::{
@@ -8,12 +8,7 @@ use crate::{
         cli::{Cli, PoaceaeAction},
         config::{self, Config},
     },
-    core::{
-        inventory,
-        inventory::model as modules,
-        ops::{backup as granary, planner},
-        storage,
-    },
+    core::{inventory, inventory::model as modules, ops::planner, storage},
     defs,
     sys::poaceae,
     utils,
@@ -73,13 +68,7 @@ pub fn handle_show_config(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-pub fn handle_save_config(cli: &Cli, payload: &str) -> Result<()> {
-    if let Ok(old_config) = load_config(cli)
-        && let Err(e) = granary::create_snapshot(&old_config, "Auto-Backup", "Pre-WebUI Save")
-    {
-        log::warn!("Failed to create Backup: {}", e);
-    }
-
+pub fn handle_save_config(payload: &str) -> Result<()> {
     let json_bytes = (0..payload.len())
         .step_by(2)
         .map(|i| u8::from_str_radix(&payload[i..i + 2], 16))
@@ -179,52 +168,6 @@ pub fn handle_diagnostics(cli: &Cli) -> Result<()> {
         serde_json::to_string(&json_issues).context("Failed to serialize diagnostics report")?;
 
     println!("{}", json);
-
-    Ok(())
-}
-
-pub fn handle_system_action(cli: &Cli, action: &str, value: Option<&str>) -> Result<()> {
-    let config = load_config(cli)?;
-
-    match action {
-        "backup-list" => {
-            let snapshots = granary::list_snapshots()?;
-
-            let json = serde_json::to_string(&snapshots)?;
-
-            println!("{}", json);
-        }
-        "backup-create" => {
-            let reason = value.unwrap_or("Manual Backup");
-
-            granary::create_snapshot(&config, "Manual Snapshot", reason)?;
-
-            println!("Snapshot created.");
-        }
-        "backup-delete" => {
-            if let Some(id) = value {
-                granary::delete_snapshot(id)?;
-
-                println!("Snapshot {} deleted.", id);
-            } else {
-                bail!("Missing Snapshot ID");
-            }
-        }
-        "backup-restore" => {
-            if let Some(id) = value {
-                granary::restore_snapshot(id)?;
-
-                println!("Snapshot {} restored. Please reboot.", id);
-            } else {
-                bail!("Missing Snapshot ID");
-            }
-        }
-        "granary-list" => handle_system_action(cli, "backup-list", value)?,
-        "granary-create" => handle_system_action(cli, "backup-create", value)?,
-        "granary-delete" => handle_system_action(cli, "backup-delete", value)?,
-        "granary-restore" => handle_system_action(cli, "backup-restore", value)?,
-        _ => bail!("Unknown action: {}", action),
-    }
 
     Ok(())
 }

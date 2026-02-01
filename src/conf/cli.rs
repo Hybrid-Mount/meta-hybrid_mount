@@ -47,13 +47,6 @@ pub enum Commands {
     Modules,
     Conflicts,
     Diagnostics,
-    #[command(name = "system-action")]
-    SystemAction {
-        #[arg(long)]
-        action: String,
-        #[arg(long)]
-        value: Option<String>,
-    },
     Poaceae {
         #[arg(short, long, default_value = defs::POACEAE_MOUNT_POINT)]
         target: String,

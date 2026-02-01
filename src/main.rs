@@ -5,7 +5,7 @@ mod mount;
 mod sys;
 mod utils;
 
-use core::{MountController, ops::backup as granary};
+use core::MountController;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -76,7 +76,7 @@ fn main() -> Result<()> {
         match command {
             Commands::GenConfig { output } => cli_handlers::handle_gen_config(output)?,
             Commands::ShowConfig => cli_handlers::handle_show_config(&cli)?,
-            Commands::SaveConfig { payload } => cli_handlers::handle_save_config(&cli, payload)?,
+            Commands::SaveConfig { payload } => cli_handlers::handle_save_config(payload)?,
             Commands::SaveModuleRules { module, payload } => {
                 cli_handlers::handle_save_module_rules(module, payload)?
             }
@@ -84,9 +84,6 @@ fn main() -> Result<()> {
             Commands::Modules => cli_handlers::handle_modules(&cli)?,
             Commands::Conflicts => cli_handlers::handle_conflicts(&cli)?,
             Commands::Diagnostics => cli_handlers::handle_diagnostics(&cli)?,
-            Commands::SystemAction { action, value } => {
-                cli_handlers::handle_system_action(&cli, action, value.as_deref())?
-            }
             Commands::Poaceae { target, action } => cli_handlers::handle_poaceae(target, action)?,
         }
 
@@ -94,19 +91,6 @@ fn main() -> Result<()> {
     }
 
     let mut config = load_final_config(&cli)?;
-
-    if let Ok(granary::RecoveryStatus::Restored) = granary::ensure_recovery_state() {
-        log::warn!(">> Config restored by Recovery Protocol. Reloading...");
-        match load_final_config(&cli) {
-            Ok(new_config) => {
-                config = new_config;
-                log::info!(">> Config reloaded successfully.");
-            }
-            Err(e) => {
-                log::error!(">> Failed to reload config after restore: {}", e);
-            }
-        }
-    }
 
     if utils::check_zygisksu_enforce_status() {
         if config.allow_umount_coexistence {
@@ -150,9 +134,9 @@ fn main() -> Result<()> {
     let mnt_base = PathBuf::from(&config.hybrid_mnt_dir);
     let img_path = PathBuf::from(defs::MODULES_IMG_FILE);
 
-    if let Err(e) = granary::create_snapshot(&config, "Boot Backup", "Automatic Pre-Mount") {
+    /*if let Err(e) = granary::create_snapshot(&config, "Boot Backup", "Automatic Pre-Mount") {
         log::warn!("Backup: Failed to create boot snapshot: {}", e);
-    }
+    }*/
 
     MountController::new(config)
         .init_storage(&mnt_base, &img_path)

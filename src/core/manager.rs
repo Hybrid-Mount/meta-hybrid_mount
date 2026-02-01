@@ -7,7 +7,7 @@ use crate::{
     core::{
         inventory,
         inventory::model as modules,
-        ops::{backup as granary, executor, planner, sync},
+        ops::{executor, planner, sync},
         state, storage,
         storage::{StorageHandle, get_usage},
     },
@@ -191,8 +191,6 @@ impl MountController<Executed> {
         if let Err(e) = state.save() {
             log::error!("Failed to save runtime state: {:#}", e);
         }
-
-        granary::reset_recovery_state();
 
         log::info!(">> System operational. Mount sequence complete.");
 
