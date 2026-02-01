@@ -94,14 +94,6 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
         }
     }
 
-    if let Err(e) = umount_dir(&config.hybrid_mnt_dir) {
-        log::warn!(
-            "Failed to schedule unmount for {}: {}",
-            config.hybrid_mnt_dir,
-            e
-        );
-    }
-
     final_overlay_ids.retain(|id| !final_magic_ids.contains(id));
 
     let mut magic_queue: Vec<String> = final_magic_ids.iter().cloned().collect();
@@ -146,11 +138,22 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
         }
     }
 
+    if let Err(e) = umount_dir(&config.hybrid_mnt_dir) {
+        log::warn!(
+            "Failed to schedule unmount for {}: {}",
+            config.hybrid_mnt_dir,
+            e
+        );
+    }
+
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if !config.disable_umount
-        && let Err(e) = umount_mgr::commit()
     {
-        log::warn!("Final try_umount commit failed: {}", e);
+        if !config.disable_umount {
+            let _ = umount_mgr::send_umountable(&config.hybrid_mnt_dir);
+            if let Err(e) = umount_mgr::commit() {
+                log::warn!("Final try_umount commit failed: {}", e);
+            }
+        }
     }
 
     let mut result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
