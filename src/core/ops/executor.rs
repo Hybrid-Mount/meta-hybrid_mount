@@ -9,7 +9,11 @@ use crate::{
     conf::config,
     core::ops::planner::MountPlan,
     defs,
-    mount::{magic_mount, overlayfs, umount_mgr},
+    mount::{
+        magic_mount,
+        overlayfs::{self, utils::umount_dir},
+        umount_mgr,
+    },
     utils,
 };
 
@@ -70,7 +74,11 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
                 if !config.disable_umount
                     && let Err(e) = umount_mgr::send_umountable(&op.target)
                 {
-                    log::warn!("Failed to schedule unmount for {}: {}", op.target, e);
+                    log::warn!(
+                        "Failed to schedule unmount for {}(kernel): {}",
+                        op.target,
+                        e
+                    );
                 }
             }
             Err(e) => {
@@ -84,6 +92,14 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
                 }
             }
         }
+    }
+
+    if let Err(e) = umount_dir(&config.hybrid_mnt_dir) {
+        log::warn!(
+            "Failed to schedule unmount for {}: {}",
+            config.hybrid_mnt_dir,
+            e
+        );
     }
 
     final_overlay_ids.retain(|id| !final_magic_ids.contains(id));
