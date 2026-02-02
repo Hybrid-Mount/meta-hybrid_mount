@@ -1,16 +1,11 @@
 use anyhow::Result;
 
-pub fn init_logging(verbose: bool) -> Result<()> {
-    let level = if verbose {
-        log::LevelFilter::Debug
-    } else {
-        log::LevelFilter::Info
-    };
+pub fn init_logging() -> Result<()> {
     #[cfg(target_os = "android")]
     {
         android_logger::init_once(
             android_logger::Config::default()
-                .with_max_level(level)
+                .with_max_level(log::LevelFilter::Debug)
                 .with_tag("mhm"),
         );
     }
@@ -30,7 +25,7 @@ pub fn init_logging(verbose: bool) -> Result<()> {
                 record.args()
             )
         });
-        builder.filter_level(level).init();
+        builder.filter_level(log::LevelFilter::Debug).init();
     }
     Ok(())
 }

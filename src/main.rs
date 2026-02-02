@@ -51,7 +51,6 @@ fn load_final_config(cli: &Cli) -> Result<Config> {
     config.merge_with_cli(
         cli.moduledir.clone(),
         cli.mountsource.clone(),
-        cli.verbose,
         cli.partitions.clone(),
     );
     Ok(config)
@@ -77,6 +76,7 @@ fn main() -> Result<()> {
             Commands::GenConfig { output } => cli_handlers::handle_gen_config(output)?,
             Commands::ShowConfig => cli_handlers::handle_show_config(&cli)?,
             Commands::SaveConfig { payload } => cli_handlers::handle_save_config(payload)?,
+
             Commands::SaveModuleRules { module, payload } => {
                 cli_handlers::handle_save_module_rules(module, payload)?
             }
@@ -94,22 +94,17 @@ fn main() -> Result<()> {
 
     if utils::check_zygisksu_enforce_status() {
         if config.allow_umount_coexistence {
-            if config.verbose {
-                println!(
-                    ">> ZygiskSU Enforce!=0 detected, but Umount Coexistence enabled. Respecting \
+            log::debug!(
+                ">> ZygiskSU Enforce!=0 detected, but Umount Coexistence enabled. Respecting \
                         user config."
-                );
-            }
+            );
         } else {
-            if config.verbose {
-                println!(">> ZygiskSU Enforce!=0 detected. Forcing DISABLE_UMOUNT to TRUE.");
-            }
-
+            log::debug!(">> ZygiskSU Enforce!=0 detected. Forcing DISABLE_UMOUNT to TRUE.");
             config.disable_umount = true;
         }
     }
 
-    utils::init_logging(config.verbose).context("Failed to initialize logging")?;
+    utils::init_logging().context("Failed to initialize logging")?;
 
     let camouflage_name = utils::random_kworker_name();
 

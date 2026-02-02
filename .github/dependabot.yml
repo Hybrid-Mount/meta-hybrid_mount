@@ -9,6 +9,15 @@ updates:
         patterns:
           - "*"
 
+  - package-ecosystem: "cargo"
+    directory: "/tools/notify"
+    schedule:
+      interval: "weekly"
+    groups:
+      crates:
+        patterns:
+          - "*"
+
   - package-ecosystem: "npm"
     directory: "/webui"
     schedule:

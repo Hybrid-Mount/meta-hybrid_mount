@@ -83,7 +83,6 @@ pub struct Config {
     pub moduledir: PathBuf,
     #[serde(default = "default_mountsource")]
     pub mountsource: String,
-    pub verbose: bool,
     #[serde(default, deserialize_with = "deserialize_partitions_flexible")]
     pub partitions: Vec<String>,
     #[serde(default)]
@@ -140,7 +139,6 @@ impl Default for Config {
         Self {
             moduledir: default_moduledir(),
             mountsource: default_mountsource(),
-            verbose: false,
             partitions: Vec::new(),
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
@@ -182,7 +180,6 @@ impl Config {
         &mut self,
         moduledir: Option<PathBuf>,
         mountsource: Option<String>,
-        verbose: bool,
         partitions: Vec<String>,
     ) {
         if let Some(dir) = moduledir {
@@ -191,10 +188,6 @@ impl Config {
 
         if let Some(source) = mountsource {
             self.mountsource = source;
-        }
-
-        if verbose {
-            self.verbose = true;
         }
 
         if !partitions.is_empty() {
