@@ -155,7 +155,6 @@ pub fn handle_diagnostics(cli: &Cli) -> Result<()> {
         .into_iter()
         .map(|i| DiagnosticIssueJson {
             level: match i.level {
-                planner::DiagnosticLevel::Info => "Info".to_string(),
                 planner::DiagnosticLevel::Warning => "Warning".to_string(),
                 planner::DiagnosticLevel::Critical => "Critical".to_string(),
             },

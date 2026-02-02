@@ -33,11 +33,11 @@ fn copy_extended_attributes(src: &Path, dst: &Path) -> Result<()> {
             let name_bytes = xattr_name.as_bytes();
             let name_str = String::from_utf8_lossy(name_bytes);
 
-            #[allow(clippy::collapsible_if)]
-            if name_str.starts_with("trusted.overlay.") && name_str != OVERLAY_OPAQUE_XATTR {
-                if let Ok(val) = lgetxattr(src, &xattr_name) {
-                    let _ = lsetxattr(dst, &xattr_name, &val, XattrFlags::empty());
-                }
+            if name_str.starts_with("trusted.overlay.")
+                && name_str != OVERLAY_OPAQUE_XATTR
+                && let Ok(val) = lgetxattr(src, &xattr_name)
+            {
+                let _ = lsetxattr(dst, &xattr_name, &val, XattrFlags::empty());
             }
         }
     }

@@ -2,14 +2,11 @@ use std::{
     collections::HashSet,
     fs::{self},
     io::{BufRead, BufReader},
-    os::unix::fs::{FileTypeExt, MetadataExt},
-    path::{Path, PathBuf},
+    path::Path,
     sync::OnceLock,
 };
 
 use anyhow::Result;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use extattr::lgetxattr;
 use regex_lite::Regex;
 use serde::Serialize;
 
@@ -89,59 +86,6 @@ impl ModuleInfo {
             mode: mode_str.to_string(),
             rules: m.rules,
         }
-    }
-}
-
-#[allow(dead_code)]
-pub struct ModuleFile {
-    pub relative_path: PathBuf,
-    pub real_path: PathBuf,
-    pub file_type: fs::FileType,
-    pub is_whiteout: bool,
-    pub is_replace: bool,
-    pub is_replace_file: bool,
-}
-
-#[allow(dead_code)]
-impl ModuleFile {
-    pub fn new(root: &Path, relative: &Path) -> Result<Self> {
-        let real_path = root.join(relative);
-
-        let metadata = fs::symlink_metadata(&real_path)?;
-
-        let file_type = metadata.file_type();
-
-        let is_whiteout = file_type.is_char_device() && metadata.rdev() == 0;
-
-        let check_replace = || -> bool {
-            if real_path.join(defs::REPLACE_DIR_FILE_NAME).exists() {
-                return true;
-            }
-
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if let Ok(val) = lgetxattr(&real_path, defs::REPLACE_DIR_XATTR) {
-                return String::from_utf8_lossy(&val) == "y";
-            }
-
-            false
-        };
-
-        let is_replace = file_type.is_dir() && check_replace();
-
-        let is_replace_file = real_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(|s| s == defs::REPLACE_DIR_FILE_NAME)
-            .unwrap_or(false);
-
-        Ok(Self {
-            relative_path: relative.to_path_buf(),
-            real_path,
-            file_type,
-            is_whiteout,
-            is_replace,
-            is_replace_file,
-        })
     }
 }
 

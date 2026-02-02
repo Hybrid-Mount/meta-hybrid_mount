@@ -38,8 +38,6 @@ pub struct ConflictEntry {
 
 #[derive(Debug, Clone, Serialize)]
 pub enum DiagnosticLevel {
-    #[allow(dead_code)]
-    Info,
     Warning,
     Critical,
 }
@@ -57,7 +55,6 @@ pub struct AnalysisReport {
     pub diagnostics: Vec<DiagnosticIssue>,
 }
 
-#[allow(clippy::collapsible_if)]
 impl MountPlan {
     pub fn analyze(&self) -> AnalysisReport {
         let results: Vec<(Vec<ConflictEntry>, Vec<DiagnosticIssue>)> = self
@@ -85,20 +82,20 @@ impl MountPlan {
                         utils::extract_module_id(layer_path).unwrap_or_else(|| "UNKNOWN".into());
 
                     for entry in WalkDir::new(layer_path).min_depth(1).into_iter().flatten() {
-                        if entry.path_is_symlink() {
-                            if let Ok(target) = std::fs::read_link(entry.path()) {
-                                if target.is_absolute() && !target.exists() {
-                                    local_diagnostics.push(DiagnosticIssue {
-                                        level: DiagnosticLevel::Warning,
-                                        context: module_id.clone(),
-                                        message: format!(
-                                            "Dead absolute symlink: {} -> {}",
-                                            entry.path().display(),
-                                            target.display()
-                                        ),
-                                    });
-                                }
-                            }
+                        if entry.path_is_symlink()
+                            && let Ok(target) = std::fs::read_link(entry.path())
+                            && target.is_absolute()
+                            && !target.exists()
+                        {
+                            local_diagnostics.push(DiagnosticIssue {
+                                level: DiagnosticLevel::Warning,
+                                context: module_id.clone(),
+                                message: format!(
+                                    "Dead absolute symlink: {} -> {}",
+                                    entry.path().display(),
+                                    target.display()
+                                ),
+                            });
                         }
 
                         if !entry.file_type().is_file() {

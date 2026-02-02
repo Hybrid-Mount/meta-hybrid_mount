@@ -13,6 +13,12 @@ use crate::{
     defs,
 };
 
+#[derive(Deserialize)]
+struct PartialRules {
+    default_mode: Option<MountMode>,
+    paths: Option<HashMap<String, MountMode>>,
+}
+
 fn load_module_rules(module_dir: &Path, module_id: &str, cfg: &config::Config) -> ModuleRules {
     let mut rules = ModuleRules {
         default_mode: match cfg.default_mode {
@@ -21,12 +27,6 @@ fn load_module_rules(module_dir: &Path, module_id: &str, cfg: &config::Config) -
         },
         ..Default::default()
     };
-
-    #[derive(Deserialize)]
-    struct PartialRules {
-        default_mode: Option<MountMode>,
-        paths: Option<HashMap<String, MountMode>>,
-    }
 
     let internal_config = module_dir.join("hybrid_rules.json");
 

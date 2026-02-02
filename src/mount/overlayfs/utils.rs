@@ -1,22 +1,18 @@
 // Copyright 2026 https://github.com/KernelSU-Modules-Repo/meta-overlayfs and https://github.com/bmax121/APatch
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::{os::unix::fs::PermissionsExt, path::Path, process::Command};
+use std::{fs, os::unix::fs::PermissionsExt, path::Path, process::Command};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use anyhow::{Context, Result, anyhow};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{UnmountFlags, unmount};
 
-#[allow(dead_code)]
 pub struct AutoMountExt4 {
     target: String,
     auto_umount: bool,
 }
 
-#[allow(dead_code)]
 impl AutoMountExt4 {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn try_new<P>(source: P, target: P, auto_umount: bool) -> Result<Self>
@@ -50,7 +46,7 @@ impl AutoMountExt4 {
     where
         P: AsRef<Path>,
     {
-        unimplemented!()
+        unimplemented!();
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -72,13 +68,6 @@ impl Drop for AutoMountExt4 {
             let _ = self.umount();
         }
     }
-}
-
-#[allow(dead_code)]
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn mount_image(src: &str, target: &str, _autodrop: bool) -> Result<()> {
-    mount_ext4(src, target)?;
-    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

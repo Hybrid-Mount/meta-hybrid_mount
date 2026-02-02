@@ -26,14 +26,11 @@ pub struct ModulesReady {
 
 pub struct Planned {
     pub handle: StorageHandle,
-    pub modules: Vec<inventory::Module>,
     pub plan: planner::MountPlan,
 }
 
 pub struct Executed {
     pub handle: StorageHandle,
-    #[allow(dead_code)]
-    pub modules: Vec<inventory::Module>,
     pub plan: planner::MountPlan,
     pub result: executor::ExecutionResult,
 }
@@ -133,7 +130,6 @@ impl MountController<ModulesReady> {
             config: self.config,
             state: Planned {
                 handle: self.state.handle,
-                modules: self.state.modules,
                 plan,
             },
         })
@@ -150,7 +146,6 @@ impl MountController<Planned> {
             config: self.config,
             state: Executed {
                 handle: self.state.handle,
-                modules: self.state.modules,
                 plan: self.state.plan,
                 result,
             },
