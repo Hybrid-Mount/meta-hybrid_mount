@@ -1,12 +1,9 @@
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::process::Command;
+use std::{os::unix::ffi::OsStrExt, process::Command};
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use anyhow::{Context, Result};
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use clap::Args;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use extattr::{Flags as XattrFlags, lgetxattr, llistxattr, lsetxattr};
 
