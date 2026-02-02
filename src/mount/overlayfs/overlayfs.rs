@@ -1,4 +1,6 @@
 // Copyright 2026 https://github.com/KernelSU-Modules-Repo/meta-overlayfs
+// Copyright 2026 Hybrid Mount Developers
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
     ffi::CString,

@@ -1,4 +1,6 @@
 // Copyright 2026 https://github.com/Tools-cx-app/meta-magic_mount
+// Copyright 2026 Hybrid Mount Developers
+// SPDX-License-Identifier: GPL-3.0-or-later
 
 mod utils;
 
