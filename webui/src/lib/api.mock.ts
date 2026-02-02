@@ -14,27 +14,9 @@ import type {
   ModuleRules,
   ConflictEntry,
   DiagnosticIssue,
-  Silo,
 } from "./types";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-let mockSilos: Silo[] = [
-  {
-    id: "silo_1715000000",
-    timestamp: 1715000000,
-    label: "Boot Backup",
-    reason: "Automatic Pre-Mount",
-    config_snapshot: { ...DEFAULT_CONFIG },
-  },
-  {
-    id: "silo_1715003600",
-    timestamp: 1715003600,
-    label: "Manual Save",
-    reason: "User Action",
-    config_snapshot: { ...DEFAULT_CONFIG },
-  },
-];
 
 export const MockAPI = {
   async loadConfig(): Promise<AppConfig> {
@@ -130,7 +112,6 @@ export const MockAPI = {
       size: "1024 MB",
       percent: "12.5%",
       type: "erofs",
-      hymofs_available: true,
     };
   },
   async getSystemInfo(): Promise<SystemInfo> {
@@ -141,6 +122,7 @@ export const MockAPI = {
       mountBase: "/data/adb/meta-hybrid/mnt",
       activeMounts: ["system", "product"],
       zygisksuEnforce: "1",
+      tmpfs_xattr_supported: false,
     };
   },
   async fetchSystemColor(): Promise<string | null> {
@@ -161,45 +143,5 @@ export const MockAPI = {
         message: "Dead absolute symlink: system/bin/test -> /dev/null",
       },
     ];
-  },
-
-  async getGranaryList(): Promise<Silo[]> {
-    await delay(400);
-    return JSON.parse(JSON.stringify(mockSilos));
-  },
-  async createSilo(reason: string): Promise<void> {
-    await delay(500);
-    const newSilo: Silo = {
-      id: `silo_${Math.floor(Date.now() / 1000)}`,
-      timestamp: Math.floor(Date.now() / 1000),
-      label: "Manual Snapshot",
-      reason: reason,
-      config_snapshot: { ...DEFAULT_CONFIG },
-    };
-    mockSilos.unshift(newSilo);
-    console.log("[Mock] Created silo:", newSilo);
-  },
-  async deleteSilo(siloId: string): Promise<void> {
-    await delay(500);
-    mockSilos = mockSilos.filter((s) => s.id !== siloId);
-    console.log(`[Mock] Deleted silo: ${siloId}`);
-  },
-  async restoreSilo(siloId: string): Promise<void> {
-    await delay(500);
-    console.log(`[Mock] Restored silo: ${siloId}`);
-  },
-
-  async setWinnowingRule(path: string, moduleId: string): Promise<void> {
-    await delay(300);
-    console.log(`[Mock] Winnow rule set: ${path} -> ${moduleId}`);
-  },
-  openLink(url: string): void {
-    console.log("[Mock] Opening link:", url);
-    window.open(url, "_blank");
-  },
-  async reboot(): Promise<void> {
-    console.log("[Mock] Rebooting...");
-    await delay(1000);
-    window.location.reload();
   },
 };

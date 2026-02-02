@@ -95,9 +95,7 @@ const RealAPI: AppAPI = {
         const loaded = JSON.parse(stdout);
         return { ...DEFAULT_CONFIG, ...loaded };
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     return DEFAULT_CONFIG;
   },
   saveConfig: async (config: AppConfig): Promise<void> => {
@@ -114,16 +112,13 @@ const RealAPI: AppAPI = {
     const { errno, stderr } = await ksuExec(cmd);
     if (errno !== 0) throw new Error(`Failed to reset config: ${stderr}`);
   },
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   scanModules: async (_path?: string): Promise<Module[]> => {
     if (!ksuExec) return [];
     const cmd = `${PATHS.BINARY} modules`;
     try {
       const { errno, stdout } = await ksuExec(cmd);
       if (errno === 0 && stdout) return JSON.parse(stdout);
-    } catch {
-      // ignore
-    }
+    } catch {}
     return [];
   },
   saveModules: async (_modules: Module[]): Promise<void> => {
@@ -140,7 +135,6 @@ const RealAPI: AppAPI = {
     return "";
   },
 
-  // Reverted to standard command execution
   saveModuleRules: async (
     moduleId: string,
     rules: ModuleRules,
@@ -168,9 +162,7 @@ const RealAPI: AppAPI = {
           used: formatBytes(state.storage_used ?? 0),
         };
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     return { size: "-", used: "-", percent: "0%", type: null };
   },
   getSystemInfo: async (): Promise<SystemInfo> => {
@@ -207,9 +199,10 @@ const RealAPI: AppAPI = {
           if (state.zygisksu_enforce !== undefined) {
             info.zygisksuEnforce = state.zygisksu_enforce ? "1" : "0";
           }
-        } catch {
-          // ignore
-        }
+          if (state.tmpfs_xattr_supported !== undefined) {
+            info.tmpfs_xattr_supported = state.tmpfs_xattr_supported;
+          }
+        } catch {}
       }
       return info;
     } catch {
@@ -230,9 +223,7 @@ const RealAPI: AppAPI = {
           android = `${p2.stdout.trim()} (API ${p3.stdout.trim()})`;
         const p4 = await ksuExec("uname -r");
         if (p4.errno === 0) kernel = p4.stdout.trim();
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
     return { model, android, kernel, selinux: "Enforcing" };
   },
@@ -248,9 +239,7 @@ const RealAPI: AppAPI = {
         const match = stdout.match(/^version=(.+)$/m);
         if (match) return match[1].trim();
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     return APP_VERSION;
   },
   openLink: async (url: string): Promise<void> => {
@@ -281,9 +270,7 @@ const RealAPI: AppAPI = {
             "#" + (match[1].length === 8 ? match[1].substring(2) : match[1])
           );
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     return null;
   },
   getConflicts: async (): Promise<ConflictEntry[]> => {
@@ -291,9 +278,7 @@ const RealAPI: AppAPI = {
     try {
       const { errno, stdout } = await ksuExec(`${PATHS.BINARY} conflicts`);
       if (errno === 0 && stdout) return JSON.parse(stdout);
-    } catch {
-      // ignore
-    }
+    } catch {}
     return [];
   },
   getDiagnostics: async (): Promise<DiagnosticIssue[]> => {
@@ -301,9 +286,7 @@ const RealAPI: AppAPI = {
     try {
       const { errno, stdout } = await ksuExec(`${PATHS.BINARY} diagnostics`);
       if (errno === 0 && stdout) return JSON.parse(stdout);
-    } catch {
-      // ignore
-    }
+    } catch {}
     return [];
   },
   reboot: async (): Promise<void> => {
