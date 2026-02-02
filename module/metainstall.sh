@@ -27,6 +27,12 @@ cleanup_empty_system_dir() {
     fi
 }
 
+mark_replace() {
+  replace_target="$1"
+  mkdir -p "$replace_target"
+  setfattr -n trusted.overlay.opaque -v y "$replace_target"
+}
+
 ui_print "- Using Hybrid Mount metainstall"
 
 install_module
