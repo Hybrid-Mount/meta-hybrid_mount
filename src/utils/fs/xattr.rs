@@ -5,6 +5,8 @@ use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result};
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use clap::Args;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use extattr::{Flags as XattrFlags, lgetxattr, llistxattr, lsetxattr};
 
@@ -16,30 +18,28 @@ const CONTEXT_HAL: &str = "u:object_r:same_process_hal_file:s0";
 const CONTEXT_VENDOR_EXEC: &str = "u:object_r:vendor_file:s0";
 const CONTEXT_ROOTFS: &str = "u:object_r:rootfs:s0";
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_extended_attributes(src: &Path, dst: &Path) -> Result<()> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        if let Ok(mut ctx) = lgetfilecon(src) {
-            if ctx.contains("u:object_r:rootfs:s0") {
-                ctx = CONTEXT_SYSTEM.to_string();
-            }
-            let _ = lsetfilecon(dst, &ctx);
-        } else {
-            let _ = lsetfilecon(dst, CONTEXT_SYSTEM);
+    if let Ok(mut ctx) = lgetfilecon(src) {
+        if ctx.contains("u:object_r:rootfs:s0") {
+            ctx = CONTEXT_SYSTEM.to_string();
         }
-        if let Ok(opaque) = lgetxattr(src, OVERLAY_OPAQUE_XATTR) {
-            let _ = lsetxattr(dst, OVERLAY_OPAQUE_XATTR, &opaque, XattrFlags::empty());
-        }
-        if let Ok(xattrs) = llistxattr(src) {
-            for xattr_name in xattrs {
-                let name_bytes = xattr_name.as_bytes();
-                let name_str = String::from_utf8_lossy(name_bytes);
+        let _ = lsetfilecon(dst, &ctx);
+    } else {
+        let _ = lsetfilecon(dst, CONTEXT_SYSTEM);
+    }
+    if let Ok(opaque) = lgetxattr(src, OVERLAY_OPAQUE_XATTR) {
+        let _ = lsetxattr(dst, OVERLAY_OPAQUE_XATTR, &opaque, XattrFlags::empty());
+    }
+    if let Ok(xattrs) = llistxattr(src) {
+        for xattr_name in xattrs {
+            let name_bytes = xattr_name.as_bytes();
+            let name_str = String::from_utf8_lossy(name_bytes);
 
-                #[allow(clippy::collapsible_if)]
-                if name_str.starts_with("trusted.overlay.") && name_str != OVERLAY_OPAQUE_XATTR {
-                    if let Ok(val) = lgetxattr(src, &xattr_name) {
-                        let _ = lsetxattr(dst, &xattr_name, &val, XattrFlags::empty());
-                    }
+            #[allow(clippy::collapsible_if)]
+            if name_str.starts_with("trusted.overlay.") && name_str != OVERLAY_OPAQUE_XATTR {
+                if let Ok(val) = lgetxattr(src, &xattr_name) {
+                    let _ = lsetxattr(dst, &xattr_name, &val, XattrFlags::empty());
                 }
             }
         }
@@ -47,32 +47,49 @@ fn copy_extended_attributes(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn copy_extended_attributes(_src: &Path, _dst: &Path) {
+    unimplemented!();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn set_overlay_opaque<P: AsRef<Path>>(path: P) -> Result<()> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        lsetxattr(
-            path.as_ref(),
-            OVERLAY_OPAQUE_XATTR,
-            b"y",
-            XattrFlags::empty(),
-        )?;
+    lsetxattr(
+        path.as_ref(),
+        OVERLAY_OPAQUE_XATTR,
+        b"y",
+        XattrFlags::empty(),
+    )?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn set_overlay_opaque<P>(_path: P) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    unimplemented!();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn lsetfilecon<P: AsRef<Path>>(path: P, con: &str) -> Result<()> {
+    if let Err(e) = lsetxattr(
+        path.as_ref(),
+        SELINUX_XATTR,
+        con.as_bytes(),
+        XattrFlags::empty(),
+    ) {
+        let _ = e;
     }
     Ok(())
 }
 
-pub fn lsetfilecon<P: AsRef<Path>>(path: P, con: &str) -> Result<()> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        if let Err(e) = lsetxattr(
-            path.as_ref(),
-            SELINUX_XATTR,
-            con.as_bytes(),
-            XattrFlags::empty(),
-        ) {
-            let _ = e;
-        }
-    }
-    Ok(())
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn lsetfilecon<P>(_path: P, _con: &str) -> Result<()>
+where
+    P: AsRef<Path>,
+{
+    unimplemented!();
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -93,34 +110,35 @@ pub fn lgetfilecon<P: AsRef<Path>>(_path: P) -> Result<String> {
     unimplemented!();
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn is_overlay_xattr_supported() -> Result<bool> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let output = Command::new("zcat")
-            .arg("/proc/config.gz")
-            .output()
-            .context("Failed to read config.gz")
-            .unwrap();
-        let config = String::from_utf8_lossy(&output.stdout);
+    let output = Command::new("zcat")
+        .arg("/proc/config.gz")
+        .output()
+        .context("Failed to read config.gz")
+        .unwrap();
+    let config = String::from_utf8_lossy(&output.stdout);
 
-        for i in config.lines() {
-            if i.starts_with("#") {
-                continue;
-            }
-
-            let Some((k, v)) = i.split_once('=') else {
-                continue;
-            };
-
-            if k.trim() == "CONFIG_TMPFS_XATTR" && v.trim() == "y" {
-                return Ok(true);
-            }
+    for i in config.lines() {
+        if i.starts_with("#") {
+            continue;
         }
 
-        Ok(false)
+        let Some((k, v)) = i.split_once('=') else {
+            continue;
+        };
+
+        if k.trim() == "CONFIG_TMPFS_XATTR" && v.trim() == "y" {
+            return Ok(true);
+        }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    Ok(true)
+
+    Ok(false)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn is_overlay_xattr_supported() -> Result<bool> {
+    unimplemented!();
 }
 
 fn guess_context_by_path(path: &Path) -> &'static str {
