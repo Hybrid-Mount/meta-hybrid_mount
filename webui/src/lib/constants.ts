@@ -10,7 +10,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   moduledir: "/data/adb/modules",
   mountsource: "KSU",
   logfile: RUST_PATHS.DAEMON_LOG || "/data/adb/meta-hybrid/daemon.log",
-  verbose: false,
   partitions: [],
   disable_umount: false,
   allow_umount_coexistence: false,

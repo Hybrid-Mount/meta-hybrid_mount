@@ -79,19 +79,6 @@ export const MockAPI = {
     await delay(400);
     console.log(`[Mock] Rules saved for ${moduleId}:`, rules);
   },
-  async saveModules(modules: Module[]): Promise<void> {
-    console.warn("[Mock] saveModules is deprecated");
-  },
-  async readLogs(): Promise<string> {
-    await delay(200);
-    return `[I] Daemon started at ${new Date().toISOString()}
-[I] Loading config from /data/adb/meta-hybrid/config.toml
-[D] Scanning modules...
-[I] Found 2 modules
-[W] OverlayFS is not supported on this kernel, falling back to Magic Mount
-[E] Failed to mount /system/app/TestApp: No such file or directory
-[I] Daemon ready`;
-  },
   async getDeviceStatus(): Promise<DeviceInfo> {
     await delay(300);
     return {

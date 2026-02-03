@@ -424,25 +424,6 @@ export default function ConfigTab() {
                 </div>
               </button>
             </Show>
-
-            <button
-              class={`option-tile clickable primary ${store.config.verbose ? "active" : ""}`}
-              onClick={() => toggle("verbose")}
-            >
-              <md-ripple></md-ripple>
-              <div class="tile-top">
-                <div class="tile-icon">
-                  <md-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path d={ICONS.description} />
-                    </svg>
-                  </md-icon>
-                </div>
-              </div>
-              <div class="tile-bottom">
-                <span class="tile-label">{store.L.config.verboseLabel}</span>
-              </div>
-            </button>
           </div>
         </section>
 

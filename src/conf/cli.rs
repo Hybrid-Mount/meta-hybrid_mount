@@ -16,8 +16,6 @@ pub struct Cli {
     pub moduledir: Option<PathBuf>,
     #[arg(short = 's', long = "mountsource")]
     pub mountsource: Option<String>,
-    #[arg(short = 'v', long = "verbose")]
-    pub verbose: bool,
     #[arg(short = 'p', long = "partitions", value_delimiter = ',')]
     pub partitions: Vec<String>,
     #[command(subcommand)]
