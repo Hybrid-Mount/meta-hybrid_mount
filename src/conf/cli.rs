@@ -41,7 +41,6 @@ pub enum Commands {
         #[arg(long)]
         payload: String,
     },
-    Storage,
     Modules,
     Conflicts,
     Diagnostics,

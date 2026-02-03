@@ -8,12 +8,10 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use jwalk::WalkDir;
 use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount as umount};
-use serde::Serialize;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr::send_umountable;
 use crate::{
-    core::state::RuntimeState,
     defs,
     mount::overlayfs::utils as overlay_utils,
     sys::{mount::is_mounted, nuke},
@@ -75,33 +73,6 @@ impl StorageHandle {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Serialize)]
-struct StorageStatus {
-    #[serde(rename = "type")]
-    mode: String,
-    mount_point: String,
-    usage_percent: u8,
-    total_size: u64,
-    used_size: u64,
-    supported_modes: Vec<String>,
-}
-
-pub fn get_usage(path: &Path) -> (u64, u64, u8) {
-    if let Ok(stat) = rustix::fs::statvfs(path) {
-        let total = stat.f_blocks * stat.f_frsize;
-
-        let free = stat.f_bfree * stat.f_frsize;
-
-        let used = total - free;
-
-        let percent = (used * 100).checked_div(total).unwrap_or(0) as u8;
-
-        (total, used, percent)
-    } else {
-        (0, 0, 0)
     }
 }
 
@@ -290,67 +261,6 @@ fn setup_ext4_image(target: &Path, img_path: &Path, moduledir: &Path) -> Result<
         backing_image: Some(img_path.to_path_buf()),
         final_target: None,
     })
-}
-
-pub fn print_status() -> Result<()> {
-    let state = RuntimeState::load().ok();
-    let fallback_mnt = crate::conf::config::Config::load_default()
-        .map(|c| c.hybrid_mnt_dir)
-        .unwrap_or_else(|_| defs::DEFAULT_HYBRID_MNT_DIR.to_string());
-    let (mnt_base, expected_mode) = if let Some(ref s) = state {
-        (s.mount_point.clone(), s.storage_mode.clone())
-    } else {
-        (PathBuf::from(fallback_mnt), "unknown".to_string())
-    };
-
-    let mut mode = "unknown".to_string();
-
-    let mut total = 0;
-
-    let mut used = 0;
-
-    let mut percent = 0;
-
-    if is_mounted(&mnt_base)
-        && let Ok(stat) = rustix::fs::statvfs(&mnt_base)
-    {
-        mode = if expected_mode != "unknown" {
-            expected_mode
-        } else {
-            "active".to_string()
-        };
-
-        total = stat.f_blocks * stat.f_frsize;
-
-        let free = stat.f_bfree * stat.f_frsize;
-
-        used = total - free;
-
-        percent = (used * 100).checked_div(total).unwrap_or(0) as u8;
-    }
-
-    let mut supported_modes = vec!["ext4".to_string(), "erofs".to_string()];
-    let check_dir = Path::new(defs::XATTR_CHECK_DIR);
-    if crate::sys::mount::mount_tmpfs(check_dir, "mh_check").is_ok() {
-        if utils::is_overlay_xattr_supported().unwrap_or(false) {
-            supported_modes.insert(0, "tmpfs".to_string());
-        }
-        let _ = umount(check_dir, UnmountFlags::DETACH);
-        let _ = fs::remove_dir(check_dir);
-    }
-
-    let status = StorageStatus {
-        mode,
-        mount_point: mnt_base.to_string_lossy().to_string(),
-        usage_percent: percent,
-        total_size: total,
-        used_size: used,
-        supported_modes,
-    };
-
-    println!("{}", serde_json::to_string(&status)?);
-
-    Ok(())
 }
 
 fn is_erofs_supported() -> bool {

@@ -20,12 +20,6 @@ pub struct RuntimeState {
     #[serde(default)]
     pub active_mounts: Vec<String>,
     #[serde(default)]
-    pub storage_total: u64,
-    #[serde(default)]
-    pub storage_used: u64,
-    #[serde(default)]
-    pub storage_percent: u8,
-    #[serde(default)]
     pub zygisksu_enforce: bool,
     #[serde(default)]
     pub tmpfs_xattr_supported: bool,
@@ -39,7 +33,6 @@ impl RuntimeState {
         overlay_modules: Vec<String>,
         magic_modules: Vec<String>,
         active_mounts: Vec<String>,
-        storage_info: (u64, u64, u8),
     ) -> Self {
         let start = SystemTime::now();
 
@@ -61,9 +54,6 @@ impl RuntimeState {
             overlay_modules,
             magic_modules,
             active_mounts,
-            storage_total: storage_info.0,
-            storage_used: storage_info.1,
-            storage_percent: storage_info.2,
             zygisksu_enforce,
             tmpfs_xattr_supported,
         }

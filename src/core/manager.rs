@@ -9,7 +9,7 @@ use crate::{
         inventory::model as modules,
         ops::{executor, planner, sync},
         state, storage,
-        storage::{StorageHandle, get_usage},
+        storage::StorageHandle,
     },
 };
 
@@ -161,8 +161,6 @@ impl MountController<Executed> {
             self.state.result.magic_module_ids.len(),
         );
 
-        let storage_stats = get_usage(&self.state.handle.mount_point);
-
         let mut active_mounts: Vec<String> = self
             .state
             .plan
@@ -180,7 +178,6 @@ impl MountController<Executed> {
             self.state.result.overlay_module_ids,
             self.state.result.magic_module_ids,
             active_mounts,
-            storage_stats,
         );
 
         if let Err(e) = state.save() {

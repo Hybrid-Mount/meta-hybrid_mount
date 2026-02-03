@@ -76,11 +76,9 @@ fn main() -> Result<()> {
             Commands::GenConfig { output } => cli_handlers::handle_gen_config(output)?,
             Commands::ShowConfig => cli_handlers::handle_show_config(&cli)?,
             Commands::SaveConfig { payload } => cli_handlers::handle_save_config(payload)?,
-
             Commands::SaveModuleRules { module, payload } => {
                 cli_handlers::handle_save_module_rules(module, payload)?
             }
-            Commands::Storage => cli_handlers::handle_storage()?,
             Commands::Modules => cli_handlers::handle_modules(&cli)?,
             Commands::Conflicts => cli_handlers::handle_conflicts(&cli)?,
             Commands::Diagnostics => cli_handlers::handle_diagnostics(&cli)?,

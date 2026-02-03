@@ -10,7 +10,6 @@ pub const MODULE_PROP_FILE: &str = "/data/adb/modules/meta-hybrid/module.prop";
 pub const MODULES_DIR: &str = "/data/adb/modules";
 pub const CONFIG_FILE: &str = "/data/adb/meta-hybrid/config.toml";
 pub const MKFS_EROFS_PATH: &str = "/data/adb/metamodule/tools/mkfs.erofs";
-pub const XATTR_CHECK_DIR: &str = "/data/local/tmp/.mh_xattr_chk";
 pub const POACEAE_MOUNT_POINT: &str = "/data/adb/poaceaefs_mount";
 pub const ZYGISKSU_DENYLIST_FILE: &str = "/data/adb/zygisksu/denylist_enforce";
 

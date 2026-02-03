@@ -8,7 +8,7 @@ use crate::{
         cli::{Cli, PoaceaeAction},
         config::{self, Config},
     },
-    core::{inventory, inventory::model as modules, ops::planner, storage},
+    core::{inventory, inventory::model as modules, ops::planner},
     defs,
     sys::poaceae,
     utils,
@@ -108,10 +108,6 @@ pub fn handle_save_module_rules(module_id: &str, payload: &str) -> Result<()> {
     println!("Module rules saved for {} into config.toml", module_id);
 
     Ok(())
-}
-
-pub fn handle_storage() -> Result<()> {
-    storage::print_status().context("Failed to retrieve storage status")
 }
 
 pub fn handle_modules(cli: &Cli) -> Result<()> {
