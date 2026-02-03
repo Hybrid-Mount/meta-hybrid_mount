@@ -1,8 +1,3 @@
-/**
- * Copyright 2025 Meta-Hybrid Mount Authors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { createMemo, createSignal, onMount, Show, For } from "solid-js";
 import { store } from "../lib/store";
 import { ICONS } from "../lib/constants";
@@ -12,7 +7,6 @@ import BottomActions from "../components/BottomActions";
 import { API } from "../lib/api";
 import "./StatusTab.css";
 
-import "@material/web/progress/linear-progress.js";
 import "@material/web/chips/chip-set.js";
 import "@material/web/chips/filter-chip.js";
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
@@ -29,40 +23,33 @@ export default function StatusTab() {
     ...new Set([...BUILTIN_PARTITIONS, ...(store.config?.partitions || [])]),
   ]);
 
-  const storageLabel = createMemo(() =>
-    store.storage?.type === "tmpfs"
-      ? store.systemInfo?.mountBase
-      : store.L?.status?.storageDesc,
-  );
-
   const mountedCount = createMemo(
     () => store.modules?.filter((m) => m.is_mounted).length ?? 0,
   );
 
   const [showRebootConfirm, setShowRebootConfirm] = createSignal(false);
 
-  function getDiagColor(level: string) {
-    if (level === "Critical") return "var(--md-sys-color-error)";
-    if (level === "Warning") return "var(--md-sys-color-tertiary)";
-    return "var(--md-sys-color-primary)";
-  }
-
-  function getDiagLabel(level: string) {
-    if (level === "Critical") return store.L?.status?.diagCritical ?? level;
-    if (level === "Warning") return store.L?.status?.diagWarning ?? level;
-    return store.L?.status?.diagInfo ?? level;
-  }
-
-  function getStoragePercent() {
-    if (!store.storage?.percent) return 0;
-    return parseFloat(store.storage.percent) / 100;
-  }
-
   function getStorageBadgeClass(type: string | null | undefined) {
     if (type === "tmpfs") return "type-tmpfs";
     if (type === "ext4") return "type-ext4";
     if (type === "erofs") return "type-erofs";
     return "";
+  }
+
+  function getModeDescription(mode: string | null | undefined) {
+    if (!mode) return "";
+    // @ts-ignore
+    const key = `mode_${mode}Desc`;
+    // @ts-ignore
+    return store.L.config?.[key] || "";
+  }
+
+  function getModeDisplayName(mode: string | null | undefined) {
+    if (!mode) return "Unknown";
+    // @ts-ignore
+    const key = `mode_${mode}`;
+    // @ts-ignore
+    return store.L.config?.[key] || mode.toUpperCase();
   }
 
   return (
@@ -105,19 +92,17 @@ export default function StatusTab() {
                     <Skeleton width="100px" height="24px" />
                     <Skeleton width="60px" height="20px" borderRadius="12px" />
                   </div>
-                  <Skeleton width="120px" height="64px" />
-                </div>
-                <div class="progress-container">
-                  <md-linear-progress indeterminate></md-linear-progress>
                 </div>
                 <div class="storage-details">
-                  <Skeleton width="150px" height="12px" />
-                  <Skeleton width="80px" height="12px" />
+                  <Skeleton width="100%" height="40px" />
                 </div>
               </>
             }
           >
-            <div class="storage-header-row">
+            <div
+              class="storage-header-row"
+              style={{ "align-items": "center", "margin-bottom": "16px" }}
+            >
               <div class="storage-info-col">
                 <div class="storage-label-group">
                   <div class="storage-icon-circle">
@@ -126,39 +111,57 @@ export default function StatusTab() {
                     </svg>
                   </div>
                   <span class="storage-title">
-                    {store.L?.status?.storageTitle ?? "Storage"}
+                    {store.L?.status?.storageTitle ?? "Backend"}
                   </span>
                 </div>
-                <Show
-                  when={store.storage?.type && store.storage.type !== "unknown"}
+              </div>
+
+              <Show when={store.storage?.type}>
+                <span
+                  class={`storage-type-badge ${getStorageBadgeClass(store.storage.type)}`}
                 >
-                  <span
-                    class={`storage-type-badge ${getStorageBadgeClass(store.storage.type)}`}
-                  >
-                    {store.storage.type?.toUpperCase()}
-                  </span>
-                </Show>
-              </div>
-              <div class="storage-value-group">
-                <span class="storage-value">
-                  {store.storage?.percent ?? "0%"}
+                  {store.storage.type?.toUpperCase()}
                 </span>
-                <span class="storage-unit">
-                  {store.L?.common?.used ?? "Used"}
-                </span>
-              </div>
+              </Show>
             </div>
 
-            <div class="progress-container">
-              <md-linear-progress
-                value={getStoragePercent()}
-              ></md-linear-progress>
+            <div style={{ margin: "8px 0 16px 0" }}>
+              <span class="storage-value" style={{ "font-size": "48px" }}>
+                {getModeDisplayName(store.storage?.type)}
+              </span>
             </div>
 
-            <div class="storage-details">
-              <span class="detail-path">{storageLabel() ?? ""}</span>
-              <span class="detail-nums">
-                {store.storage?.used} / {store.storage?.size}
+            <div
+              style={{
+                opacity: "0.8",
+                "font-size": "14px",
+                "margin-bottom": "24px",
+                "line-height": "1.4",
+              }}
+            >
+              {getModeDescription(store.storage?.type)}
+            </div>
+
+            <div
+              class="storage-details"
+              style={{
+                background: "rgba(0,0,0,0.08)",
+                padding: "12px",
+                "border-radius": "12px",
+              }}
+            >
+              <span style={{ opacity: "0.7", "font-size": "12px" }}>
+                {store.L?.status?.mountBase ?? "Mount Base"}
+              </span>
+              <span
+                class="detail-path"
+                style={{
+                  "max-width": "100%",
+                  background: "transparent",
+                  padding: "0",
+                }}
+              >
+                {store.systemInfo?.mountBase ?? "Unknown"}
               </span>
             </div>
           </Show>
@@ -257,19 +260,6 @@ export default function StatusTab() {
                 <span class="info-val">{store.systemInfo?.selinux || "-"}</span>
               </Show>
             </div>
-            <div class="info-item full-width">
-              <span class="info-label">
-                {store.L?.status?.mountBase ?? "Mount Base"}
-              </span>
-              <Show
-                when={!store.loading.status}
-                fallback={<Skeleton width="90%" height="16px" />}
-              >
-                <span class="info-val mono">
-                  {store.systemInfo?.mountBase ?? "-"}
-                </span>
-              </Show>
-            </div>
           </div>
         </div>
 
@@ -302,49 +292,6 @@ export default function StatusTab() {
               </div>
               <span class="mode-count">{store.modeStats?.magic ?? 0}</span>
             </div>
-          </Show>
-        </div>
-
-        <div class="mode-card">
-          <div class="mode-title">
-            {store.L?.status?.health ?? "System Health"}
-          </div>
-          <Show
-            when={!store.loading.diagnostics}
-            fallback={
-              <div class="skeleton-group">
-                <Skeleton width="100%" height="20px" />
-                <Skeleton width="80%" height="20px" />
-              </div>
-            }
-          >
-            <Show
-              when={store.diagnostics.length > 0}
-              fallback={
-                <div class="health-message healthy">
-                  {store.L?.status?.healthy ?? "All checks passed."}
-                </div>
-              }
-            >
-              <div class="diagnostic-list">
-                <For each={store.diagnostics}>
-                  {(issue) => (
-                    <div class="diagnostic-item">
-                      <div
-                        class="diag-level"
-                        style={{ color: getDiagColor(issue.level) }}
-                      >
-                        {getDiagLabel(issue.level)}
-                      </div>
-                      <div class="diag-content">
-                        <div class="diag-context">{issue.context}</div>
-                        <div class="diag-message">{issue.message}</div>
-                      </div>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </Show>
           </Show>
         </div>
       </div>
