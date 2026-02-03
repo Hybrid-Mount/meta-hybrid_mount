@@ -100,8 +100,7 @@ fn native_cp_r(
         }
     }
 
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
+    for entry in fs::read_dir(src)?.flatten() {
         let src_path = entry.path();
         let file_name = entry.file_name();
         let dst_path = dst.join(&file_name);
@@ -172,7 +171,7 @@ pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
     {
         if entry.file_type().is_dir() {
             let path = entry.path();
-            if fs::remove_dir(path).is_ok() {}
+            let _ = fs::remove_dir(path);
         }
     }
     Ok(())
