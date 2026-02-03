@@ -1,9 +1,4 @@
-/**
- * Copyright 2026 Hybrid Mount Authors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
-import { createMemo, createEffect, onMount, For } from "solid-js";
+import { createMemo, createEffect, For } from "solid-js";
 import { store } from "../lib/store";
 import { ICONS } from "../lib/constants";
 import "./NavBar.css";
@@ -27,10 +22,6 @@ export default function NavBar(props: Props) {
   ];
 
   const visibleTabs = createMemo(() => ALL_TABS);
-
-  onMount(() => {
-    store.loadConflicts();
-  });
 
   createEffect(() => {
     const active = props.activeTab;

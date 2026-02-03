@@ -12,8 +12,6 @@ import type {
   StorageStatus,
   SystemInfo,
   DeviceInfo,
-  ConflictEntry,
-  DiagnosticIssue,
   ModuleRules,
 } from "./types";
 
@@ -37,15 +35,6 @@ try {
 }
 
 const shouldUseMock = import.meta.env.DEV || !ksuExec;
-
-function formatBytes(bytes: number, decimals = 2): string {
-  if (!+bytes) return "0 B";
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-}
 
 function stringToHex(str: string): string {
   let bytes: Uint8Array;
@@ -79,8 +68,6 @@ interface AppAPI {
   getVersion: () => Promise<string>;
   openLink: (url: string) => Promise<void>;
   fetchSystemColor: () => Promise<string | null>;
-  getConflicts: () => Promise<ConflictEntry[]>;
-  getDiagnostics: () => Promise<DiagnosticIssue[]>;
   reboot: () => Promise<void>;
   readLogs: () => Promise<string>;
 }
@@ -147,7 +134,7 @@ const RealAPI: AppAPI = {
     if (errno !== 0) throw new Error(`Failed to save rules: ${stderr}`);
   },
   getStorageUsage: async (): Promise<StorageStatus> => {
-    if (!ksuExec) return { size: "-", used: "-", percent: "0%", type: null };
+    if (!ksuExec) return { type: null };
     try {
       const stateFile =
         (PATHS as Record<string, string>).DAEMON_STATE ||
@@ -157,13 +144,10 @@ const RealAPI: AppAPI = {
         const state = JSON.parse(stdout);
         return {
           type: state.storage_mode || "unknown",
-          percent: `${state.storage_percent ?? 0}%`,
-          size: formatBytes(state.storage_total ?? 0),
-          used: formatBytes(state.storage_used ?? 0),
         };
       }
     } catch {}
-    return { size: "-", used: "-", percent: "0%", type: null };
+    return { type: null };
   },
   getSystemInfo: async (): Promise<SystemInfo> => {
     if (!ksuExec)
@@ -272,22 +256,6 @@ const RealAPI: AppAPI = {
       }
     } catch {}
     return null;
-  },
-  getConflicts: async (): Promise<ConflictEntry[]> => {
-    if (!ksuExec) return [];
-    try {
-      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} conflicts`);
-      if (errno === 0 && stdout) return JSON.parse(stdout);
-    } catch {}
-    return [];
-  },
-  getDiagnostics: async (): Promise<DiagnosticIssue[]> => {
-    if (!ksuExec) return [];
-    try {
-      const { errno, stdout } = await ksuExec(`${PATHS.BINARY} diagnostics`);
-      if (errno === 0 && stdout) return JSON.parse(stdout);
-    } catch {}
-    return [];
   },
   reboot: async (): Promise<void> => {
     if (!ksuExec) return;

@@ -17,8 +17,6 @@ import type {
   ToastMessage,
   LanguageOption,
   ModeStats,
-  ConflictEntry,
-  DiagnosticIssue,
 } from "./types";
 
 const localeModules = import.meta.glob("../locales/*.json", { eager: true });
@@ -60,11 +58,7 @@ const createGlobalStore = () => {
   });
   const [version, setVersion] = createSignal(APP_VERSION);
   const [storage, setStorage] = createSignal<StorageStatus>({
-    used: "-",
-    size: "-",
-    percent: "0%",
     type: null,
-    hymofs_available: false,
   });
   const [systemInfo, setSystemInfo] = createSignal<SystemInfo>({
     kernel: "-",
@@ -73,14 +67,10 @@ const createGlobalStore = () => {
     activeMounts: [],
   });
   const [activePartitions, setActivePartitions] = createSignal<string[]>([]);
-  const [conflicts, setConflicts] = createSignal<ConflictEntry[]>([]);
-  const [diagnostics, setDiagnostics] = createSignal<DiagnosticIssue[]>([]);
 
   const [loadingConfig, setLoadingConfig] = createSignal(false);
   const [loadingModules, setLoadingModules] = createSignal(false);
   const [loadingStatus, setLoadingStatus] = createSignal(false);
-  const [loadingConflicts, setLoadingConflicts] = createSignal(false);
-  const [loadingDiagnostics, setLoadingDiagnostics] = createSignal(false);
 
   const [savingConfig, setSavingConfig] = createSignal(false);
   const [savingModules, setSavingModules] = createSignal(false);
@@ -88,7 +78,6 @@ const createGlobalStore = () => {
   const availableLanguages: LanguageOption[] = Object.entries(localeModules)
     .map(([path, mod]: [string, unknown]) => {
       const match = path.match(/\/([^/]+)\.json$/);
-      // Fix: Default fallback to en-US
       const code = match ? match[1] : "en-US";
       const name =
         (mod as { default?: { lang?: { display?: string } } }).default?.lang
@@ -96,7 +85,6 @@ const createGlobalStore = () => {
       return { code, name };
     })
     .sort((a, b) => {
-      // Fix: Sort en-US to top
       if (a.code === "en-US") return -1;
       if (b.code === "en-US") return 1;
       return a.name.localeCompare(b.name);
@@ -108,12 +96,11 @@ const createGlobalStore = () => {
   );
 
   const modeStats = createMemo((): ModeStats => {
-    const stats = { auto: 0, magic: 0, hymofs: 0 };
+    const stats = { auto: 0, magic: 0 };
     modules().forEach((m) => {
       if (!m.is_mounted) return;
       if (m.mode === "auto") stats.auto++;
       else if (m.mode === "magic") stats.magic++;
-      else if (m.mode === "hymofs") stats.hymofs++;
     });
     return stats;
   });
@@ -161,7 +148,6 @@ const createGlobalStore = () => {
     if (match) {
       setLoadedLocale(match[1]);
     } else {
-      // Fix: Fallback to en-US.json which exists
       setLoadedLocale(localeModules["../locales/en-US.json"]);
     }
   }
@@ -289,35 +275,10 @@ const createGlobalStore = () => {
       if (modules().length === 0) {
         await loadModules();
       }
-
-      setLoadingDiagnostics(true);
-      const diag = await API.getDiagnostics();
-      setDiagnostics(diag);
-      setLoadingDiagnostics(false);
     } catch {
       // ignore
     }
     setLoadingStatus(false);
-  }
-
-  async function loadConflicts() {
-    setLoadingConflicts(true);
-    try {
-      const conf = await API.getConflicts();
-      setConflicts(conf);
-      if (conf.length === 0) {
-        showToast(
-          L().modules?.noConflicts || "No conflicts detected",
-          "success",
-        );
-      }
-    } catch {
-      showToast(
-        L().modules?.conflictError || "Failed to check conflicts",
-        "error",
-      );
-    }
-    setLoadingConflicts(false);
   }
 
   return {
@@ -398,15 +359,6 @@ const createGlobalStore = () => {
       return activePartitions();
     },
 
-    get conflicts() {
-      return conflicts();
-    },
-    loadConflicts,
-
-    get diagnostics() {
-      return diagnostics();
-    },
-
     loadStatus,
 
     get loading() {
@@ -419,12 +371,6 @@ const createGlobalStore = () => {
         },
         get status() {
           return loadingStatus();
-        },
-        get conflicts() {
-          return loadingConflicts();
-        },
-        get diagnostics() {
-          return loadingDiagnostics();
         },
       };
     },

@@ -37,12 +37,8 @@ export interface Module {
 }
 
 export interface StorageStatus {
-  size: string;
-  used: string;
-  percent: string;
   type: "tmpfs" | "ext4" | "erofs" | "unknown" | null;
   error?: string;
-  hymofs_available?: boolean;
 }
 
 export interface SystemInfo {
@@ -78,16 +74,4 @@ export interface LanguageOption {
 export interface ModeStats {
   auto: number;
   magic: number;
-}
-
-export interface ConflictEntry {
-  partition: string;
-  relative_path: string;
-  contending_modules: string[];
-}
-
-export interface DiagnosticIssue {
-  level: "Info" | "Warning" | "Critical";
-  context: string;
-  message: string;
 }

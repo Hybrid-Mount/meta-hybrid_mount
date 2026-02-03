@@ -12,8 +12,6 @@ import type {
   StorageStatus,
   SystemInfo,
   ModuleRules,
-  ConflictEntry,
-  DiagnosticIssue,
 } from "./types";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -95,9 +93,6 @@ export const MockAPI = {
   async getStorageUsage(): Promise<StorageStatus> {
     await delay(300);
     return {
-      used: "128 MB",
-      size: "1024 MB",
-      percent: "12.5%",
       type: "erofs",
     };
   },
@@ -115,20 +110,5 @@ export const MockAPI = {
   async fetchSystemColor(): Promise<string | null> {
     await delay(100);
     return "#8AB4F8";
-  },
-  async getConflicts(): Promise<ConflictEntry[]> {
-    await delay(500);
-    return [];
-  },
-  async getDiagnostics(): Promise<DiagnosticIssue[]> {
-    await delay(500);
-    return [
-      { level: "Info", context: "System", message: "OverlayFS is available" },
-      {
-        level: "Warning",
-        context: "magisk_module_1",
-        message: "Dead absolute symlink: system/bin/test -> /dev/null",
-      },
-    ];
   },
 };
