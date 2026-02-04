@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createEffect, createRoot } from "solid-js";
+import { createSignal, createMemo, createRoot } from "solid-js";
 import { API } from "./api";
 import { DEFAULT_CONFIG } from "./constants";
 import { APP_VERSION } from "./constants_gen";
@@ -23,10 +23,6 @@ export interface LogEntry {
 }
 
 const createGlobalStore = () => {
-  const [theme, setThemeSignal] = createSignal<"auto" | "light" | "dark">(
-    "auto",
-  );
-  const [isSystemDark, setIsSystemDark] = createSignal(false);
   const [lang, setLangSignal] = createSignal("en-US");
   const [loadedLocale, setLoadedLocale] = createSignal<unknown>(null);
 
@@ -110,21 +106,6 @@ const createGlobalStore = () => {
     }, 3000);
   }
 
-  function setTheme(t: "auto" | "light" | "dark") {
-    setThemeSignal(t);
-  }
-
-  createEffect(() => {
-    const currentTheme = theme();
-    const sysDark = isSystemDark();
-
-    const isDark = currentTheme === "auto" ? sysDark : currentTheme === "dark";
-    document.documentElement.setAttribute(
-      "data-theme",
-      isDark ? "dark" : "light",
-    );
-  });
-
   async function loadLocale(code: string) {
     const match = Object.entries(localeModules).find(([path]) =>
       path.endsWith(`/${code}.json`),
@@ -160,13 +141,6 @@ const createGlobalStore = () => {
     await loadLocale(savedLang);
 
     setFixBottomNavSignal(localStorage.getItem("hm_fix_bottom_nav") === "true");
-
-    const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    setIsSystemDark(darkModeQuery.matches);
-
-    darkModeQuery.addEventListener("change", (e) => {
-      setIsSystemDark(e.matches);
-    });
 
     await Promise.all([loadConfig(), loadStatus()]);
   }
@@ -252,19 +226,11 @@ const createGlobalStore = () => {
       if (modules().length === 0) {
         await loadModules();
       }
-    } catch {
-      // ignore
-    }
+    } catch {}
     setLoadingStatus(false);
   }
 
   return {
-    get theme() {
-      return theme();
-    },
-    get isSystemDark() {
-      return isSystemDark();
-    },
     get lang() {
       return lang();
     },
@@ -287,7 +253,6 @@ const createGlobalStore = () => {
     },
     toggleBottomNavFix,
     showToast,
-    setTheme,
     setLang,
     init,
 

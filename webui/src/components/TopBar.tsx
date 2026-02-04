@@ -1,8 +1,3 @@
-/**
- * Copyright 2026 Hybrid Mount Developers
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { Show, For } from "solid-js";
 import { store } from "../lib/store";
 import { ICONS } from "../lib/constants";
@@ -21,32 +16,6 @@ interface MdDialogElement extends HTMLElement {
 
 export default function TopBar() {
   let langDialogRef: MdDialogElement | undefined;
-
-  function toggleTheme() {
-    let nextTheme: "light" | "dark" | "auto";
-    let toastMsg: string;
-    const common = store.L?.common;
-    const currentTheme = store.theme;
-
-    if (currentTheme === "auto") {
-      nextTheme = "light";
-      toastMsg = common?.themeLight ?? "Light Mode";
-    } else if (currentTheme === "light") {
-      nextTheme = "dark";
-      toastMsg = common?.themeDark ?? "Dark Mode";
-    } else {
-      nextTheme = "auto";
-      toastMsg = common?.themeAuto ?? "Auto Mode";
-    }
-    store.setTheme(nextTheme);
-    store.showToast(toastMsg, "info");
-  }
-
-  function getThemeIcon() {
-    if (store.theme === "auto") return ICONS.auto_mode;
-    if (store.theme === "light") return ICONS.light_mode;
-    return ICONS.dark_mode;
-  }
 
   function openLangDialog() {
     langDialogRef?.show();
@@ -67,19 +36,6 @@ export default function TopBar() {
         <div class="top-bar-content">
           <h1 class="screen-title">{store.L?.common?.appName}</h1>
           <div class="top-actions">
-            <md-icon-button
-              onClick={toggleTheme}
-              title={store.L?.common?.theme}
-              role="button"
-              tabIndex={0}
-            >
-              <md-icon>
-                <svg viewBox="0 0 24 24">
-                  <path d={getThemeIcon()} />
-                </svg>
-              </md-icon>
-            </md-icon-button>
-
             <md-icon-button
               onClick={openLangDialog}
               title={store.L?.common?.language}
