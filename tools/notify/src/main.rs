@@ -1,13 +1,15 @@
 // Copyright 2025 Meta-Hybrid Mount Authors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::{
+    env, fs,
+    path::PathBuf,
+    process::{Command, exit},
+    thread,
+    time::Duration,
+};
+
 use reqwest::blocking::{Client, multipart};
-use std::env;
-use std::fs;
-use std::path::PathBuf;
-use std::process::{Command, exit};
-use std::thread;
-use std::time::Duration;
 
 fn main() {
     let bot_token = env::var("TELEGRAM_BOT_TOKEN").expect("Error: TELEGRAM_BOT_TOKEN not set");
@@ -77,8 +79,13 @@ fn main() {
     for attempt in 0..max_retries {
         let mut form = multipart::Form::new()
             .text("chat_id", chat_id.clone())
-            .text("caption", caption.clone())
             .text("parse_mode", "HTML");
+
+        if caption.len() > 1024 {
+            form.text("caption", run_url.clone());
+        } else {
+            form.text("caption", caption.clone());
+        }
 
         if let Some(tid) = topic_id {
             if !tid.trim().is_empty() && tid != "0" {
