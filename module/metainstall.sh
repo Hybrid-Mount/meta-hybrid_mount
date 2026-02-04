@@ -15,7 +15,7 @@ hybrid_handle_partition() {
     fi
 
     if [ -d "$MODPATH/system/$partition" ] && [ ! -L "$MODPATH/system/$partition" ]; then
-        mv -f "$MODPATH/system/$partition" "$MODPATH/$partition"
+        ln -sf "$MODPATH/system/$partition" "$MODPATH/$partition"
         ui_print "- handled /$partition"
     fi
 }
