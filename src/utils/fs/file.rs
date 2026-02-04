@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail};
 use rustix::fs::ioctl_ficlone;
 use walkdir::WalkDir;
 
-use super::xattr::{internal_apply_system_context, internal_copy_extended_attributes};
+use super::xattr::internal_copy_extended_attributes;
 
 pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Result<()> {
     let path = path.as_ref();
@@ -82,7 +82,7 @@ fn native_cp_r(
     src: &Path,
     dst: &Path,
     relative: &Path,
-    repair: bool,
+    _repair: bool,
     visited: &mut HashSet<(u64, u64)>,
 ) -> Result<()> {
     if !dst.exists() {
@@ -92,15 +92,11 @@ fn native_cp_r(
         if let Ok(src_meta) = src.metadata() {
             let _ = fs::set_permissions(dst, src_meta.permissions());
         }
-
-        if repair && relative.as_os_str().is_empty() {
-            let _ = internal_apply_system_context(dst, relative);
-        } else if !repair {
-            let _ = internal_copy_extended_attributes(src, dst);
-        }
+        let _ = internal_copy_extended_attributes(src, dst);
     }
 
-    for entry in fs::read_dir(src)?.flatten() {
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
         let src_path = entry.path();
         let file_name = entry.file_name();
         let dst_path = dst.join(&file_name);
@@ -115,7 +111,7 @@ fn native_cp_r(
             if !visited.insert((dev, ino)) {
                 continue;
             }
-            native_cp_r(&src_path, &dst_path, &next_relative, repair, visited)?;
+            native_cp_r(&src_path, &dst_path, &next_relative, _repair, visited)?;
         } else if ft.is_symlink() {
             if dst_path.exists() {
                 fs::remove_file(&dst_path)?;
@@ -134,10 +130,6 @@ fn native_cp_r(
         }
 
         let _ = internal_copy_extended_attributes(&src_path, &dst_path);
-
-        if repair {
-            let _ = internal_apply_system_context(&dst_path, &next_relative);
-        }
     }
     Ok(())
 }
@@ -171,7 +163,7 @@ pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
     {
         if entry.file_type().is_dir() {
             let path = entry.path();
-            let _ = fs::remove_dir(path);
+            if fs::remove_dir(path).is_ok() {}
         }
     }
     Ok(())
