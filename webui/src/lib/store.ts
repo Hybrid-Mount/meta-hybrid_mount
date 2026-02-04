@@ -1,13 +1,7 @@
-/**
- * Copyright 2026 Hybrid Mount Developers
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { createSignal, createMemo, createEffect, createRoot } from "solid-js";
 import { API } from "./api";
-import { DEFAULT_CONFIG, DEFAULT_SEED } from "./constants";
+import { DEFAULT_CONFIG } from "./constants";
 import { APP_VERSION } from "./constants_gen";
-import { Monet, ThemeStyle } from "./theme";
 import type {
   AppConfig,
   Module,
@@ -32,11 +26,8 @@ const createGlobalStore = () => {
   const [theme, setThemeSignal] = createSignal<"auto" | "light" | "dark">(
     "auto",
   );
-  const [themeStyle, setThemeStyleSignal] =
-    createSignal<ThemeStyle>("TONAL_SPOT");
   const [isSystemDark, setIsSystemDark] = createSignal(false);
   const [lang, setLangSignal] = createSignal("en-US");
-  const [seed, setSeed] = createSignal<string | null>(DEFAULT_SEED);
   const [loadedLocale, setLoadedLocale] = createSignal<unknown>(null);
 
   const [toast, setToast] = createSignal<ToastMessage>({
@@ -123,22 +114,15 @@ const createGlobalStore = () => {
     setThemeSignal(t);
   }
 
-  function setThemeStyle(s: ThemeStyle) {
-    setThemeStyleSignal(s);
-  }
-
   createEffect(() => {
     const currentTheme = theme();
     const sysDark = isSystemDark();
-    const currentSeed = seed();
-    const currentStyle = themeStyle();
 
     const isDark = currentTheme === "auto" ? sysDark : currentTheme === "dark";
     document.documentElement.setAttribute(
       "data-theme",
       isDark ? "dark" : "light",
     );
-    Monet.apply(currentSeed, isDark, currentStyle);
   });
 
   async function loadLocale(code: string) {
@@ -183,13 +167,6 @@ const createGlobalStore = () => {
     darkModeQuery.addEventListener("change", (e) => {
       setIsSystemDark(e.matches);
     });
-
-    try {
-      const sysColor = await API.fetchSystemColor();
-      if (sysColor) {
-        setSeed(sysColor);
-      }
-    } catch {}
 
     await Promise.all([loadConfig(), loadStatus()]);
   }
@@ -285,17 +262,11 @@ const createGlobalStore = () => {
     get theme() {
       return theme();
     },
-    get themeStyle() {
-      return themeStyle();
-    },
     get isSystemDark() {
       return isSystemDark();
     },
     get lang() {
       return lang();
-    },
-    get seed() {
-      return seed();
     },
     get availableLanguages() {
       return availableLanguages;
@@ -317,7 +288,6 @@ const createGlobalStore = () => {
     toggleBottomNavFix,
     showToast,
     setTheme,
-    setThemeStyle,
     setLang,
     init,
 

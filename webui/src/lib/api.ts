@@ -31,24 +31,6 @@ try {
 
 const shouldUseMock = import.meta.env.DEV || !ksuExec;
 
-const OVERLAY_COLOR_MAP: Record<string, string> = {
-  "com.android.theme.color.cinnamon": "#9F6047",
-  "com.android.theme.color.black": "#3C3F41",
-  "com.android.theme.color.green": "#3DDC84",
-  "com.android.theme.color.ocean": "#009688",
-  "com.android.theme.color.space": "#475975",
-  "com.android.theme.color.orchid": "#DA70D6",
-  "com.android.theme.color.purple": "#9C27B0",
-  "org.lineageos.overlay.accent.blue": "#4285F4",
-  "org.lineageos.overlay.accent.cyan": "#00BCD4",
-  "org.lineageos.overlay.accent.green": "#4CAF50",
-  "org.lineageos.overlay.accent.orange": "#FF9800",
-  "org.lineageos.overlay.accent.pink": "#E91E63",
-  "org.lineageos.overlay.accent.purple": "#9C27B0",
-  "org.lineageos.overlay.accent.red": "#F44336",
-  "org.lineageos.overlay.accent.yellow": "#FFEB3B",
-};
-
 function stringToHex(str: string): string {
   let bytes: Uint8Array;
   if (typeof TextEncoder !== "undefined") {
@@ -80,7 +62,6 @@ interface AppAPI {
   getDeviceStatus: () => Promise<DeviceInfo>;
   getVersion: () => Promise<string>;
   openLink: (url: string) => Promise<void>;
-  fetchSystemColor: () => Promise<string | null>;
   reboot: () => Promise<void>;
   readLogs: () => Promise<string>;
 }
@@ -247,62 +228,6 @@ const RealAPI: AppAPI = {
     await ksuExec(
       `am start -a android.intent.action.VIEW -d "${url.replace(/"/g, '\\"')}"`,
     );
-  },
-  fetchSystemColor: async (): Promise<string | null> => {
-    if (!ksuExec) return null;
-    try {
-      const { stdout: settingsOut } = await ksuExec(
-        "settings get secure theme_customization_overlay_packages",
-      );
-      if (settingsOut) {
-        const match =
-          /["']?(?:android\.theme\.customization\.system_palette|source_color)["']?\s*:\s*["']?#?([0-9a-fA-F]{6,8})["']?/i.exec(
-            settingsOut,
-          );
-        if (match?.[1]) {
-          const hex = match[1].length === 8 ? match[1].substring(2) : match[1];
-          return `#${hex}`;
-        }
-      }
-
-      const { stdout: dumpOut } = await ksuExec(
-        "dumpsys wallpaper | grep -E 'mMainColor|mPrimaryColors|mConnection'",
-      );
-      if (dumpOut) {
-        const match = /mMainColor=0x([0-9a-fA-F]{8})/i.exec(dumpOut);
-        if (match?.[1]) {
-          const hex = match[1].length === 8 ? match[1].substring(2) : match[1];
-          return `#${hex}`;
-        }
-      }
-
-      const { stdout: overlayOut } = await ksuExec(
-        "cmd overlay list --user current",
-      );
-      if (overlayOut) {
-        const lines = overlayOut.split("\n");
-        for (const line of lines) {
-          if (line.includes("[x]")) {
-            for (const [pkg, color] of Object.entries(OVERLAY_COLOR_MAP)) {
-              if (line.includes(pkg)) {
-                return color;
-              }
-            }
-          }
-        }
-      }
-
-      const { stdout: propOut } = await ksuExec(
-        "getprop persist.sys.theme.color",
-      );
-      if (propOut) {
-        const trimmed = propOut.trim();
-        if (/^#?[0-9a-fA-F]{6,8}$/.test(trimmed)) {
-          return trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
-        }
-      }
-    } catch {}
-    return null;
   },
   reboot: async (): Promise<void> => {
     if (!ksuExec) return;

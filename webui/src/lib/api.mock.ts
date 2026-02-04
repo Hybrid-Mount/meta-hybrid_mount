@@ -1,8 +1,3 @@
-/**
- * Copyright 2026 Hybrid Mount Developers
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
 import type {
@@ -106,9 +101,5 @@ export const MockAPI = {
       zygisksuEnforce: "1",
       tmpfs_xattr_supported: false,
     };
-  },
-  async fetchSystemColor(): Promise<string | null> {
-    await delay(100);
-    return "#8AB4F8";
   },
 };
