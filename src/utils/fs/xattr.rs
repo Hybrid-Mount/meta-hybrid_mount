@@ -1,6 +1,6 @@
 use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::{os::unix::ffi::OsStrExt, process::Command};
+use std::{fs, io::Read, os::unix::ffi::OsStrExt};
 
 use anyhow::{Context, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -93,12 +93,12 @@ pub fn lgetfilecon<P: AsRef<Path>>(_path: P) -> Result<String> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn is_overlay_xattr_supported() -> Result<bool> {
-    let output = Command::new("zcat")
-        .arg("/proc/config.gz")
-        .output()
-        .context("Failed to read config.gz")
-        .unwrap();
-    let config = String::from_utf8_lossy(&output.stdout);
+    use flate2::read::GzDecoder;
+    let file = fs::File::open("/proc/config.gz")?;
+
+    let mut config = String::new();
+    let mut decoder = GzDecoder::new(file);
+    decoder.read_to_string(&mut config)?;
 
     for i in config.lines() {
         if i.starts_with("#") {

@@ -27,6 +27,7 @@ ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.1.0" }
 cfg_aliases = "0.2.1"
 jwalk = "0.8.1"
 log = "0.4.29"
+flate2 = "1.1.9"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 env_logger = "0.11.8"
