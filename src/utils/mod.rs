@@ -14,6 +14,5 @@ pub fn get_mnt() -> PathBuf {
         name.push(fastrand::alphanumeric());
     }
 
-    let path = Path::new("/mnt").join(name);
-    path
+    Path::new("/mnt").join(name)
 }
