@@ -82,9 +82,9 @@ fn main() {
             .text("parse_mode", "HTML");
 
         if caption.len() > 1024 {
-            form.text("caption", run_url.clone());
+            form = form.text("caption", run_url.clone());
         } else {
-            form.text("caption", caption.clone());
+            form = form.text("caption", caption.clone());
         }
 
         if let Some(tid) = topic_id {
