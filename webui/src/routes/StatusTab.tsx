@@ -92,23 +92,6 @@ export default function StatusTab() {
               </div>
             }
           >
-            <div class="hero-header">
-              <div class="storage-badge">
-                <md-icon
-                  style={{
-                    "font-size": "16px",
-                    width: "16px",
-                    height: "16px",
-                  }}
-                >
-                  <svg viewBox="0 0 24 24">
-                    <path d={ICONS.storage} />
-                  </svg>
-                </md-icon>
-                <span>{store.storage?.type || "Unknown"}</span>
-              </div>
-            </div>
-
             <div class="hero-content">
               <span class="hero-label">
                 {store.L?.status?.storageTitle ?? "Backend Strategy"}
