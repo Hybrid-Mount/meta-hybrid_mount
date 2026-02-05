@@ -166,27 +166,6 @@ body:
       required: true
 
   - type: textarea
-    id: logs
-    attributes:
-      label: Verbose Hybrid Mount Log / 详细运行日志
-      description: |
-        CRITICAL / 重要:
-        1) In WebUI -> Config enable **"Verbose Log"** and Save.
-        2) Reproduce the issue.
-        3) Paste the content of `/data/adb/meta-hybrid/daemon.log` here OR attach it as a file below.
-        4) If possible, also include kernel messages: `adb logcat -b kernel` or output of `dmesg`.
-        
-        If the log is extremely long, paste the most relevant time window (±1 minute around the failure) and attach the full log file.
-        
-        中文提示：
-        1）在 WebUI -> 配置 中开启 **"详细日志"** 并保存。
-        2）复现问题后，粘贴 `/data/adb/meta-hybrid/daemon.log` 或作为附件上传。
-        3）如果可行，请同时提供内核日志：`adb logcat -b kernel` 或 `dmesg` 输出。
-      render: shell
-    validations:
-      required: true
-
-  - type: textarea
     id: extra_info
     attributes:
       label: Additional Info / 额外信息 (optional)
@@ -201,21 +180,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        ### Attachments / 附件（请尽量提供）
+        ### Attachments / 附件（请务必提供）
         
         Please upload the following files by dragging and dropping them into the text area below:
         请将以下文件拖拽到下方的文本框中上传：
         
-        1. KernelSU Bugreport (Required/必须): 
+        1. **KernelSU Bugreport (Required/必须)**: 
            - Generate via KernelSU Manager -> Settings -> Bug Report.
            - 请通过 KernelSU 管理器 -> 设置 -> 调试报告 生成。
+           - This .zip file contains kernel logs (dmesg), logcat, and environment info needed for debugging.
+           - 此压缩包包含调试所需的内核日志 (dmesg)、logcat 和环境信息。
            
         2. Problematic Module Sample (Required if applicable/如果适用请上传): 
            - The module `.zip` file that caused the issue.
            - 导致问题的模块 `.zip` 安装包。
-        
-        3. Full daemon.log, dmesg or kernel log (if too long to paste).
-           - 如果日志过长无法粘贴，请上传完整文件并在上方粘贴关键时间窗口。
         
         Privacy note / 隐私提示:
         - Please review logs for personal data before posting. Remove device-specific keys or tokens.
@@ -225,6 +203,6 @@ body:
     id: attachments
     attributes:
       label: Upload Area / 上传区域
-      description: Drag & drop your KernelSU bugreport and module zip here. / 请将 KernelSU 调试报告和模块包拖拽至此处，或粘贴附件链接。
+      description: Drag & drop your KernelSU bugreport (.zip) and module zip here. / 请将 KernelSU 调试报告压缩包和模块包拖拽至此处。
     validations:
       required: true
