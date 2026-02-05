@@ -1,4 +1,3 @@
-pub const DEFAULT_HYBRID_MNT_DIR: &str = "/debug_ramdisk";
 pub const MODULES_IMG_FILE: &str = "/data/adb/meta-hybrid/modules.img";
 pub const RUN_DIR: &str = "/data/adb/meta-hybrid/run/";
 pub const STATE_FILE: &str = "/data/adb/meta-hybrid/run/daemon_state.json";
