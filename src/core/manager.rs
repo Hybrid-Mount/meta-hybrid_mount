@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
@@ -38,13 +38,18 @@ pub struct Executed {
 pub struct MountController<S> {
     config: Config,
     state: S,
+    tempdir: PathBuf,
 }
 
 impl MountController<Init> {
-    pub fn new(config: Config) -> Self {
+    pub fn new<P>(config: Config, tempdir: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
         Self {
             config,
             state: Init,
+            tempdir: tempdir.as_ref().to_path_buf(),
         }
     }
 
@@ -74,6 +79,7 @@ impl MountController<Init> {
         Ok(MountController {
             config: self.config,
             state: StorageReady { handle },
+            tempdir: self.tempdir,
         })
     }
 }
@@ -114,6 +120,7 @@ impl MountController<StorageReady> {
                 handle: self.state.handle,
                 modules,
             },
+            tempdir: self.tempdir,
         })
     }
 }
@@ -132,6 +139,7 @@ impl MountController<ModulesReady> {
                 handle: self.state.handle,
                 plan,
             },
+            tempdir: self.tempdir,
         })
     }
 }
@@ -140,7 +148,7 @@ impl MountController<Planned> {
     pub fn execute(self) -> Result<MountController<Executed>> {
         log::info!(">> Link Start! Executing mount plan...");
 
-        let result = executor::execute(&self.state.plan, &self.config)?;
+        let result = executor::execute(&self.state.plan, &self.config, self.tempdir.clone())?;
 
         Ok(MountController {
             config: self.config,
@@ -149,6 +157,7 @@ impl MountController<Planned> {
                 plan: self.state.plan,
                 result,
             },
+            tempdir: self.tempdir,
         })
     }
 }

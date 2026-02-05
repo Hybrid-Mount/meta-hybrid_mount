@@ -93,16 +93,10 @@ pub struct Config {
     pub allow_umount_coexistence: bool,
     #[serde(default, alias = "granary")]
     pub backup: BackupConfig,
-    #[serde(default = "default_hybrid_mnt_dir")]
-    pub hybrid_mnt_dir: String,
     #[serde(default)]
     pub default_mode: DefaultMode,
     #[serde(default)]
     pub rules: HashMap<String, ModuleRules>,
-}
-
-fn default_hybrid_mnt_dir() -> String {
-    defs::DEFAULT_HYBRID_MNT_DIR.to_string()
 }
 
 fn default_moduledir() -> PathBuf {
@@ -144,7 +138,6 @@ impl Default for Config {
             disable_umount: false,
             allow_umount_coexistence: false,
             backup: BackupConfig::default(),
-            hybrid_mnt_dir: default_hybrid_mnt_dir(),
             default_mode: DefaultMode::default(),
             rules: HashMap::new(),
         }

@@ -124,14 +124,16 @@ fn main() -> Result<()> {
         log::warn!("!! Umount is DISABLED via config.");
     }
 
-    let mnt_base = PathBuf::from(&config.hybrid_mnt_dir);
+    let mnt_base = utils::get_mnt();
     let img_path = PathBuf::from(defs::MODULES_IMG_FILE);
 
     /*if let Err(e) = granary::create_snapshot(&config, "Boot Backup", "Automatic Pre-Mount") {
         log::warn!("Backup: Failed to create boot snapshot: {}", e);
     }*/
 
-    MountController::new(config)
+    utils::ensure_dir_exists(&mnt_base)?;
+
+    MountController::new(config, &mnt_base)
         .init_storage(&mnt_base, &img_path)
         .context("Failed to initialize storage")?
         .scan_and_sync()

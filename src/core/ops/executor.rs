@@ -22,7 +22,10 @@ pub struct ExecutionResult {
     pub magic_module_ids: Vec<String>,
 }
 
-pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionResult> {
+pub fn execute<P>(plan: &MountPlan, config: &config::Config, tempdir: P) -> Result<ExecutionResult>
+where
+    P: AsRef<Path>,
+{
     let mut final_magic_ids: HashSet<String> = plan.magic_module_ids.iter().cloned().collect();
     let mut final_overlay_ids: HashSet<String> = HashSet::new();
 
@@ -100,7 +103,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     magic_queue.sort();
 
     if !magic_queue.is_empty() {
-        let tempdir = PathBuf::from(&config.hybrid_mnt_dir).join("magic_workspace");
+        let tempdir = tempdir.as_ref().join("magic_workspace");
         let _ = umount_mgr::TMPFS.set(tempdir.to_string_lossy().to_string());
 
         log::info!(
@@ -122,7 +125,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
             std::fs::create_dir_all(&tempdir)?;
         }
 
-        let module_dir = Path::new(&config.hybrid_mnt_dir);
+        let module_dir = tempdir.as_ref();
         let magic_need_ids: HashSet<String> = magic_queue.iter().cloned().collect();
 
         if let Err(e) = magic_mount::magic_mount(
@@ -138,10 +141,10 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
         }
     }
 
-    if let Err(e) = umount_dir(&config.hybrid_mnt_dir) {
+    if let Err(e) = umount_dir(tempdir.as_ref()) {
         log::warn!(
             "Failed to schedule unmount for {}: {}",
-            config.hybrid_mnt_dir,
+            tempdir.as_ref().display(),
             e
         );
     }
@@ -149,7 +152,7 @@ pub fn execute(plan: &MountPlan, config: &config::Config) -> Result<ExecutionRes
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         if !config.disable_umount {
-            let _ = umount_mgr::send_umountable(&config.hybrid_mnt_dir);
+            let _ = umount_mgr::send_umountable(tempdir.as_ref());
             if let Err(e) = umount_mgr::commit() {
                 log::warn!("Final try_umount commit failed: {}", e);
             }

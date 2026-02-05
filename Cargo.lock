@@ -721,6 +721,7 @@ dependencies = [
  "clap",
  "env_logger",
  "extattr",
+ "fastrand",
  "flate2",
  "jwalk",
  "ksu",
