@@ -75,7 +75,8 @@ async fn main() -> Result<()> {
 
     let bot = Client::new(bot_token)?;
 
-    let mut action = SendDocument::new(chat_id, InputFile::path(file_path).await?);
+    let mut action = SendDocument::new(chat_id, InputFile::path(file_path).await?)
+        .with_caption_parse_mode(tgbot::types::ParseMode::Html);
 
     if let Some(topic_id) = topic_id {
         action = action.with_message_thread_id(topic_id.parse::<i64>()?);
