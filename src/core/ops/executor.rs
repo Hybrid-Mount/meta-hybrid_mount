@@ -100,33 +100,33 @@ where
     magic_queue.sort();
 
     if !magic_queue.is_empty() {
-        let tempdir = tempdir.as_ref().join("magic_workspace");
-        let _ = umount_mgr::TMPFS.set(tempdir.to_string_lossy().to_string());
+        let magic_ws_path = tempdir.as_ref().join("magic_workspace");
+        let _ = umount_mgr::TMPFS.set(magic_ws_path.to_string_lossy().to_string());
 
         log::info!(
             ">> Phase 2: Magic Mount (Fallback/Native) using {}",
-            tempdir.display()
+            magic_ws_path.display()
         );
 
         if matches!(config.overlay_mode, config::OverlayMode::Erofs) {
-            if tempdir.exists() {
-                crate::sys::mount::mount_tmpfs(&tempdir, "magic_ws")?;
+            if magic_ws_path.exists() {
+                crate::sys::mount::mount_tmpfs(&magic_ws_path, "magic_ws")?;
                 #[cfg(any(target_os = "linux", target_os = "android"))]
-                if let Err(e) = umount_mgr::send_umountable(&tempdir) {
+                if let Err(e) = umount_mgr::send_umountable(&magic_ws_path) {
                     log::warn!("Failed to schedule unmount for magic_ws: {}", e);
                 }
             } else {
                 log::error!("Magic Mount anchor missing in EROFS image!");
             }
-        } else if !tempdir.exists() {
-            std::fs::create_dir_all(&tempdir)?;
+        } else if !magic_ws_path.exists() {
+            std::fs::create_dir_all(&magic_ws_path)?;
         }
 
         let module_dir = tempdir.as_ref();
         let magic_need_ids: HashSet<String> = magic_queue.iter().cloned().collect();
 
         if let Err(e) = magic_mount::magic_mount(
-            &tempdir,
+            &magic_ws_path,
             module_dir,
             &config.mountsource,
             &config.partitions,
