@@ -122,7 +122,6 @@ export default function ConfigTab() {
   }
 
   const availableModes = createMemo(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const storageModes = (store.storage as any)?.supported_modes;
     let modes: OverlayMode[];
 
@@ -251,47 +250,6 @@ export default function ConfigTab() {
                 <md-icon slot="leading-icon">
                   <svg viewBox="0 0 24 24">
                     <path d={ICONS.ksu} />
-                  </svg>
-                </md-icon>
-              </md-outlined-text-field>
-            </div>
-          </div>
-
-          <div class="config-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <md-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path d={ICONS.mount_path} />
-                  </svg>
-                </md-icon>
-              </div>
-              <div class="card-text">
-                <span class="card-title">
-                  {store.L.config?.hybrid_mnt_dir ?? "Mount Point Path"}
-                </span>
-                <span class="card-desc">
-                  {store.L.config?.hybrid_mnt_dir_desc ??
-                    "Temporary directory for OverlayFS mounting"}
-                </span>
-              </div>
-            </div>
-
-            <div class="input-stack">
-              <md-outlined-text-field
-                label={store.L.config?.hybrid_mnt_dir ?? "Mount Point Path"}
-                value={store.config.hybrid_mnt_dir ?? ""}
-                onInput={(e: Event) =>
-                  updateConfig(
-                    "hybrid_mnt_dir",
-                    (e.currentTarget as HTMLInputElement).value,
-                  )
-                }
-                class="full-width-field"
-              >
-                <md-icon slot="leading-icon">
-                  <svg viewBox="0 0 24 24">
-                    <path d={ICONS.mount_path} />
                   </svg>
                 </md-icon>
               </md-outlined-text-field>

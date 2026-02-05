@@ -13,7 +13,6 @@ export type OverlayMode = "tmpfs" | "ext4" | "erofs";
 export interface AppConfig {
   moduledir: string;
   mountsource: string;
-  hybrid_mnt_dir: string;
   partitions: string[];
   overlay_mode: OverlayMode;
   disable_umount: boolean;

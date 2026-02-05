@@ -13,7 +13,6 @@ export const DEFAULT_CONFIG: AppConfig = {
   partitions: [],
   disable_umount: false,
   allow_umount_coexistence: false,
-  hybrid_mnt_dir: "/debug_ramdisk",
   overlay_mode: "tmpfs",
 };
 
