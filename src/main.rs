@@ -37,12 +37,11 @@ fn load_config(cli: &Cli) -> Result<Config> {
             .map(|io_err| io_err.kind() == std::io::ErrorKind::NotFound)
             .unwrap_or(false);
 
-        if is_not_found {
-            Config::default()
-        } else {
-            log::warn!("Failed to load default config, using defaults: {}", e);
-            Config::default()
+        if !is_not_found {
+            log::warn!("Failed to load default config, using defaults: {:#}", e);
         }
+
+        Config::default()
     }))
 }
 
