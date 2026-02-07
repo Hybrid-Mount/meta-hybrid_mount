@@ -96,8 +96,24 @@ pub fn mount_overlayfs(
     })();
 
     if let Err(e) = result {
-        log::warn!("fsopen mount failed: {:#}, fallback to magic mount", e);
-        return Err(e.into());
+        log::warn!("fsopen mount failed: {:#}, fallback to mount", e);
+        let safe_lower = lowerdir_config.replace(',', "\\,");
+        let mut data = format!("lowerdir={safe_lower}");
+
+        if let (Some(upperdir), Some(workdir)) = (upperdir_s, workdir_s) {
+            data = format!(
+                "{data},upperdir={},workdir={}",
+                upperdir.replace(',', "\\,"),
+                workdir.replace(',', "\\,")
+            );
+        }
+        mount(
+            mount_source,
+            dest.as_ref(),
+            "overlay",
+            MountFlags::empty(),
+            Some(CString::new(data)?.as_c_str()),
+        )?;
     }
     Ok(())
 }
