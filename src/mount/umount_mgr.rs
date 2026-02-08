@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::Result;
-use ksu::TryUmount;
+use ksu::{TryUmount, TryUmountFlags};
 
 pub static TMPFS: OnceLock<String> = OnceLock::new();
 pub static LIST: LazyLock<Mutex<TryUmount>> = LazyLock::new(|| Mutex::new(TryUmount::new()));
@@ -44,11 +44,11 @@ pub fn commit() -> Result<()> {
         .lock()
         .map_err(|_| anyhow::anyhow!("Failed to lock umount list"))?;
 
-    list.flags(0);
+    list.flags(TryUmountFlags::empty());
     if let Err(e0) = list.umount() {
         log::debug!("try_umount(0) failed: {:#}, retrying with flags(2)", e0);
 
-        list.flags(2);
+        list.flags(TryUmountFlags::from_bits_truncate(2));
         if let Err(e2) = list.umount() {
             log::warn!("try_umount(2) failed: {:#}", e2);
         }
