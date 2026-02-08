@@ -9,7 +9,7 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 serde_json = "1.0.149"
 tgbot = "0.41.0"
 tokio = { version = "1.49.0", features = ["full"] }
