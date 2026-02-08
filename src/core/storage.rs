@@ -7,7 +7,10 @@ use std::{
 
 use anyhow::{Context, Result, bail, ensure};
 use jwalk::WalkDir;
-use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount as umount};
+use loopdev::LoopControl;
+use rustix::mount::{
+    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_change, unmount as umount,
+};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr::send_umountable;
@@ -303,16 +306,31 @@ fn create_erofs_image(src_dir: &Path, image_path: &Path) -> Result<()> {
 fn mount_erofs_image(image_path: &Path, target: &Path) -> Result<()> {
     ensure_dir_exists(target)?;
     lsetfilecon(image_path, "u:object_r:ksu_file:s0").ok();
-    let status = Command::new("mount")
-        .args(["-t", "erofs", "-o", "loop,ro,nodev,noatime"])
-        .arg(image_path)
-        .arg(target)
-        .status()
-        .context("Failed to execute mount command for EROFS")?;
 
-    if !status.success() {
-        bail!("EROFS Mount command failed");
-    }
+    let lc = LoopControl::open().context("Failed to open loop control")?;
+    let ld = lc.next_free().context("Failed to find free loop device")?;
+
+    ld.with()
+        .read_only(true)
+        .autoclear(true)
+        .attach(image_path)
+        .context("Failed to attach source to loop device")?;
+
+    let device_path = ld.path().context("Could not get loop device path")?;
+    log::debug!("loop device path: {}", device_path.display());
+
+    mount(
+        &device_path,
+        target,
+        "erofs",
+        MountFlags::NOATIME | MountFlags::NODEV | MountFlags::RDONLY,
+        Some(c""),
+    )
+    .context(format!(
+        "Failed to mount {} to {}",
+        device_path.display(),
+        target.display()
+    ))?;
 
     if fs::read_dir(target)?.next().is_none() {
         bail!("EROFS mount success but directory is empty (Loop device failure?)");
