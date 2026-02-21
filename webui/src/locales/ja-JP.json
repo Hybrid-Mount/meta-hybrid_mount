@@ -65,7 +65,8 @@
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "ループバックイメージ。永続的、RAM を節約できます。",
     "mode_erofs": "EROFS",
-    "mode_erofsDesc": "読み取り専用な圧縮。高性能、省スペース。"
+    "mode_erofsDesc": "読み取り専用な圧縮。高性能、省スペース。",
+    "hymofsEnable": "HymoFS"
   },
   "hymofs": {
     "rmmodTitle": "Unload HymoFS?",
@@ -80,7 +81,15 @@
     "debugMode": "Debug Mode",
     "debugModeDesc": "Enable verbose logging for HymoFS.",
     "stealthMode": "Stealth Mode",
-    "stealthModeDesc": "Hide HymoFS mount points from standard detection."
+    "stealthModeDesc": "Hide HymoFS mount points from standard detection.",
+    "unameSpoofTitle": "Uname Spoofing",
+    "unameSpoofEnable": "Enable Uname Spoofing",
+    "uname_sysname": "Sysname",
+    "uname_nodename": "Nodename",
+    "uname_release": "Release",
+    "uname_version": "Version",
+    "uname_machine": "Machine",
+    "uname_domainname": "Domainname"
   },
   "modules": {
     "reload": "更新",

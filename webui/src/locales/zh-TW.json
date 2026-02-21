@@ -65,7 +65,8 @@
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
     "mode_erofs": "EROFS",
-    "mode_erofsDesc": "Read-only compressed. High performance, space saving."
+    "mode_erofsDesc": "Read-only compressed. High performance, space saving.",
+    "hymofsEnable": "HymoFS"
   },
   "hymofs": {
     "rmmodTitle": "Unload HymoFS?",
@@ -80,7 +81,15 @@
     "debugMode": "Debug Mode",
     "debugModeDesc": "Enable verbose logging for HymoFS.",
     "stealthMode": "Stealth Mode",
-    "stealthModeDesc": "Hide HymoFS mount points from standard detection."
+    "stealthModeDesc": "Hide HymoFS mount points from standard detection.",
+    "unameSpoofTitle": "Uname Spoofing",
+    "unameSpoofEnable": "Enable Uname Spoofing",
+    "uname_sysname": "Sysname",
+    "uname_nodename": "Nodename",
+    "uname_release": "Release",
+    "uname_version": "Version",
+    "uname_machine": "Machine",
+    "uname_domainname": "Domainname"
   },
   "modules": {
     "reload": "重新整理",

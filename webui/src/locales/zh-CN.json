@@ -65,7 +65,8 @@
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "节省内存，使用 Loop 设备",
     "mode_erofs": "EROFS",
-    "mode_erofsDesc": "高性能只读文件系统，极大节省空间"
+    "mode_erofsDesc": "高性能只读文件系统，极大节省空间",
+    "hymofsEnable": "HymoFS"
   },
   "hymofs": {
     "rmmodTitle": "卸载HymoFS？",
@@ -80,7 +81,15 @@
     "debugMode": "Debug Mode",
     "debugModeDesc": "HymoFS的详细日志",
     "stealthMode": "Stealth Mode",
-    "stealthModeDesc": "隐藏HymoFS挂载点"
+    "stealthModeDesc": "隐藏HymoFS挂载点",
+    "unameSpoofTitle": "Uname Spoofing",
+    "unameSpoofEnable": "Enable Uname Spoofing",
+    "uname_sysname": "Sysname",
+    "uname_nodename": "Nodename",
+    "uname_release": "Release",
+    "uname_version": "Version",
+    "uname_machine": "Machine",
+    "uname_domainname": "Domainname"
   },
   "modules": {
     "reload": "刷新",
