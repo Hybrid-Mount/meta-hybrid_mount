@@ -10,12 +10,16 @@
     "rebootConfirm": "Вы уверены, что хотите перезагрузить устройство?",
     "reboot": "Перезагрузить",
     "cancel": "Отмена",
-    "saved": "Saved"
+    "saved": "Saved",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No"
   },
   "tabs": {
     "status": "Статус",
     "config": "Конфиг",
     "modules": "Модули",
+    "hymofs": "HymoFS",
     "info": "Инфо"
   },
   "status": {
@@ -25,10 +29,12 @@
     "sysInfoTitle": "Системная информация",
     "kernel": "Ядро",
     "selinux": "SELinux",
+    "abi": "ABI",
     "mountBase": "База монтирования",
     "activePartitions": "Активные разделы"
   },
   "config": {
+    "title": "Configuration",
     "disableUmount": "Отключить Umount",
     "allowUmountCoexistence": "Разрешить сосуществование",
     "coexistenceRequired": "Требуется включить сосуществование",
@@ -61,6 +67,21 @@
     "mode_erofs": "EROFS",
     "mode_erofsDesc": "Read-only compressed. High performance, space saving."
   },
+  "hymofs": {
+    "rmmodTitle": "Unload HymoFS?",
+    "rmmodConfirm": "Are you sure you want to unload the HymoFS kernel module?",
+    "rmmodBtn": "Unload HymoFS Module",
+    "rmmodSuccess": "HymoFS Unloaded",
+    "rmmodError": "Failed to unload HymoFS",
+    "unsupported": "Device Not Supported",
+    "unsupportedDesc": "HymoFS is currently only available for aarch64 devices.",
+    "loaded": "Module Loaded",
+    "version": "Version",
+    "debugMode": "Debug Mode",
+    "debugModeDesc": "Enable verbose logging for HymoFS.",
+    "stealthMode": "Stealth Mode",
+    "stealthModeDesc": "Hide HymoFS mount points from standard detection."
+  },
   "modules": {
     "reload": "Обновить",
     "save": "Сохранить",
@@ -74,10 +95,12 @@
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
+      "hymofs": "HymoFS",
       "none": "Unmounted",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
+        "hymofs": "HymoFS",
         "ignore": "Ignore"
       }
     }

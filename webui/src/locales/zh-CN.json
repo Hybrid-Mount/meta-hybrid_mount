@@ -10,12 +10,16 @@
     "rebootConfirm": "你确定你想重启系统吗？",
     "reboot": "重启",
     "cancel": "取消",
-    "saved": "已保存"
+    "saved": "已保存",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No"
   },
   "tabs": {
     "status": "状态",
     "config": "配置",
     "modules": "模块",
+    "hymofs": "HymoFS",
     "info": "关于"
   },
   "status": {
@@ -25,10 +29,12 @@
     "sysInfoTitle": "系统信息",
     "kernel": "内核版本",
     "selinux": "SELinux",
+    "abi": "ABI",
     "mountBase": "挂载基点",
     "activePartitions": "活跃分区"
   },
   "config": {
+    "title": "Configuration",
     "disableUmount": "禁用Umount",
     "allowUmountCoexistence": "允许Umount共存",
     "coexistenceRequired": "需开启共存选项",
@@ -61,6 +67,21 @@
     "mode_erofs": "EROFS",
     "mode_erofsDesc": "高性能只读文件系统，极大节省空间"
   },
+  "hymofs": {
+    "rmmodTitle": "Unload HymoFS?",
+    "rmmodConfirm": "Are you sure you want to unload the HymoFS kernel module?",
+    "rmmodBtn": "Unload HymoFS Module",
+    "rmmodSuccess": "HymoFS Unloaded",
+    "rmmodError": "Failed to unload HymoFS",
+    "unsupported": "Device Not Supported",
+    "unsupportedDesc": "HymoFS is currently only available for aarch64 devices.",
+    "loaded": "Module Loaded",
+    "version": "Version",
+    "debugMode": "Debug Mode",
+    "debugModeDesc": "Enable verbose logging for HymoFS.",
+    "stealthMode": "Stealth Mode",
+    "stealthModeDesc": "Hide HymoFS mount points from standard detection."
+  },
   "modules": {
     "reload": "刷新",
     "save": "保存配置",
@@ -74,10 +95,12 @@
     "modes": {
       "auto": "OverlayFS",
       "magic": "Magic Mount",
+      "hymofs": "HymoFS",
       "none": "未挂载",
       "short": {
         "auto": "Overlay",
         "magic": "Magic",
+        "hymofs": "HymoFS",
         "ignore": "忽略"
       }
     }
