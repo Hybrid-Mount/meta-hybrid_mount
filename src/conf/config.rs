@@ -54,12 +54,32 @@ impl ModuleRules {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct SpoofUnameConfig {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default)]
+    pub sysname: String,
+    #[serde(default)]
+    pub nodename: String,
+    #[serde(default)]
+    pub release: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub machine: String,
+    #[serde(default)]
+    pub domainname: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HymofsConfig {
     pub enable: bool,
     pub debug: bool,
     pub stealth: bool,
     pub hide_overlay_xattrs: bool,
+    #[serde(default)]
+    pub spoof_uname: SpoofUnameConfig,
 }
 
 impl Default for HymofsConfig {
@@ -69,6 +89,7 @@ impl Default for HymofsConfig {
             debug: false,
             stealth: true,
             hide_overlay_xattrs: false,
+            spoof_uname: SpoofUnameConfig::default(),
         }
     }
 }

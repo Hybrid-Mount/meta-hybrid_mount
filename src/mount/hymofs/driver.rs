@@ -16,9 +16,9 @@ use crate::{
     conf::config,
     core::state::HymofsState,
     mount::hymofs::ioctl::{
-        HymoSyscallArg, get_hymofs_fd, hymo_ioc_add_merge_rule, hymo_ioc_add_rule,
+        HymoSyscallArg, HymoSpoofUname, get_hymofs_fd, hymo_ioc_add_merge_rule, hymo_ioc_add_rule,
         hymo_ioc_get_features, hymo_ioc_get_version, hymo_ioc_set_debug, hymo_ioc_set_enabled,
-        hymo_ioc_set_mirror_path, hymo_ioc_set_stealth,
+        hymo_ioc_set_mirror_path, hymo_ioc_set_stealth, hymo_ioc_set_uname,
     },
 };
 
@@ -130,6 +130,41 @@ pub fn apply_hymofs_rules(
         let stealth_val = if config.hymofs.stealth { 1 } else { 0 };
         if let Err(e) = hymo_ioc_set_stealth(raw_fd, &stealth_val) {
             error!("Failed to set HymoFS stealth mode: {}", e);
+        }
+
+        let mut uname_arg = HymoSpoofUname {
+            sysname: [0; 65],
+            nodename: [0; 65],
+            release: [0; 65],
+            version: [0; 65],
+            machine: [0; 65],
+            domainname: [0; 65],
+            err: 0,
+        };
+
+        if config.hymofs.spoof_uname.enable {
+            let copy_to_c_array = |src: &str, dst: &mut [libc::c_char; 65]| {
+                let bytes = src.as_bytes();
+                let len = bytes.len().min(64);
+                for i in 0..len {
+                    dst[i] = bytes[i] as libc::c_char;
+                }
+                dst[len] = 0;
+            };
+
+            copy_to_c_array(&config.hymofs.spoof_uname.sysname, &mut uname_arg.sysname);
+            copy_to_c_array(&config.hymofs.spoof_uname.nodename, &mut uname_arg.nodename);
+            copy_to_c_array(&config.hymofs.spoof_uname.release, &mut uname_arg.release);
+            copy_to_c_array(&config.hymofs.spoof_uname.version, &mut uname_arg.version);
+            copy_to_c_array(&config.hymofs.spoof_uname.machine, &mut uname_arg.machine);
+            copy_to_c_array(
+                &config.hymofs.spoof_uname.domainname,
+                &mut uname_arg.domainname,
+            );
+        }
+
+        if let Err(e) = hymo_ioc_set_uname(raw_fd, &uname_arg) {
+            error!("Failed to set HymoFS uname spoofing: {}", e);
         }
 
         let mirror_dir = storage_root.join("hymofs");
