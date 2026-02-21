@@ -7,6 +7,13 @@ export interface ModuleRules {
   paths: Record<string, string>;
 }
 
+export interface HymofsConfig {
+  enable: boolean;
+  debug: boolean;
+  stealth: boolean;
+  hide_overlay_xattrs: boolean;
+}
+
 export interface AppConfig {
   moduledir: string;
   mountsource: string;
@@ -15,9 +22,7 @@ export interface AppConfig {
   disable_umount: boolean;
   allow_umount_coexistence: boolean;
   logfile?: string;
-  hymofs_debug?: boolean;
-  hymofs_stealth?: boolean;
-  hymofs_enable?: boolean;
+  hymofs: HymofsConfig;
 }
 
 export interface Module {

@@ -86,6 +86,28 @@ export default function ConfigTab() {
     });
   }
 
+  function toggleHymofs() {
+    const currentVal = store.config.hymofs.enable;
+    const newVal = !currentVal;
+    const newConfig = {
+      ...store.config,
+      hymofs: { ...store.config.hymofs, enable: newVal },
+    };
+
+    store.config = newConfig;
+
+    API.saveConfig(newConfig).catch(() => {
+      store.config = {
+        ...store.config,
+        hymofs: { ...store.config.hymofs, enable: currentVal },
+      };
+      store.showToast(
+        store.L.config?.saveFailed || "Failed to update setting",
+        "error",
+      );
+    });
+  }
+
   function setOverlayMode(mode: string) {
     updateConfig("overlay_mode", mode as OverlayMode);
   }
@@ -323,8 +345,8 @@ export default function ConfigTab() {
               </div>
             </button>
             <button
-              class={`option-tile clickable tertiary ${store.config.hymofs_enable ? "active" : ""}`}
-              onClick={() => toggle("hymofs_enable")}
+              class={`option-tile clickable tertiary ${store.config.hymofs?.enable ? "active" : ""}`}
+              onClick={() => toggleHymofs()}
             >
               <md-ripple></md-ripple>
               <div class="tile-top">

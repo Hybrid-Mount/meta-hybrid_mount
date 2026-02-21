@@ -61,14 +61,20 @@ export default function HymoFSTab() {
   function toggleDebug() {
     store.config = {
       ...store.config,
-      hymofs_debug: !store.config.hymofs_debug,
+      hymofs: {
+        ...store.config.hymofs,
+        debug: !store.config.hymofs.debug,
+      },
     };
   }
 
   function toggleStealth() {
     store.config = {
       ...store.config,
-      hymofs_stealth: !store.config.hymofs_stealth,
+      hymofs: {
+        ...store.config.hymofs,
+        stealth: !store.config.hymofs.stealth,
+      },
     };
   }
 
@@ -162,7 +168,7 @@ export default function HymoFSTab() {
               </div>
               <md-switch
                 slot="end"
-                selected={store.config?.hymofs_debug || false}
+                selected={store.config?.hymofs?.debug || false}
                 onChange={toggleDebug}
               ></md-switch>
             </md-list-item>
@@ -176,7 +182,7 @@ export default function HymoFSTab() {
               </div>
               <md-switch
                 slot="end"
-                selected={store.config?.hymofs_stealth || false}
+                selected={store.config?.hymofs?.stealth || false}
                 onChange={toggleStealth}
               ></md-switch>
             </md-list-item>

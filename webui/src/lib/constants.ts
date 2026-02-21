@@ -9,6 +9,12 @@ export const DEFAULT_CONFIG: AppConfig = {
   disable_umount: false,
   allow_umount_coexistence: false,
   overlay_mode: "tmpfs",
+  hymofs: {
+    enable: true,
+    debug: false,
+    stealth: true,
+    hide_overlay_xattrs: false,
+  },
 };
 
 export const PATHS = {
