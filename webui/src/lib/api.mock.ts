@@ -99,7 +99,7 @@ export const MockAPI = {
       tmpfs_xattr_supported: false,
       abi: "aarch64",
       hymofs_state: {
-        enabled: false,
+        enabled: true,
         loaded: true,
         version: 12,
         active_features: ["debug", "stealth"],

@@ -14,6 +14,15 @@ export const DEFAULT_CONFIG: AppConfig = {
     debug: false,
     stealth: true,
     hide_overlay_xattrs: false,
+    spoof_uname: {
+      enable: false,
+      sysname: "",
+      nodename: "",
+      release: "",
+      version: "",
+      machine: "",
+      domainname: "",
+    },
   },
 };
 

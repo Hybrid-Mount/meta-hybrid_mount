@@ -4,6 +4,7 @@ import {
   createEffect,
   createMemo,
   Show,
+  For,
 } from "solid-js";
 import { store } from "../lib/store";
 import { ICONS } from "../lib/constants";
@@ -20,6 +21,7 @@ import "@material/web/button/filled-button.js";
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
 import "@material/web/icon/icon.js";
 import "@material/web/dialog/dialog.js";
+import "@material/web/textfield/outlined-text-field.js";
 
 export default function HymoFSTab() {
   const [showRmmodConfirm, setShowRmmodConfirm] = createSignal(false);
@@ -74,6 +76,35 @@ export default function HymoFSTab() {
       hymofs: {
         ...store.config.hymofs,
         stealth: !store.config.hymofs.stealth,
+      },
+    };
+  }
+
+  function toggleUnameSpoof() {
+    store.config = {
+      ...store.config,
+      hymofs: {
+        ...store.config.hymofs,
+        spoof_uname: {
+          ...store.config.hymofs.spoof_uname,
+          enable: !store.config.hymofs.spoof_uname?.enable,
+        },
+      },
+    };
+  }
+
+  function updateUnameField(
+    key: keyof typeof store.config.hymofs.spoof_uname,
+    value: string,
+  ) {
+    store.config = {
+      ...store.config,
+      hymofs: {
+        ...store.config.hymofs,
+        spoof_uname: {
+          ...store.config.hymofs.spoof_uname,
+          [key]: value,
+        },
       },
     };
   }
@@ -187,6 +218,61 @@ export default function HymoFSTab() {
               ></md-switch>
             </md-list-item>
           </md-list>
+        </div>
+
+        <div class="config-card">
+          <div class="card-header">
+            <span class="card-title">
+              {store.L?.hymofs?.unameSpoofTitle ?? "Uname Spoofing"}
+            </span>
+          </div>
+          <md-list>
+            <md-list-item>
+              <div slot="headline">
+                {store.L?.hymofs?.unameSpoofEnable ?? "Enable Uname Spoofing"}
+              </div>
+              <md-switch
+                slot="end"
+                selected={store.config?.hymofs?.spoof_uname?.enable || false}
+                onChange={toggleUnameSpoof}
+              ></md-switch>
+            </md-list-item>
+          </md-list>
+
+          <Show when={store.config?.hymofs?.spoof_uname?.enable}>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 0 16px 16px;">
+              <For
+                each={[
+                  "sysname",
+                  "nodename",
+                  "release",
+                  "version",
+                  "machine",
+                  "domainname",
+                ]}
+              >
+                {(field) => (
+                  <md-outlined-text-field
+                    label={
+                      store.L?.hymofs?.[`uname_${field}`] ??
+                      field.charAt(0).toUpperCase() + field.slice(1)
+                    }
+                    value={
+                      (store.config?.hymofs?.spoof_uname?.[
+                        field as keyof typeof store.config.hymofs.spoof_uname
+                      ] as string) || ""
+                    }
+                    onInput={(e: Event) =>
+                      updateUnameField(
+                        field as keyof typeof store.config.hymofs.spoof_uname,
+                        (e.currentTarget as HTMLInputElement).value,
+                      )
+                    }
+                  ></md-outlined-text-field>
+                )}
+              </For>
+            </div>
+          </Show>
         </div>
 
         <div class="action-card">

@@ -7,11 +7,22 @@ export interface ModuleRules {
   paths: Record<string, string>;
 }
 
+export interface SpoofUnameConfig {
+  enable: boolean;
+  sysname: string;
+  nodename: string;
+  release: string;
+  version: string;
+  machine: string;
+  domainname: string;
+}
+
 export interface HymofsConfig {
   enable: boolean;
   debug: boolean;
   stealth: boolean;
   hide_overlay_xattrs: boolean;
+  spoof_uname: SpoofUnameConfig;
 }
 
 export interface AppConfig {

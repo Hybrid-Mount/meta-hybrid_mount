@@ -16,7 +16,7 @@ use crate::{
     conf::config,
     core::state::HymofsState,
     mount::hymofs::ioctl::{
-        HymoSyscallArg, HymoSpoofUname, get_hymofs_fd, hymo_ioc_add_merge_rule, hymo_ioc_add_rule,
+        HymoSpoofUname, HymoSyscallArg, get_hymofs_fd, hymo_ioc_add_merge_rule, hymo_ioc_add_rule,
         hymo_ioc_get_features, hymo_ioc_get_version, hymo_ioc_set_debug, hymo_ioc_set_enabled,
         hymo_ioc_set_mirror_path, hymo_ioc_set_stealth, hymo_ioc_set_uname,
     },
