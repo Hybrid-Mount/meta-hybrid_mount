@@ -175,7 +175,9 @@ pub fn generate(
                     continue;
                 }
 
-                if let Ok(file_type) = entry.file_type() && file_type.is_symlink() {
+                if let Ok(file_type) = entry.file_type()
+                    && file_type.is_symlink()
+                {
                     continue;
                 }
 
