@@ -1,0 +1,95 @@
+{
+  "lang": {
+    "display": "Tiếng Việt"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "saving": "Đang lưu...",
+    "language": "Ngôn ngữ",
+    "rebootTitle": "Khởi động lại hệ thống?",
+    "rebootConfirm": "Bạn có chắc muốn khởi động lại thiết bị?",
+    "reboot": "Khởi động lại",
+    "cancel": "Hủy",
+    "saved": "Đã lưu"
+  },
+  "tabs": {
+    "status": "Trạng thái",
+    "config": "Cấu hình",
+    "modules": "Mô-đun",
+    "info": "Thông tin"
+  },
+  "status": {
+    "storageTitle": "Bộ nhớ",
+    "moduleActive": "Mô-đun đang hoạt động",
+    "modeStats": "Thống kê Chế độ",
+    "sysInfoTitle": "Thông tin Hệ thống",
+    "kernel": "Kernel",
+    "selinux": "SELinux",
+    "mountBase": "Cơ sở Gắn kết",
+    "activePartitions": "Phân vùng đang hoạt động"
+  },
+  "config": {
+    "disableUmount": "Tắt Umount",
+    "allowUmountCoexistence": "Cho phép Umount Cùng tồn tại",
+    "coexistenceRequired": "Cần có tuỳ chọn cùng tồn tại.",
+    "moduleDir": "Thư mục Mô-đun",
+    "moduleDirDesc": "Đặt thư mục nơi các mô-đun được lưu trữ",
+    "mountSource": "Nguồn Gắn kết",
+    "mountSourceDesc": "Không gian tên nguồn gắn kết toàn cầu (ví dụ: KSU)",
+    "partitions": "Phân vùng",
+    "partitionsDesc": "Thêm phân vùng để gắn kết",
+    "reload": "Tải lại",
+    "save": "Lưu",
+    "resetConfig": "Đặt lại Cấu hình",
+    "resetConfigTitle": "Đặt lại Cấu hình?",
+    "resetConfigConfirm": "Điều này sẽ đặt lại tất cả cài đặt phụ trợ về mặc định. Tiếp tục?",
+    "invalidPath": "Đã phát hiện đường dẫn không hợp lệ",
+    "invalidModuleDir": "Đường dẫn Không hợp lệ",
+    "loadError": "Thất bại khi tải cấu hình",
+    "saveFailed": "Thất bại khi lưu",
+    "resetSuccess": "Cấu hình đã được đặt lại về mặc định",
+    "webui": "Cài đặt WebUI",
+    "fixBottomNav": "Sửa Điều hướng Phía dưới",
+    "fixBottomNavOn": "Sửa Điều hướng Phía dưới đã Bật",
+    "fixBottomNavOff": "Sửa Điều hướng Phía dưới đã Tắt",
+    "overlayMode": "Chế độ Lớp phủ",
+    "overlayModeDesc": "Chọn chiến lược lưu trữ sao lưu",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "Dựa trên RAM. I/O nhanh nhất, đặt lại khi khởi động lại.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Hình ảnh lặp lại. Bền bỉ, tiết kiệm RAM.",
+    "mode_erofs": "EROFS",
+    "mode_erofsDesc": "Nén chỉ đọc. Hiệu năng cao, tiết kiệm không gian."
+  },
+  "modules": {
+    "reload": "Làm mới",
+    "save": "Lưu các chế độ",
+    "scanError": "Thất bại khi quét các mô-đun",
+    "saveSuccess": "Các chế độ đã được lưu",
+    "saveFailed": "Thất bại khi lưu các chế độ",
+    "searchPlaceholder": "Tìm kiếm các mô-đun...",
+    "filterLabel": "Bộ lọc:",
+    "filterAll": "Tất cả",
+    "defaultMode": "Chiến lược Mặc định",
+    "modes": {
+      "auto": "OverlayFS",
+      "magic": "Gắn kết Magic",
+      "none": "Đã bỏ gắn kết",
+      "short": {
+        "auto": "Overlay",
+        "magic": "Magic",
+        "ignore": "Phớt lờ"
+      }
+    }
+  },
+  "logs": {
+    "refresh": "Làm mới"
+  },
+  "info": {
+    "projectLink": "Kho",
+    "donate": "Quyên góp",
+    "contributors": "Những người đóng góp",
+    "loadFail": "Thất bại khi tải (Giới hạn Tỷ lệ API)",
+    "noBio": "Không có sẵn tiểu sử"
+  }
+}
