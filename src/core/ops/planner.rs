@@ -168,17 +168,32 @@ pub fn generate(
             continue;
         }
 
-        if let Ok(entries) = fs::read_dir(&content_path) {
+    if let Ok(entries) = fs::read_dir(&content_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if !path.is_dir() {
                     continue;
                 }
 
+                if let Ok(file_type) = entry.file_type() {
+                    if file_type.is_symlink() {
+                        continue;
+                    }
+                }
+
                 let dir_name = entry.file_name();
                 let Some(dir_name) = dir_name.to_str() else {
                     continue;
                 };
+
+                let mut partitions = HashSet::new();
+                partitions.insert("system".to_string());
+                partitions.extend(config.partitions.clone());
+                partitions.extend(defs::BUILTIN_PARTITIONS.iter().map(|s| s.to_string()));
+
+                if !partitions.contains(dir_name) {
+                    continue;
+                }
 
                 let mut partitions = HashSet::new();
                 partitions.insert("system".to_string());
