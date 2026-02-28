@@ -168,7 +168,7 @@ pub fn generate(
             continue;
         }
 
-    if let Ok(entries) = fs::read_dir(&content_path) {
+        if let Ok(entries) = fs::read_dir(&content_path) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if !path.is_dir() {
@@ -246,12 +246,14 @@ pub fn generate(
                         }
                         Err(_) => system_target.clone(),
                     };
-
                     let canonical_target = if resolved_target.exists() {
-                        resolved_target.canonicalize().unwrap_or_else(|_| resolved_target.clone())
+                        resolved_target
+                            .canonicalize()
+                            .unwrap_or_else(|_| resolved_target.clone())
                     } else if let Some(parent) = resolved_target.parent() {
                         if parent.exists() {
-                            parent.canonicalize()
+                            parent
+                                .canonicalize()
                                 .map(|p| p.join(resolved_target.file_name().unwrap()))
                                 .unwrap_or_else(|_| resolved_target.clone())
                         } else {
