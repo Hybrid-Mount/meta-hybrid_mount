@@ -26,7 +26,7 @@
     "kernel": "Kernel",
     "selinux": "SELinux",
     "mountBase": "Cơ sở Gắn kết",
-    "activePartitions": "Phân vùng đang hoạt động"
+    "activePartitions": "Phân vùng Đang hoạt động"
   },
   "config": {
     "disableUmount": "Tắt Umount",
