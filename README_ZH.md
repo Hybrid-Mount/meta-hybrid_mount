@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="https://raw.githubusercontent.com/YuzakiKokuban/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
+<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
 
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
@@ -18,10 +18,10 @@
 
 ### 挂载策略
 
-核心二进制程序 (`meta-hybrid`) 会根据配置和系统兼容性为每个模块目录决定挂载方式：
+核心二进制程序 (`hybrid-mount`) 会根据配置和系统兼容性为每个模块目录决定挂载方式：
 
-1.  **OverlayFS**：使用内核的 OverlayFS 将模块目录与系统分区合并。这是支持该文件系统的设备上的默认策略。
-2.  **Magic Mount**：使用递归 Bind Mount 镜像修改后的文件结构。当 OverlayFS 不可用或失败时，此策略作为回退方案运行。
+1. **OverlayFS**：使用内核的 OverlayFS 将模块目录与系统分区合并。这是支持该文件系统的设备上的默认策略。
+2. **Magic Mount**：使用递归 Bind Mount 镜像修改后的文件结构。当 OverlayFS 不可用或失败时，此策略作为回退方案运行。
 
 ### 功能特性
 
@@ -34,7 +34,7 @@
 
 ## 配置
 
-配置文件位于 `/data/adb/meta-hybrid/config.toml`。
+配置文件位于 `/data/adb/hybrid-mount/config.toml`。
 
 | 参数 | 类型 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- |
@@ -43,7 +43,6 @@
 | `partitions` | list | `[]` | 显式管理的分区列表。 |
 | `overlay_mode` | string | `tmpfs` | Loop 设备后端类型 (`tmpfs`, `ext4`, `erofs`)。 |
 | `disable_umount` | bool | `false` | 若为 true，则跳过卸载原始源（调试用途）。 |
-| `backup` | object | `{}` | 启动快照保留设置。 |
 
 ---
 
@@ -68,22 +67,24 @@
 
 ### 编译命令
 
-1.  **完整构建 (二进制 + WebUI)**：
+1. **完整构建 (二进制 + WebUI)**：
+
     ```bash
     cargo run -p xtask -- build --release
     ```
+
     构建产物将生成在 `output/` 目录中。
 
-2.  **仅构建二进制**：
+2. **仅构建二进制**：
+
     ```bash
     cargo run -p xtask -- build --release --skip-webui
     ```
 
-
 ### 致谢
 
-*  [5ec1cff/KernelSU](https://github.com/5ec1cff/KernelSU/blob/52f1f575ce2bd0ca46ebf644fd00a838af9f344e/userspace/ksud/src/magic_mount.rs)：原始实现
-*  [Tools-cx-app/meta-magic_mount](https://github.com/Tools-cx-app/meta-magic_mount)：magic mount 部分
+* [5ec1cff/KernelSU](https://github.com/5ec1cff/KernelSU/blob/52f1f575ce2bd0ca46ebf644fd00a838af9f344e/userspace/ksud/src/magic_mount.rs)：原始实现
+* [Tools-cx-app/meta-magic_mount](https://github.com/Tools-cx-app/meta-magic_mount-rs)：magic mount 部分
 * [KernelSU-Modules-Repo/meta-overlayfs](https://github.com/KernelSU-Modules-Repo/meta-overlayfs) overlayfs 参考
 * [bmax121/APatch](https://github.com/bmax121/APatch/blob/8e4b71ada83e06c02cf03b23debe9bf7c9dc1e9e/apd/src/mount.rs) overlayfs 参考
 

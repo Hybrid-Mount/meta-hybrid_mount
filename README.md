@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="https://raw.githubusercontent.com/YuzakiKokuban/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
+<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
 
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
@@ -18,10 +18,10 @@ The project includes a WebUI dashboard for module management and configuration.
 
 ### Mounting Strategies
 
-The core binary (`meta-hybrid`) determines the mounting method for each module directory based on configuration and system compatibility:
+The core binary (`hybrid-mount`) determines the mounting method for each module directory based on configuration and system compatibility:
 
-1.  **OverlayFS**: Uses the kernel's OverlayFS to merge module directories with system partitions. This is the default strategy for supported filesystems.
-2.  **Magic Mount**: Uses recursive bind mounts to mirror modified file structures. This serves as a fallback strategy when OverlayFS is unavailable or fails.
+1. **OverlayFS**: Uses the kernel's OverlayFS to merge module directories with system partitions. This is the default strategy for supported filesystems.
+2. **Magic Mount**: Uses recursive bind mounts to mirror modified file structures. This serves as a fallback strategy when OverlayFS is unavailable or fails.
 
 ### Functionality
 
@@ -34,7 +34,7 @@ The core binary (`meta-hybrid`) determines the mounting method for each module d
 
 ## Configuration
 
-Configuration is stored at `/data/adb/meta-hybrid/config.toml`.
+Configuration is stored at `/data/adb/hybrid-mount/config.toml`.
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
@@ -43,7 +43,6 @@ Configuration is stored at `/data/adb/meta-hybrid/config.toml`.
 | `partitions` | list | `[]` | List of partitions to explicitly manage. |
 | `overlay_mode` | string | `tmpfs` | Backend for loop devices (`tmpfs`, `ext4`, `erofs`). |
 | `disable_umount` | bool | `false` | If true, skips unmounting the original source (debug usage). |
-| `backup` | object | `{}` | Settings for boot snapshot retention. |
 
 ---
 
@@ -68,13 +67,16 @@ The project uses `xtask` for build automation.
 
 ### Compilation
 
-1.  **Full Build (Binary + WebUI)**:
+1. **Full Build (Binary + WebUI)**:
+
     ```bash
     cargo run -p xtask -- build --release
     ```
+
     Output will be generated in the `output/` directory.
 
-2.  **Binary Only**:
+2. **Binary Only**:
+
     ```bash
     cargo run -p xtask -- build --release --skip-webui
     ```
