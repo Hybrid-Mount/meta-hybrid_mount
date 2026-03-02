@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 Hybrid Mount Developers
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { createSignal, createRoot } from "solid-js";
 import { API } from "../api";
 import { APP_VERSION } from "../constants_gen";

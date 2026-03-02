@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 Hybrid Mount Developers
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
 import type {

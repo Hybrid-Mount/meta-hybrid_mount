@@ -1,3 +1,6 @@
+// Copyright 2026 Hybrid Mount Developers
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
 pub const RUN_DIR: &str = "/data/adb/hybrid-mount/run/";
 pub const STATE_FILE: &str = "/data/adb/hybrid-mount/run/daemon_state.json";

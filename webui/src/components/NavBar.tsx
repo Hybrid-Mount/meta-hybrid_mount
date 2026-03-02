@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 Hybrid Mount Developers
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { createEffect, For } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { ICONS } from "../lib/constants";

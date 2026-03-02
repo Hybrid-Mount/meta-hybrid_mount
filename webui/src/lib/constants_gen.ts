@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 Hybrid Mount Developers
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 export const APP_VERSION = "v3.0.1-5-g950a83e-dirty";
 export const RUST_PATHS = {
   CONFIG: "/data/adb/meta-hybrid/config.toml",
