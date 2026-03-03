@@ -243,10 +243,14 @@ pub fn generate(
                             .unwrap_or_else(|_| resolved_target.clone())
                     } else if let Some(parent) = resolved_target.parent() {
                         if parent.exists() {
-                            parent
-                                .canonicalize()
-                                .map(|p| p.join(resolved_target.file_name().unwrap()))
-                                .unwrap_or_else(|_| resolved_target.clone())
+                            if let Some(file_name) = resolved_target.file_name() {
+                                parent
+                                    .canonicalize()
+                                    .map(|p| p.join(file_name))
+                                    .unwrap_or_else(|_| resolved_target.clone())
+                            } else {
+                                resolved_target.clone()
+                            }
                         } else {
                             resolved_target.clone()
                         }

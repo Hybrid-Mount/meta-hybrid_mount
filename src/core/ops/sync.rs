@@ -137,17 +137,68 @@ fn should_sync(src: &Path, dst: &Path) -> bool {
     }
 
     let src_prop = src.join("module.prop");
-
     let dst_prop = dst.join("module.prop");
 
     if !src_prop.exists() || !dst_prop.exists() {
         return true;
     }
 
-    match (fs::read(&src_prop), fs::read(&dst_prop)) {
-        (Ok(s), Ok(d)) => s != d,
+    if !matches!((fs::read(&src_prop), fs::read(&dst_prop)), (Ok(s), Ok(d)) if s == d) {
+        return true;
+    }
+
+    match (collect_snapshot(src), collect_snapshot(dst)) {
+        (Ok(src_snapshot), Ok(dst_snapshot)) => src_snapshot != dst_snapshot,
         _ => true,
     }
+}
+
+fn collect_snapshot(root: &Path) -> Result<Vec<String>> {
+    let mut snapshot = Vec::new();
+
+    for entry in WalkDir::new(root).into_iter().flatten() {
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+
+        let file_type = entry.file_type();
+        if file_type.is_dir() {
+            snapshot.push(format!("d:{}", relative));
+            continue;
+        }
+
+        if file_type.is_symlink() {
+            let target = fs::read_link(path)
+                .ok()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            snapshot.push(format!("l:{}:{}", relative, target));
+            continue;
+        }
+
+        let metadata = fs::symlink_metadata(path)?;
+        let content_hash = fs::read(path)
+            .ok()
+            .map(|data| {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                data.hash(&mut hasher);
+                hasher.finish()
+            })
+            .unwrap_or_default();
+        snapshot.push(format!(
+            "f:{}:{}:{}",
+            relative,
+            metadata.len(),
+            content_hash
+        ));
+    }
+
+    snapshot.sort();
+    Ok(snapshot)
 }
 
 fn has_files_recursive(path: &Path) -> bool {
@@ -160,4 +211,82 @@ fn has_files_recursive(path: &Path) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    fn create_temp_dir(name: &str) -> std::path::PathBuf {
+        let base = std::env::temp_dir();
+        let unique = format!(
+            "hybrid_mount_sync_test_{}_{}_{}",
+            name,
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let dir = base.join(unique);
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn write_file(path: &Path, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        let mut file = fs::File::create(path).expect("create file");
+        file.write_all(content.as_bytes()).expect("write file");
+    }
+
+    #[test]
+    fn should_sync_when_dst_missing() {
+        let src = create_temp_dir("dst_missing_src");
+        let dst = create_temp_dir("dst_missing_dst");
+        let dst_target = dst.join("not_exists");
+
+        write_file(&src.join("module.prop"), "id=a\n");
+
+        assert!(should_sync(&src, &dst_target));
+
+        let _ = fs::remove_dir_all(src);
+        let _ = fs::remove_dir_all(dst);
+    }
+
+    #[test]
+    fn should_sync_when_payload_changes_with_same_module_prop() {
+        let src = create_temp_dir("payload_src");
+        let dst = create_temp_dir("payload_dst");
+
+        write_file(&src.join("module.prop"), "id=a\nname=A\n");
+        write_file(&dst.join("module.prop"), "id=a\nname=A\n");
+
+        write_file(&src.join("system/bin/app_process"), "v2");
+        write_file(&dst.join("system/bin/app_process"), "v1");
+
+        assert!(should_sync(&src, &dst));
+
+        let _ = fs::remove_dir_all(src);
+        let _ = fs::remove_dir_all(dst);
+    }
+
+    #[test]
+    fn should_not_sync_when_snapshots_equal() {
+        let src = create_temp_dir("equal_src");
+        let dst = create_temp_dir("equal_dst");
+
+        write_file(&src.join("module.prop"), "id=a\nname=A\n");
+        write_file(&dst.join("module.prop"), "id=a\nname=A\n");
+
+        write_file(&src.join("system/etc/test.conf"), "same");
+        write_file(&dst.join("system/etc/test.conf"), "same");
+
+        assert!(!should_sync(&src, &dst));
+
+        let _ = fs::remove_dir_all(src);
+        let _ = fs::remove_dir_all(dst);
+    }
 }
