@@ -31,15 +31,10 @@ jobs:
 
       - name: Commit and Push Binary
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           
           git add notify
-          
-          if git diff --staged --quiet; then
-            echo "No changes in binary detected."
-            exit 0
-          fi
-          
-          git commit -m "chore(tools): update notify binary [skip ci]"
-          git push origin HEAD:${{ github.ref }}
+
+          git commit -m "chore(tools): update notify binary [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref }} || echo "No need to push"
