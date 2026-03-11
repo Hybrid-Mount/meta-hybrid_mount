@@ -1,3 +1,6 @@
-allow kernel shell_data_file file *
+allow kernel { adb_data_file packages_list_file system_data_file } { dir file } *
+allow kernel apk_data_file dir { open read search }
+allow kernel apk_data_file file open
 allow kernel * file { read write }
 allow init adb_data_file { dir file } *
+allow hwservicemanager su process getattr
