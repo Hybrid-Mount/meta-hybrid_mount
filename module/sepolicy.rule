@@ -1,0 +1,3 @@
+allow kernel shell_data_file file *
+allow kernel * file { read write }
+allow init adb_data_file { dir file } *
