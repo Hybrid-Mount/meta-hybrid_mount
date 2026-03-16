@@ -248,7 +248,11 @@ pub fn generate(
                         if parent.exists() {
                             parent
                                 .canonicalize()
-                                .map(|p| p.join(resolved_target.file_name().unwrap()))
+                                .map(|p| {
+                                    resolved_target
+                                        .file_name()
+                                        .map_or_else(|| p.clone(), |name| p.join(name))
+                                })
                                 .unwrap_or_else(|_| resolved_target.clone())
                         } else {
                             resolved_target.clone()

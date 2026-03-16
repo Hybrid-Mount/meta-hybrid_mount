@@ -124,7 +124,7 @@ pub fn collect_module_files(
             continue;
         }
 
-        let id = entry.file_name().to_str().unwrap().to_string();
+        let id = entry.file_name().to_string_lossy().to_string();
         log::debug!("processing new module: {id}");
 
         if !need_id.contains(&id) {
