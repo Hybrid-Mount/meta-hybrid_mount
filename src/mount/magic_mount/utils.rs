@@ -124,7 +124,11 @@ pub fn collect_module_files(
             continue;
         }
 
-        let id = entry.file_name().to_string_lossy().to_string();
+        let file_name = entry.file_name();
+        let Some(id) = file_name.to_str().map(str::to_owned) else {
+            log::warn!("skipped non-utf8 module directory name: {:?}", file_name);
+            continue;
+        };
         log::debug!("processing new module: {id}");
 
         if !need_id.contains(&id) {

@@ -102,11 +102,9 @@ impl MagicMount {
             &self.path
         };
 
-        if self.node.module_path.is_none() {
+        let Some(module_path) = self.node.module_path.as_ref() else {
             bail!("cannot mount root file {}!", self.path.display());
-        }
-
-        let module_path = self.node.module_path.as_ref().unwrap();
+        };
 
         log::debug!(
             "mount module file {} -> {}",
