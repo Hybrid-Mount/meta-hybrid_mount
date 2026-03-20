@@ -28,7 +28,7 @@ pub fn get_mnt() -> PathBuf {
 }
 
 pub fn init_logging() -> Result<()> {
-    let level = if fs::exists(defs::TRACING).is_ok() {
+    let level = if fs::exists(defs::TRACING).unwrap_or(false) {
         LevelFilter::Trace
     } else {
         LevelFilter::Info

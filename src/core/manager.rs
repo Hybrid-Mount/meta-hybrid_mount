@@ -89,20 +89,8 @@ impl MountController<StorageReady> {
         sync::perform_sync(&modules, self.state.handle.mount_point())?;
 
         if self.state.handle.mode() == "erofs_staging" {
-            let needs_magic = modules.iter().any(|m| {
-                m.rules.default_mode == inventory::MountMode::Magic
-                    || m.rules
-                        .paths
-                        .values()
-                        .any(|v| *v == inventory::MountMode::Magic)
-            });
-
-            if needs_magic {
-                let magic_ws = self.state.handle.mount_point().join("magic_workspace");
-                if !magic_ws.exists() {
-                    let _ = std::fs::create_dir(magic_ws);
-                }
-            }
+            let magic_ws = self.state.handle.mount_point().join("magic_workspace");
+            std::fs::create_dir_all(&magic_ws)?;
         }
 
         self.state.handle.commit(self.config.disable_umount)?;

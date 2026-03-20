@@ -3,7 +3,7 @@
 
 use std::{collections::HashSet, path::Path};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::{
     conf::config,
@@ -42,12 +42,23 @@ impl Executer {
                     Ok(ids) => {
                         final_overlay_ids.extend(ids);
                     }
-                    Err(_) => {
-                        let involved_modules: Vec<String> = op
+                    Err(err) => {
+                        let mut involved_modules: Vec<String> = op
                             .lowerdirs
                             .iter()
                             .filter_map(|p| utils::extract_module_id(p))
                             .collect();
+                        involved_modules.sort();
+                        log::warn!(
+                            "Overlay mount failed for {} (modules: {}), falling back to Magic Mount: {:#}",
+                            op.target,
+                            if involved_modules.is_empty() {
+                                "<unknown>".to_string()
+                            } else {
+                                involved_modules.join(", ")
+                            },
+                            err
+                        );
                         final_magic_ids.extend(involved_modules);
                     }
                 }
@@ -62,11 +73,16 @@ impl Executer {
 
         if !magic_queue.is_empty() {
             let magic_need_ids: HashSet<String> = magic_queue.into_iter().collect();
-            if let Ok(mounted_ids) = Self::mount_magic(&magic_need_ids, config, tempdir.as_ref()) {
-                final_magic_ids.retain(|id| mounted_ids.contains(id));
-            } else {
-                final_magic_ids.clear();
-            }
+            let mut magic_need_list: Vec<String> = magic_need_ids.iter().cloned().collect();
+            magic_need_list.sort();
+            let mounted_ids = Self::mount_magic(&magic_need_ids, config, tempdir.as_ref())
+                .with_context(|| {
+                    format!(
+                        "Failed to mount Magic Mount modules: {}",
+                        magic_need_list.join(", ")
+                    )
+                })?;
+            final_magic_ids.retain(|id| mounted_ids.contains(id));
         }
 
         let _ = umount_dir(tempdir.as_ref());
@@ -152,7 +168,13 @@ impl Executer {
         let magic_ws_path = tempdir.join("magic_workspace");
 
         if matches!(config.overlay_mode, config::OverlayMode::Erofs) {
-            if magic_ws_path.exists() {
+            anyhow::ensure!(
+                magic_ws_path.exists(),
+                "EROFS backend is missing magic_workspace placeholder at {}",
+                magic_ws_path.display()
+            );
+
+            if !crate::sys::mount::is_mounted(&magic_ws_path) {
                 crate::sys::mount::mount_tmpfs(&magic_ws_path, "magic_ws")?;
             }
         } else if !magic_ws_path.exists() {

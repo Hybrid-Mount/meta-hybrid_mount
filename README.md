@@ -41,7 +41,7 @@ Configuration is stored at `/data/adb/hybrid-mount/config.toml`.
 | `moduledir` | string | `/data/adb/modules/` | Path to the module source directory. |
 | `mountsource` | string | Auto-detect | Mount source label (e.g., `KSU`, `APatch`). |
 | `partitions` | list | `[]` | List of partitions to explicitly manage. |
-| `overlay_mode` | string | `tmpfs` | Backend for loop devices (`tmpfs`, `ext4`, `erofs`). |
+| `overlay_mode` | string | `ext4` | Backend for loop devices (`tmpfs`, `ext4`, `erofs`). |
 | `disable_umount` | bool | `false` | If true, skips unmounting the original source (debug usage). |
 
 ---
