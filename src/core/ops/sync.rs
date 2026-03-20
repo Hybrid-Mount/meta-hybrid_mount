@@ -3,7 +3,7 @@
 
 use std::{collections::HashSet, fs, os::unix::fs::symlink, path::Path};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use walkdir::WalkDir;
 
 use crate::{
@@ -66,7 +66,7 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
             if let Err(e) = sync_dir(&module.source_path, &tmp_dst, true) {
                 log::error!("Failed to sync module {}: {}", module.id, e);
                 let _ = fs::remove_dir_all(&tmp_dst);
-                return Ok(());
+                return Err(e).with_context(|| format!("Failed to sync module {}", module.id));
             }
 
             if let Err(e) = prune_empty_dirs(&tmp_dst) {
@@ -86,7 +86,8 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
                 if let Err(e) = fs::rename(&dst, &dst_backup) {
                     log::error!("Failed to backup existing module {}: {}", module.id, e);
                     let _ = fs::remove_dir_all(&tmp_dst);
-                    return Ok(());
+                    return Err(e)
+                        .with_context(|| format!("Failed to back up module {}", module.id));
                 }
                 backup_created = true;
             }
@@ -97,7 +98,8 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
                     let _ = fs::rename(&dst_backup, &dst);
                 }
                 let _ = fs::remove_dir_all(&tmp_dst);
-                return Ok(());
+                return Err(e)
+                    .with_context(|| format!("Failed to commit synced module {}", module.id));
             }
 
             if backup_created && let Err(e) = fs::remove_dir_all(&dst_backup) {

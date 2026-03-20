@@ -59,11 +59,12 @@ pub struct ErofsBackend {
 impl StorageBackend for ErofsBackend {
     fn commit(&mut self, disable_umount: bool) -> Result<()> {
         if self.mode == "erofs_staging" {
+            let staged_has_entries = directory_has_entries(&self.mount_point)?;
             create_erofs_image(&self.mount_point, &self.backing_image)?;
             umount(&self.mount_point, UnmountFlags::DETACH)?;
             let _ = fs::remove_dir(&self.mount_point);
             ensure_dir_exists(&self.final_target)?;
-            mount_erofs_image(&self.backing_image, &self.final_target)?;
+            mount_erofs_image(&self.backing_image, &self.final_target, staged_has_entries)?;
             mount_change(&self.final_target, MountPropagationFlags::PRIVATE)?;
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if !disable_umount {
@@ -136,6 +137,10 @@ fn calculate_total_size(path: &Path) -> Result<u64> {
         }
     }
     Ok(total_size)
+}
+
+fn directory_has_entries(path: &Path) -> Result<bool> {
+    Ok(fs::read_dir(path)?.next().is_some())
 }
 
 fn check_image<P>(img: P) -> Result<()>
@@ -336,7 +341,7 @@ fn create_erofs_image(src_dir: &Path, image_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn mount_erofs_image(image_path: &Path, target: &Path) -> Result<()> {
+fn mount_erofs_image(image_path: &Path, target: &Path, expected_non_empty: bool) -> Result<()> {
     ensure_dir_exists(target)?;
     let _ = lsetfilecon(image_path, "u:object_r:ksu_file:s0");
 
@@ -358,8 +363,8 @@ fn mount_erofs_image(image_path: &Path, target: &Path) -> Result<()> {
         Some(c""),
     )?;
 
-    if fs::read_dir(target)?.next().is_none() {
-        bail!("EROFS mount success but directory is empty");
+    if expected_non_empty && !directory_has_entries(target)? {
+        bail!("EROFS mount succeeded but staged module contents disappeared after remount");
     }
 
     Ok(())
