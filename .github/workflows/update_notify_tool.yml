@@ -21,6 +21,11 @@ jobs:
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tools/notify -> target
+
       - name: Build Notify Tool
         run: |
           cd tools/notify

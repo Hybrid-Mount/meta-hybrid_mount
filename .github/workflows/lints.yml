@@ -26,6 +26,8 @@ jobs:
           toolchain: nightly
           targets: aarch64-linux-android
           components: rustfmt, clippy
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
       - name: Format codes
         uses: LoliGothick/rustfmt-check@master
         with:

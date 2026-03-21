@@ -32,6 +32,8 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -42,6 +44,8 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: webui/pnpm-lock.yaml
 
       - name: Install build dependencies
         run: |
