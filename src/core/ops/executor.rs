@@ -167,17 +167,7 @@ impl Executer {
     ) -> Result<Vec<String>> {
         let magic_ws_path = tempdir.join("magic_workspace");
 
-        if matches!(config.overlay_mode, config::OverlayMode::Erofs) {
-            anyhow::ensure!(
-                magic_ws_path.exists(),
-                "EROFS backend is missing magic_workspace placeholder at {}",
-                magic_ws_path.display()
-            );
-
-            if !crate::sys::mount::is_mounted(&magic_ws_path) {
-                crate::sys::mount::mount_tmpfs(&magic_ws_path, "magic_ws")?;
-            }
-        } else if !magic_ws_path.exists() {
+        if !magic_ws_path.exists() {
             std::fs::create_dir_all(&magic_ws_path)?;
         }
 

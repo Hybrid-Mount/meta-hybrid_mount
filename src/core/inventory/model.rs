@@ -124,18 +124,13 @@ pub fn update_description(storage_mode: &str, overlay_count: usize, magic_count:
         return;
     }
 
-    let mut mode_str = match storage_mode {
+    let mode_str = match storage_mode {
         "tmpfs" => "Tmpfs",
-        "erofs" => "EROFS",
         _ => "Ext4",
     };
-    if crate::EROFS_FLAG.load(Ordering::Relaxed) {
-        mode_str = "Ext4(Erofs is deprecated)";
-    }
 
     let status_emoji = match storage_mode {
         "tmpfs" => "🐾",
-        "erofs" => "🚀",
         _ => "💿",
     };
 

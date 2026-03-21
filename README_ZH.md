@@ -41,7 +41,7 @@
 | `moduledir` | string | `/data/adb/modules/` | 模块源目录路径。 |
 | `mountsource` | string | 自动检测 | 挂载源标签 (如 `KSU`, `APatch`)。 |
 | `partitions` | list | `[]` | 显式管理的分区列表。 |
-| `overlay_mode` | string | `ext4` | Loop 设备后端类型 (`tmpfs`, `ext4`, `erofs`)。 |
+| `overlay_mode` | string | `ext4` | Loop 设备后端类型 (`tmpfs`, `ext4`)。 |
 | `disable_umount` | bool | `false` | 若为 true，则跳过卸载原始源（调试用途）。 |
 
 ---

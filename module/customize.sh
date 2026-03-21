@@ -75,5 +75,4 @@ fi
 
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 set_perm "$BIN_TARGET" 0 0 0755
-set_perm "$MODPATH/tools/mkfs.erofs" 0 0 0755
 ui_print "- Installation complete"

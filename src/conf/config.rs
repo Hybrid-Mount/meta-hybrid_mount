@@ -18,7 +18,6 @@ pub enum OverlayMode {
     Tmpfs,
     #[default]
     Ext4,
-    Erofs,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]

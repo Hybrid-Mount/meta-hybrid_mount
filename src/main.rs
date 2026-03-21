@@ -9,7 +9,6 @@ mod sys;
 mod utils;
 
 use core::MountController;
-use std::sync::atomic::AtomicBool;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -20,12 +19,8 @@ use conf::{
 };
 use mimalloc::MiMalloc;
 
-use crate::conf::config::OverlayMode;
-
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
-
-pub static EROFS_FLAG: AtomicBool = AtomicBool::new(false);
 
 fn load_config(cli: &Cli) -> Result<Config> {
     if let Some(config_path) = &cli.config {
@@ -92,7 +87,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let mut config = load_final_config(&cli)?;
+    let config = load_final_config(&cli)?;
 
     utils::init_logging().context("Failed to initialize logging")?;
 
@@ -114,12 +109,6 @@ fn main() -> Result<()> {
 
     if config.disable_umount {
         log::warn!("!! Umount is DISABLED via config.");
-    }
-
-    if config.overlay_mode == OverlayMode::Erofs {
-        log::warn!("erofs is deprecated, will fallback to ext4");
-        config.overlay_mode = OverlayMode::Ext4;
-        EROFS_FLAG.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     let mnt_base = utils::get_mnt();

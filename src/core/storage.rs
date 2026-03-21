@@ -166,7 +166,7 @@ pub fn setup(
     };
 
     if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
-        log::trace!("tmpfs mode was supported, and no use erofs mode");
+        log::trace!("tmpfs mode is supported");
         make_private(mnt_base);
         try_hide(mnt_base);
 
