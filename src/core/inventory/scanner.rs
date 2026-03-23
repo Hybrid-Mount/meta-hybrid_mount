@@ -3,7 +3,8 @@
 
 use std::{
     collections::HashMap,
-    fs,
+    fs::{self, File},
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
 };
 
@@ -20,6 +21,27 @@ use crate::{
 struct PartialRules {
     default_mode: Option<MountMode>,
     paths: Option<HashMap<String, MountMode>>,
+}
+
+fn detect_manual_mount(path: &Path) -> bool {
+    let scripts = ["post-fs-data.sh", "service.sh"];
+    for script_name in scripts {
+        let script_path = path.join(script_name);
+        if script_path.exists() {
+            if let Ok(file) = File::open(&script_path) {
+                let reader = BufReader::new(file);
+                for line in reader.lines().map_while(Result::ok) {
+                    let trimmed = line.trim();
+                    if !trimmed.starts_with('#')
+                        && (trimmed.contains("mount ") || trimmed.contains("--bind"))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
 }
 
 fn load_module_rules(module_dir: &Path, module_id: &str, cfg: &config::Config) -> ModuleRules {
@@ -96,6 +118,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
             if path.join(defs::DISABLE_FILE_NAME).exists()
                 || path.join(defs::REMOVE_FILE_NAME).exists()
                 || path.join(defs::SKIP_MOUNT_FILE_NAME).exists()
+                || detect_manual_mount(&path)
             {
                 return None;
             }
