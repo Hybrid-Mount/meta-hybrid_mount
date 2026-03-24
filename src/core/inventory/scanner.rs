@@ -115,10 +115,12 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
                 return None;
             }
 
+            let force_mount = path.join(defs::FORCE_MOUNT_FILE_NAME).exists();
+
             if path.join(defs::DISABLE_FILE_NAME).exists()
                 || path.join(defs::REMOVE_FILE_NAME).exists()
                 || path.join(defs::SKIP_MOUNT_FILE_NAME).exists()
-                || detect_manual_mount(&path)
+                || (!force_mount && detect_manual_mount(&path))
             {
                 return None;
             }
