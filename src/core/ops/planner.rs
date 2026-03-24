@@ -153,6 +153,12 @@ pub fn generate(
     modules: &[Module],
     storage_root: &Path,
 ) -> Result<MountPlan> {
+    log::info!(
+        "[planner] start generating mount plan: modules={}, storage_root={}",
+        modules.len(),
+        storage_root.display()
+    );
+
     let mut plan = MountPlan::default();
 
     let mut overlay_groups: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
@@ -163,11 +169,17 @@ pub fn generate(
     let sensitive_partitions: HashSet<&str> = defs::SENSITIVE_PARTITIONS.iter().cloned().collect();
 
     for module in modules {
+        log::debug!("[planner] evaluating module={}", module.id);
         let mut content_path = storage_root.join(&module.id);
         if !content_path.exists() {
             content_path = module.source_path.clone();
         }
         if !content_path.exists() {
+            log::debug!(
+                "[planner] skip module={} because content path not found: {}",
+                module.id,
+                content_path.display()
+            );
             continue;
         }
 
@@ -201,9 +213,19 @@ pub fn generate(
                 let mode = module.rules.get_mode(dir_name);
                 if matches!(mode, MountMode::Magic) {
                     magic_ids.insert(module.id.clone());
+                    log::info!(
+                        "[planner] module={} partition={} forced to magic mount",
+                        module.id,
+                        dir_name
+                    );
                     continue;
                 }
                 if matches!(mode, MountMode::Ignore) {
+                    log::debug!(
+                        "[planner] module={} partition={} ignored by rule",
+                        module.id,
+                        dir_name
+                    );
                     continue;
                 }
 
@@ -224,6 +246,11 @@ pub fn generate(
                     } = item;
 
                     if !system_target.exists() {
+                        log::debug!(
+                            "[planner] skip missing target for module={}: {}",
+                            module.id,
+                            system_target.display()
+                        );
                         continue;
                     }
 
@@ -286,6 +313,13 @@ pub fn generate(
                             }
                         }
                     } else {
+                        log::debug!(
+                            "[planner] queue overlay layer: module={}, partition={}, layer={}, target={}",
+                            module.id,
+                            partition_label,
+                            module_source.display(),
+                            canonical_target.display()
+                        );
                         overlay_groups
                             .entry(canonical_target)
                             .or_default()
@@ -309,6 +343,13 @@ pub fn generate(
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
+        log::info!(
+            "[planner] add overlay op: partition={}, target={}, layers={}",
+            partition_name,
+            target_str,
+            layers.len()
+        );
+
         plan.overlay_ops.push(OverlayOperation {
             partition_name,
             target: target_str,
@@ -320,6 +361,13 @@ pub fn generate(
     plan.magic_module_ids = magic_ids.into_iter().collect();
     plan.overlay_module_ids.sort();
     plan.magic_module_ids.sort();
+
+    log::info!(
+        "[planner] plan generated: overlay_ops={}, overlay_modules={}, magic_modules={}",
+        plan.overlay_ops.len(),
+        plan.overlay_module_ids.len(),
+        plan.magic_module_ids.len()
+    );
 
     Ok(plan)
 }

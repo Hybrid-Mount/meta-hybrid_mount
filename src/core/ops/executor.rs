@@ -33,13 +33,30 @@ impl Executer {
     where
         P: AsRef<Path>,
     {
+        log::info!(
+            "[executor] start: overlay_ops={}, preselected_magic_modules={}",
+            plan.overlay_ops.len(),
+            plan.magic_module_ids.len()
+        );
         let mut final_magic_ids: HashSet<String> = plan.magic_module_ids.iter().cloned().collect();
         let mut final_overlay_ids: HashSet<String> = HashSet::new();
 
         if Self::is_supported()? {
+            log::info!("[executor] overlayfs supported, applying overlay operations");
             for op in &plan.overlay_ops {
+                log::info!(
+                    "[executor] apply overlay op: partition={}, target={}, layers={}",
+                    op.partition_name,
+                    op.target,
+                    op.lowerdirs.len()
+                );
                 match Self::mount_overlay(op, config) {
                     Ok(ids) => {
+                        log::info!(
+                            "[executor] overlay op success: target={}, modules={}",
+                            op.target,
+                            ids.len()
+                        );
                         final_overlay_ids.extend(ids);
                     }
                     Err(err) => {
@@ -65,6 +82,9 @@ impl Executer {
             }
             final_overlay_ids.retain(|id| !final_magic_ids.contains(id));
         } else {
+            log::warn!(
+                "[executor] overlayfs unsupported, fallback all overlay modules to magic mount"
+            );
             final_magic_ids.extend(plan.overlay_module_ids.clone());
         }
 
@@ -75,6 +95,10 @@ impl Executer {
             let magic_need_ids: HashSet<String> = magic_queue.into_iter().collect();
             let mut magic_need_list: Vec<String> = magic_need_ids.iter().cloned().collect();
             magic_need_list.sort();
+            log::info!(
+                "[executor] applying magic mount for modules: {}",
+                magic_need_list.join(", ")
+            );
             let mounted_ids = Self::mount_magic(&magic_need_ids, config, tempdir.as_ref())
                 .with_context(|| {
                     format!(
@@ -83,6 +107,10 @@ impl Executer {
                     )
                 })?;
             final_magic_ids.retain(|id| mounted_ids.contains(id));
+            log::info!(
+                "[executor] magic mount completed: mounted_modules={}",
+                mounted_ids.len()
+            );
         }
 
         let _ = umount_dir(tempdir.as_ref());
@@ -101,6 +129,12 @@ impl Executer {
         result_overlay.sort();
         result_magic.sort();
 
+        log::info!(
+            "[executor] completed: overlay_modules={}, magic_modules={}",
+            result_overlay.len(),
+            result_magic.len()
+        );
+
         Ok(ExecutionResult {
             overlay_module_ids: result_overlay,
             magic_module_ids: result_magic,
@@ -117,6 +151,17 @@ impl Executer {
             .iter()
             .filter_map(|p| utils::extract_module_id(p))
             .collect();
+
+        log::debug!(
+            "[executor] mount_overlay preparing: target={}, partition={}, modules={}",
+            op.target,
+            op.partition_name,
+            if involved_modules.is_empty() {
+                "<unknown>".to_string()
+            } else {
+                involved_modules.join(",")
+            }
+        );
 
         let lowerdir_strings: Vec<String> = op
             .lowerdirs
@@ -152,6 +197,12 @@ impl Executer {
             &mount_source,
         )?;
 
+        log::debug!(
+            "[executor] mount_overlay done: target={}, mount_source={}",
+            op.target,
+            mount_source
+        );
+
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if !config.disable_umount {
             let _ = umount_mgr::send_umountable(&op.target);
@@ -167,6 +218,11 @@ impl Executer {
     ) -> Result<Vec<String>> {
         let magic_ws_path = tempdir.join("magic_workspace");
 
+        log::debug!(
+            "[executor] mount_magic preparing workspace: {}",
+            magic_ws_path.display()
+        );
+
         if !magic_ws_path.exists() {
             std::fs::create_dir_all(&magic_ws_path)?;
         }
@@ -179,6 +235,8 @@ impl Executer {
             ids.clone(),
             !config.disable_umount,
         )?;
+
+        log::debug!("[executor] mount_magic done: module_count={}", ids.len());
 
         Ok(ids.iter().cloned().collect())
     }
