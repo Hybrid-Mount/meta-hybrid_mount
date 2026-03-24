@@ -16,6 +16,7 @@ pub const MODULE_PROP_FILE: &str = concatcp!(MODULES_DIR, "/hybrid_mount/module.
 
 pub const DISABLE_FILE_NAME: &str = "disable";
 pub const REMOVE_FILE_NAME: &str = "remove";
+pub const FORCE_MOUNT_FILE_NAME: &str = "force_mount"
 pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
