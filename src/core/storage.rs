@@ -4,6 +4,7 @@
 use std::{
     collections::HashSet,
     fs,
+    io::ErrorKind,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::Command,
@@ -91,8 +92,27 @@ fn calculate_total_size(path: &Path) -> Result<u64> {
     let mut stack = vec![path.to_path_buf()];
 
     while let Some(c) = stack.pop() {
-        let md = fs::metadata(&c)?;
-        if c.is_file() {
+        let md = match fs::symlink_metadata(&c) {
+            Ok(md) => md,
+            Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
+                log::warn!(
+                    "Skip path with symlink loop while calculating size: {} ({err})",
+                    c.display()
+                );
+                continue;
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                log::debug!(
+                    "Skip disappeared path while calculating size: {}",
+                    c.display()
+                );
+                continue;
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        let ft = md.file_type();
+        if ft.is_file() {
             let dev = md.dev();
             let ino = md.ino();
 
@@ -101,8 +121,8 @@ fn calculate_total_size(path: &Path) -> Result<u64> {
             }
 
             let blocks = md.blocks();
-            total_size += blocks as u64 * 512;
-        } else if c.is_dir() {
+            total_size += blocks * 512;
+        } else if ft.is_dir() {
             match c.read_dir() {
                 Ok(r) => {
                     for i in r.flatten() {
@@ -113,6 +133,8 @@ fn calculate_total_size(path: &Path) -> Result<u64> {
                     log::error!("Failed to read dir {}", c.display());
                 }
             }
+        } else if ft.is_symlink() {
+            log::debug!("Skip symlink while calculating size: {}", c.display());
         }
     }
     Ok(total_size)
@@ -124,11 +146,22 @@ where
 {
     let path = img.as_ref();
     let path_str = path.to_str().context("Invalid path string")?;
-    let result = Command::new("e2fsck")
+    let status = Command::new("e2fsck")
         .args(["-yf", path_str])
         .status()
         .with_context(|| format!("Failed to exec e2fsck {}", path.display()))?;
-    let _ = result.code();
+
+    let code = status
+        .code()
+        .context("e2fsck exited without an exit code (terminated by signal)")?;
+
+    // e2fsck returns bitmask values. 0/1/2/3 indicate success or corrected issues.
+    ensure!(
+        (0..=3).contains(&code),
+        "e2fsck failed for {} with exit code {}",
+        path.display(),
+        code
+    );
     Ok(())
 }
 

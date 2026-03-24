@@ -1,0 +1,38 @@
+name: Update WebUI Submodule
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  update-webui:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Update webui submodule
+        run: |
+          git submodule update --init --remote webui
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet -- webui; then
+            echo "No webui submodule updates"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add webui
+          git commit -m "chore(submodule): update webui [skip ci]"
+          git push

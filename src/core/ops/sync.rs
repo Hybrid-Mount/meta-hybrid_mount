@@ -171,10 +171,24 @@ fn should_sync(src: &Path, dst: &Path) -> bool {
 }
 
 fn has_files_recursive(path: &Path) -> bool {
-    if let Ok(entries) = fs::read_dir(path) {
+    let mut stack = vec![path.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(dir) else {
+            continue;
+        };
+
         for entry in entries.flatten() {
-            if entry.file_type().is_ok() {
+            let Ok(ft) = entry.file_type() else {
+                continue;
+            };
+
+            if ft.is_file() {
                 return true;
+            }
+
+            if ft.is_dir() {
+                stack.push(entry.path());
             }
         }
     }
