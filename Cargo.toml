@@ -26,7 +26,7 @@ rustix = { version = "1.1", features = ["fs", "mount"] }
 libc = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-toml = "1.0"
+toml = "1.1"
 chrono = "0.4"
 procfs = "0.18"
 mimalloc = { version = "0.1.48", features = ["no_thp", "override"] }
@@ -43,7 +43,7 @@ const_format = "0.2.35"
 glob = "0.3.3"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-env_logger = "0.11.8"
+env_logger = "0.11.10"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
@@ -58,4 +58,4 @@ strip = true
 [build-dependencies]
 anyhow = "1"
 serde = { version = "1.0", features = ["serde_derive"] }
-toml = "1.0"
+toml = "1.1"
