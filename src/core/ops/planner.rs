@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
 };
@@ -161,7 +161,12 @@ pub fn generate(
 
     let mut plan = MountPlan::default();
 
-    let mut overlay_groups: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    let mut overlay_groups: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
+    let module_rank: HashMap<&str, usize> = modules
+        .iter()
+        .enumerate()
+        .map(|(idx, m)| (m.id.as_str(), idx))
+        .collect();
 
     let mut overlay_ids = HashSet::new();
     let mut magic_ids = HashSet::new();
@@ -330,12 +335,21 @@ pub fn generate(
         }
     }
 
-    for (target_path, layers) in overlay_groups {
+    for (target_path, mut layers) in overlay_groups {
         let target_str = target_path.to_string_lossy().to_string();
 
         if !target_path.is_dir() {
             continue;
         }
+
+        layers.sort_by(|a, b| {
+            let aid = utils::extract_module_id(a).unwrap_or_default();
+            let bid = utils::extract_module_id(b).unwrap_or_default();
+            let ar = module_rank.get(aid.as_str()).copied().unwrap_or(usize::MAX);
+            let br = module_rank.get(bid.as_str()).copied().unwrap_or(usize::MAX);
+
+            ar.cmp(&br).then_with(|| a.cmp(b))
+        });
 
         let partition_name = target_path
             .iter()

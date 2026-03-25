@@ -189,8 +189,12 @@ fn mount_overlay_child(
         mount_point,
         mount_source,
     ) {
-        log::warn!("failed: {:#}, fallback to bind mount", e);
-        bind_mount(stock_root, mount_point)?;
+        log::warn!(
+            "failed to mount overlayfs for child {}: {:#}",
+            mount_point,
+            e
+        );
+        return Err(e);
     }
     let _ = send_umountable(mount_point);
     Ok(())

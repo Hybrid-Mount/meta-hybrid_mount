@@ -3,7 +3,7 @@
 
 use std::{collections::HashSet, path::Path};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::{
     conf::config,
@@ -66,8 +66,8 @@ impl Executer {
                             .filter_map(|p| utils::extract_module_id(p))
                             .collect();
                         involved_modules.sort();
-                        log::warn!(
-                            "Overlay mount failed for {} (modules: {}), falling back to Magic Mount: {:#}",
+                        bail!(
+                            "Overlay mount failed for {} (modules: {}): {:#}",
                             op.target,
                             if involved_modules.is_empty() {
                                 "<unknown>".to_string()
@@ -76,16 +76,14 @@ impl Executer {
                             },
                             err
                         );
-                        final_magic_ids.extend(involved_modules);
                     }
                 }
             }
-            final_overlay_ids.retain(|id| !final_magic_ids.contains(id));
         } else {
-            log::warn!(
-                "[executor] overlayfs unsupported, fallback all overlay modules to magic mount"
-            );
-            final_magic_ids.extend(plan.overlay_module_ids.clone());
+            if !plan.overlay_ops.is_empty() {
+                bail!("[executor] overlayfs unsupported and overlay operations are pending");
+            }
+            log::info!("[executor] overlayfs unsupported, no overlay operations to apply");
         }
 
         let mut magic_queue: Vec<String> = final_magic_ids.iter().cloned().collect();

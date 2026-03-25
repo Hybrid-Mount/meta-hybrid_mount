@@ -221,11 +221,32 @@ pub fn setup(
 }
 
 fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
-    if crate::sys::mount::mount_tmpfs(target, mount_source).is_ok() {
-        if crate::sys::fs::is_overlay_xattr_supported().unwrap_or(false) {
-            return Ok(true);
-        } else {
-            let _ = umount(target, UnmountFlags::DETACH);
+    match crate::sys::mount::mount_tmpfs(target, mount_source) {
+        Ok(()) => match crate::sys::fs::is_overlay_xattr_supported() {
+            Ok(true) => return Ok(true),
+            Ok(false) => {
+                log::warn!(
+                    "tmpfs mounted at {} but overlay xattr is unsupported, fallback to ext4 backend",
+                    target.display()
+                );
+                let _ = umount(target, UnmountFlags::DETACH);
+            }
+            Err(err) => {
+                log::warn!(
+                    "tmpfs mounted at {} but failed to probe overlay xattr support: {:#}, fallback to ext4 backend",
+                    target.display(),
+                    err
+                );
+                let _ = umount(target, UnmountFlags::DETACH);
+            }
+        },
+        Err(err) => {
+            log::warn!(
+                "failed to mount tmpfs at {} (source={}): {:#}, fallback to ext4 backend",
+                target.display(),
+                mount_source,
+                err
+            );
         }
     }
     Ok(false)

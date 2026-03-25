@@ -110,7 +110,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         })
         .collect();
 
-    modules.sort_by(|a, b| b.id.cmp(&a.id));
+    modules.sort_by(|a, b| a.id.cmp(&b.id));
 
     Ok(modules)
 }
