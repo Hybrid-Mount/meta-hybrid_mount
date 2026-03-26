@@ -10,7 +10,10 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{defs, sys::fs::xattr};
+use crate::{
+    defs,
+    sys::fs::{atomic_write, xattr},
+};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RuntimeState {
@@ -60,7 +63,7 @@ impl RuntimeState {
 
     pub fn save(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
-        fs::write(defs::STATE_FILE, json)?;
+        atomic_write(defs::STATE_FILE, json.as_bytes())?;
         Ok(())
     }
 

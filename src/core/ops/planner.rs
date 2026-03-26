@@ -172,6 +172,12 @@ pub fn generate(
     let mut magic_ids = HashSet::new();
 
     let sensitive_partitions: HashSet<&str> = defs::SENSITIVE_PARTITIONS.iter().cloned().collect();
+    let mut managed_partitions: HashSet<String> = defs::BUILTIN_PARTITIONS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    managed_partitions.insert("system".to_string());
+    managed_partitions.extend(config.partitions.iter().cloned());
 
     for module in modules {
         log::debug!("[planner] evaluating module={}", module.id);
@@ -206,12 +212,7 @@ pub fn generate(
                     continue;
                 };
 
-                let mut partitions = HashSet::new();
-                partitions.insert("system".to_string());
-                partitions.extend(config.partitions.clone());
-                partitions.extend(defs::BUILTIN_PARTITIONS.iter().map(|s| s.to_string()));
-
-                if !partitions.contains(dir_name) {
+                if !managed_partitions.contains(dir_name) {
                     continue;
                 }
 

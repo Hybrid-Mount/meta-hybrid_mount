@@ -27,6 +27,8 @@ pub enum Commands {
     GenConfig {
         #[arg(short = 'o', long = "output", default_value = defs::CONFIG_FILE)]
         output: PathBuf,
+        #[arg(long)]
+        force: bool,
     },
     ShowConfig,
     #[command(name = "save-config")]

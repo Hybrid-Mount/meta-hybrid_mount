@@ -8,7 +8,7 @@ on:
       - 'src/**'
       - 'Cargo.*'
       - 'module/**'
-      - 'webui'
+      - 'webui/**'
       - 'xtask/**'
       - 'build.rs'
       - '.github/workflows/build.yml'
@@ -19,15 +19,20 @@ on:
       - 'src/**'
       - 'Cargo.*'
       - 'module/**'
-      - 'webui'
+      - 'webui/**'
       - 'xtask/**'
       - 'build.rs'
       - '.github/workflows/build.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Code

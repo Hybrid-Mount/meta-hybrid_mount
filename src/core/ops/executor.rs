@@ -25,6 +25,17 @@ pub struct ExecutionResult {
 pub struct Executer;
 
 impl Executer {
+    fn collect_involved_modules(op: &OverlayOperation) -> Vec<String> {
+        let mut involved_modules: Vec<String> = op
+            .lowerdirs
+            .iter()
+            .filter_map(|p| utils::extract_module_id(p))
+            .collect();
+        involved_modules.sort();
+        involved_modules.dedup();
+        involved_modules
+    }
+
     pub fn execute<P>(
         plan: &MountPlan,
         config: &config::Config,
@@ -60,12 +71,7 @@ impl Executer {
                         final_overlay_ids.extend(ids);
                     }
                     Err(err) => {
-                        let mut involved_modules: Vec<String> = op
-                            .lowerdirs
-                            .iter()
-                            .filter_map(|p| utils::extract_module_id(p))
-                            .collect();
-                        involved_modules.sort();
+                        let involved_modules = Self::collect_involved_modules(op);
                         bail!(
                             "Overlay mount failed for {} (modules: {}): {:#}",
                             op.target,
@@ -144,11 +150,7 @@ impl Executer {
     }
 
     fn mount_overlay(op: &OverlayOperation, config: &config::Config) -> Result<Vec<String>> {
-        let involved_modules: Vec<String> = op
-            .lowerdirs
-            .iter()
-            .filter_map(|p| utils::extract_module_id(p))
-            .collect();
+        let involved_modules = Self::collect_involved_modules(op);
 
         log::debug!(
             "[executor] mount_overlay preparing: target={}, partition={}, modules={}",

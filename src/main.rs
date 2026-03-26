@@ -58,9 +58,6 @@ fn load_final_config(cli: &Cli) -> Result<Config> {
 }
 
 fn main() -> Result<()> {
-    sys::fs::ensure_dir_exists(defs::RUN_DIR)
-        .with_context(|| format!("Failed to create run directory: {}", defs::RUN_DIR))?;
-
     let threads = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4);
@@ -73,7 +70,9 @@ fn main() -> Result<()> {
 
     if let Some(command) = &cli.command {
         match command {
-            Commands::GenConfig { output } => cli_handlers::handle_gen_config(output)?,
+            Commands::GenConfig { output, force } => {
+                cli_handlers::handle_gen_config(output, *force)?
+            }
             Commands::ShowConfig => cli_handlers::handle_show_config(&cli)?,
             Commands::SaveConfig { payload } => cli_handlers::handle_save_config(payload)?,
             Commands::SaveModuleRules { module, payload } => {
@@ -87,19 +86,14 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    sys::fs::ensure_dir_exists(defs::RUN_DIR)
+        .with_context(|| format!("Failed to create run directory: {}", defs::RUN_DIR))?;
+
     let config = load_final_config(&cli)?;
 
     utils::init_logging().context("Failed to initialize logging")?;
 
-    let camouflage_name = utils::random_kworker_name();
-
-    if let Err(e) = utils::camouflage_process(&camouflage_name) {
-        log::warn!("Failed to camouflage process: {:#}", e);
-    }
-
     log::info!(">> Initializing Hybrid Mount Daemon...");
-
-    log::debug!("Process camouflaged as: {}", camouflage_name);
 
     if let Ok(version) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
         log::debug!("Kernel Version: {}", version.trim());

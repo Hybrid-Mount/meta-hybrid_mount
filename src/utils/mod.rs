@@ -1,7 +1,6 @@
 // Copyright 2026 Hybrid Mount Developers
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-pub mod process;
 pub mod validation;
 
 use std::{
@@ -12,7 +11,7 @@ use std::{
 use anyhow::Result;
 use log::LevelFilter;
 
-pub use self::{process::*, validation::*};
+pub use self::validation::*;
 use crate::defs;
 
 pub fn get_mnt() -> PathBuf {

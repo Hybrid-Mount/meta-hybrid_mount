@@ -3,8 +3,8 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
-use serde::Serialize;
+use anyhow::{Context, Result, bail};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
     conf::{
@@ -53,7 +53,29 @@ fn load_config(cli: &Cli) -> Result<Config> {
     }
 }
 
-pub fn handle_gen_config(output: &Path) -> Result<()> {
+fn decode_hex_json<T: DeserializeOwned>(payload: &str, type_name: &str) -> Result<T> {
+    if payload.len() % 2 != 0 {
+        bail!("Invalid hex payload length for {}", type_name);
+    }
+
+    let json_bytes = (0..payload.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&payload[i..i + 2], 16))
+        .collect::<Result<Vec<u8>, _>>()
+        .with_context(|| format!("Failed to decode hex payload for {}", type_name))?;
+
+    serde_json::from_slice(&json_bytes)
+        .with_context(|| format!("Failed to parse {} JSON payload", type_name))
+}
+
+pub fn handle_gen_config(output: &Path, force: bool) -> Result<()> {
+    if output.exists() && !force {
+        bail!(
+            "Config already exists at {}. Use --force to overwrite.",
+            output.display()
+        );
+    }
+
     Config::default()
         .save_to_file(output)
         .with_context(|| format!("Failed to save generated config to {}", output.display()))
@@ -70,14 +92,7 @@ pub fn handle_show_config(cli: &Cli) -> Result<()> {
 }
 
 pub fn handle_save_config(payload: &str) -> Result<()> {
-    let json_bytes = (0..payload.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&payload[i..i + 2], 16))
-        .collect::<Result<Vec<u8>, _>>()
-        .context("Failed to decode hex payload")?;
-
-    let config: Config =
-        serde_json::from_slice(&json_bytes).context("Failed to parse config JSON payload")?;
+    let config: Config = decode_hex_json(payload, "config")?;
 
     config
         .save_to_file(defs::CONFIG_FILE)
@@ -90,14 +105,7 @@ pub fn handle_save_config(payload: &str) -> Result<()> {
 
 pub fn handle_save_module_rules(module_id: &str, payload: &str) -> Result<()> {
     utils::validate_module_id(module_id)?;
-    let json_bytes = (0..payload.len())
-        .step_by(2)
-        .map(|i| u8::from_str_radix(&payload[i..i + 2], 16))
-        .collect::<Result<Vec<u8>, _>>()
-        .context("Failed to decode hex payload")?;
-
-    let new_rules: config::ModuleRules =
-        serde_json::from_slice(&json_bytes).context("Failed to parse module rules JSON")?;
+    let new_rules: config::ModuleRules = decode_hex_json(payload, "module rules")?;
     let mut config = Config::load_default().unwrap_or_default();
 
     config.rules.insert(module_id.to_string(), new_rules);

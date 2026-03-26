@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
-    log::info!("Starting smart module sync to {}", target_base.display());
+    log::info!("Starting full module sync to {}", target_base.display());
 
     prune_orphaned_modules(modules, target_base)?;
 
@@ -21,14 +21,10 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
         let dst = target_base.join(&module.id);
         let dst_backup = target_base.join(format!(".backup_{}", module.id));
 
-        let has_content = defs::BUILTIN_PARTITIONS.iter().any(|p| {
-            let part_path = module.source_path.join(p);
+        let has_content = has_module_mount_content(module);
 
-            part_path.exists() && has_files_recursive(&part_path)
-        });
-
-        if has_content && should_sync(&module.source_path, &dst) {
-            log::info!("Syncing module: {} (Updated/New)", module.id);
+        if has_content {
+            log::info!("Syncing module: {}", module.id);
 
             let tmp_dst = target_base.join(format!(".tmp_{}", module.id));
 
@@ -133,43 +129,6 @@ fn prune_orphaned_modules(modules: &[Module], target_base: &Path) -> Result<()> 
     Ok(())
 }
 
-fn should_sync(src: &Path, dst: &Path) -> bool {
-    if !dst.exists() {
-        return true;
-    }
-
-    let src_prop = src.join("module.prop");
-    let dst_prop = dst.join("module.prop");
-
-    if !src_prop.exists() || !dst_prop.exists() {
-        return true;
-    }
-
-    if let (Ok(s), Ok(d)) = (fs::read(&src_prop), fs::read(&dst_prop)) {
-        if s != d {
-            return true;
-        }
-    } else {
-        return true;
-    }
-
-    let src_post_fs = src.join("post-fs-data.sh");
-    let dst_post_fs = dst.join("post-fs-data.sh");
-
-    if src_post_fs.exists() && dst_post_fs.exists() {
-        if let (Ok(s_meta), Ok(d_meta)) = (fs::metadata(&src_post_fs), fs::metadata(&dst_post_fs))
-            && let (Ok(s_time), Ok(d_time)) = (s_meta.modified(), d_meta.modified())
-            && s_time > d_time
-        {
-            return true;
-        }
-    } else if src_post_fs.exists() != dst_post_fs.exists() {
-        return true;
-    }
-
-    false
-}
-
 fn has_files_recursive(path: &Path) -> bool {
     let mut stack = vec![path.to_path_buf()];
 
@@ -183,7 +142,7 @@ fn has_files_recursive(path: &Path) -> bool {
                 continue;
             };
 
-            if ft.is_file() {
+            if ft.is_file() || ft.is_symlink() || !ft.is_dir() {
                 return true;
             }
 
@@ -194,4 +153,11 @@ fn has_files_recursive(path: &Path) -> bool {
     }
 
     false
+}
+
+fn has_module_mount_content(module: &Module) -> bool {
+    defs::BUILTIN_PARTITIONS.iter().any(|partition| {
+        let part_path = module.source_path.join(partition);
+        part_path.exists() && has_files_recursive(&part_path)
+    })
 }

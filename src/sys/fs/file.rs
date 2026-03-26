@@ -45,6 +45,11 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
         }
         let _ = fs::remove_file(&temp_file);
     }
+
+    File::open(dir)
+        .and_then(|f| f.sync_all())
+        .with_context(|| format!("failed to fsync parent dir for {}", path.display()))?;
+
     Ok(())
 }
 
