@@ -54,7 +54,7 @@ fn load_config(cli: &Cli) -> Result<Config> {
 }
 
 fn decode_hex_json<T: DeserializeOwned>(payload: &str, type_name: &str) -> Result<T> {
-    if payload.len() % 2 != 0 {
+    if !payload.len().is_multiple_of(2) {
         bail!("Invalid hex payload length for {}", type_name);
     }
 
