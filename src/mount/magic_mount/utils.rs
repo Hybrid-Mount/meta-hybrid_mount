@@ -226,7 +226,14 @@ pub fn collect_module_files(
 
 fn is_valid_module_prop_id(prop: &Path) -> Result<bool> {
     let file = fs::File::open(prop)?;
-    for line in BufReader::new(file).lines().map_while(Result::ok) {
+    for line_result in BufReader::new(file).lines() {
+        let line = match line_result {
+            Ok(line) => line,
+            Err(e) => {
+                log::warn!("failed to read module.prop {}: {}", prop.display(), e);
+                return Ok(false);
+            }
+        };
         if line.starts_with("id")
             && let Some((_, value)) = line.split_once('=')
         {
