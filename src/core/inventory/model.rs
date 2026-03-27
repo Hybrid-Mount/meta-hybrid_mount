@@ -159,7 +159,7 @@ fn set_description(prop_path: &Path, desc_text: &str) {
             .arg("config")
             .arg("set")
             .arg("override.description")
-            .arg(&desc_text)
+            .arg(desc_text)
             .status();
 
         if let Ok(status) = result
