@@ -10,6 +10,7 @@ use crate::{
     conf::{
         cli::Cli,
         config::{self, Config},
+        loader::{self, LoadPolicy},
     },
     core::{inventory, inventory::model as modules, ops::planner},
     defs, utils,
@@ -20,37 +21,6 @@ struct DiagnosticIssueJson {
     level: String,
     context: String,
     message: String,
-}
-
-fn load_config(cli: &Cli) -> Result<Config> {
-    if let Some(config_path) = &cli.config {
-        return Config::from_file(config_path).with_context(|| {
-            format!(
-                "Failed to load config from custom path: {}",
-                config_path.display()
-            )
-        });
-    }
-
-    match Config::load_default() {
-        Ok(config) => Ok(config),
-        Err(e) => {
-            let is_not_found = e
-                .root_cause()
-                .downcast_ref::<std::io::Error>()
-                .map(|io_err| io_err.kind() == std::io::ErrorKind::NotFound)
-                .unwrap_or(false);
-
-            if is_not_found {
-                Ok(Config::default())
-            } else {
-                Err(e).context(format!(
-                    "Failed to load default config from {}",
-                    defs::CONFIG_FILE
-                ))
-            }
-        }
-    }
 }
 
 fn decode_hex_json<T: DeserializeOwned>(payload: &str, type_name: &str) -> Result<T> {
@@ -82,7 +52,7 @@ pub fn handle_gen_config(output: &Path, force: bool) -> Result<()> {
 }
 
 pub fn handle_show_config(cli: &Cli) -> Result<()> {
-    let config = load_config(cli)?;
+    let config = loader::load_config(cli, LoadPolicy::ErrorOnInvalidDefault)?;
 
     let json = serde_json::to_string(&config).context("Failed to serialize config to JSON")?;
 
@@ -120,32 +90,13 @@ pub fn handle_save_module_rules(module_id: &str, payload: &str) -> Result<()> {
 }
 
 pub fn handle_modules(cli: &Cli) -> Result<()> {
-    let config = load_config(cli)?;
+    let config = loader::load_config(cli, LoadPolicy::ErrorOnInvalidDefault)?;
 
     modules::print_list(&config).context("Failed to list modules")
 }
 
-pub fn handle_conflicts(cli: &Cli) -> Result<()> {
-    let config = load_config(cli)?;
-
-    let module_list = inventory::scan(&config.moduledir, &config)
-        .context("Failed to scan modules for conflict analysis")?;
-
-    let plan = planner::generate(&config, &module_list, &config.moduledir)
-        .context("Failed to generate plan for conflict analysis")?;
-
-    let report = plan.analyze();
-
-    let json =
-        serde_json::to_string(&report.conflicts).context("Failed to serialize conflict report")?;
-
-    println!("{}", json);
-
-    Ok(())
-}
-
-pub fn handle_diagnostics(cli: &Cli) -> Result<()> {
-    let config = load_config(cli)?;
+pub fn handle_analyze(cli: &Cli, kind: &str) -> Result<()> {
+    let config = loader::load_config(cli, LoadPolicy::ErrorOnInvalidDefault)?;
 
     let module_list = inventory::scan(&config.moduledir, &config)
         .context("Failed to scan modules for diagnostics")?;
@@ -155,23 +106,36 @@ pub fn handle_diagnostics(cli: &Cli) -> Result<()> {
 
     let report = plan.analyze();
 
-    let json_issues: Vec<DiagnosticIssueJson> = report
-        .diagnostics
-        .into_iter()
-        .map(|i| DiagnosticIssueJson {
-            level: match i.level {
-                planner::DiagnosticLevel::Warning => "Warning".to_string(),
-                planner::DiagnosticLevel::Critical => "Critical".to_string(),
-            },
-            context: i.context,
-            message: i.message,
-        })
-        .collect();
+    match kind {
+        "conflicts" => {
+            let json = serde_json::to_string(&report.conflicts)
+                .context("Failed to serialize conflict report")?;
+            println!("{}", json);
+        }
+        "diagnostics" => {
+            let json_issues: Vec<DiagnosticIssueJson> = report
+                .diagnostics
+                .into_iter()
+                .map(|i| DiagnosticIssueJson {
+                    level: match i.level {
+                        planner::DiagnosticLevel::Warning => "Warning".to_string(),
+                        planner::DiagnosticLevel::Critical => "Critical".to_string(),
+                    },
+                    context: i.context,
+                    message: i.message,
+                })
+                .collect();
 
-    let json =
-        serde_json::to_string(&json_issues).context("Failed to serialize diagnostics report")?;
-
-    println!("{}", json);
+            let json = serde_json::to_string(&json_issues)
+                .context("Failed to serialize diagnostics report")?;
+            println!("{}", json);
+        }
+        "all" => {
+            let json = serde_json::to_string(&report).context("Failed to serialize report")?;
+            println!("{}", json);
+        }
+        _ => bail!("Unsupported analyze kind: {}", kind),
+    }
 
     Ok(())
 }

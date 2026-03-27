@@ -4,6 +4,7 @@
 use std::{
     collections::HashSet,
     fs::{self, DirEntry, Metadata, create_dir, create_dir_all, read_link},
+    io::{BufRead, BufReader},
     os::unix::fs::{MetadataExt, symlink},
     path::{Path, PathBuf},
 };
@@ -15,7 +16,7 @@ use rustix::{
 };
 
 use crate::{
-    defs::{DISABLE_FILE_NAME, REMOVE_FILE_NAME, SKIP_MOUNT_FILE_NAME},
+    core::inventory,
     mount::node::Node,
     sys::fs::{lgetfilecon, lsetfilecon},
     utils::validate_module_id,
@@ -116,6 +117,9 @@ pub fn collect_module_files(
     let mut system = Node::new_root("system");
     let module_root = module_dir;
     let mut has_file = HashSet::new();
+    let mut partitions = HashSet::new();
+    partitions.insert("system".to_string());
+    partitions.extend(extra_partitions.iter().cloned());
 
     log::debug!("begin collect module files: {}", module_root.display());
 
@@ -136,62 +140,40 @@ pub fn collect_module_files(
             continue;
         }
 
-        let prop = entry.path().join("module.prop");
-        if !prop.exists() {
+        let module_path = entry.path();
+        let prop = module_path.join("module.prop");
+        if !prop.is_file() {
             log::debug!("skipped module {id}, because not found module.prop");
             continue;
         }
-        let string = fs::read_to_string(prop)?;
-
-        let mut valid_id = true;
-        for line in string.lines() {
-            if line.starts_with("id")
-                && let Some((_, value)) = line.split_once('=')
-                && validate_module_id(value).is_err()
-            {
-                valid_id = false;
-                break;
-            }
-        }
-
-        if !valid_id {
+        if !is_valid_module_prop_id(&prop)? {
             log::debug!("skipped module {id}, invalid ID format");
             continue;
         }
 
-        if entry.path().join(DISABLE_FILE_NAME).exists()
-            || entry.path().join(REMOVE_FILE_NAME).exists()
-            || entry.path().join(SKIP_MOUNT_FILE_NAME).exists()
+        if inventory::is_reserved_module_dir(&id) || inventory::has_mount_block_marker(&module_path)
         {
             log::debug!("skipped module {id}, due to disable/remove/skip_mount");
             continue;
         }
 
-        let mut modified = false;
-        let mut partitions = HashSet::new();
-        partitions.insert("system".to_string());
-        partitions.extend(extra_partitions.iter().cloned());
+        let touched_partitions: Vec<String> = partitions
+            .iter()
+            .filter(|p| module_path.join(p).is_dir())
+            .cloned()
+            .collect();
 
-        for p in &partitions {
-            if entry.path().join(p).is_dir() {
-                modified = true;
-                break;
+        if touched_partitions.is_empty() {
+            for p in &partitions {
+                log::debug!("{id} due not modify {p}");
             }
-            log::debug!("{id} due not modify {p}");
-        }
-
-        if !modified {
             continue;
         }
 
-        log::debug!("collecting {}", entry.path().display());
+        log::debug!("collecting {}", module_path.display());
 
-        for p in partitions {
-            if !entry.path().join(&p).exists() {
-                continue;
-            }
-
-            has_file.insert(system.collect_module_files(entry.path().join(&p))?);
+        for p in touched_partitions {
+            has_file.insert(system.collect_module_files(module_path.join(p))?);
         }
     }
 
@@ -240,6 +222,18 @@ pub fn collect_module_files(
     } else {
         Ok(None)
     }
+}
+
+fn is_valid_module_prop_id(prop: &Path) -> Result<bool> {
+    let file = fs::File::open(prop)?;
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        if line.starts_with("id")
+            && let Some((_, value)) = line.split_once('=')
+        {
+            return Ok(validate_module_id(value).is_ok());
+        }
+    }
+    Ok(true)
 }
 
 pub fn clone_symlink<S>(src: S, dst: S) -> Result<()>

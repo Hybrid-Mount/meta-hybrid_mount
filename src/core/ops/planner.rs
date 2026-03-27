@@ -52,7 +52,7 @@ pub struct DiagnosticIssue {
     pub message: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize)]
 pub struct AnalysisReport {
     pub conflicts: Vec<ConflictEntry>,
     pub diagnostics: Vec<DiagnosticIssue>,
@@ -148,6 +148,71 @@ struct ProcessingItem {
     partition_label: String,
 }
 
+fn build_managed_partitions(config: &config::Config) -> HashSet<String> {
+    let mut managed_partitions: HashSet<String> = defs::BUILTIN_PARTITIONS
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    managed_partitions.insert("system".to_string());
+    managed_partitions.extend(config.partitions.iter().cloned());
+    managed_partitions
+}
+
+fn module_content_path(storage_root: &Path, module: &Module) -> Option<PathBuf> {
+    let mut content_path = storage_root.join(&module.id);
+    if !content_path.exists() {
+        content_path = module.source_path.clone();
+    }
+    content_path.exists().then_some(content_path)
+}
+
+fn resolve_target(system_target: &Path) -> PathBuf {
+    let resolved_target = match fs::read_link(system_target) {
+        Ok(target) => {
+            if target.is_absolute() {
+                target
+            } else {
+                system_target
+                    .parent()
+                    .unwrap_or(Path::new("/"))
+                    .join(target)
+            }
+        }
+        Err(_) => system_target.to_path_buf(),
+    };
+
+    if resolved_target.exists() {
+        return resolved_target
+            .canonicalize()
+            .unwrap_or_else(|_| resolved_target.clone());
+    }
+
+    if let Some(parent) = resolved_target.parent()
+        && parent.exists()
+    {
+        return parent
+            .canonicalize()
+            .map(|p| {
+                resolved_target
+                    .file_name()
+                    .map_or_else(|| p.clone(), |name| p.join(name))
+            })
+            .unwrap_or_else(|_| resolved_target.clone());
+    }
+
+    resolved_target
+}
+
+fn resolve_target_cached(cache: &mut HashMap<PathBuf, PathBuf>, system_target: &Path) -> PathBuf {
+    if let Some(cached) = cache.get(system_target) {
+        return cached.clone();
+    }
+
+    let resolved = resolve_target(system_target);
+    cache.insert(system_target.to_path_buf(), resolved.clone());
+    resolved
+}
+
 pub fn generate(
     config: &config::Config,
     modules: &[Module],
@@ -162,6 +227,7 @@ pub fn generate(
     let mut plan = MountPlan::default();
 
     let mut overlay_groups: BTreeMap<PathBuf, Vec<PathBuf>> = BTreeMap::new();
+    let mut target_cache: HashMap<PathBuf, PathBuf> = HashMap::new();
     let module_rank: HashMap<&str, usize> = modules
         .iter()
         .enumerate()
@@ -172,27 +238,17 @@ pub fn generate(
     let mut magic_ids = HashSet::new();
 
     let sensitive_partitions: HashSet<&str> = defs::SENSITIVE_PARTITIONS.iter().cloned().collect();
-    let mut managed_partitions: HashSet<String> = defs::BUILTIN_PARTITIONS
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    managed_partitions.insert("system".to_string());
-    managed_partitions.extend(config.partitions.iter().cloned());
+    let managed_partitions = build_managed_partitions(config);
 
     for module in modules {
         log::debug!("[planner] evaluating module={}", module.id);
-        let mut content_path = storage_root.join(&module.id);
-        if !content_path.exists() {
-            content_path = module.source_path.clone();
-        }
-        if !content_path.exists() {
+        let Some(content_path) = module_content_path(storage_root, module) else {
             log::debug!(
-                "[planner] skip module={} because content path not found: {}",
+                "[planner] skip module={} because content path not found",
                 module.id,
-                content_path.display()
             );
             continue;
-        }
+        };
 
         if let Ok(entries) = fs::read_dir(&content_path) {
             for entry in entries.flatten() {
@@ -260,39 +316,7 @@ pub fn generate(
                         continue;
                     }
 
-                    let resolved_target = match fs::read_link(&system_target) {
-                        Ok(target) => {
-                            if target.is_absolute() {
-                                target
-                            } else {
-                                system_target
-                                    .parent()
-                                    .unwrap_or(Path::new("/"))
-                                    .join(target)
-                            }
-                        }
-                        Err(_) => system_target.clone(),
-                    };
-                    let canonical_target = if resolved_target.exists() {
-                        resolved_target
-                            .canonicalize()
-                            .unwrap_or_else(|_| resolved_target.clone())
-                    } else if let Some(parent) = resolved_target.parent() {
-                        if parent.exists() {
-                            parent
-                                .canonicalize()
-                                .map(|p| {
-                                    resolved_target
-                                        .file_name()
-                                        .map_or_else(|| p.clone(), |name| p.join(name))
-                                })
-                                .unwrap_or_else(|_| resolved_target.clone())
-                        } else {
-                            resolved_target.clone()
-                        }
-                    } else {
-                        resolved_target.clone()
-                    };
+                    let canonical_target = resolve_target_cached(&mut target_cache, &system_target);
 
                     let target_name = canonical_target
                         .file_name()

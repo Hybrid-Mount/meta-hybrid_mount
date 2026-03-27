@@ -13,7 +13,7 @@ use serde::Deserialize;
 
 use crate::{
     conf::config::{self, ModuleRules, MountMode},
-    defs,
+    core::inventory,
 };
 
 #[derive(Deserialize)]
@@ -86,17 +86,11 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
 
             let id = entry.file_name().to_string_lossy().to_string();
 
-            if matches!(
-                id.as_str(),
-                "hybrid-mount" | "lost+found" | ".git" | ".idea" | ".vscode"
-            ) {
+            if inventory::is_reserved_module_dir(&id) {
                 return None;
             }
 
-            if path.join(defs::DISABLE_FILE_NAME).exists()
-                || path.join(defs::REMOVE_FILE_NAME).exists()
-                || path.join(defs::SKIP_MOUNT_FILE_NAME).exists()
-            {
+            if inventory::has_mount_block_marker(&path) {
                 return None;
             }
 

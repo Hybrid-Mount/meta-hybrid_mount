@@ -16,39 +16,15 @@ use conf::{
     cli::{Cli, Commands},
     cli_handlers,
     config::Config,
+    loader::{self, LoadPolicy},
 };
 use mimalloc::MiMalloc;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-fn load_config(cli: &Cli) -> Result<Config> {
-    if let Some(config_path) = &cli.config {
-        return Config::from_file(config_path).with_context(|| {
-            format!(
-                "Failed to load config from custom path: {}",
-                config_path.display()
-            )
-        });
-    }
-
-    Ok(Config::load_default().unwrap_or_else(|e| {
-        let is_not_found = e
-            .root_cause()
-            .downcast_ref::<std::io::Error>()
-            .map(|io_err| io_err.kind() == std::io::ErrorKind::NotFound)
-            .unwrap_or(false);
-
-        if !is_not_found {
-            log::warn!("Failed to load default config, using defaults: {:#}", e);
-        }
-
-        Config::default()
-    }))
-}
-
 fn load_final_config(cli: &Cli) -> Result<Config> {
-    let mut config = load_config(cli)?;
+    let mut config = loader::load_config(cli, LoadPolicy::FallbackToDefault)?;
     config.merge_with_cli(
         cli.moduledir.clone(),
         cli.mountsource.clone(),
@@ -79,8 +55,7 @@ fn main() -> Result<()> {
                 cli_handlers::handle_save_module_rules(module, payload)?
             }
             Commands::Modules => cli_handlers::handle_modules(&cli)?,
-            Commands::Conflicts => cli_handlers::handle_conflicts(&cli)?,
-            Commands::Diagnostics => cli_handlers::handle_diagnostics(&cli)?,
+            Commands::Analyze { kind } => cli_handlers::handle_analyze(&cli, kind)?,
         }
 
         return Ok(());

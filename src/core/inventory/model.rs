@@ -138,41 +138,7 @@ pub fn update_description(storage_mode: &str, overlay_count: usize, magic_count:
         "😋 运行中喵～ ({}) {} | Overlay: {} | Magic: {}",
         mode_str, status_emoji, overlay_count, magic_count
     );
-    if KSU.load(Ordering::Relaxed) {
-        let result = Command::new("ksud")
-            .arg("module")
-            .arg("config")
-            .arg("set")
-            .arg("override.description")
-            .arg(&desc_text)
-            .status();
-
-        if let Ok(status) = result
-            && status.success()
-        {
-            return;
-        }
-    }
-
-    let lines: Vec<String> = match fs::File::open(prop_path) {
-        Ok(file) => BufReader::new(file)
-            .lines()
-            .map_while(Result::ok)
-            .map(|line| {
-                if line.starts_with("description=") {
-                    format!("description={}", desc_text)
-                } else {
-                    line
-                }
-            })
-            .collect(),
-        Err(_) => return,
-    };
-
-    let content = lines.join("\n");
-    if let Err(e) = atomic_write(prop_path, format!("{}\n", content)) {
-        log::warn!("Failed to update module description: {}", e);
-    }
+    set_description(prop_path, &desc_text);
 }
 
 pub fn update_crash_description(reason: &str) {
@@ -183,7 +149,10 @@ pub fn update_crash_description(reason: &str) {
     }
 
     let desc_text = format!("😭 崩溃了呜～ | 原因: {}", reason);
+    set_description(prop_path, &desc_text);
+}
 
+fn set_description(prop_path: &Path, desc_text: &str) {
     if KSU.load(Ordering::Relaxed) {
         let result = Command::new("ksud")
             .arg("module")

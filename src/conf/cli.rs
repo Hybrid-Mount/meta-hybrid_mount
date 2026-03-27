@@ -44,6 +44,8 @@ pub enum Commands {
         payload: String,
     },
     Modules,
-    Conflicts,
-    Diagnostics,
+    Analyze {
+        #[arg(long, default_value = "all", value_parser = ["all", "conflicts", "diagnostics"])]
+        kind: String,
+    },
 }
