@@ -8,7 +8,6 @@ use std::{
 };
 
 use anyhow::Result;
-use rayon::prelude::*;
 use serde::Deserialize;
 
 use crate::{
@@ -75,7 +74,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
     let dir_entries = fs::read_dir(source_dir)?.collect::<std::io::Result<Vec<_>>>()?;
 
     let mut modules: Vec<Module> = dir_entries
-        .into_par_iter()
+        .into_iter()
         .filter_map(|entry| {
             let path = entry.path();
 

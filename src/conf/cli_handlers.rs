@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use serde::{Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
 
 use crate::{
     conf::{
@@ -12,16 +12,9 @@ use crate::{
         config::{self, Config},
         loader::{self, LoadPolicy},
     },
-    core::{inventory, inventory::model as modules, ops::planner},
+    core::inventory::model as modules,
     defs, utils,
 };
-
-#[derive(Serialize)]
-struct DiagnosticIssueJson {
-    level: String,
-    context: String,
-    message: String,
-}
 
 fn decode_hex_json<T: DeserializeOwned>(payload: &str, type_name: &str) -> Result<T> {
     if !payload.len().is_multiple_of(2) {
@@ -93,49 +86,4 @@ pub fn handle_modules(cli: &Cli) -> Result<()> {
     let config = loader::load_config(cli, LoadPolicy::ErrorOnInvalidDefault)?;
 
     modules::print_list(&config).context("Failed to list modules")
-}
-
-pub fn handle_analyze(cli: &Cli, kind: &str) -> Result<()> {
-    let config = loader::load_config(cli, LoadPolicy::ErrorOnInvalidDefault)?;
-
-    let module_list = inventory::scan(&config.moduledir, &config)
-        .context("Failed to scan modules for diagnostics")?;
-
-    let plan = planner::generate(&config, &module_list, &config.moduledir)
-        .context("Failed to generate plan for diagnostics")?;
-
-    let report = plan.analyze();
-
-    match kind {
-        "conflicts" => {
-            let json = serde_json::to_string(&report.conflicts)
-                .context("Failed to serialize conflict report")?;
-            println!("{}", json);
-        }
-        "diagnostics" => {
-            let json_issues: Vec<DiagnosticIssueJson> = report
-                .diagnostics
-                .into_iter()
-                .map(|i| DiagnosticIssueJson {
-                    level: match i.level {
-                        planner::DiagnosticLevel::Warning => "Warning".to_string(),
-                        planner::DiagnosticLevel::Critical => "Critical".to_string(),
-                    },
-                    context: i.context,
-                    message: i.message,
-                })
-                .collect();
-
-            let json = serde_json::to_string(&json_issues)
-                .context("Failed to serialize diagnostics report")?;
-            println!("{}", json);
-        }
-        "all" => {
-            let json = serde_json::to_string(&report).context("Failed to serialize report")?;
-            println!("{}", json);
-        }
-        _ => bail!("Unsupported analyze kind: {}", kind),
-    }
-
-    Ok(())
 }

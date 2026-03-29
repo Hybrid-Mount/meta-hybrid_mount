@@ -6,83 +6,150 @@
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)
 
-**Hybrid Mount** is a mount logic metamodule implementation for KernelSU and APatch. It manages module file integration into the Android system using a combination of **OverlayFS** and **bind mounts** (Magic Mount).
+Hybrid Mount is a mount orchestration metamodule for **KernelSU** and **APatch**.  
+It merges module files into Android partitions with a hybrid strategy:
 
-The project includes a WebUI dashboard for module management and configuration.
+- **OverlayFS** when kernel/filesystem support is stable.
+- **Magic Mount (bind mount)** as fallback or per-path override.
 
-**[🇨🇳 中文 (Chinese)](README_ZH.md)**
+The runtime is designed for predictable boot behavior, conflict visibility, and policy-level control.
+
+**[🇨🇳 中文文档](README_ZH.md)**
+
+---
+
+## Table of Contents
+
+- [Design Goals](#design-goals)
+- [Architecture](#architecture)
+- [Repository Layout](#repository-layout)
+- [Configuration](#configuration)
+- [CLI](#cli)
+- [Build](#build)
+- [Operational Notes](#operational-notes)
+- [License](#license)
 
 ---
 
-## Technical Overview
+## Design Goals
 
-### Mounting Strategies
+1. **Compatibility-first mounting** across diverse Android kernels.
+2. **Deterministic behavior** through explicit planning and conflict analysis.
+3. **Operational safety** with recovery-friendly defaults.
+4. **Automation-friendly CLI** for WebUI or external controllers.
 
-The core binary (`hybrid-mount`) determines the mounting method for each module directory based on configuration and system compatibility:
+## Architecture
 
-1. **OverlayFS**: Uses the kernel's OverlayFS to merge module directories with system partitions. This is the default strategy for supported filesystems.
-2. **Magic Mount**: Uses recursive bind mounts to mirror modified file structures. This serves as a fallback strategy when OverlayFS is unavailable or fails.
+At startup, `hybrid-mount` follows this pipeline:
 
-### Functionality
+1. Load config (file + CLI override).
+2. Scan module tree and inventory mountable entries.
+3. Generate an execution plan (overlay/magic/ignore).
+4. Apply mounts and persist runtime state.
+5. Emit diagnostics/conflict reports when requested.
 
-* **Conflict Detection**: Scans module file paths to identify collisions where multiple modules modify the same file.
-* **Module Isolation**: Supports mounting modules in isolated namespaces.
-* **Configurable Strategies**: Users can force specific partitions or modules to use OverlayFS or Magic Mount via `config.toml`.
-* **Recovery Protocol**: Includes a mechanism to restore default configurations in case of boot failures caused by invalid settings.
+Key implementation modules:
 
----
+- `src/conf`: config schema, loader, CLI handlers.
+- `src/core/inventory`: module scanning and inventory modeling.
+- `src/core/ops`: planning, execution, synchronization.
+- `src/mount`: overlayfs + magic-mount backends.
+- `src/sys`: filesystem/mount helpers and low-level integration.
+
+## Repository Layout
+
+```text
+.
+├─ src/                 # daemon/runtime implementation
+├─ module/              # module scripts and packaging assets
+├─ xtask/               # build/release automation commands
+├─ tools/notify/        # optional helper binary
+├─ Cargo.toml           # workspace + runtime crate settings
+└─ README*.md           # user and developer docs
+```
 
 ## Configuration
 
-Configuration is stored at `/data/adb/hybrid-mount/config.toml`.
+Default path: `/data/adb/hybrid-mount/config.toml`.
 
-| Parameter | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `moduledir` | string | `/data/adb/modules/` | Path to the module source directory. |
-| `mountsource` | string | Auto-detect | Mount source label (e.g., `KSU`, `APatch`). |
-| `partitions` | list | `[]` | List of partitions to explicitly manage. |
-| `overlay_mode` | string | `ext4` | Backend for loop devices (`tmpfs`, `ext4`). |
-| `disable_umount` | bool | `false` | If true, skips unmounting the original source (debug usage). |
+### Top-level fields
 
----
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `moduledir` | string | `/data/adb/modules` | Module source directory. |
+| `mountsource` | string | auto-detect | Runtime source tag (e.g. `KSU`, `APatch`). |
+| `partitions` | list\|csv string | `[]` | Extra managed partitions. |
+| `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work backing mode. |
+| `disable_umount` | bool | `false` | Skip unmount operations (debug-only). |
+| `allow_umount_coexistence` | bool | `false` | Allow coexistence with existing umount behavior. |
+| `default_mode` | `overlay` \| `magic` | `overlay` | Default policy for module paths. |
+| `rules` | map | `{}` | Per-module path-level mount policy. |
 
-## WebUI
+### Example
 
-The project provides a web-based interface built with **SolidJS**.
+```toml
+moduledir = "/data/adb/modules"
+mountsource = "KSU"
+partitions = ["system", "vendor"]
+overlay_mode = "ext4"
+disable_umount = false
+allow_umount_coexistence = false
+default_mode = "overlay"
 
-* **Status**: View current storage usage and kernel version.
-* **Management**: Toggle mount modes per module.
+[rules.my_module]
+default_mode = "magic"
 
----
+[rules.my_module.paths]
+"system/bin/tool" = "overlay"
+"vendor/lib64/libfoo.so" = "ignore"
+```
 
-## Build Instructions
+## CLI
 
-The project uses `xtask` for build automation.
+```bash
+hybrid-mount [OPTIONS] [COMMAND]
+```
 
-### Prerequisites
+Global options:
 
-* **Rust**: Nightly toolchain.
-* **Android NDK**: r27 or newer.
-* **Node.js**: v20+ (Required for WebUI compilation).
+- `-c, --config <PATH>` custom config path
+- `-m, --moduledir <PATH>` override module directory
+- `-s, --mountsource <SOURCE>` override source tag
+- `-p, --partitions <CSV>` override partition list
 
-### Compilation
+Subcommands:
 
-1. **Full Build (Binary + WebUI)**:
+- `gen-config` generate config file
+- `show-config` print effective config JSON
+- `save-config --payload <HEX_JSON>` save config from WebUI payload
+- `save-module-rules --module <ID> --payload <HEX_JSON>` update one module rule set
+- `modules` list detected modules
 
-    ```bash
-    cargo run -p xtask -- build --release
-    ```
+## Build
 
-    Output will be generated in the `output/` directory.
+Prerequisites:
 
-2. **Binary Only**:
+- Rust toolchain from `rust-toolchain.toml`
+- Android NDK (recommended r27+)
+- Node.js 20+ (only when building WebUI assets)
 
-    ```bash
-    cargo run -p xtask -- build --release --skip-webui
-    ```
+Build commands:
 
----
+```bash
+# full package
+cargo run -p xtask -- build --release
+
+# runtime only (skip web assets)
+cargo run -p xtask -- build --release --skip-webui
+```
+
+Artifacts are produced under `output/`.
+
+## Operational Notes
+
+- If a bad config causes boot issues, regenerate a minimal config with `gen-config` and reapply module rules incrementally.
+- For binary size optimization, prefer dependency feature trimming and release profile tuning before invasive refactors.
 
 ## License
 
-This project is licensed under the [GPL-3.0 License](LICENSE).
+Licensed under [GPL-3.0](LICENSE).

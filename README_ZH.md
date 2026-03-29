@@ -6,90 +6,150 @@
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)
 
-**Hybrid Mount** 是 KernelSU 和 APatch 的挂载逻辑元模块实现。它结合 **OverlayFS** 和 **Bind Mounts** (Magic Mount) 将模块文件集成到 Android 系统中。
+Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。  
+它使用混合策略把模块文件注入 Android 分区：
 
-本项目包含一个基于 **SolidJS** 构建的 WebUI 面板，用于模块管理和配置。
+- 内核/文件系统条件允许时优先使用 **OverlayFS**。
+- 不满足条件或按规则指定时回退到 **Magic Mount（bind mount）**。
+
+整体目标是：启动行为可预测、冲突可观测、策略可配置。
 
 **[🇺🇸 English](README.md)**
 
 ---
 
-## 技术概览
+## 目录
 
-### 挂载策略
-
-核心二进制程序 (`hybrid-mount`) 会根据配置和系统兼容性为每个模块目录决定挂载方式：
-
-1. **OverlayFS**：使用内核的 OverlayFS 将模块目录与系统分区合并。这是支持该文件系统的设备上的默认策略。
-2. **Magic Mount**：使用递归 Bind Mount 镜像修改后的文件结构。当 OverlayFS 不可用或失败时，此策略作为回退方案运行。
-
-### 功能特性
-
-* **冲突检测**：扫描模块文件路径，识别多个模块修改同一文件时的冲突情况。
-* **模块隔离**：支持在隔离的命名空间中挂载模块。
-* **策略配置**：用户可通过 `config.toml` 强制特定分区或模块使用 OverlayFS 或 Magic Mount。
-* **恢复协议**：包含故障恢复机制，若因配置无效导致启动失败，将自动恢复默认配置。
+- [设计目标](#设计目标)
+- [架构说明](#架构说明)
+- [仓库结构](#仓库结构)
+- [配置说明](#配置说明)
+- [CLI 命令](#cli-命令)
+- [构建方式](#构建方式)
+- [运维建议](#运维建议)
+- [开源协议](#开源协议)
 
 ---
 
-## 配置
+## 设计目标
 
-配置文件位于 `/data/adb/hybrid-mount/config.toml`。
+1. **兼容优先**：适配不同 Android 内核环境。
+2. **可确定性**：通过显式规划减少“偶现挂载异常”。
+3. **运行安全性**：配置和恢复流程尽可能保守。
+4. **自动化友好**：CLI 输出可直接给 WebUI/脚本消费。
 
-| 参数 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `moduledir` | string | `/data/adb/modules/` | 模块源目录路径。 |
-| `mountsource` | string | 自动检测 | 挂载源标签 (如 `KSU`, `APatch`)。 |
-| `partitions` | list | `[]` | 显式管理的分区列表。 |
-| `overlay_mode` | string | `ext4` | Loop 设备后端类型 (`tmpfs`, `ext4`)。 |
-| `disable_umount` | bool | `false` | 若为 true，则跳过卸载原始源（调试用途）。 |
+## 架构说明
 
----
+`hybrid-mount` 启动后主要流程如下：
 
-## WebUI
+1. 加载配置（文件 + CLI 覆盖）。
+2. 扫描模块目录并构建清单。
+3. 生成执行计划（overlay/magic/ignore）。
+4. 执行挂载并记录运行状态。
+5. 按需输出冲突与诊断报告。
 
-项目提供了一个基于 **SolidJS** 开发的 Web 管理界面。
+关键模块：
 
-* **状态**：查看当前存储使用情况和内核版本。
-* **管理**：切换模块的挂载模式。
+- `src/conf`：配置模型、加载器、CLI 处理。
+- `src/core/inventory`：模块扫描与数据建模。
+- `src/core/ops`：计划生成、执行与同步。
+- `src/mount`：overlayfs 与 magic mount 后端。
+- `src/sys`：底层文件系统与挂载接口。
 
----
+## 仓库结构
 
-## 构建指南
+```text
+.
+├─ src/                 # 守护进程与运行时逻辑
+├─ module/              # 模块脚本与打包资源
+├─ xtask/               # 构建/发布自动化入口
+├─ tools/notify/        # 可选辅助工具
+├─ Cargo.toml           # workspace 与主 crate 配置
+└─ README*.md           # 中英文文档
+```
 
-本项目使用 `xtask` 进行自动化构建。
+## 配置说明
 
-### 环境要求
+默认路径：`/data/adb/hybrid-mount/config.toml`。
 
-* **Rust**: Nightly 工具链。
-* **Android NDK**: r27 或更新版本。
-* **Node.js**: v20+ (编译 WebUI 所需)。
+### 顶层字段
 
-### 编译命令
+| 字段 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `moduledir` | string | `/data/adb/modules` | 模块目录。 |
+| `mountsource` | string | 自动检测 | 运行来源标识（如 `KSU`、`APatch`）。 |
+| `partitions` | list\|csv string | `[]` | 额外受管分区。 |
+| `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay 上层存储模式。 |
+| `disable_umount` | bool | `false` | 跳过 umount（仅调试建议使用）。 |
+| `allow_umount_coexistence` | bool | `false` | 允许与既有 umount 行为共存。 |
+| `default_mode` | `overlay` \| `magic` | `overlay` | 全局默认策略。 |
+| `rules` | map | `{}` | 按模块 + 路径细粒度策略。 |
 
-1. **完整构建 (二进制 + WebUI)**：
+### 示例
 
-    ```bash
-    cargo run -p xtask -- build --release
-    ```
+```toml
+moduledir = "/data/adb/modules"
+mountsource = "KSU"
+partitions = ["system", "vendor"]
+overlay_mode = "ext4"
+disable_umount = false
+allow_umount_coexistence = false
+default_mode = "overlay"
 
-    构建产物将生成在 `output/` 目录中。
+[rules.my_module]
+default_mode = "magic"
 
-2. **仅构建二进制**：
+[rules.my_module.paths]
+"system/bin/tool" = "overlay"
+"vendor/lib64/libfoo.so" = "ignore"
+```
 
-    ```bash
-    cargo run -p xtask -- build --release --skip-webui
-    ```
+## CLI 命令
 
-### 致谢
+```bash
+hybrid-mount [OPTIONS] [COMMAND]
+```
 
-* [5ec1cff/KernelSU](https://github.com/5ec1cff/KernelSU/blob/52f1f575ce2bd0ca46ebf644fd00a838af9f344e/userspace/ksud/src/magic_mount.rs)：原始实现
-* [Tools-cx-app/meta-magic_mount](https://github.com/Tools-cx-app/meta-magic_mount-rs)：magic mount 部分
-* [KernelSU-Modules-Repo/meta-overlayfs](https://github.com/KernelSU-Modules-Repo/meta-overlayfs) overlayfs 参考
-* [bmax121/APatch](https://github.com/bmax121/APatch/blob/8e4b71ada83e06c02cf03b23debe9bf7c9dc1e9e/apd/src/mount.rs) overlayfs 参考
+全局参数：
 
----
+- `-c, --config <PATH>` 指定配置文件路径
+- `-m, --moduledir <PATH>` 覆盖模块目录
+- `-s, --mountsource <SOURCE>` 覆盖来源标识
+- `-p, --partitions <CSV>` 覆盖分区列表
 
-## 协议
+子命令：
 
-本项目遵循 [GPL-3.0 协议](LICENSE) 开源。
+- `gen-config` 生成配置文件
+- `show-config` 输出当前生效配置（JSON）
+- `save-config --payload <HEX_JSON>` 从 WebUI 负载保存配置
+- `save-module-rules --module <ID> --payload <HEX_JSON>` 更新单模块规则
+- `modules` 输出模块清单
+
+## 构建方式
+
+环境要求：
+
+- 使用 `rust-toolchain.toml` 指定的 Rust 工具链
+- Android NDK（建议 r27+）
+- Node.js 20+（仅构建 WebUI 时需要）
+
+命令示例：
+
+```bash
+# 完整构建
+cargo run -p xtask -- build --release
+
+# 仅构建运行时（二进制）
+cargo run -p xtask -- build --release --skip-webui
+```
+
+产物输出到 `output/`。
+
+## 运维建议
+
+- 如果配置导致启动异常，先 `gen-config` 生成最小配置，再逐步恢复规则。
+- 缩小体积建议优先从依赖特性裁剪与 release profile 入手，再考虑重构。
+
+## 开源协议
+
+本项目采用 [GPL-3.0](LICENSE)。

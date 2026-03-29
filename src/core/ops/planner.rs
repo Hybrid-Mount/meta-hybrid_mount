@@ -8,9 +8,6 @@ use std::{
 };
 
 use anyhow::Result;
-use rayon::prelude::*;
-use serde::Serialize;
-use walkdir::WalkDir;
 
 use crate::{
     conf::config,
@@ -30,116 +27,6 @@ pub struct MountPlan {
     pub overlay_ops: Vec<OverlayOperation>,
     pub overlay_module_ids: Vec<String>,
     pub magic_module_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ConflictEntry {
-    pub partition: String,
-    pub relative_path: String,
-    pub contending_modules: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub enum DiagnosticLevel {
-    Warning,
-    Critical,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct DiagnosticIssue {
-    pub level: DiagnosticLevel,
-    pub context: String,
-    pub message: String,
-}
-
-#[derive(Debug, Default, Serialize)]
-pub struct AnalysisReport {
-    pub conflicts: Vec<ConflictEntry>,
-    pub diagnostics: Vec<DiagnosticIssue>,
-}
-
-impl MountPlan {
-    pub fn analyze(&self) -> AnalysisReport {
-        let results: Vec<(Vec<ConflictEntry>, Vec<DiagnosticIssue>)> = self
-            .overlay_ops
-            .par_iter()
-            .map(|op| {
-                let mut local_conflicts = Vec::new();
-                let mut local_diagnostics = Vec::new();
-                let mut file_map: HashMap<String, Vec<String>> = HashMap::new();
-
-                if !Path::new(&op.target).exists() {
-                    local_diagnostics.push(DiagnosticIssue {
-                        level: DiagnosticLevel::Critical,
-                        context: op.partition_name.clone(),
-                        message: format!("Target mount point does not exist: {}", op.target),
-                    });
-                }
-
-                for layer_path in &op.lowerdirs {
-                    if !layer_path.exists() {
-                        continue;
-                    }
-
-                    let module_id =
-                        utils::extract_module_id(layer_path).unwrap_or_else(|| "UNKNOWN".into());
-
-                    for entry in WalkDir::new(layer_path).min_depth(1).into_iter().flatten() {
-                        if entry.path_is_symlink()
-                            && let Ok(target) = std::fs::read_link(entry.path())
-                            && target.is_absolute()
-                            && !target.exists()
-                        {
-                            local_diagnostics.push(DiagnosticIssue {
-                                level: DiagnosticLevel::Warning,
-                                context: module_id.clone(),
-                                message: format!(
-                                    "Dead absolute symlink: {} -> {}",
-                                    entry.path().display(),
-                                    target.display()
-                                ),
-                            });
-                        }
-
-                        if !entry.file_type().is_file() {
-                            continue;
-                        }
-
-                        if let Ok(rel) = entry.path().strip_prefix(layer_path) {
-                            let rel_str = rel.to_string_lossy().to_string();
-                            file_map.entry(rel_str).or_default().push(module_id.clone());
-                        }
-                    }
-                }
-
-                for (rel_path, modules) in file_map {
-                    if modules.len() > 1 {
-                        local_conflicts.push(ConflictEntry {
-                            partition: op.partition_name.clone(),
-                            relative_path: rel_path,
-                            contending_modules: modules,
-                        });
-                    }
-                }
-
-                (local_conflicts, local_diagnostics)
-            })
-            .collect();
-
-        let mut report = AnalysisReport::default();
-        for (c, d) in results {
-            report.conflicts.extend(c);
-            report.diagnostics.extend(d);
-        }
-
-        report.conflicts.sort_by(|a, b| {
-            a.partition
-                .cmp(&b.partition)
-                .then_with(|| a.relative_path.cmp(&b.relative_path))
-        });
-
-        report
-    }
 }
 
 struct ProcessingItem {
