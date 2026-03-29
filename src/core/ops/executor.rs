@@ -33,6 +33,14 @@ impl Executer {
         involved_modules
     }
 
+    fn collect_overlay_modules_for_magic_fallback(plan: &MountPlan) -> HashSet<String> {
+        let mut fallback_ids = HashSet::new();
+        for op in &plan.overlay_ops {
+            fallback_ids.extend(Self::collect_involved_modules(op));
+        }
+        fallback_ids
+    }
+
     pub fn execute<P>(
         plan: &MountPlan,
         config: &config::Config,
@@ -84,7 +92,21 @@ impl Executer {
             }
         } else {
             if !plan.overlay_ops.is_empty() {
-                bail!("[executor] overlayfs unsupported and overlay operations are pending");
+                if config.enable_overlay_fallback {
+                    let fallback_ids = Self::collect_overlay_modules_for_magic_fallback(plan);
+                    if fallback_ids.is_empty() {
+                        bail!(
+                            "[executor] overlayfs unsupported and no modules could be inferred for magic fallback"
+                        );
+                    }
+                    log::warn!(
+                        "[executor] overlayfs unsupported, fallback enabled; switching {} modules to magic mount",
+                        fallback_ids.len()
+                    );
+                    final_magic_ids.extend(fallback_ids);
+                } else {
+                    bail!("[executor] overlayfs unsupported and overlay operations are pending");
+                }
             }
             log::info!("[executor] overlayfs unsupported, no overlay operations to apply");
         }
@@ -234,5 +256,43 @@ impl Executer {
         log::debug!("[executor] mount_magic done: module_count={}", ids.len());
 
         Ok(ids.iter().cloned().collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, path::PathBuf};
+
+    use crate::core::ops::planner::{MountPlan, OverlayOperation};
+
+    use super::Executer;
+
+    #[test]
+    fn collect_overlay_modules_for_magic_fallback_deduplicates_modules() {
+        let mut plan = MountPlan::default();
+        plan.overlay_ops.push(OverlayOperation {
+            partition_name: "system".to_string(),
+            target: "/system/bin".to_string(),
+            lowerdirs: vec![
+                PathBuf::from("/modA/system"),
+                PathBuf::from("/modB/system"),
+            ],
+        });
+        plan.overlay_ops.push(OverlayOperation {
+            partition_name: "vendor".to_string(),
+            target: "/vendor/lib".to_string(),
+            lowerdirs: vec![
+                PathBuf::from("/modA/vendor"),
+                PathBuf::from("/modC/vendor"),
+            ],
+        });
+
+        let result = Executer::collect_overlay_modules_for_magic_fallback(&plan);
+        let expected = HashSet::from([
+            "modA".to_string(),
+            "modB".to_string(),
+            "modC".to_string(),
+        ]);
+        assert_eq!(result, expected);
     }
 }

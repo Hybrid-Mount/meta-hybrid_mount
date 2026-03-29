@@ -33,6 +33,22 @@ struct ModuleProp {
     description: String,
 }
 
+fn normalize_module_prop(module_id: &str, mut prop: ModuleProp) -> ModuleProp {
+    if prop.name.trim().is_empty() {
+        prop.name = module_id.to_string();
+    }
+    if prop.version.trim().is_empty() {
+        prop.version = "unknown".to_string();
+    }
+    if prop.author.trim().is_empty() {
+        prop.author = "unknown".to_string();
+    }
+    if prop.description.trim().is_empty() {
+        prop.description = "No description".to_string();
+    }
+    prop
+}
+
 impl From<&Path> for ModuleProp {
     fn from(path: &Path) -> Self {
         let mut prop = ModuleProp::default();
@@ -74,7 +90,10 @@ struct ModuleInfo {
 
 impl ModuleInfo {
     fn new(m: inventory::Module, mounted_set: &HashSet<&str>) -> Self {
-        let prop = ModuleProp::from(m.source_path.join("module.prop").as_path());
+        let prop = normalize_module_prop(
+            &m.id,
+            ModuleProp::from(m.source_path.join("module.prop").as_path()),
+        );
 
         let mode_str = match m.rules.default_mode {
             MountMode::Overlay => "auto",
@@ -187,5 +206,49 @@ fn set_description(prop_path: &Path, desc_text: &str) {
     let content = lines.join("\n");
     if let Err(e) = atomic_write(prop_path, format!("{}\n", content)) {
         log::warn!("Failed to update module description: {}", e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::{ModuleProp, normalize_module_prop};
+    use tempfile::tempdir;
+
+    #[test]
+    fn module_prop_parses_expected_fields() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let prop_file = dir.path().join("module.prop");
+        fs::write(
+            &prop_file,
+            "name=Demo\nversion=1.0\nauthor=Hybrid Mount\ndescription=sample\nignored=1\n",
+        )
+        .expect("failed to write module.prop");
+
+        let prop = ModuleProp::from(prop_file.as_path());
+        assert_eq!(prop.name, "Demo");
+        assert_eq!(prop.version, "1.0");
+        assert_eq!(prop.author, "Hybrid Mount");
+        assert_eq!(prop.description, "sample");
+    }
+
+    #[test]
+    fn module_prop_returns_defaults_for_missing_file() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let prop = ModuleProp::from(dir.path().join("not-found.prop").as_path());
+        assert!(prop.name.is_empty());
+        assert!(prop.version.is_empty());
+        assert!(prop.author.is_empty());
+        assert!(prop.description.is_empty());
+    }
+
+    #[test]
+    fn normalize_module_prop_fills_empty_fields() {
+        let normalized = normalize_module_prop("sample.id", ModuleProp::default());
+        assert_eq!(normalized.name, "sample.id");
+        assert_eq!(normalized.version, "unknown");
+        assert_eq!(normalized.author, "unknown");
+        assert_eq!(normalized.description, "No description");
     }
 }

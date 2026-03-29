@@ -82,6 +82,7 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay 上层存储模式。 |
 | `disable_umount` | bool | `false` | 跳过 umount（仅调试建议使用）。 |
 | `allow_umount_coexistence` | bool | `false` | 允许与既有 umount 行为共存。 |
+| `enable_overlay_fallback` | bool | `false` | 当 overlayfs 不可用时，允许将 overlay 计划模块回退到 Magic Mount。 |
 | `default_mode` | `overlay` \| `magic` | `overlay` | 全局默认策略。 |
 | `rules` | map | `{}` | 按模块 + 路径细粒度策略。 |
 
@@ -94,6 +95,7 @@ partitions = ["system", "vendor"]
 overlay_mode = "ext4"
 disable_umount = false
 allow_umount_coexistence = false
+enable_overlay_fallback = false
 default_mode = "overlay"
 
 [rules.my_module]

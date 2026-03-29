@@ -47,3 +47,40 @@ pub fn extract_module_id(path: &Path) -> Option<String> {
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_module_id, validate_module_id};
+    use std::fs;
+
+    use tempfile::tempdir;
+
+    #[test]
+    fn validate_module_id_accepts_valid_ids() {
+        let valid_ids = ["Alpha", "alpha_1", "A.b-c_123"];
+        for id in valid_ids {
+            assert!(validate_module_id(id).is_ok(), "id should be valid: {id}");
+        }
+    }
+
+    #[test]
+    fn validate_module_id_rejects_invalid_ids() {
+        let invalid_ids = ["1alpha", "alpha space", "", "-alpha"];
+        for id in invalid_ids {
+            assert!(validate_module_id(id).is_err(), "id should be invalid: {id}");
+        }
+    }
+
+    #[test]
+    fn extract_module_id_prefers_directory_with_module_prop() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let module_dir = dir.path().join("my_module");
+        let nested = module_dir.join("system/bin");
+        fs::create_dir_all(&nested).expect("failed to create nested dir");
+        fs::write(module_dir.join("module.prop"), "name=My Module\n")
+            .expect("failed to write module.prop");
+
+        let extracted = extract_module_id(&nested).expect("expected module id");
+        assert_eq!(extracted, "my_module");
+    }
+}

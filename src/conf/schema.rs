@@ -65,6 +65,8 @@ pub struct Config {
     #[serde(default)]
     pub allow_umount_coexistence: bool,
     #[serde(default)]
+    pub enable_overlay_fallback: bool,
+    #[serde(default)]
     pub default_mode: DefaultMode,
     #[serde(default)]
     pub rules: HashMap<String, ModuleRules>,
@@ -108,6 +110,7 @@ impl Default for Config {
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
             allow_umount_coexistence: false,
+            enable_overlay_fallback: false,
             default_mode: DefaultMode::default(),
             rules: HashMap::new(),
         }
@@ -132,5 +135,27 @@ impl Config {
         if !partitions.is_empty() {
             self.partitions = partitions;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+
+    #[test]
+    fn config_default_disables_overlay_fallback() {
+        let cfg = Config::default();
+        assert!(!cfg.enable_overlay_fallback);
+    }
+
+    #[test]
+    fn config_can_deserialize_overlay_fallback_switch() {
+        let content = r#"
+moduledir = "/data/adb/modules"
+mountsource = "KSU"
+enable_overlay_fallback = true
+"#;
+        let cfg: Config = toml::from_str(content).expect("failed to parse toml");
+        assert!(cfg.enable_overlay_fallback);
     }
 }
