@@ -263,9 +263,8 @@ impl Executer {
 mod tests {
     use std::{collections::HashSet, path::PathBuf};
 
-    use crate::core::ops::planner::{MountPlan, OverlayOperation};
-
     use super::Executer;
+    use crate::core::ops::planner::{MountPlan, OverlayOperation};
 
     #[test]
     fn collect_overlay_modules_for_magic_fallback_deduplicates_modules() {
@@ -273,26 +272,16 @@ mod tests {
         plan.overlay_ops.push(OverlayOperation {
             partition_name: "system".to_string(),
             target: "/system/bin".to_string(),
-            lowerdirs: vec![
-                PathBuf::from("/modA/system"),
-                PathBuf::from("/modB/system"),
-            ],
+            lowerdirs: vec![PathBuf::from("/modA/system"), PathBuf::from("/modB/system")],
         });
         plan.overlay_ops.push(OverlayOperation {
             partition_name: "vendor".to_string(),
             target: "/vendor/lib".to_string(),
-            lowerdirs: vec![
-                PathBuf::from("/modA/vendor"),
-                PathBuf::from("/modC/vendor"),
-            ],
+            lowerdirs: vec![PathBuf::from("/modA/vendor"), PathBuf::from("/modC/vendor")],
         });
 
         let result = Executer::collect_overlay_modules_for_magic_fallback(&plan);
-        let expected = HashSet::from([
-            "modA".to_string(),
-            "modB".to_string(),
-            "modC".to_string(),
-        ]);
+        let expected = HashSet::from(["modA".to_string(), "modB".to_string(), "modC".to_string()]);
         assert_eq!(result, expected);
     }
 }

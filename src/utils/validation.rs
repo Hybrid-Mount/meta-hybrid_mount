@@ -50,10 +50,11 @@ pub fn extract_module_id(path: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{extract_module_id, validate_module_id};
     use std::fs;
 
     use tempfile::tempdir;
+
+    use super::{extract_module_id, validate_module_id};
 
     #[test]
     fn validate_module_id_accepts_valid_ids() {
@@ -67,7 +68,10 @@ mod tests {
     fn validate_module_id_rejects_invalid_ids() {
         let invalid_ids = ["1alpha", "alpha space", "", "-alpha"];
         for id in invalid_ids {
-            assert!(validate_module_id(id).is_err(), "id should be invalid: {id}");
+            assert!(
+                validate_module_id(id).is_err(),
+                "id should be invalid: {id}"
+            );
         }
     }
 

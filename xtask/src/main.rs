@@ -285,15 +285,8 @@ export const BUILTIN_PARTITIONS = ["system", "vendor", "product", "system_ext", 
 
 fn compile_core(release: bool, arch: Arch) -> Result<()> {
     let mut cmd = Command::new("cargo");
-    cmd.args([
-        "ndk",
-        "--platform",
-        "26",
-        "-t",
-        arch.target(),
-        "build",
-    ])
-    .env("RUSTFLAGS", "-C default-linker-libraries");
+    cmd.args(["ndk", "--platform", "26", "-t", arch.target(), "build"])
+        .env("RUSTFLAGS", "-C default-linker-libraries");
     if release {
         cmd.arg("-r");
     }

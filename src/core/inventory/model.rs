@@ -213,8 +213,9 @@ fn set_description(prop_path: &Path, desc_text: &str) {
 mod tests {
     use std::fs;
 
-    use super::{ModuleProp, normalize_module_prop};
     use tempfile::tempdir;
+
+    use super::{ModuleProp, normalize_module_prop};
 
     #[test]
     fn module_prop_parses_expected_fields() {
