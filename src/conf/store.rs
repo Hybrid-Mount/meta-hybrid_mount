@@ -1,17 +1,11 @@
 // Copyright 2026 Hybrid Mount Developers
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 
-use crate::{
-    conf::schema::Config,
-    defs,
-};
+use crate::{conf::schema::Config, defs};
 
 impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
