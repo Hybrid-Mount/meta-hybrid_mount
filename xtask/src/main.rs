@@ -292,8 +292,6 @@ fn compile_core(release: bool, arch: Arch) -> Result<()> {
         "-t",
         arch.target(),
         "build",
-        "-Z",
-        "build-std",
     ])
     .env("RUSTFLAGS", "-C default-linker-libraries");
     if release {
