@@ -3,11 +3,14 @@
 
 use std::{collections::HashSet, path::Path};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 use crate::{
     conf::config,
-    core::ops::planner::{MountPlan, OverlayOperation},
+    core::{
+        ops::planner::{MountPlan, OverlayOperation},
+        recovery::{FailureStage, ModuleStageFailure},
+    },
     defs,
     mount::{
         magic_mount,
@@ -25,6 +28,18 @@ pub struct ExecutionResult {
 pub struct Executer;
 
 impl Executer {
+    fn is_symlink_loop_mount_error(err: &anyhow::Error) -> bool {
+        let mut cursor = Some(err.as_ref() as &(dyn std::error::Error + 'static));
+        while let Some(current) = cursor {
+            let msg = current.to_string();
+            if msg.contains("Too many symbolic links") || msg.contains("os error 40") {
+                return true;
+            }
+            cursor = current.source();
+        }
+        false
+    }
+
     fn collect_involved_modules(op: &OverlayOperation) -> Vec<String> {
         let mut involved_modules: Vec<String> = op
             .lowerdirs
@@ -80,16 +95,24 @@ impl Executer {
                     }
                     Err(err) => {
                         let involved_modules = Self::collect_involved_modules(op);
-                        bail!(
-                            "Overlay mount failed for {} (modules: {}): {:#}",
-                            op.target,
-                            if involved_modules.is_empty() {
-                                "<unknown>".to_string()
-                            } else {
+                        if config.enable_overlay_fallback
+                            && Self::is_symlink_loop_mount_error(&err)
+                            && !involved_modules.is_empty()
+                        {
+                            log::warn!(
+                                "[executor] overlay op hit symlink-loop mount error on {}; fallback to magic mount for modules: {}",
+                                op.target,
                                 involved_modules.join(", ")
-                            },
-                            err
-                        );
+                            );
+                            final_magic_ids.extend(involved_modules);
+                            continue;
+                        }
+                        return Err(ModuleStageFailure::new(
+                            FailureStage::Execute,
+                            involved_modules,
+                            anyhow::anyhow!("Overlay mount failed for {}: {:#}", op.target, err),
+                        )
+                        .into());
                     }
                 }
             }
@@ -124,10 +147,15 @@ impl Executer {
                 magic_need_list.join(", ")
             );
             let mounted_ids = Self::mount_magic(&magic_need_ids, config, tempdir.as_ref())
-                .with_context(|| {
-                    format!(
-                        "Failed to mount Magic Mount modules: {}",
-                        magic_need_list.join(", ")
+                .map_err(|err| {
+                    ModuleStageFailure::new(
+                        FailureStage::Execute,
+                        magic_need_list.clone(),
+                        anyhow::anyhow!(
+                            "Failed to mount Magic Mount modules [{}]: {:#}",
+                            magic_need_list.join(", "),
+                            err
+                        ),
                     )
                 })?;
             final_magic_ids.retain(|id| mounted_ids.contains(id));
@@ -266,6 +294,8 @@ impl Executer {
 mod tests {
     use std::{collections::HashSet, path::PathBuf};
 
+    use anyhow::anyhow;
+
     use super::Executer;
     use crate::core::ops::planner::{MountPlan, OverlayOperation};
 
@@ -286,5 +316,16 @@ mod tests {
         let result = Executer::collect_overlay_modules_for_magic_fallback(&plan);
         let expected = HashSet::from(["modA".to_string(), "modB".to_string(), "modC".to_string()]);
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn symlink_loop_detection_matches_expected_messages() {
+        let err = anyhow!(
+            "Failed to fsconfig create new fs: Too many symbolic links encountered (os error 40)"
+        );
+        assert!(Executer::is_symlink_loop_mount_error(&err));
+
+        let other = anyhow!("permission denied");
+        assert!(!Executer::is_symlink_loop_mount_error(&other));
     }
 }
