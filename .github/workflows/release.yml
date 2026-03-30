@@ -139,8 +139,10 @@ jobs:
           
           mv /tmp/update.json update.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
+
+          cargo update
           
-          git add update.json changelog.md Cargo.toml
+          git add update.json changelog.md Cargo.toml Cargo.lock
           
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"

@@ -41,7 +41,7 @@ pub fn perform_sync(modules: &[Module], target_base: &Path) -> Result<()> {
                 return Err(ModuleStageFailure::new(
                     FailureStage::Sync,
                     vec![module.id.clone()],
-                    e.into(),
+                    e,
                 ))
                 .with_context(|| format!("Failed to sync module {}", module.id));
             }
