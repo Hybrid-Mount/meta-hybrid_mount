@@ -32,6 +32,32 @@ rm -rf "$MODPATH/system"
 BASE_DIR="/data/adb/hybrid-mount"
 mkdir -p "$BASE_DIR"
 
+show_usage_notice_and_confirm() {
+  local github_url="https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/master/USAGE_NOTICE.md"
+  ui_print " "
+  ui_print "========================================"
+  ui_print "          Important Notice (Read)       "
+  ui_print "========================================"
+  ui_print "Please read the multi-language usage notice:"
+  ui_print "$github_url"
+  ui_print "========================================"
+  ui_print "- Trying to open the GitHub notice page..."
+  if command -v am >/dev/null 2>&1; then
+    am start -a android.intent.action.VIEW -d "$github_url" >/dev/null 2>&1
+  fi
+  ui_print "- Press any volume key (Vol+ / Vol-) to confirm."
+  while true; do
+    local key_event=$(getevent -l 2>/dev/null)
+    if echo "$key_event" | grep -q "KEY_VOLUMEUP"; then
+      ui_print "- Confirmed (Vol+)"
+      break
+    elif echo "$key_event" | grep -q "KEY_VOLUMEDOWN"; then
+      ui_print "- Confirmed (Vol-)"
+      break
+    fi
+  done
+}
+
 KEY_volume_detect() {
   ui_print " "
   ui_print "========================================"
@@ -71,6 +97,7 @@ if [ ! -f "$BASE_DIR/config.toml" ]; then
   ui_print "- Fresh installation detected"
   ui_print "- Installing default config..."
   cat "$MODPATH/config.toml" >"$BASE_DIR/config.toml"
+  show_usage_notice_and_confirm
   KEY_volume_detect
 else
   ui_print "- Existing config found"
