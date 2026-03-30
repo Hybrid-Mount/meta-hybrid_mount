@@ -378,6 +378,10 @@ pub fn magic_mount<P>(
 where
     P: AsRef<Path>,
 {
+    MOUNTED_FILES.store(0, std::sync::atomic::Ordering::Relaxed);
+    IGNORED_FILES.store(0, std::sync::atomic::Ordering::Relaxed);
+    MOUNTED_SYMBOLS_FILES.store(0, std::sync::atomic::Ordering::Relaxed);
+
     if let Some(root) = collect_module_files(module_dir, extra_partitions, need_id)? {
         log::debug!("collected: {root:?}");
         let tmp_root = tmp_path.as_ref();

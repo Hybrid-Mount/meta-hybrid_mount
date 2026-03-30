@@ -65,6 +65,7 @@ fn run_daemon(cli: &Cli) -> Result<()> {
     let max_restarts = module_dirs.len().saturating_add(1);
     let mut restart_round = 0usize;
     let mut auto_skipped = HashSet::new();
+    let mut unattributed_retry_used = false;
     log::info!(
         "[stage:recovery] initialized: module_candidates={}, restart_limit={}",
         module_dirs.len(),
@@ -115,7 +116,33 @@ fn run_daemon(cli: &Cli) -> Result<()> {
                 if let Some(module_failure) = e.downcast_ref::<ModuleStageFailure>() {
                     if module_failure.module_ids.is_empty() {
                         log::error!(
-                            "[stage:recovery] {} failure did not include module ids; aborting recovery",
+                            "[stage:recovery] {} failure did not include module ids",
+                            module_failure.stage
+                        );
+                        if !unattributed_retry_used {
+                            unattributed_retry_used = true;
+                            restart_round += 1;
+                            if restart_round > max_restarts {
+                                let loop_error = anyhow::anyhow!(
+                                    "Auto-recovery reached restart limit ({} rounds), aborting to avoid loop",
+                                    max_restarts
+                                );
+                                log::error!("[stage:recovery] {}", loop_error);
+                                crate::core::inventory::model::update_crash_description(
+                                    &loop_error.to_string(),
+                                );
+                                return Err(loop_error);
+                            }
+                            log::warn!(
+                                "[event:recovery_retry_unattributed] stage={} next_attempt={}/{}",
+                                module_failure.stage,
+                                restart_round + 1,
+                                max_restarts
+                            );
+                            continue;
+                        }
+                        log::error!(
+                            "[event:recovery_retry_unattributed] exhausted=true stage={}",
                             module_failure.stage
                         );
                     } else {
