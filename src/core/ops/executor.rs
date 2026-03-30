@@ -95,17 +95,32 @@ impl Executer {
                     }
                     Err(err) => {
                         let involved_modules = Self::collect_involved_modules(op);
-                        if config.enable_overlay_fallback
-                            && Self::is_symlink_loop_mount_error(&err)
-                            && !involved_modules.is_empty()
-                        {
-                            log::warn!(
-                                "[executor] overlay op hit symlink-loop mount error on {}; fallback to magic mount for modules: {}",
-                                op.target,
-                                involved_modules.join(", ")
+                        let is_symlink_loop = Self::is_symlink_loop_mount_error(&err);
+                        if is_symlink_loop {
+                            if !config.enable_overlay_fallback {
+                                log::error!(
+                                    "[executor] overlay op hit symlink-loop mount error on {}, but enable_overlay_fallback=false; cannot downgrade to magic mount",
+                                    op.target
+                                );
+                            } else if involved_modules.is_empty() {
+                                log::error!(
+                                    "[executor] overlay op hit symlink-loop mount error on {}, but no module ids were inferred; cannot downgrade to magic mount",
+                                    op.target
+                                );
+                            } else {
+                                log::warn!(
+                                    "[executor] overlay op hit symlink-loop mount error on {}; fallback to magic mount for modules: {}",
+                                    op.target,
+                                    involved_modules.join(", ")
+                                );
+                                final_magic_ids.extend(involved_modules);
+                                continue;
+                            }
+                        } else {
+                            log::error!(
+                                "[executor] overlay op failed on {} with non-symlink-loop error; forwarding failure to recovery",
+                                op.target
                             );
-                            final_magic_ids.extend(involved_modules);
-                            continue;
                         }
                         return Err(ModuleStageFailure::new(
                             FailureStage::Execute,
