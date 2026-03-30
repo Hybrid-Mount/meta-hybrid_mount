@@ -28,6 +28,10 @@ pub struct ExecutionResult {
 pub struct Executer;
 
 impl Executer {
+    fn overlay_fallback_allowed(config: &config::Config) -> bool {
+        config.enable_overlay_fallback
+    }
+
     fn resolve_magic_failure_modules(err: &anyhow::Error, fallback: &[String]) -> Vec<String> {
         if let Some(magic_failure) = err.downcast_ref::<magic_mount::MagicMountModuleFailure>()
             && !magic_failure.module_ids.is_empty()
@@ -106,7 +110,7 @@ impl Executer {
                         let involved_modules = Self::collect_involved_modules(op);
                         let is_symlink_loop = Self::is_symlink_loop_mount_error(&err);
                         if is_symlink_loop {
-                            if !config.enable_overlay_fallback {
+                            if !Self::overlay_fallback_allowed(config) {
                                 log::error!(
                                     "[executor] overlay op hit symlink-loop mount error on {}, but enable_overlay_fallback=false; cannot downgrade to magic mount",
                                     op.target
@@ -142,7 +146,7 @@ impl Executer {
             }
         } else {
             if !plan.overlay_ops.is_empty() {
-                if config.enable_overlay_fallback {
+                if Self::overlay_fallback_allowed(config) {
                     let fallback_ids = Self::collect_overlay_modules_for_magic_fallback(plan);
                     if fallback_ids.is_empty() {
                         bail!(
@@ -324,6 +328,7 @@ mod tests {
 
     use super::Executer;
     use crate::{
+        conf::config::{Config, OverlayMode},
         core::ops::planner::{MountPlan, OverlayOperation},
         mount::magic_mount::MagicMountModuleFailure,
     };
@@ -378,5 +383,18 @@ mod tests {
 
         let result = Executer::resolve_magic_failure_modules(&err, &fallback);
         assert_eq!(result, fallback);
+    }
+
+    #[test]
+    fn overlay_fallback_is_controlled_by_enable_overlay_fallback() {
+        let mut cfg = Config {
+            overlay_mode: OverlayMode::Tmpfs,
+            ..Config::default()
+        };
+        cfg.enable_overlay_fallback = false;
+        assert!(!Executer::overlay_fallback_allowed(&cfg));
+
+        cfg.enable_overlay_fallback = true;
+        assert!(Executer::overlay_fallback_allowed(&cfg));
     }
 }

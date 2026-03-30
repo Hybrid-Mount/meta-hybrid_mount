@@ -16,8 +16,20 @@ pub fn is_reserved_module_dir(id: &str) -> bool {
     )
 }
 
+pub fn mount_block_markers(module_path: &std::path::Path) -> Vec<&'static str> {
+    let mut markers = Vec::new();
+    if module_path.join(defs::DISABLE_FILE_NAME).exists() {
+        markers.push(defs::DISABLE_FILE_NAME);
+    }
+    if module_path.join(defs::REMOVE_FILE_NAME).exists() {
+        markers.push(defs::REMOVE_FILE_NAME);
+    }
+    if module_path.join(defs::SKIP_MOUNT_FILE_NAME).exists() {
+        markers.push(defs::SKIP_MOUNT_FILE_NAME);
+    }
+    markers
+}
+
 pub fn has_mount_block_marker(module_path: &std::path::Path) -> bool {
-    module_path.join(defs::DISABLE_FILE_NAME).exists()
-        || module_path.join(defs::REMOVE_FILE_NAME).exists()
-        || module_path.join(defs::SKIP_MOUNT_FILE_NAME).exists()
+    !mount_block_markers(module_path).is_empty()
 }

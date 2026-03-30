@@ -150,17 +150,22 @@ fn run_daemon(cli: &Cli) -> Result<()> {
                     }
                     if !unknown_modules.is_empty() {
                         log::error!(
-                            "[stage:recovery] failed modules not found in module dir map: {}",
-                            unknown_modules.join(", ")
+                            "[event:recovery_unknown_modules] stage={} attempt={}/{} modules={}",
+                            module_failure.stage,
+                            attempt,
+                            max_restarts,
+                            unknown_modules.join(",")
                         );
                     }
 
                     if !newly_marked.is_empty() {
                         restart_round += 1;
                         log::warn!(
-                            "[stage:recovery] marked skip_mount after {} failure: {}",
+                            "[event:recovery_mark_skip] stage={} attempt={}/{} modules={}",
                             module_failure.stage,
-                            newly_marked.join(", ")
+                            attempt,
+                            max_restarts,
+                            newly_marked.join(",")
                         );
                         if restart_round > max_restarts {
                             let loop_error = anyhow::anyhow!(
@@ -174,7 +179,7 @@ fn run_daemon(cli: &Cli) -> Result<()> {
                             return Err(loop_error);
                         }
                         log::info!(
-                            "[stage:recovery] restarting daemon pipeline ({}/{})",
+                            "[event:recovery_restart] next_attempt={}/{}",
                             restart_round + 1,
                             max_restarts
                         );

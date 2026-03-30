@@ -73,34 +73,52 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
 
     let dir_entries = fs::read_dir(source_dir)?.collect::<std::io::Result<Vec<_>>>()?;
 
-    let mut modules: Vec<Module> = dir_entries
-        .into_iter()
-        .filter_map(|entry| {
-            let path = entry.path();
+    let mut modules = Vec::new();
+    let mut skipped_reserved = 0usize;
+    let mut skipped_blocked = 0usize;
 
-            if !path.is_dir() {
-                return None;
-            }
+    for entry in dir_entries {
+        let path = entry.path();
 
-            let id = entry.file_name().to_string_lossy().to_string();
+        if !path.is_dir() {
+            continue;
+        }
 
-            if inventory::is_reserved_module_dir(&id) {
-                return None;
-            }
+        let id = entry.file_name().to_string_lossy().to_string();
 
-            if inventory::has_mount_block_marker(&path) {
-                return None;
-            }
+        if inventory::is_reserved_module_dir(&id) {
+            skipped_reserved += 1;
+            log::debug!("[scanner] skip reserved module dir: {}", id);
+            continue;
+        }
 
-            let rules = load_module_rules(&path, &id, cfg);
-
-            Some(Module {
+        let block_markers = inventory::mount_block_markers(&path);
+        if !block_markers.is_empty() {
+            skipped_blocked += 1;
+            log::debug!(
+                "[scanner] skip blocked module dir: id={}, markers={}",
                 id,
-                source_path: path,
-                rules,
-            })
-        })
-        .collect();
+                block_markers.join(",")
+            );
+            continue;
+        }
+
+        let rules = load_module_rules(&path, &id, cfg);
+
+        modules.push(Module {
+            id,
+            source_path: path,
+            rules,
+        });
+    }
+
+    log::info!(
+        "[scanner] complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}",
+        modules.len() + skipped_reserved + skipped_blocked,
+        modules.len(),
+        skipped_reserved,
+        skipped_blocked
+    );
 
     modules.sort_by(|a, b| a.id.cmp(&b.id));
 
