@@ -4,7 +4,8 @@ mod utils;
 
 use std::{
     collections::HashSet,
-    fs,
+    error::Error as StdError,
+    fmt, fs,
     path::{Path, PathBuf},
     sync::atomic::AtomicU32,
 };
@@ -28,6 +29,68 @@ use crate::{
 static MOUNTED_FILES: AtomicU32 = AtomicU32::new(0);
 static IGNORED_FILES: AtomicU32 = AtomicU32::new(0);
 static MOUNTED_SYMBOLS_FILES: AtomicU32 = AtomicU32::new(0);
+
+#[derive(Debug)]
+pub struct MagicMountModuleFailure {
+    pub module_ids: Vec<String>,
+    pub source: anyhow::Error,
+}
+
+impl MagicMountModuleFailure {
+    pub fn new(module_ids: Vec<String>, source: anyhow::Error) -> Self {
+        Self { module_ids, source }
+    }
+}
+
+impl fmt::Display for MagicMountModuleFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.module_ids.is_empty() {
+            write!(f, "magic mount module failure: {}", self.source)
+        } else {
+            write!(
+                f,
+                "magic mount module failure for [{}]: {}",
+                self.module_ids.join(", "),
+                self.source
+            )
+        }
+    }
+}
+
+impl StdError for MagicMountModuleFailure {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
+fn collect_module_ids(node: &Node, ids: &mut HashSet<String>) {
+    if let Some(module_path) = &node.module_path
+        && let Some(module_id) = crate::utils::extract_module_id(module_path)
+    {
+        ids.insert(module_id);
+    }
+
+    for child in node.children.values() {
+        collect_module_ids(child, ids);
+    }
+}
+
+fn infer_module_ids(node: &Node) -> Vec<String> {
+    let mut ids = HashSet::new();
+    collect_module_ids(node, &mut ids);
+    let mut module_ids: Vec<String> = ids.into_iter().collect();
+    module_ids.sort();
+    module_ids
+}
+
+fn wrap_with_module_context(err: anyhow::Error, node: &Node) -> anyhow::Error {
+    let module_ids = infer_module_ids(node);
+    if module_ids.is_empty() {
+        err
+    } else {
+        MagicMountModuleFailure::new(module_ids, err).into()
+    }
+}
 
 struct MagicMount {
     node: Node,
@@ -218,7 +281,7 @@ impl MagicMount {
             .with_context(|| format!("magic mount {}/{name}", self.path.display()))
             {
                 if has_tmpfs {
-                    return Err(e);
+                    return Err(wrap_with_module_context(e, node));
                 }
                 log::error!("mount child {}/{name} failed: {e:#?}", self.path.display());
             }
@@ -262,11 +325,13 @@ impl MagicMount {
     fn mount_path(&mut self, has_tmpfs: bool) -> Result<()> {
         for entry in self.path.read_dir()?.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
+            let mut failed_node: Option<Node> = None;
             let result = {
                 if let Some(node) = self.node.children.remove(&name) {
                     if node.skip {
                         continue;
                     }
+                    failed_node = Some(node.clone());
 
                     Self::new(
                         &node,
@@ -288,6 +353,9 @@ impl MagicMount {
 
             if let Err(e) = result {
                 if has_tmpfs {
+                    if let Some(node) = failed_node.as_ref() {
+                        return Err(wrap_with_module_context(e, node));
+                    }
                     return Err(e);
                 }
                 log::error!("mount child {}/{name} failed: {e:#?}", self.path.display());
@@ -327,7 +395,8 @@ where
             #[cfg(any(target_os = "linux", target_os = "android"))]
             umount,
         )
-        .do_mount();
+        .do_mount()
+        .map_err(|e| wrap_with_module_context(e, &root));
 
         if let Err(e) = unmount(&tmp_dir, UnmountFlags::DETACH) {
             log::error!("failed to unmount tmp {e}");

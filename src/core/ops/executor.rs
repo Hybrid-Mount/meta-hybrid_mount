@@ -28,6 +28,15 @@ pub struct ExecutionResult {
 pub struct Executer;
 
 impl Executer {
+    fn resolve_magic_failure_modules(err: &anyhow::Error, fallback: &[String]) -> Vec<String> {
+        if let Some(magic_failure) = err.downcast_ref::<magic_mount::MagicMountModuleFailure>()
+            && !magic_failure.module_ids.is_empty()
+        {
+            return magic_failure.module_ids.clone();
+        }
+        fallback.to_vec()
+    }
+
     fn is_symlink_loop_mount_error(err: &anyhow::Error) -> bool {
         let mut cursor = Some(err.as_ref() as &(dyn std::error::Error + 'static));
         while let Some(current) = cursor {
@@ -163,12 +172,14 @@ impl Executer {
             );
             let mounted_ids = Self::mount_magic(&magic_need_ids, config, tempdir.as_ref())
                 .map_err(|err| {
+                    let failed_module_ids =
+                        Self::resolve_magic_failure_modules(&err, &magic_need_list);
                     ModuleStageFailure::new(
                         FailureStage::Execute,
-                        magic_need_list.clone(),
+                        failed_module_ids.clone(),
                         anyhow::anyhow!(
                             "Failed to mount Magic Mount modules [{}]: {:#}",
-                            magic_need_list.join(", "),
+                            failed_module_ids.join(", "),
                             err
                         ),
                     )
@@ -312,7 +323,10 @@ mod tests {
     use anyhow::anyhow;
 
     use super::Executer;
-    use crate::core::ops::planner::{MountPlan, OverlayOperation};
+    use crate::{
+        core::ops::planner::{MountPlan, OverlayOperation},
+        mount::magic_mount::MagicMountModuleFailure,
+    };
 
     #[test]
     fn collect_overlay_modules_for_magic_fallback_deduplicates_modules() {
@@ -342,5 +356,27 @@ mod tests {
 
         let other = anyhow!("permission denied");
         assert!(!Executer::is_symlink_loop_mount_error(&other));
+    }
+
+    #[test]
+    fn resolve_magic_failure_modules_prefers_precise_modules() {
+        let err: anyhow::Error = MagicMountModuleFailure::new(
+            vec!["modB".to_string(), "modA".to_string()],
+            anyhow!("tmpfs mount failed"),
+        )
+        .into();
+        let fallback = vec!["modA".to_string(), "modB".to_string(), "modC".to_string()];
+
+        let result = Executer::resolve_magic_failure_modules(&err, &fallback);
+        assert_eq!(result, vec!["modB".to_string(), "modA".to_string()]);
+    }
+
+    #[test]
+    fn resolve_magic_failure_modules_falls_back_when_untyped_error() {
+        let err = anyhow!("unknown magic mount error");
+        let fallback = vec!["modA".to_string(), "modC".to_string()];
+
+        let result = Executer::resolve_magic_failure_modules(&err, &fallback);
+        assert_eq!(result, fallback);
     }
 }
