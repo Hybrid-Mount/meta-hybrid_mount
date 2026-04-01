@@ -35,3 +35,5 @@ jobs:
           working-directory: ./
       - name: Clippy code
         run: cargo clippy --all-targets -- -D warnings
+      - name: Run unit tests
+        run: cargo test --all-targets --workspace

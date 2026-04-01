@@ -24,6 +24,7 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 - [架构说明](#架构说明)
 - [仓库结构](#仓库结构)
 - [配置说明](#配置说明)
+- [策略行为矩阵](#策略行为矩阵)
 - [CLI 命令](#cli-命令)
 - [构建方式](#构建方式)
 - [运维建议](#运维建议)
@@ -105,6 +106,36 @@ default_mode = "magic"
 "system/bin/tool" = "overlay"
 "vendor/lib64/libfoo.so" = "ignore"
 ```
+
+## 策略行为矩阵
+
+下表用于说明不同策略在不同运行条件下的实际行为：
+
+| 规则结果 | OverlayFS 可用 | `enable_overlay_fallback` | 最终行为 |
+| --- | --- | --- | --- |
+| `overlay` | 是 | 任意 | 使用 OverlayFS 挂载。 |
+| `overlay` | 否 | `false` | 跳过挂载，并在计划/执行结果中标记失败项。 |
+| `overlay` | 否 | `true` | 回退为 Magic Mount（bind mount）重试。 |
+| `magic` | 是/否 | 任意 | 直接使用 Magic Mount。 |
+| `ignore` | 是/否 | 任意 | 不挂载该路径。 |
+
+### 规则优先级
+
+当多个策略可能同时命中时，优先级如下：
+
+1. 路径级覆盖（`rules.<module>.paths["..."]`）
+2. 模块级默认（`rules.<module>.default_mode`）
+3. 全局默认（`default_mode`）
+
+### 实用示例
+
+- 模块大部分路径走 overlay，仅单个易冲突文件走 magic：
+  - 模块默认设为 `overlay`
+  - 对该路径配置 `rules.<module>.paths["system/bin/<tool>"] = "magic"`
+- 临时屏蔽单个冲突文件，而不禁用整个模块：
+  - 配置 `rules.<module>.paths["..."] = "ignore"`
+- 内核 OverlayFS 稳定性不足时降低失败概率：
+  - 配置 `enable_overlay_fallback = true`。
 
 ## CLI 命令
 

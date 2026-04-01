@@ -24,6 +24,7 @@ The runtime is designed for predictable boot behavior, conflict visibility, and 
 - [Architecture](#architecture)
 - [Repository Layout](#repository-layout)
 - [Configuration](#configuration)
+- [Policy Behavior Matrix](#policy-behavior-matrix)
 - [CLI](#cli)
 - [Build](#build)
 - [Operational Notes](#operational-notes)
@@ -105,6 +106,36 @@ default_mode = "magic"
 "system/bin/tool" = "overlay"
 "vendor/lib64/libfoo.so" = "ignore"
 ```
+
+## Policy Behavior Matrix
+
+This matrix clarifies what happens under each policy and runtime condition:
+
+| Rule result | OverlayFS available | `enable_overlay_fallback` | Effective behavior |
+| --- | --- | --- | --- |
+| `overlay` | yes | any | Mount with OverlayFS. |
+| `overlay` | no | `false` | Skip mount and report as failed planning/execution item. |
+| `overlay` | no | `true` | Retry as Magic Mount (bind mount). |
+| `magic` | yes/no | any | Mount with Magic Mount directly. |
+| `ignore` | yes/no | any | Do not mount this path. |
+
+### Rule precedence
+
+When multiple policies may apply, evaluation follows this order:
+
+1. Path-level override (`rules.<module>.paths["..."]`)
+2. Module-level default (`rules.<module>.default_mode`)
+3. Global default (`default_mode`)
+
+### Practical examples
+
+- Keep one problematic binary on bind mount while the rest of the module uses overlay:
+  - set module default to `overlay`
+  - set `rules.<module>.paths["system/bin/<tool>"] = "magic"`
+- Temporarily disable one conflicting file without disabling the full module:
+  - set `rules.<module>.paths["..."] = "ignore"`
+- For kernels with unstable OverlayFS support:
+  - set `enable_overlay_fallback = true` to reduce boot-time mount failures.
 
 ## CLI
 
