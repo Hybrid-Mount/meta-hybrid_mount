@@ -582,7 +582,7 @@ dependencies = [
 
 [[package]]
 name = "hybrid-mount"
-version = "3.4.0"
+version = "3.4.1"
 dependencies = [
  "android_logger",
  "anyhow",

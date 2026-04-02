@@ -1,3 +1,69 @@
+
+## v3.4.1
+
+
+### <!-- 2 --> Fixes
+
+- `core` Resolve naming refactor build errors
+
+- `recovery` Avoid state borrow conflict
+
+- `planner` Split configured extra partitions
+
+- `planner` Preserve real partition names for symlink targets
+
+- `umount` Restore queued try-umount commit
+
+
+
+### <!-- 4 --> Refactors
+
+- `core` Split boot and command entrypoints
+
+- `executor` Split overlay and magic handlers
+
+- `storage` Split backends and ext4 setup
+
+- `recovery` Split retry state and markers
+
+- `core` Extract finalization workflow
+
+- `core` Separate module description updates
+
+- `inventory` Separate module presentation
+
+- `core` Clarify controller and runtime names
+
+- `startup` Rename boot recovery modules
+
+- `naming` Rename entry, inventory, and fallback modules
+
+- `naming` Rename status and finalization modules
+
+- `umount` Drop extra /mnt cleanup and unify wording
+
+
+
+### <!-- 6 --> Tests
+
+- `planner` Add mount plan scenarios
+
+
+
+### <!-- 7 --> CI / Tooling
+
+- `submodule` Track webui on configured branch
+
+- `release` Generate changelog with git-cliff
+
+
+
+### <!-- 9 --> Other
+
+- .github/workflows/update_webui_submodule.yml
+
+
+
 ## v3.4.0
 
 Changes since v3.3.1:
