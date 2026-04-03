@@ -38,6 +38,7 @@ mkdir -p "$BASE_DIR"
 
 show_usage_notice_and_confirm() {
   local github_url="https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/master/USAGE_NOTICE.md"
+  local confirm_timeout=15
   ui_print " "
   ui_print "========================================"
   ui_print "          Important Notice (Read)       "
@@ -50,8 +51,15 @@ show_usage_notice_and_confirm() {
     am start -a android.intent.action.VIEW -d "$github_url" >/dev/null 2>&1
   fi
   ui_print "- Press any volume key (Vol+ / Vol-) to confirm."
+  ui_print "- Auto-confirming in ${confirm_timeout}s if no key is detected."
+  local start_time=$(date +%s)
   while true; do
-    local key_event=$(getevent -l 2>/dev/null)
+    local current_time=$(date +%s)
+    if [ $((current_time - start_time)) -ge $confirm_timeout ]; then
+      ui_print "- No key detected, auto-confirmed after ${confirm_timeout}s."
+      break
+    fi
+    local key_event=$(timeout 0.5 getevent -l 2>/dev/null)
     if echo "$key_event" | grep -q "KEY_VOLUMEUP"; then
       ui_print "- Confirmed (Vol+)"
       break
