@@ -140,10 +140,11 @@ fn native_cp_r(
             reflink_or_copy(&src_path, &dst_path)?;
         }
 
-        if ft.is_file() && file_name.as_os_str() == defs::REPLACE_DIR_FILE_NAME {
-            if let Some(parent) = dst_path.parent() {
-                stats.opaque_dirs.push(parent.to_path_buf());
-            }
+        if ft.is_file()
+            && file_name.as_os_str() == defs::REPLACE_DIR_FILE_NAME
+            && let Some(parent) = dst_path.parent()
+        {
+            stats.opaque_dirs.push(parent.to_path_buf());
         }
 
         let _ = internal_copy_extended_attributes(&src_path, &dst_path);
