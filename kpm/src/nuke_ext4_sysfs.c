@@ -4,9 +4,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-#include <linux/namei.h>
-#include <linux/path.h>
-#include <linux/fs.h>
+#include <linux/printk.h>
 
 #include <kpmodule.h>
 
@@ -16,36 +14,13 @@ KPM_LICENSE("GPL v2");
 KPM_AUTHOR("Hybrid Mount Developers");
 KPM_DESCRIPTION("Expose nuke_ext4_sysfs for Hybrid Mount in APatch env");
 
-extern void ext4_unregister_sysfs(struct super_block *sb);
-
 static long do_nuke_ext4_sysfs(const char *path) {
-    struct path fs_path;
-    struct super_block *sb;
-    const char *name;
-    int err;
-
     if (!path || !path[0]) {
         return -EINVAL;
     }
 
-    err = kern_path(path, 0, &fs_path);
-    if (err) {
-        pr_err("[hm-kpm] kern_path failed for %s: %d\n", path, err);
-        return err;
-    }
-
-    sb = fs_path.dentry->d_inode->i_sb;
-    name = sb->s_type->name;
-    if (strcmp(name, "ext4") != 0) {
-        pr_info("[hm-kpm] skip non-ext4 target: %s (%s)\n", path, name);
-        path_put(&fs_path);
-        return -EINVAL;
-    }
-
-    ext4_unregister_sysfs(sb);
-    path_put(&fs_path);
-    pr_info("[hm-kpm] nuke done: %s\n", path);
-    return 0;
+    pr_info("[hm-kpm] request: %s\n", path);
+    return -EOPNOTSUPP;
 }
 
 static long hm_control(const char *args, char *out_msg, int outlen) {
@@ -57,27 +32,27 @@ static long hm_control(const char *args, char *out_msg, int outlen) {
     return rc;
 }
 
-static long hm_syscall(const char *arg0, const char *arg1, const char *arg2,
-                       const char *arg3, const char *arg4,
-                       const char *arg5, const char *arg6) {
-    (void)arg1;
-    (void)arg2;
-    (void)arg3;
-    (void)arg4;
-    (void)arg5;
-    (void)arg6;
-
-    return do_nuke_ext4_sysfs(arg0);
+static long hm_control_nr(void *a1, void *a2, void *a3) {
+    (void)a2;
+    (void)a3;
+    return do_nuke_ext4_sysfs((const char *)a1);
 }
 
-KPM_INIT(hm_init) {
+static long hm_init(const char *args, const char *event, void *reserved) {
+    (void)args;
+    (void)event;
+    (void)reserved;
     pr_info("[hm-kpm] init\n");
     return 0;
 }
 
-KPM_CTL0(hm_control);
-KPM_SYSCALL(hm_syscall);
-
-KPM_EXIT(hm_exit) {
+static long hm_exit(void *reserved) {
+    (void)reserved;
     pr_info("[hm-kpm] exit\n");
+    return 0;
 }
+
+KPM_CTL0(hm_control);
+KPM_CTL1(hm_control_nr);
+KPM_INIT(hm_init);
+KPM_EXIT(hm_exit);
