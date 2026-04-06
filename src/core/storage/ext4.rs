@@ -17,7 +17,6 @@ use crate::{
         fs::{ensure_dir_exists, lsetfilecon},
         nuke,
     },
-    utils,
 };
 
 const DEFAULT_SELINUX_CONTEXT: &str = "u:object_r:system_file:s0";
@@ -159,9 +158,7 @@ fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
 }
 
 fn reset_mount_state(target: &Path) -> Result<()> {
-    if utils::KSU.load(std::sync::atomic::Ordering::Relaxed) {
-        nuke::nuke_path(target);
-    } else {
+    if nuke::nuke_path(target).is_err() {
         umount(target, UnmountFlags::DETACH)?;
     }
     Ok(())

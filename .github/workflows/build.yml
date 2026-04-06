@@ -11,6 +11,7 @@ on:
       - 'webui'
       - 'webui/**'
       - 'xtask/**'
+      - 'kpm/**'
       - 'build.rs'
       - '.github/workflows/build.yml'
   pull_request:
@@ -23,6 +24,7 @@ on:
       - 'webui'
       - 'webui/**'
       - 'xtask/**'
+      - 'kpm/**'
       - 'build.rs'
       - '.github/workflows/build.yml'
   workflow_dispatch:
@@ -80,6 +82,11 @@ jobs:
       - name: Build All
         run: |
           cargo xtask build --ci
+
+      - name: Build KPM Module
+        run: |
+          git clone --depth 1 https://github.com/AndroidPatch/kpm.git /tmp/apatch-kpm
+          make -C kpm KP_DIR=/tmp/apatch-kpm
 
       - name: Detect Version and Name
         run: |
