@@ -9,8 +9,8 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 serde_json = "1.0.149"
-tgbot = "0.43.0"
-tokio = { version = "1.51.0", features = ["full"] }
+tgbot = "0.44.0"
+tokio = { version = "1.51.1", features = ["full"] }
 
 [profile.release]
 strip = true
