@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -91,7 +91,7 @@ jobs:
           ls -la "$OUT/"
 
       - name: Upload .ko
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.KMI }}-${{ env.TARGET_ARCH }}-hymofs-lkm
           path: ${{ env.OUT }}/${{ env.KMI }}_${{ env.TARGET_ARCH }}_hymofs_lkm.ko
