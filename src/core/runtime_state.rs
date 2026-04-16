@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
@@ -142,6 +142,10 @@ pub struct RuntimeState {
     #[serde(default)]
     pub mount_error_modules: Vec<String>,
     #[serde(default)]
+    pub mount_error_reasons: BTreeMap<String, String>,
+    #[serde(default)]
+    pub skip_mount_modules: Vec<String>,
+    #[serde(default)]
     pub active_mounts: Vec<String>,
     #[serde(default)]
     pub tmpfs_xattr_supported: bool,
@@ -186,6 +190,8 @@ impl RuntimeState {
             magic_modules,
             hymofs_modules,
             mount_error_modules: Vec::new(),
+            mount_error_reasons: BTreeMap::new(),
+            skip_mount_modules: Vec::new(),
             active_mounts,
             tmpfs_xattr_supported,
             mount_stats,

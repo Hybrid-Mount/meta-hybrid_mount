@@ -310,6 +310,8 @@ pub fn build_system_payload(config: &Config, state: &RuntimeState) -> Value {
         "selinux": read_selinux_status().unwrap_or_else(|_| "Unknown".to_string()),
         "mount_base": state.mount_point,
         "mount_error_modules": state.mount_error_modules,
+        "mount_error_reasons": state.mount_error_reasons,
+        "skip_mount_modules": state.skip_mount_modules,
         "hymofs_available": status == HymoFsStatus::Available,
         "hymofs_status": status_code(status),
         "lkm": build_lkm_payload(config),

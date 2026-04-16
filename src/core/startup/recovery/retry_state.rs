@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::PathBuf,
 };
 
@@ -22,6 +22,7 @@ pub(super) struct RecoveryState {
     max_restarts: usize,
     restart_round: usize,
     auto_skipped: HashSet<String>,
+    mount_error_reasons: BTreeMap<String, String>,
     unattributed_retry_used: bool,
 }
 
@@ -42,6 +43,7 @@ impl RecoveryState {
             max_restarts,
             restart_round: 0,
             auto_skipped: HashSet::new(),
+            mount_error_reasons: BTreeMap::new(),
             unattributed_retry_used: false,
         })
     }
@@ -54,12 +56,20 @@ impl RecoveryState {
         self.max_restarts
     }
 
-    pub(super) fn mark_failed_modules(&mut self, module_ids: &[String]) -> Result<MarkOutcome> {
+    pub(super) fn mark_failed_modules(
+        &mut self,
+        stage: &str,
+        module_ids: &[String],
+    ) -> Result<MarkOutcome> {
         let outcome = skip_markers::mark_failed_modules(
             module_ids,
             &self.module_dirs,
             &mut self.auto_skipped,
         )?;
+        for module_id in &outcome.newly_marked {
+            self.mount_error_reasons
+                .insert(module_id.clone(), format!("stage={stage}"));
+        }
         self.persist_mount_error_modules()?;
         Ok(outcome)
     }
@@ -132,6 +142,7 @@ impl RecoveryState {
         let mut mount_error_modules: Vec<String> = self.auto_skipped.iter().cloned().collect();
         mount_error_modules.sort();
         state.mount_error_modules = mount_error_modules;
+        state.mount_error_reasons = self.mount_error_reasons.clone();
         state.save()
     }
 
