@@ -9,7 +9,5 @@ mod status;
 #[cfg(test)]
 mod tests;
 
-pub use runtime::{
-    apply, clear_cmdline_best_effort, clear_runtime_best_effort, reset_runtime, sync_runtime_config,
-};
+pub use runtime::{apply, clear_runtime_best_effort, reset_runtime, sync_runtime_config};
 pub use status::{can_operate, collect_runtime_info, hook_lines, require_live};

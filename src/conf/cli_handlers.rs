@@ -108,12 +108,6 @@ fn apply_live_runtime_sync(config: &Config, description: &str) -> Result<bool> {
     })
 }
 
-fn apply_live_cmdline_clear(config: &Config) -> Result<bool> {
-    apply_live_if_possible(config, "clear_cmdline", || {
-        hymofs_mount::clear_cmdline_best_effort()
-    })
-}
-
 fn detect_rule_file_type(path: &Path) -> Result<i32> {
     let metadata = fs::symlink_metadata(path)
         .with_context(|| format!("failed to read source metadata for {}", path.display()))?;
@@ -704,7 +698,7 @@ pub fn handle_hymofs_clear_cmdline(cli: &Cli) -> Result<()> {
     config.hymofs.cmdline_value.clear();
 
     let path = save_hymofs_config_for_cli(cli, &config)?;
-    let applied = apply_live_cmdline_clear(&config)?;
+    let applied = apply_live_runtime_sync(&config, "clear_cmdline")?;
     print_config_apply_result(&path, "HymoFS cmdline spoof setting", applied);
     Ok(())
 }

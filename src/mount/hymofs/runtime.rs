@@ -197,22 +197,11 @@ fn sync_cmdline_config(config: &config::Config, features: Option<i32>) -> Result
         return Ok(());
     }
 
-    if !config.hymofs.cmdline_value.is_empty() {
-        hymofs::set_cmdline_str(&config.hymofs.cmdline_value)
-    } else {
-        crate::scoped_log!(
-            debug,
-            "mount:hymofs",
-            "cmdline sync skipped: reason=empty_config_value"
-        );
-        Ok(())
+    if config.hymofs.cmdline_value.is_empty() {
+        crate::scoped_log!(debug, "mount:hymofs", "cmdline sync: action=clear");
     }
-}
 
-pub fn clear_cmdline_best_effort() -> Result<()> {
-    // HymoFS currently exposes cmdline spoofing through set_cmdline only; there is no separate
-    // "clear cmdline spoof" ioctl. Keep empty cmdline writes limited to explicit user action.
-    hymofs::set_cmdline_str("")
+    hymofs::set_cmdline_str(&config.hymofs.cmdline_value)
 }
 
 fn sync_kstat_rules(config: &config::Config, features: Option<i32>) -> Result<()> {
@@ -412,6 +401,7 @@ pub fn clear_runtime_best_effort() {
         ("clear_rules", hymofs::clear_rules()),
         ("clear_maps_rules", hymofs::clear_maps_rules()),
         ("set_uname(clear)", hymofs::set_uname(&empty_uname)),
+        ("set_cmdline(clear)", hymofs::set_cmdline_str("")),
         ("set_hide_uids(clear)", hymofs::set_hide_uids(&[])),
         ("set_mount_hide(false)", hymofs::set_mount_hide(false)),
         ("set_maps_spoof(false)", hymofs::set_maps_spoof(false)),
