@@ -198,10 +198,10 @@ fn sync_cmdline_config(config: &config::Config, features: Option<i32>) -> Result
     }
 
     if config.hymofs.cmdline_value.is_empty() {
-        hymofs::set_cmdline_str("")
-    } else {
-        hymofs::set_cmdline_str(&config.hymofs.cmdline_value)
+        crate::scoped_log!(debug, "mount:hymofs", "cmdline sync: action=clear");
     }
+
+    hymofs::set_cmdline_str(&config.hymofs.cmdline_value)
 }
 
 fn sync_kstat_rules(config: &config::Config, features: Option<i32>) -> Result<()> {

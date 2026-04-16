@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     path::PathBuf,
 };
 
 use anyhow::Result;
 
 use super::skip_markers::{self, MarkOutcome};
-use crate::conf::config::Config;
+use crate::{conf::config::Config, core::runtime_state::RuntimeState};
 
 pub(super) enum RecoveryDecision {
     RetryUnattributed,
@@ -22,6 +22,7 @@ pub(super) struct RecoveryState {
     max_restarts: usize,
     restart_round: usize,
     auto_skipped: HashSet<String>,
+    mount_error_reasons: BTreeMap<String, String>,
     unattributed_retry_used: bool,
 }
 
@@ -42,6 +43,7 @@ impl RecoveryState {
             max_restarts,
             restart_round: 0,
             auto_skipped: HashSet::new(),
+            mount_error_reasons: BTreeMap::new(),
             unattributed_retry_used: false,
         })
     }
@@ -54,8 +56,24 @@ impl RecoveryState {
         self.max_restarts
     }
 
-    pub(super) fn mark_failed_modules(&mut self, module_ids: &[String]) -> Result<MarkOutcome> {
-        skip_markers::mark_failed_modules(module_ids, &self.module_dirs, &mut self.auto_skipped)
+    pub(super) fn mark_failed_modules(
+        &mut self,
+        stage: &str,
+        reason: Option<&str>,
+        module_ids: &[String],
+    ) -> Result<MarkOutcome> {
+        let outcome = skip_markers::mark_failed_modules(
+            module_ids,
+            &self.module_dirs,
+            &mut self.auto_skipped,
+        )?;
+        let reason_detail = build_reason(stage, reason);
+        for module_id in &outcome.newly_marked {
+            self.mount_error_reasons
+                .insert(module_id.clone(), reason_detail.clone());
+        }
+        self.persist_mount_error_modules()?;
+        Ok(outcome)
     }
 
     pub(super) fn handle_unattributed_failure(&mut self, stage: String) -> RecoveryDecision {
@@ -121,6 +139,15 @@ impl RecoveryState {
         );
     }
 
+    fn persist_mount_error_modules(&self) -> Result<()> {
+        let mut state = RuntimeState::load().unwrap_or_default();
+        let mut mount_error_modules: Vec<String> = self.auto_skipped.iter().cloned().collect();
+        mount_error_modules.sort();
+        state.mount_error_modules = mount_error_modules;
+        state.mount_error_reasons = self.mount_error_reasons.clone();
+        state.save()
+    }
+
     pub(super) fn abort_on_retry_limit(&self) -> Result<()> {
         let loop_error = anyhow::anyhow!(
             "Auto-recovery reached restart limit ({} rounds), aborting to avoid loop",
@@ -129,5 +156,24 @@ impl RecoveryState {
         crate::scoped_log!(error, "recovery", "abort: error={}", loop_error);
         crate::core::module_status::update_crash_description(&loop_error.to_string());
         Err(loop_error)
+    }
+}
+
+fn build_reason(stage: &str, reason: Option<&str>) -> String {
+    const MAX_REASON_LEN: usize = 200;
+
+    match reason {
+        Some(reason) if !reason.trim().is_empty() => {
+            let normalized = reason.replace('\n', " -> ");
+            if normalized.len() <= MAX_REASON_LEN {
+                format!("stage={stage}; error={normalized}")
+            } else {
+                format!(
+                    "stage={stage}; error={}…",
+                    normalized.chars().take(MAX_REASON_LEN).collect::<String>()
+                )
+            }
+        }
+        _ => format!("stage={stage}"),
     }
 }
