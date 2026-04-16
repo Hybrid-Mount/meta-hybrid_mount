@@ -64,6 +64,29 @@ fn build_managed_partitions(config: &config::Config) -> HashSet<String> {
     managed_partitions
 }
 
+fn mode_name(mode: &MountMode) -> &'static str {
+    match mode {
+        MountMode::Overlay => "overlay",
+        MountMode::Magic => "magic",
+        MountMode::Hymofs => "hymofs",
+        MountMode::Ignore => "ignore",
+    }
+}
+
+fn effective_mount_mode(requested: &MountMode, use_hymofs: bool) -> MountMode {
+    if matches!(requested, MountMode::Hymofs) && !use_hymofs {
+        MountMode::Ignore
+    } else {
+        requested.clone()
+    }
+}
+
+fn sorted_ids(ids: HashSet<String>) -> Vec<String> {
+    let mut out: Vec<String> = ids.into_iter().collect();
+    out.sort();
+    out
+}
+
 pub fn module_requests_hymofs(module: &Module) -> bool {
     matches!(module.rules.default_mode, MountMode::Hymofs)
         || module
@@ -255,49 +278,40 @@ fn generate_with_root(
                         continue;
                     }
 
-                    let mode = module.rules.get_mode(dir_name);
-                    if matches!(mode, MountMode::Magic) {
-                        magic_ids.insert(module.id.clone());
+                    let requested_mode = module.rules.get_mode(dir_name);
+                    let effective_mode = effective_mount_mode(&requested_mode, use_hymofs);
+                    if requested_mode != effective_mode {
                         crate::scoped_log!(
                             info,
                             "planner",
-                            "mode override: module={}, partition={}, mode=magic",
+                            "mode decision: module={}, partition={}, requested={}, effective={}",
                             module.id,
-                            dir_name
+                            dir_name,
+                            mode_name(&requested_mode),
+                            mode_name(&effective_mode)
                         );
-                        continue;
-                    }
-                    if matches!(mode, MountMode::Ignore) {
+                    } else {
                         crate::scoped_log!(
                             debug,
                             "planner",
-                            "mode override: module={}, partition={}, mode=ignore",
+                            "mode decision: module={}, partition={}, requested={}, effective={}",
                             module.id,
-                            dir_name
+                            dir_name,
+                            mode_name(&requested_mode),
+                            mode_name(&effective_mode)
                         );
-                        continue;
                     }
-
-                    if matches!(mode, MountMode::Hymofs) {
-                        if use_hymofs {
-                            hymofs_ids.insert(module.id.clone());
-                            crate::scoped_log!(
-                                info,
-                                "planner",
-                                "mode override: module={}, partition={}, mode=hymofs",
-                                module.id,
-                                dir_name
-                            );
-                        } else {
-                            crate::scoped_log!(
-                                info,
-                                "planner",
-                                "mode fallback: module={}, partition={}, requested=hymofs, effective=ignore",
-                                module.id,
-                                dir_name
-                            );
+                    match effective_mode {
+                        MountMode::Magic => {
+                            magic_ids.insert(module.id.clone());
+                            continue;
                         }
-                        continue;
+                        MountMode::Ignore => continue,
+                        MountMode::Hymofs => {
+                            hymofs_ids.insert(module.id.clone());
+                            continue;
+                        }
+                        MountMode::Overlay => {}
                     }
 
                     overlay_ids.insert(module.id.clone());
@@ -438,13 +452,15 @@ fn generate_with_root(
             continue;
         }
 
-        layers.sort_by(|a, b| {
-            let aid = utils::extract_module_id(a).unwrap_or_default();
-            let bid = utils::extract_module_id(b).unwrap_or_default();
-            let ar = module_rank.get(aid.as_str()).copied().unwrap_or(usize::MAX);
-            let br = module_rank.get(bid.as_str()).copied().unwrap_or(usize::MAX);
-
-            ar.cmp(&br).then_with(|| a.cmp(b))
+        layers.sort_by_cached_key(|path| {
+            let module_id = utils::extract_module_id(path).unwrap_or_default();
+            (
+                module_rank
+                    .get(module_id.as_str())
+                    .copied()
+                    .unwrap_or(usize::MAX),
+                path.clone(),
+            )
         });
 
         crate::scoped_log!(
@@ -463,12 +479,9 @@ fn generate_with_root(
         });
     }
 
-    plan.overlay_module_ids = overlay_ids.into_iter().collect();
-    plan.magic_module_ids = magic_ids.into_iter().collect();
-    plan.hymofs_module_ids = hymofs_ids.into_iter().collect();
-    plan.overlay_module_ids.sort();
-    plan.magic_module_ids.sort();
-    plan.hymofs_module_ids.sort();
+    plan.overlay_module_ids = sorted_ids(overlay_ids);
+    plan.magic_module_ids = sorted_ids(magic_ids);
+    plan.hymofs_module_ids = sorted_ids(hymofs_ids);
 
     crate::scoped_log!(
         info,

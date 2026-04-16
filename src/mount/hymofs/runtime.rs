@@ -197,10 +197,10 @@ fn sync_cmdline_config(config: &config::Config, features: Option<i32>) -> Result
         return Ok(());
     }
 
-    if config.hymofs.cmdline_value.is_empty() {
-        hymofs::set_cmdline_str("")
-    } else {
+    if !config.hymofs.cmdline_value.is_empty() {
         hymofs::set_cmdline_str(&config.hymofs.cmdline_value)
+    } else {
+        Ok(())
     }
 }
 
@@ -401,7 +401,6 @@ pub fn clear_runtime_best_effort() {
         ("clear_rules", hymofs::clear_rules()),
         ("clear_maps_rules", hymofs::clear_maps_rules()),
         ("set_uname(clear)", hymofs::set_uname(&empty_uname)),
-        ("set_cmdline(clear)", hymofs::set_cmdline_str("")),
         ("set_hide_uids(clear)", hymofs::set_hide_uids(&[])),
         ("set_mount_hide(false)", hymofs::set_mount_hide(false)),
         ("set_maps_spoof(false)", hymofs::set_maps_spoof(false)),

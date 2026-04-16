@@ -69,7 +69,10 @@ pub fn run(config: Config) -> Result<()> {
                         );
                     }
 
-                    let action = state.mark_failed_modules(&module_failure.module_ids)?;
+                    let action = state.mark_failed_modules(
+                        &module_failure.stage.to_string(),
+                        &module_failure.module_ids,
+                    )?;
 
                     if !action.already_marked.is_empty() {
                         crate::scoped_log!(
