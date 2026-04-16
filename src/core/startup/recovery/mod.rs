@@ -71,6 +71,7 @@ pub fn run(config: Config) -> Result<()> {
 
                     let action = state.mark_failed_modules(
                         &module_failure.stage.to_string(),
+                        Some(&module_failure.source.to_string()),
                         &module_failure.module_ids,
                     )?;
 

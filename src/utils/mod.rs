@@ -3,7 +3,10 @@
 
 pub mod validation;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 use anyhow::Result;
 
@@ -26,6 +29,11 @@ pub fn get_mnt() -> PathBuf {
 }
 
 pub fn init_logging() -> Result<()> {
+    static LOGGER_INIT: OnceLock<()> = OnceLock::new();
+    if LOGGER_INIT.get().is_some() {
+        return Ok(());
+    }
+
     #[cfg(target_os = "android")]
     {
         android_logger::init_once(
@@ -33,6 +41,7 @@ pub fn init_logging() -> Result<()> {
                 .with_max_level(log::LevelFilter::Trace)
                 .with_tag("Hybrid_Logger"),
         );
+        let _ = LOGGER_INIT.set(());
     }
 
     #[cfg(not(target_os = "android"))]
@@ -50,7 +59,8 @@ pub fn init_logging() -> Result<()> {
                 record.args()
             )
         });
-        builder.filter_level(log::LevelFilter::Trace).init();
+        let _ = builder.filter_level(log::LevelFilter::Trace).try_init();
+        let _ = LOGGER_INIT.set(());
     }
     Ok(())
 }

@@ -200,8 +200,19 @@ fn sync_cmdline_config(config: &config::Config, features: Option<i32>) -> Result
     if !config.hymofs.cmdline_value.is_empty() {
         hymofs::set_cmdline_str(&config.hymofs.cmdline_value)
     } else {
+        crate::scoped_log!(
+            debug,
+            "mount:hymofs",
+            "cmdline sync skipped: reason=empty_config_value"
+        );
         Ok(())
     }
+}
+
+pub fn clear_cmdline_best_effort() -> Result<()> {
+    // HymoFS currently exposes cmdline spoofing through set_cmdline only; there is no separate
+    // "clear cmdline spoof" ioctl. Keep empty cmdline writes limited to explicit user action.
+    hymofs::set_cmdline_str("")
 }
 
 fn sync_kstat_rules(config: &config::Config, features: Option<i32>) -> Result<()> {

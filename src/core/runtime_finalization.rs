@@ -60,6 +60,7 @@ fn build_runtime_state(
     );
     state.mount_error_modules = previous_state.mount_error_modules;
     state.mount_error_reasons = previous_state.mount_error_reasons;
+    clear_recovered_mount_errors(&mut state);
     state.skip_mount_modules = collect_skip_mount_modules(config);
     state
 }
@@ -102,4 +103,18 @@ fn collect_skip_mount_modules(config: &Config) -> Vec<String> {
 
     modules.sort();
     modules
+}
+
+fn clear_recovered_mount_errors(state: &mut RuntimeState) {
+    let mounted: std::collections::HashSet<String> = state
+        .mounted_module_ids()
+        .into_iter()
+        .map(ToString::to_string)
+        .collect();
+    state
+        .mount_error_modules
+        .retain(|module_id| !mounted.contains(module_id));
+    state
+        .mount_error_reasons
+        .retain(|module_id, _| !mounted.contains(module_id));
 }
