@@ -17,6 +17,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 use walkdir::WalkDir;
 
+use super::common::build_managed_partitions;
 use crate::{
     conf::config,
     core::{
@@ -25,8 +26,6 @@ use crate::{
     },
     defs,
 };
-
-use super::common::build_managed_partitions;
 
 #[derive(Debug, Default)]
 pub(super) struct CompiledRules {
