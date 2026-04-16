@@ -5,7 +5,7 @@ mod fallback;
 mod magic;
 mod overlay;
 
-use std::{collections::HashSet, path::Path};
+use std::{collections::BTreeSet, path::Path};
 
 use anyhow::{Result, bail};
 
@@ -49,8 +49,8 @@ impl Executor {
             plan.magic_module_ids.len(),
             plan.hymofs_module_ids.len()
         );
-        let mut final_magic_ids: HashSet<String> = plan.magic_module_ids.iter().cloned().collect();
-        let mut final_overlay_ids: HashSet<String> = HashSet::new();
+        let mut final_magic_ids: BTreeSet<String> = plan.magic_module_ids.iter().cloned().collect();
+        let mut final_overlay_ids: BTreeSet<String> = BTreeSet::new();
         let planned_hymofs_ids = plan.hymofs_module_ids.clone();
         let mut mount_stats = MountStatistics::default();
 
@@ -181,11 +181,9 @@ impl Executor {
         plan.hymofs_hide_rules.clear();
         let final_hymofs_ids = plan.hymofs_module_ids.clone();
 
-        let mut magic_need_list: Vec<String> = final_magic_ids.iter().cloned().collect();
-        magic_need_list.sort();
+        let magic_need_list: Vec<String> = final_magic_ids.iter().cloned().collect();
 
         if !magic_need_list.is_empty() {
-            let magic_need_ids: HashSet<String> = magic_need_list.iter().cloned().collect();
             crate::scoped_log!(
                 info,
                 "executor",
@@ -193,7 +191,7 @@ impl Executor {
                 magic_need_list.join(", ")
             );
             let (mounted_ids, magic_stats) =
-                magic::mount_magic(&magic_need_ids, config, tempdir.as_ref()).map_err(|err| {
+                magic::mount_magic(&magic_need_list, config, tempdir.as_ref()).map_err(|err| {
                     let failed_module_ids =
                         fallback::resolve_magic_failure_modules(&err, &magic_need_list);
                     ModuleStageFailure::new(
@@ -207,6 +205,7 @@ impl Executor {
                     )
                 })?;
             mount_stats.merge(&magic_stats);
+            let mounted_ids: BTreeSet<String> = mounted_ids.into_iter().collect();
             final_magic_ids.retain(|id| mounted_ids.contains(id));
             crate::scoped_log!(
                 info,
@@ -238,11 +237,8 @@ impl Executor {
             let _ = umount_mgr::commit();
         }
 
-        let mut result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
-        let mut result_magic: Vec<String> = final_magic_ids.into_iter().collect();
-
-        result_overlay.sort();
-        result_magic.sort();
+        let result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
+        let result_magic: Vec<String> = final_magic_ids.into_iter().collect();
 
         crate::scoped_log!(
             info,
