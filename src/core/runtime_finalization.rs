@@ -45,8 +45,9 @@ fn build_runtime_state(
     plan: &MountPlan,
     result: &ExecutionResult,
 ) -> RuntimeState {
+    let previous_state = RuntimeState::load().unwrap_or_default();
     let hymofs = hymofs::collect_runtime_info(config);
-    RuntimeState::new(
+    let mut state = RuntimeState::new(
         storage_mode.to_string(),
         mount_point.to_path_buf(),
         result.overlay_module_ids.clone(),
@@ -56,7 +57,9 @@ fn build_runtime_state(
         result.mount_stats.clone(),
         hymofs,
         defs::DAEMON_LOG_FILE.into(),
-    )
+    );
+    state.mount_error_modules = previous_state.mount_error_modules;
+    state
 }
 
 fn collect_active_mounts(plan: &MountPlan) -> Vec<String> {

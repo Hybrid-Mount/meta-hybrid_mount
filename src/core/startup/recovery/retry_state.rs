@@ -9,7 +9,7 @@ use std::{
 use anyhow::Result;
 
 use super::skip_markers::{self, MarkOutcome};
-use crate::conf::config::Config;
+use crate::{conf::config::Config, core::runtime_state::RuntimeState};
 
 pub(super) enum RecoveryDecision {
     RetryUnattributed,
@@ -55,7 +55,13 @@ impl RecoveryState {
     }
 
     pub(super) fn mark_failed_modules(&mut self, module_ids: &[String]) -> Result<MarkOutcome> {
-        skip_markers::mark_failed_modules(module_ids, &self.module_dirs, &mut self.auto_skipped)
+        let outcome = skip_markers::mark_failed_modules(
+            module_ids,
+            &self.module_dirs,
+            &mut self.auto_skipped,
+        )?;
+        self.persist_mount_error_modules()?;
+        Ok(outcome)
     }
 
     pub(super) fn handle_unattributed_failure(&mut self, stage: String) -> RecoveryDecision {
@@ -119,6 +125,14 @@ impl RecoveryState {
             "complete: auto_skipped_modules={}",
             skipped.join(", ")
         );
+    }
+
+    fn persist_mount_error_modules(&self) -> Result<()> {
+        let mut state = RuntimeState::load().unwrap_or_default();
+        let mut mount_error_modules: Vec<String> = self.auto_skipped.iter().cloned().collect();
+        mount_error_modules.sort();
+        state.mount_error_modules = mount_error_modules;
+        state.save()
     }
 
     pub(super) fn abort_on_retry_limit(&self) -> Result<()> {

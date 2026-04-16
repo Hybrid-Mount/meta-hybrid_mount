@@ -140,6 +140,8 @@ pub struct RuntimeState {
     #[serde(default)]
     pub hymofs_modules: Vec<String>,
     #[serde(default)]
+    pub mount_error_modules: Vec<String>,
+    #[serde(default)]
     pub active_mounts: Vec<String>,
     #[serde(default)]
     pub tmpfs_xattr_supported: bool,
@@ -183,6 +185,7 @@ impl RuntimeState {
             overlay_modules,
             magic_modules,
             hymofs_modules,
+            mount_error_modules: Vec::new(),
             active_mounts,
             tmpfs_xattr_supported,
             mount_stats,

@@ -32,7 +32,7 @@ pub(super) fn mark_failed_modules(
             continue;
         }
         if let Some(module_dir) = module_dirs.get(module_id) {
-            create_skip_mount_marker(module_dir)?;
+            create_mount_error_marker(module_dir)?;
             auto_skipped.insert(module_id.clone());
             newly_marked.push(module_id.clone());
         } else {
@@ -68,12 +68,12 @@ pub(super) fn list_module_dirs(base: &Path) -> Result<HashMap<String, PathBuf>> 
     Ok(modules)
 }
 
-fn create_skip_mount_marker(module_dir: &Path) -> Result<()> {
-    let marker = module_dir.join(defs::SKIP_MOUNT_FILE_NAME);
+fn create_mount_error_marker(module_dir: &Path) -> Result<()> {
+    let marker = module_dir.join(defs::MOUNT_ERROR_FILE_NAME);
     crate::scoped_log!(
         info,
         "recovery:markers",
-        "create skip marker: path={}",
+        "create mount error marker: path={}",
         marker.display()
     );
     OpenOptions::new()
@@ -85,7 +85,7 @@ fn create_skip_mount_marker(module_dir: &Path) -> Result<()> {
     crate::scoped_log!(
         debug,
         "recovery:markers",
-        "skip marker ready: module_dir={}",
+        "mount error marker ready: module_dir={}",
         module_dir.display()
     );
     Ok(())
