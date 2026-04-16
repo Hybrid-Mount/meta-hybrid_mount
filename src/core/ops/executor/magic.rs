@@ -8,7 +8,7 @@ use anyhow::Result;
 use crate::{conf::config, core::runtime_state::MountStatistics, mount::magic_mount};
 
 pub(super) fn mount_magic(
-    ids: &HashSet<String>,
+    ids: &[String],
     config: &config::Config,
     tempdir: &Path,
 ) -> Result<(Vec<String>, MountStatistics)> {
@@ -25,12 +25,14 @@ pub(super) fn mount_magic(
         std::fs::create_dir_all(&magic_ws_path)?;
     }
 
+    let module_ids: HashSet<String> = ids.iter().cloned().collect();
+
     let stats = magic_mount::magic_mount(
         &magic_ws_path,
         tempdir,
         &config.mountsource,
         &config.partitions,
-        ids.clone(),
+        module_ids,
         !config.disable_umount,
     )?;
 
@@ -41,5 +43,5 @@ pub(super) fn mount_magic(
         ids.len()
     );
 
-    Ok((ids.iter().cloned().collect(), stats))
+    Ok((ids.to_vec(), stats))
 }

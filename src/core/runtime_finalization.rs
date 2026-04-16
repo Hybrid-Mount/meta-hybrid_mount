@@ -45,8 +45,9 @@ fn build_runtime_state(
     plan: &MountPlan,
     result: &ExecutionResult,
 ) -> RuntimeState {
+    let previous_state = RuntimeState::load().unwrap_or_default();
     let hymofs = hymofs::collect_runtime_info(config);
-    RuntimeState::new(
+    let mut state = RuntimeState::new(
         storage_mode.to_string(),
         mount_point.to_path_buf(),
         result.overlay_module_ids.clone(),
@@ -56,7 +57,12 @@ fn build_runtime_state(
         result.mount_stats.clone(),
         hymofs,
         defs::DAEMON_LOG_FILE.into(),
-    )
+    );
+    state.mount_error_modules = previous_state.mount_error_modules;
+    state.mount_error_reasons = previous_state.mount_error_reasons;
+    clear_recovered_mount_errors(&mut state);
+    state.skip_mount_modules = collect_skip_mount_modules(config);
+    state
 }
 
 fn collect_active_mounts(plan: &MountPlan) -> Vec<String> {
@@ -73,4 +79,42 @@ fn collect_active_mounts(plan: &MountPlan) -> Vec<String> {
     active_mounts.sort();
     active_mounts.dedup();
     active_mounts
+}
+
+fn collect_skip_mount_modules(config: &Config) -> Vec<String> {
+    let mut modules = Vec::new();
+    let Ok(entries) = std::fs::read_dir(&config.moduledir) else {
+        return modules;
+    };
+
+    for entry in entries.flatten() {
+        let module_dir = entry.path();
+        if !module_dir.is_dir() {
+            continue;
+        }
+        let id = entry.file_name().to_string_lossy().to_string();
+        if crate::core::inventory::is_reserved_module_dir(&id) {
+            continue;
+        }
+        if module_dir.join(defs::SKIP_MOUNT_FILE_NAME).exists() {
+            modules.push(id);
+        }
+    }
+
+    modules.sort();
+    modules
+}
+
+fn clear_recovered_mount_errors(state: &mut RuntimeState) {
+    let mounted: std::collections::HashSet<String> = state
+        .mounted_module_ids()
+        .into_iter()
+        .map(ToString::to_string)
+        .collect();
+    state
+        .mount_error_modules
+        .retain(|module_id| !mounted.contains(module_id));
+    state
+        .mount_error_reasons
+        .retain(|module_id, _| !mounted.contains(module_id));
 }
