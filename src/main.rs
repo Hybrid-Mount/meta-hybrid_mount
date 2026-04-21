@@ -29,9 +29,10 @@ use mimalloc::MiMalloc;
 static GLOBAL: MiMalloc = MiMalloc;
 
 fn main() -> Result<()> {
-    if std::env::var("KSU_LATE_LOAD").is_ok() && std::env::var("KSU").is_ok() {
-        panic!("! unsupported late load mode");
+    if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
+        panic!("不支持Late-load（越狱）模式");
     }
+
     let cli = Cli::parse();
     core::entry::run(cli)
 }
