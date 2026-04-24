@@ -90,6 +90,7 @@ jobs:
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
+          toolchain: nightly
           targets: aarch64-linux-android
           components: rust-src, clippy
 

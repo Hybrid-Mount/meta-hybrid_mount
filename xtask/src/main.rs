@@ -583,8 +583,22 @@ export const RUST_PATHS = {{
 
 fn compile_core(release: bool, arch: Arch) -> Result<()> {
     let mut cmd = Command::new("cargo");
-    cmd.args(["ndk", "--platform", "26", "-t", arch.target(), "build"])
-        .env("RUSTFLAGS", "-C default-linker-libraries");
+    cmd.args([
+        "+nightly",
+        "ndk",
+        "-Z",
+        "build-std=std,core,panic_abort",
+        "-Z",
+        "build-std-features=optimize_for_size",
+        "-Z",
+        "trim-paths",
+        "--platform",
+        "26",
+        "-t",
+        arch.target(),
+        "build",
+    ])
+    .env("RUSTFLAGS", "-C default-linker-libraries");
     if release {
         cmd.arg("-r");
     }
