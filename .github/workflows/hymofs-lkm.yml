@@ -85,7 +85,7 @@ jobs:
 
       - name: Restore cached .ko
         id: cache-lkm
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.OUT }}
           key: hymofs-lkm-${{ runner.os }}-${{ env.KMI }}-${{ env.TARGET_ARCH }}-ddk-${{ inputs.ddk_release }}-hymofs-${{ steps.hymofs_source.outputs.sha }}-${{ hashFiles('.github/workflows/hymofs-lkm.yml') }}
