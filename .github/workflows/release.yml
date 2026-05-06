@@ -59,8 +59,13 @@ jobs:
       - name: Sync Kasumi UAPI
         run: |
           set -euo pipefail
-          test -s kasumi_uapi_artifact/kasumi_uapi.h
-          cp kasumi_uapi_artifact/kasumi_uapi.h src/sys/kasumi_uapi.h
+          mapfile -t UAPI_FILES < <(find kasumi_uapi_artifact -type f -name kasumi_uapi.h | sort)
+          if [ "${#UAPI_FILES[@]}" -ne 1 ]; then
+            echo "Expected exactly one kasumi_uapi.h artifact, found ${#UAPI_FILES[@]}:"
+            find kasumi_uapi_artifact -type f -print | sort
+            exit 1
+          fi
+          cp "${UAPI_FILES[0]}" src/sys/kasumi_uapi.h
           sha256sum src/sys/kasumi_uapi.h
 
       - name: Cache Rust dependencies
@@ -104,7 +109,7 @@ jobs:
           echo "ZIP_PATH=$ZIP_PATH" >> "$GITHUB_ENV"
           
           DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
-          CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/master/changelog.md"
+          CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/main/changelog.md"
           
           cat <<EOF > /tmp/update.json
           {
@@ -147,14 +152,14 @@ jobs:
           files: ${{ env.ZIP_PATH }}
           body_path: /tmp/changelog.md
 
-      - name: Sync Version to Master
+      - name: Sync Version to Main
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          git fetch origin master
-          git checkout master
+          git fetch origin main
+          git checkout main
           
           mv /tmp/update.json update.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
@@ -165,5 +170,5 @@ jobs:
           
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
-            git push origin master
+            git push origin main
           fi

@@ -14,7 +14,7 @@
 
 use std::{
     fs,
-    io::{BufRead, BufReader, ErrorKind, Write},
+    io::{BufRead, BufReader, Error as IoError, ErrorKind, Write},
     os::unix::{
         fs::{FileTypeExt, MetadataExt, PermissionsExt},
         net::{UnixListener, UnixStream},
@@ -413,7 +413,8 @@ fn cleanup_stale_pid_file() -> Result<()> {
         return Ok(());
     };
 
-    let alive = unsafe { libc::kill(pid, 0) == 0 || *libc::__error() == libc::EPERM };
+    let alive = unsafe { libc::kill(pid, 0) == 0 }
+        || IoError::last_os_error().raw_os_error() == Some(libc::EPERM);
     if !alive {
         match fs::remove_file(defs::PID_FILE) {
             Ok(()) => {}

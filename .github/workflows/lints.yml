@@ -46,10 +46,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Format codes
-        uses: LoliGothick/rustfmt-check@master
-        with:
-          token: ${{ github.token }}
-          working-directory: ./
+        run: cargo fmt --all -- --check
       - name: Clippy code
         run: cargo clippy --all-targets -- -D warnings
       - name: Run unit tests

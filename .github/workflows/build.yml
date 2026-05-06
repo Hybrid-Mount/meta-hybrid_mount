@@ -92,8 +92,13 @@ jobs:
       - name: Sync Kasumi UAPI
         run: |
           set -euo pipefail
-          test -s kasumi_uapi_artifact/kasumi_uapi.h
-          cp kasumi_uapi_artifact/kasumi_uapi.h src/sys/kasumi_uapi.h
+          mapfile -t UAPI_FILES < <(find kasumi_uapi_artifact -type f -name kasumi_uapi.h | sort)
+          if [ "${#UAPI_FILES[@]}" -ne 1 ]; then
+            echo "Expected exactly one kasumi_uapi.h artifact, found ${#UAPI_FILES[@]}:"
+            find kasumi_uapi_artifact -type f -print | sort
+            exit 1
+          fi
+          cp "${UAPI_FILES[0]}" src/sys/kasumi_uapi.h
           sha256sum src/sys/kasumi_uapi.h
 
       - name: Cache Rust dependencies

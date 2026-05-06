@@ -64,7 +64,7 @@ wait_volume_key_or_timeout() {
 }
 
 show_usage_notice_and_confirm() {
-  local github_url="https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/master/USAGE_NOTICE.md"
+  local github_url="https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/USAGE_NOTICE.md"
   local confirm_timeout=15
   ui_print " "
   ui_print "========================================"
