@@ -2177,9 +2177,9 @@ dependencies = [
 
 [[package]]
 name = "tgbot"
-version = "0.44.0"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef3557c6785bb002ebbd4c2f439cba36d946e5a96b287c2b5180b62459388cc7"
+checksum = "c98ae5d7c1e54dc7b897bd307082d2f444d26a327ac7462e5219490f145dc19f"
 dependencies = [
  "async-stream",
  "bytes",
