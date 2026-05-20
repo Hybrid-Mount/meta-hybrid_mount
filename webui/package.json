@@ -19,19 +19,19 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "eslint": "^10.3.0",
+    "eslint": "^10.4.0",
     "globals": "^17.6.0",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.59.3",
-    "vite": "^8.0.12",
+    "typescript-eslint": "^8.59.4",
+    "vite": "^8.0.13",
     "vite-plugin-solid": "^2.11.12",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.7"
   },
   "dependencies": {
     "@material/web": "^2.4.1",
     "kernelsu": "^3.0.2",
-    "solid-js": "^1.9.12",
+    "solid-js": "^1.9.13",
     "zod": "^4.4.3"
   }
 }
