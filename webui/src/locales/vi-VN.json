@@ -21,7 +21,7 @@
   },
   "status": {
     "storageTitle": "Bộ nhớ",
-    "moduleActive": "Mô-đun Đang hoạt động",
+    "moduleActive": "Mô-đun Đang h.động",
     "modeStats": "Thống kê Chế độ",
     "sysInfoTitle": "Thông tin Hệ thống",
     "kernel": "Kernel",
@@ -64,8 +64,8 @@
     "mode_tmpfsDesc": "Dựa trên RAM. I/O nhanh nhất, đặt lại khi khởi động lại.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Hình ảnh lặp lại. Bền bỉ, tiết kiệm RAM.",
-    "daemonStartupMode": "Daemon thường trú",
-    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
+    "daemonStartupMode": "Daemon Liên tục",
+    "kasumiConfigSaved": "Cấu hình Kasumi đã được lưu. Runtime không hề thay đổi."
   },
   "modules": {
     "reload": "Làm mới",
@@ -82,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "unmounted": "Unmounted",
+      "unmounted": "Đã bỏ gắn kết",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -91,7 +91,7 @@
       }
     },
     "emptyState": "Không có mô-đun nào được tìm thấy.",
-    "unmountedHiddenHint": "Các mô-đun Unmounted đang bị ẩn.",
+    "unmountedHiddenHint": "Các mô-đun Đã bỏ gắn kết đang bị ẩn.",
     "defaultTag": "Mặc định",
     "compatTag": "Tương thích",
     "disableTag": "Tắt",
@@ -102,7 +102,7 @@
     "clearMountErrors": "Xóa lỗi mount",
     "mountErrorsCleared": "Đã xóa lỗi mount",
     "mountErrorsClearFailed": "Không thể xóa lỗi mount",
-    "suggestIgnoreHint": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Ignore\"."
+    "suggestIgnoreHint": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Bỏ qua\"."
   },
   "kasumi": {
     "title": "Trạng thái Kasumi",
@@ -188,24 +188,24 @@
     "rulesVisibleSummary": "{count} quy tắc đang hoạt động có thể thấy từ không gian người dùng",
     "dtypeLabel": "dtype",
     "loadError": "Thất bại khi tải trạng thái Kasumi",
-    "statusConfigOffRuntimeOn": "Config Off / Runtime Still Loaded",
-    "unloadLkmWarningTitle": "注意！",
-    "unloadLkmWarningBody": "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？",
-    "unloadLkmWarningCancel": "取消",
-    "unloadLkmWarningConfirm": "确定",
-    "unameSpoofTitle": "Kernel version spoofing",
-    "unameEmptyHint": "No spoofed uname configured.",
-    "saveUname": "Save Uname",
-    "restoreUnameGlobal": "Restore original (global)",
-    "saveCmdline": "Save Cmdline",
-    "configOnlyHint": "Most settings below only update config. Runtime changes take effect the next time Kasumi is rebuilt or remounted.",
-    "unameMode": "Uname Mode",
-    "unameModeScoped": "Scoped",
-    "unameModeGlobal": "Global",
-    "unameModeScopedDesc": "Per-process: only Kasumi-hidden UIDs see fake values.",
-    "unameModeGlobalDesc": "System-wide: rewrites init_uts_ns, every task sees fake values.",
-    "unameReleaseDesc": "Kernel release, for example 5.15.0-generic.",
-    "unameVersionDesc": "Kernel version/build timestamp."
+    "statusConfigOffRuntimeOn": "Cấu hình Tắt / Runtime Vẫn Được tải",
+    "unloadLkmWarningTitle": "Chú ý!",
+    "unloadLkmWarningBody": "Có thể không gỡ cài đặt được Kasumi khi sử dụng chế độ TSR. Nếu không gỡ cài đặt thành công trong vòng 5 giây, Kasumi sẽ tự động khởi động lại một cách an toàn sau 3 giây. Bạn có chắc chắn muốn gỡ cài đặt không?",
+    "unloadLkmWarningCancel": "Hủy",
+    "unloadLkmWarningConfirm": "Chắc rồi",
+    "unameSpoofTitle": "Giả mạo phiên bản Kernel",
+    "unameEmptyHint": "Chưa có uname giả mạo được cấu hình.",
+    "saveUname": "Lưu Uname",
+    "restoreUnameGlobal": "Khôi phục gốc (toàn cầu)",
+    "saveCmdline": "Lưu Cmdline",
+    "configOnlyHint": "Hầu hết các thiết lập bên dưới chỉ cập nhật cấu hình. Các thay đổi trong Runtime sẽ có hiệu lực vào lần tiếp theo Kasumi được xây dựng lại hoặc gắn kết lại.",
+    "unameMode": "Chế độ Uname",
+    "unameModeScoped": "Phạm vi",
+    "unameModeGlobal": "Toàn cầu",
+    "unameModeScopedDesc": "Mỗi tến trình: chỉ những UID ẩn của Kasumi mới nhìn thấy các giá trị giả.",
+    "unameModeGlobalDesc": "Toàn hệ thống: viết lại init_uts_ns, mọi tác vụ đều nhìn thấy các giá trị giả.",
+    "unameReleaseDesc": "Phát hành Kernel, ví dụ 5.15.0-generic.",
+    "unameVersionDesc": "Phiên bản Kernel/ dấu thời gian bản dựng."
   },
   "logs": {
     "refresh": "Làm mới"
