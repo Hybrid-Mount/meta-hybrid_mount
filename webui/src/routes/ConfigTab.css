@@ -313,3 +313,22 @@ md-icon svg {
 .mode-item.selected .mode-check {
   opacity: 1;
 }
+
+.kasumi-restriction-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-top: 12px;
+  background-color: var(--md-sys-color-surface-container-high);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.kasumi-restriction-note md-icon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--md-sys-color-on-surface-variant);
+}

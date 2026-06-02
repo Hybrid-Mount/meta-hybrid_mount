@@ -75,6 +75,7 @@ pub fn is_mounted<P: AsRef<Path>>(path: P) -> bool {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(dead_code)]
 pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
     crate::scoped_log!(
         info,
@@ -103,6 +104,7 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[allow(dead_code)]
 pub fn mount_tmpfs(_target: &Path, _source: &str) -> Result<()> {
     bail!("tmpfs mounting is only supported on linux/android")
 }
@@ -121,7 +123,7 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
         .context("Failed to execute e2fsck")?;
 
     match status.code() {
-        Some(code) if code > 2 => {
+        Some(code) if code > 3 => {
             crate::scoped_log!(
                 error,
                 "sys:repair_image",

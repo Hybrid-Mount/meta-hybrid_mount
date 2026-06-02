@@ -1,6 +1,7 @@
 import { createEffect, For } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { ICONS } from "../lib/constants";
+import { ENABLE_KASUMI } from "../lib/constants_gen";
 import "./NavBar.css";
 import "@material/web/icon/icon.js";
 
@@ -17,7 +18,9 @@ export default function NavBar(props: Props) {
   const iconMap: Record<string, { regular: string; filled: string }> = {
     status: { regular: ICONS.home, filled: ICONS.home_filled },
     config: { regular: ICONS.settings, filled: ICONS.settings_filled },
-    kasumi: { regular: ICONS.snowflake, filled: ICONS.snowflake_filled },
+    ...(ENABLE_KASUMI
+      ? { kasumi: { regular: ICONS.snowflake, filled: ICONS.snowflake_filled } }
+      : {}),
     modules: { regular: ICONS.modules, filled: ICONS.modules_filled },
     info: { regular: ICONS.info, filled: ICONS.info_filled },
   };

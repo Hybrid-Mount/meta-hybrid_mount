@@ -26,6 +26,7 @@ pub fn update_description(
     overlay_count: usize,
     magic_count: usize,
     kasumi_count: usize,
+    blacklisted_count: usize,
 ) {
     let prop_path = Path::new(defs::MODULE_PROP_FILE);
 
@@ -39,6 +40,7 @@ pub fn update_description(
         overlay_count,
         magic_count,
         kasumi_count,
+        blacklisted_count,
     );
 
     set_description(prop_path, &desc_text);
@@ -50,15 +52,12 @@ fn running_description(
     overlay_count: usize,
     magic_count: usize,
     kasumi_count: usize,
+    blacklisted_count: usize,
 ) -> String {
-    let mode_str = match storage_mode {
-        StorageMode::Tmpfs => "Tmpfs",
-        StorageMode::Ext4 => "Ext4",
-    };
-
-    let status_emoji = match storage_mode {
-        StorageMode::Tmpfs => "🐾",
-        StorageMode::Ext4 => "💿",
+    let (mode_str, status_emoji) = match storage_mode {
+        #[cfg(feature = "control-plane")]
+        StorageMode::Tmpfs => ("Tmpfs", "🐾"),
+        StorageMode::Ext4 => ("Ext4", "💿"),
     };
 
     let mut stats = Vec::new();
@@ -67,6 +66,9 @@ fn running_description(
     }
     stats.push(format!("Overlay:{}", overlay_count));
     stats.push(format!("Magic:{}", magic_count));
+    if blacklisted_count > 0 {
+        stats.push(format!("Blacklist:{}", blacklisted_count));
+    }
 
     let stats_str = stats.join("  ");
 
@@ -122,7 +124,10 @@ mod tests {
 
     #[test]
     fn running_description_keeps_kasumi_zero_count_when_enabled() {
-        let desc = running_description(StorageMode::Tmpfs, true, 2, 3, 0);
+        #[cfg(feature = "control-plane")]
+        let desc = running_description(StorageMode::Tmpfs, true, 2, 3, 0, 0);
+        #[cfg(not(feature = "control-plane"))]
+        let desc = running_description(StorageMode::Ext4, true, 2, 3, 0, 0);
 
         assert!(desc.contains("Kasumi:0"));
         assert!(desc.contains("Overlay:2"));
@@ -131,10 +136,33 @@ mod tests {
 
     #[test]
     fn running_description_hides_kasumi_count_when_disabled() {
-        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0);
+        #[cfg(feature = "control-plane")]
+        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0, 0);
+        #[cfg(not(feature = "control-plane"))]
+        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0, 0);
 
         assert!(!desc.contains("Kasumi:"));
         assert!(desc.contains("Overlay:2"));
         assert!(desc.contains("Magic:3"));
+    }
+
+    #[test]
+    fn running_description_shows_blacklisted_count_when_nonzero() {
+        #[cfg(feature = "control-plane")]
+        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0, 1);
+        #[cfg(not(feature = "control-plane"))]
+        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0, 1);
+
+        assert!(desc.contains("Blacklist:1"));
+    }
+
+    #[test]
+    fn running_description_hides_blacklisted_count_when_zero() {
+        #[cfg(feature = "control-plane")]
+        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0, 0);
+        #[cfg(not(feature = "control-plane"))]
+        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0, 0);
+
+        assert!(!desc.contains("Blacklist:"));
     }
 }

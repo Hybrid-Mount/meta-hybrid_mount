@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod backends;
 mod ext4;
 
 use std::{
@@ -21,18 +20,18 @@ use std::{
 };
 
 use anyhow::Result;
-use backends::TmpfsBackend;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount as umount};
 
+use crate::defs;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr::send_umountable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::mount::is_mounted;
-use crate::{core::backend::StorageBackend, defs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageMode {
+    #[cfg(feature = "control-plane")]
     Tmpfs,
     Ext4,
 }
@@ -40,6 +39,7 @@ pub enum StorageMode {
 impl StorageMode {
     pub fn as_str(self) -> &'static str {
         match self {
+            #[cfg(feature = "control-plane")]
             Self::Tmpfs => "tmpfs",
             Self::Ext4 => "ext4",
         }
@@ -47,26 +47,24 @@ impl StorageMode {
 }
 
 pub struct StorageHandle {
-    pub backend: Box<dyn StorageBackend>,
+    mount_point: PathBuf,
+    mode: StorageMode,
 }
 
 impl StorageHandle {
-    pub fn new(backend: impl StorageBackend + 'static) -> Self {
+    pub fn new(mount_point: &Path, mode: StorageMode) -> Self {
         Self {
-            backend: Box::new(backend),
+            mount_point: mount_point.to_path_buf(),
+            mode,
         }
     }
 
-    pub fn commit(&mut self, disable_umount: bool) -> Result<()> {
-        self.backend.commit(disable_umount)
-    }
-
     pub fn mount_point(&self) -> &Path {
-        self.backend.mount_point()
+        &self.mount_point
     }
 
     pub fn mode(&self) -> StorageMode {
-        self.backend.mode()
+        self.mode
     }
 }
 
@@ -101,16 +99,19 @@ pub fn setup_with_sources(
     reset_image_files(img_path)?;
     detach_existing_mount(mnt_base);
 
+    #[cfg(feature = "control-plane")]
     if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
         crate::scoped_log!(trace, "storage", "backend select: mode=tmpfs");
         finalize_mount_setup(mnt_base, disable_umount);
-        return Ok(StorageHandle::new(TmpfsBackend::new(mnt_base)));
+        return Ok(StorageHandle::new(mnt_base, StorageMode::Tmpfs));
     }
+    #[cfg(not(feature = "control-plane"))]
+    let _ = (force_ext4, mount_source);
 
     let handle = ext4::setup_ext4_image(mnt_base, img_path, source_paths)?;
     finalize_mount_setup(mnt_base, disable_umount);
 
-    Ok(StorageHandle::new(handle))
+    Ok(handle)
 }
 
 fn reset_image_files(img_path: &Path) -> Result<()> {
@@ -205,6 +206,7 @@ fn finalize_mount_setup(path: &Path, disable_umount: bool) {
     let _ = (path, disable_umount);
 }
 
+#[cfg(feature = "control-plane")]
 fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
     match crate::sys::mount::mount_tmpfs(target, mount_source) {
         Ok(()) => match crate::sys::fs::is_overlay_xattr_supported() {
@@ -267,12 +269,14 @@ mod tests {
 
     #[test]
     fn storage_mode_as_str_matches_expected_values() {
+        #[cfg(feature = "control-plane")]
         assert_eq!(StorageMode::Tmpfs.as_str(), "tmpfs");
         assert_eq!(StorageMode::Ext4.as_str(), "ext4");
     }
 
     #[test]
     fn cleanup_image_only_for_ext4_mode() {
+        #[cfg(feature = "control-plane")]
         assert!(!should_cleanup_image(StorageMode::Tmpfs));
         assert!(should_cleanup_image(StorageMode::Ext4));
     }

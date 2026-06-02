@@ -36,8 +36,6 @@
     "moduleDirDesc": "Đặt thư mục nơi các mô-đun được lưu trữ",
     "mountSource": "Nguồn Gắn kết",
     "mountSourceDesc": "Không gian tên nguồn gắn kết toàn cầu (ví dụ: KSU)",
-    "partitions": "Phân vùng",
-    "partitionsDesc": "Thêm phân vùng để gắn kết",
     "reload": "Tải lại",
     "save": "Lưu",
     "resetConfig": "Đặt lại Cấu hình",
@@ -66,7 +64,8 @@
     "mode_tmpfsDesc": "Dựa trên RAM. I/O nhanh nhất, đặt lại khi khởi động lại.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Hình ảnh lặp lại. Bền bỉ, tiết kiệm RAM.",
-    "enableOverlayFallback": "Bật Overlay Dự phòng"
+    "daemonStartupMode": "Daemon thường trú",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
   },
   "modules": {
     "reload": "Làm mới",
@@ -83,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "Unmounted",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -92,13 +91,18 @@
       }
     },
     "emptyState": "Không có mô-đun nào được tìm thấy.",
-    "umountHiddenHint": "Các mô-đun Umount đang bị ẩn.",
+    "unmountedHiddenHint": "Các mô-đun Unmounted đang bị ẩn.",
     "defaultTag": "Mặc định",
     "compatTag": "Tương thích",
     "disableTag": "Tắt",
     "nativeTag": "Ẩn thân",
     "unavailableTag": "Không khả dụng",
-    "kasumiUnavailableHint": "Kasumi đã được bật nhưng hiện không khả dụng."
+    "kasumiUnavailableHint": "Kasumi đã được bật nhưng hiện không khả dụng.",
+    "mountError": "Lỗi mount",
+    "clearMountErrors": "Xóa lỗi mount",
+    "mountErrorsCleared": "Đã xóa lỗi mount",
+    "mountErrorsClearFailed": "Không thể xóa lỗi mount",
+    "suggestIgnoreHint": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Ignore\"."
   },
   "kasumi": {
     "title": "Trạng thái Kasumi",
@@ -155,6 +159,7 @@
     "userHidePathRequired": "Đường dẫn cần ẩn không được để trống",
     "stealthUpdated": "Tàng hình đã được cập nhật",
     "hidexattrUpdated": "HideXattr đã được cập nhật",
+    "selinuxFixUpdated": "SELinux Guard đã được cập nhật",
     "ignoreProtocolUpdated": "Chính sách lệch giao thức đã được cập nhật",
     "kernelDebugUpdated": "Gỡ lỗi kernel đã được cập nhật",
     "kmiOverride": "Ghi đè KMI",
@@ -163,6 +168,7 @@
     "lastError": "Lỗi Cuối cùng",
     "stealthTitle": "Tàng hình",
     "hidexattrTitle": "HideXattr",
+    "selinuxFixTitle": "SELinux Guard",
     "ignoreProtocolTitle": "Bỏ qua Lệch Giao thức",
     "ignoreProtocolHint": "Cho phép Kasumi tiếp tục hoạt động ngay cả khi API không gian người dùng và giao thức kernel không hoàn toàn khớp.",
     "lkmUnavailableHint": "Kasumi đã được bật, nhưng mô-đun kernel vẫn chưa được tải.",
@@ -181,7 +187,25 @@
     "cmdlineValue": "Giá trị Cmdline",
     "rulesVisibleSummary": "{count} quy tắc đang hoạt động có thể thấy từ không gian người dùng",
     "dtypeLabel": "dtype",
-    "loadError": "Thất bại khi tải trạng thái Kasumi"
+    "loadError": "Thất bại khi tải trạng thái Kasumi",
+    "statusConfigOffRuntimeOn": "Config Off / Runtime Still Loaded",
+    "unloadLkmWarningTitle": "注意！",
+    "unloadLkmWarningBody": "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？",
+    "unloadLkmWarningCancel": "取消",
+    "unloadLkmWarningConfirm": "确定",
+    "unameSpoofTitle": "Kernel version spoofing",
+    "unameEmptyHint": "No spoofed uname configured.",
+    "saveUname": "Save Uname",
+    "restoreUnameGlobal": "Restore original (global)",
+    "saveCmdline": "Save Cmdline",
+    "configOnlyHint": "Most settings below only update config. Runtime changes take effect the next time Kasumi is rebuilt or remounted.",
+    "unameMode": "Uname Mode",
+    "unameModeScoped": "Scoped",
+    "unameModeGlobal": "Global",
+    "unameModeScopedDesc": "Per-process: only Kasumi-hidden UIDs see fake values.",
+    "unameModeGlobalDesc": "System-wide: rewrites init_uts_ns, every task sees fake values.",
+    "unameReleaseDesc": "Kernel release, for example 5.15.0-generic.",
+    "unameVersionDesc": "Kernel version/build timestamp."
   },
   "logs": {
     "refresh": "Làm mới"

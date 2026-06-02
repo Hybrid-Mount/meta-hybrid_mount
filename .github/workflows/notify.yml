@@ -1,0 +1,73 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Notify crate
+
+on:
+  pull_request:
+    branches:
+      - '**'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+      - 'tools/notify/**'
+      - '.github/workflows/notify.yml'
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'rust-toolchain.toml'
+      - 'tools/notify/**'
+      - '.github/workflows/notify.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  notify:
+    name: Notify crate
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          filter: 'tree:0'
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format notify crate
+        run: cargo fmt --manifest-path tools/notify/Cargo.toml -- --check
+
+      - name: Clippy notify crate
+        run: cargo clippy --locked -p notify --all-targets -- -D warnings
+
+      - name: Test notify crate
+        run: cargo test --locked -p notify --all-targets

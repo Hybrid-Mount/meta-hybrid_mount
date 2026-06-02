@@ -214,11 +214,10 @@ fn collect_mount_topology(
     state: &RuntimeState,
     inspected_pid: u32,
 ) -> Result<MountTopologyPayload> {
-    let managed_partition_roots =
-        partitions::managed_partition_names(&config.moduledir, &config.partitions)
-            .into_iter()
-            .map(|name| PathBuf::from(format!("/{name}")))
-            .collect::<Vec<_>>();
+    let managed_partition_roots = partitions::managed_partition_names()
+        .into_iter()
+        .map(|name| PathBuf::from(format!("/{name}")))
+        .collect::<Vec<_>>();
     let active_partition_roots = state
         .active_mounts
         .iter()
@@ -523,51 +522,47 @@ fn build_warnings(
     counters: &MountCounters,
     shared_peer_groups: &[SharedPeerGroupSummary],
 ) -> Vec<String> {
-    let mut warnings = BTreeSet::new();
+    let mut warnings = Vec::new();
 
     if counters.shared_mounts > 0 {
-        warnings.insert(format!(
+        warnings.push(format!(
             "{} non-Kasumi mounts still belong to shared peer groups.",
             counters.shared_mounts
         ));
     }
     if counters.receiving_propagation_mounts > 0 {
-        warnings.insert(format!(
+        warnings.push(format!(
             "{} non-Kasumi mounts still receive propagation from another peer group.",
             counters.receiving_propagation_mounts
         ));
     }
     if counters.hybrid_mount_internal_propagation_mounts > 0 {
-        warnings.insert(
-            format!(
-                "{} Hybrid Mount internal mounts still show propagation metadata; compare these before and after setup when users report mount peer gaps.",
-                counters.hybrid_mount_internal_propagation_mounts
-            ),
-        );
+        warnings.push(format!(
+            "{} Hybrid Mount internal mounts still show propagation metadata; compare these before and after setup when users report mount peer gaps.",
+            counters.hybrid_mount_internal_propagation_mounts
+        ));
     }
     if counters.managed_partition_root_propagation_mounts > 0 {
-        warnings.insert(format!(
+        warnings.push(format!(
             "{} managed partition root mounts still show propagation metadata.",
             counters.managed_partition_root_propagation_mounts
         ));
     }
     if counters.active_partition_tree_propagation_mounts > 0 {
-        warnings.insert(
-            format!(
-                "{} mounts under active partition trees still show propagation metadata; these are the first candidates to diff in issue reports.",
-                counters.active_partition_tree_propagation_mounts
-            ),
-        );
+        warnings.push(format!(
+            "{} mounts under active partition trees still show propagation metadata; these are the first candidates to diff in issue reports.",
+            counters.active_partition_tree_propagation_mounts
+        ));
     }
     if let Some(group) = shared_peer_groups
         .iter()
         .max_by_key(|group| group.mount_count)
     {
-        warnings.insert(format!(
+        warnings.push(format!(
             "Largest non-Kasumi shared peer group is {} with {} mounts.",
             group.peer_group, group.mount_count
         ));
     }
 
-    warnings.into_iter().collect()
+    warnings
 }

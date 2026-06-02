@@ -1,7 +1,7 @@
 import { createSignal, Show, For, onMount } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { sysStore } from "../lib/stores/sysStore";
-import { API } from "../lib/api";
+import { openLink } from "../lib/api/services/systemService";
 import { ICONS } from "../lib/constants";
 import { IS_RELEASE } from "../lib/constants_gen";
 import { INFO_TAB_SECTIONS } from "../lib/infoTabData.gen";
@@ -37,12 +37,6 @@ export default function InfoTab() {
 
   function handleLink(e: MouseEvent, url: string) {
     e.preventDefault();
-    const openLink = API.openLink?.bind(API);
-
-    if (!openLink) {
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
-    }
 
     void openLink(url).catch(() => {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -280,13 +274,17 @@ export default function InfoTab() {
           </div>
         </div>
         <div slot="actions">
-          <md-text-button onClick={closeDonate}>Close</md-text-button>
+          <md-text-button onClick={closeDonate}>
+            {uiStore.L.common?.close ?? "Close"}
+          </md-text-button>
         </div>
       </md-dialog>
 
       <md-dialog ref={qrDialogRef} class="qr-dialog" onClick={closeQr}>
         <div slot="content" class="qr-content-wrapper">
-          <img src={activeQr()} alt="Scan QR Code" />
+          <Show when={activeQr()}>
+            <img src={activeQr()} alt="Scan QR Code" />
+          </Show>
         </div>
       </md-dialog>
     </div>

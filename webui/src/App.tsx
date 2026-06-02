@@ -12,25 +12,38 @@ import {
 import { uiStore } from "./lib/stores/uiStore";
 import { configStore } from "./lib/stores/configStore";
 import { sysStore } from "./lib/stores/sysStore";
-import { kasumiStore } from "./lib/stores/kasumiStore";
-import { moduleStore } from "./lib/stores/moduleStore";
+import { features } from "./lib/features";
+import { ENABLE_KASUMI } from "./lib/constants_gen";
+import { API } from "./lib/api";
+import { getErrorMessage } from "./lib/api/core/error";
+import { onSseStateUpdate, stopSse } from "./lib/api/core/bridge";
 import TopBar from "./components/TopBar";
 import NavBar from "./components/NavBar";
 import Toast from "./components/Toast";
 
 const loadStatusTab = () => import("./routes/StatusTab");
 const loadConfigTab = () => import("./routes/ConfigTab");
-const loadKasumiTab = () => import("./routes/KasumiTab");
 const loadModulesTab = () => import("./routes/ModulesTab");
 const loadInfoTab = () => import("./routes/InfoTab");
+
+function createKasumiRoute() {
+  const loadKasumiTab = () => import("./routes/KasumiTab");
+  return { id: "kasumi", load: loadKasumiTab, component: lazy(loadKasumiTab) };
+}
 
 const routes = [
   { id: "status", load: loadStatusTab, component: lazy(loadStatusTab) },
   { id: "config", load: loadConfigTab, component: lazy(loadConfigTab) },
-  { id: "kasumi", load: loadKasumiTab, component: lazy(loadKasumiTab) },
+  ...(ENABLE_KASUMI ? [createKasumiRoute()] : []),
   { id: "modules", load: loadModulesTab, component: lazy(loadModulesTab) },
   { id: "info", load: loadInfoTab, component: lazy(loadInfoTab) },
 ];
+
+async function loadKasumiStore() {
+  if (!ENABLE_KASUMI) return null;
+  const module = await import("./lib/stores/kasumiStore");
+  return module.kasumiStore;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = createSignal("status");
@@ -51,10 +64,11 @@ export default function App() {
   let disposed = false;
 
   const visibleRoutes = createMemo(() =>
-    routes.filter((route) => route.id !== "kasumi" || kasumiStore.enabled),
+    routes.filter((route) => route.id !== "kasumi" || features.kasumiEnabled),
   );
   const visibleTabs = createMemo(() => visibleRoutes().map((r) => r.id));
   const tabCount = createMemo(() => Math.max(visibleTabs().length, 1));
+  const isAppReady = createMemo(() => initialDataReady());
 
   const baseTranslateX = createMemo(() => {
     const index = visibleTabs().indexOf(activeTab());
@@ -157,6 +171,7 @@ export default function App() {
 
   onCleanup(() => {
     disposed = true;
+    stopSse();
     if (preloadTimer !== undefined) {
       window.clearTimeout(preloadTimer);
     }
@@ -190,46 +205,94 @@ export default function App() {
 
   async function initializeApp() {
     try {
-      await uiStore.init();
-      const statusLoad = sysStore.ensureStatusLoaded();
-      const kasumiLoad = kasumiStore.ensureStatusLoaded();
-      void configStore.loadConfig();
-      void sysStore.ensureVersionLoaded();
+      // uiStore.init() (locale JSON) and wakeDaemon() are independent
+      await Promise.all([uiStore.init(), API.wakeDaemon()]);
       setInitialDataReady(true);
-
-      void statusLoad.finally(() => {
-        void moduleStore.ensureModulesLoaded();
-      });
-
-      void Promise.allSettled([statusLoad, kasumiLoad]).then(() => {
-        if (disposed) return;
-        startRoutePreload();
-      });
-    } catch (e) {
+      window.setTimeout(startRoutePreload, 0);
+      onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
+      if (ENABLE_KASUMI) {
+        const kasumiStore = await loadKasumiStore();
+        if (kasumiStore && !disposed) {
+          onSseStateUpdate((state) => {
+            kasumiStore.handleSseUpdate(state);
+            features.setKasumiStatus(
+              kasumiStore.enabled,
+              Boolean(kasumiStore.status?.available),
+              Boolean(kasumiStore.status?.kernel_supported),
+            );
+          });
+        }
+      }
+      void sysStore
+        .ensureStatusLoaded()
+        .catch((e: unknown) => console.error("ensureStatusLoaded failed", e));
+      void configStore
+        .loadConfig()
+        .catch((e: unknown) => console.error("loadConfig failed", e));
+      void sysStore
+        .ensureVersionLoaded()
+        .catch((e: unknown) => console.error("ensureVersionLoaded failed", e));
+      window.setTimeout(() => {
+        void loadInitPayload();
+      }, 0);
+    } catch (e: unknown) {
       console.error("App initialization failed", e);
+      uiStore.showToast(
+        getErrorMessage(e, "App initialization failed"),
+        "error",
+      );
+      setInitialDataReady(true);
       return;
+    }
+  }
+
+  async function loadInitPayload() {
+    try {
+      const payload = await API.init();
+      if (disposed) return;
+      sysStore.loadFromInit(payload);
+      if (ENABLE_KASUMI) {
+        const kasumiStore = await loadKasumiStore();
+        if (disposed) return;
+        if (kasumiStore) {
+          kasumiStore.loadFromInit(payload);
+          features.setKasumiStatus(
+            kasumiStore.enabled,
+            Boolean(kasumiStore.status?.available),
+            Boolean(kasumiStore.status?.kernel_supported),
+          );
+        }
+      }
+      configStore.loadFromInit(payload);
+    } catch (e: unknown) {
+      if (disposed) return;
+      console.error("Background app initialization failed", e);
+      uiStore.showToast(
+        getErrorMessage(e, "App initialization failed"),
+        "error",
+      );
     }
   }
 
   return (
     <div class="app-root">
-      <Show
-        when={uiStore.isReady && initialDataReady()}
-        fallback={
-          <div class="loading-container">
-            <div class="spinner"></div>
-            <span class="loading-text">Loading...</span>
-          </div>
-        }
+      <TopBar />
+      <main
+        class="main-content"
+        ref={containerRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
-        <TopBar />
-        <main
-          class="main-content"
-          ref={containerRef}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onTouchCancel={handleTouchEnd}
+        <Show
+          when={isAppReady()}
+          fallback={
+            <div class="loading-container" style={{ height: "100%" }}>
+              <div class="spinner"></div>
+              <span class="loading-text">Loading...</span>
+            </div>
+          }
         >
           <div class="swipe-track" classList={{ "is-dragging": isDragging() }}>
             <For each={visibleRoutes()}>
@@ -247,13 +310,13 @@ export default function App() {
               )}
             </For>
           </div>
-        </main>
-        <NavBar
-          activeTab={activeTab()}
-          onTabChange={setActiveTab}
-          tabs={visibleRoutes()}
-        />
-      </Show>
+        </Show>
+      </main>
+      <NavBar
+        activeTab={activeTab()}
+        onTabChange={setActiveTab}
+        tabs={visibleRoutes()}
+      />
       <Toast />
     </div>
   );

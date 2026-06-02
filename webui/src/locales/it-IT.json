@@ -36,8 +36,6 @@
     "moduleDirDesc": "Imposta la directory in cui sono archiviati i moduli",
     "mountSource": "Sorgente di mount",
     "mountSourceDesc": "Namespace globale della sorgente di mount (es. KSU)",
-    "partitions": "Partizioni",
-    "partitionsDesc": "Aggiungi partizioni da montare",
     "reload": "Ricarica",
     "save": "Salva",
     "resetConfig": "Reimposta configurazione",
@@ -66,7 +64,8 @@
     "mode_tmpfsDesc": "Basato su RAM. I/O piu veloce, si resetta al riavvio.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Immagine loopback. Persistente, risparmia RAM.",
-    "enableOverlayFallback": "Abilita fallback overlay"
+    "daemonStartupMode": "Demone persistente",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
   },
   "modules": {
     "reload": "Ricarica",
@@ -83,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "Unmounted",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -92,13 +91,18 @@
       }
     },
     "emptyState": "Nessun modulo trovato.",
-    "umountHiddenHint": "I moduli Umount sono nascosti.",
+    "unmountedHiddenHint": "I moduli Unmounted sono nascosti.",
     "defaultTag": "Predef.",
     "compatTag": "Compat.",
     "disableTag": "Disabilitato",
     "nativeTag": "Furtivo",
     "unavailableTag": "Non disponibile",
-    "kasumiUnavailableHint": "Kasumi e abilitato, ma al momento non e disponibile."
+    "kasumiUnavailableHint": "Kasumi e abilitato, ma al momento non e disponibile.",
+    "mountError": "Errore di mount",
+    "clearMountErrors": "Cancella errori",
+    "mountErrorsCleared": "Errori cancellati",
+    "mountErrorsClearFailed": "Cancellazione errori fallita",
+    "suggestIgnoreHint": "Questo modulo contiene comandi di mount nei suoi file .sh. Considera di impostare la modalità su \"Ignora\"."
   },
   "kasumi": {
     "title": "Runtime Kasumi",
@@ -155,6 +159,7 @@
     "userHidePathRequired": "Il percorso da nascondere non puo essere vuoto",
     "stealthUpdated": "Stealth aggiornato",
     "hidexattrUpdated": "HideXattr aggiornato",
+    "selinuxFixUpdated": "SELinux Guard aggiornato",
     "ignoreProtocolUpdated": "Policy di incompatibilita del protocollo aggiornata",
     "kernelDebugUpdated": "Debug kernel aggiornato",
     "kmiOverride": "Override KMI",
@@ -163,6 +168,7 @@
     "lastError": "Ultimo errore",
     "stealthTitle": "Furtivo",
     "hidexattrTitle": "Nascondi xattr",
+    "selinuxFixTitle": "SELinux Guard",
     "ignoreProtocolTitle": "Ignora incompatibilita protocollo",
     "ignoreProtocolHint": "Consente a Kasumi di continuare a funzionare quando l'API userspace e il protocollo kernel non corrispondono del tutto.",
     "lkmUnavailableHint": "Kasumi e abilitato, ma il modulo kernel non e ancora caricato.",
@@ -181,7 +187,25 @@
     "cmdlineValue": "Valore cmdline",
     "rulesVisibleSummary": "{count} regole attive visibili dallo userspace",
     "dtypeLabel": "dtype",
-    "loadError": "Impossibile caricare lo stato Kasumi"
+    "loadError": "Impossibile caricare lo stato Kasumi",
+    "statusConfigOffRuntimeOn": "Config Off / Runtime Still Loaded",
+    "unloadLkmWarningTitle": "注意！",
+    "unloadLkmWarningBody": "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？",
+    "unloadLkmWarningCancel": "取消",
+    "unloadLkmWarningConfirm": "确定",
+    "unameSpoofTitle": "Kernel version spoofing",
+    "unameEmptyHint": "No spoofed uname configured.",
+    "saveUname": "Save Uname",
+    "restoreUnameGlobal": "Restore original (global)",
+    "saveCmdline": "Save Cmdline",
+    "configOnlyHint": "Most settings below only update config. Runtime changes take effect the next time Kasumi is rebuilt or remounted.",
+    "unameMode": "Uname Mode",
+    "unameModeScoped": "Scoped",
+    "unameModeGlobal": "Global",
+    "unameModeScopedDesc": "Per-process: only Kasumi-hidden UIDs see fake values.",
+    "unameModeGlobalDesc": "System-wide: rewrites init_uts_ns, every task sees fake values.",
+    "unameReleaseDesc": "Kernel release, for example 5.15.0-generic.",
+    "unameVersionDesc": "Kernel version/build timestamp."
   },
   "logs": {
     "refresh": "Aggiorna"

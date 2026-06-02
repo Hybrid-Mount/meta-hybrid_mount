@@ -10,3 +10,4 @@ build.sh
 
 .claude/settings.local.json
 .claude/
+CLAUDE.md

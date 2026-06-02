@@ -25,24 +25,33 @@ jobs:
     uses: ./.github/workflows/build-kasumi-lkm.yml
     secrets: inherit
 
-  release:
-    needs: build-kasumi-lkm
+  build:
+    needs: [build-kasumi-lkm]
+    name: Build ${{ matrix.flavor }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [full, lite, nano]
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          filter: 'tree:0'
 
-      - name: Checkout KPM Sources
-        uses: actions/checkout@v6
-        with:
-          repository: Hybrid-Mount/nuke-kpm
-          path: nuke-kpm
-          fetch-depth: 1
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Download Kasumi LKM artifacts
         uses: actions/download-artifact@v8
@@ -51,82 +60,198 @@ jobs:
           pattern: "*-kasumi-lkm"
           merge-multiple: true
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
+      - name: Download Kasumi UAPI
+        uses: actions/download-artifact@v8
         with:
-          ndk-version: r29
+          name: kasumi-uapi
+          path: kasumi_uapi_artifact
 
-      - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          targets: aarch64-linux-android
-          components: rust-src, clippy
+      - name: Sync Kasumi UAPI
+        run: |
+          set -euo pipefail
+          mapfile -t UAPI_FILES < <(find kasumi_uapi_artifact -type f -name kasumi_uapi.h | sort)
+          if [ "${#UAPI_FILES[@]}" -ne 1 ]; then
+            echo "Expected exactly one kasumi_uapi.h artifact, found ${#UAPI_FILES[@]}:"
+            find kasumi_uapi_artifact -type f -print | sort
+            exit 1
+          fi
+          cp "${UAPI_FILES[0]}" src/sys/kasumi_uapi.h
+          sha256sum src/sys/kasumi_uapi.h
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: "10"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "20"
-          cache: pnpm
-          cache-dependency-path: webui/pnpm-lock.yaml
-
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-multilib
-          cargo install cargo-ndk --locked
-
-      - name: Prepare APatch KPM Sources
-        run: |
-          git clone --depth 1 https://github.com/AndroidPatch/kpm.git /tmp/apatch-kpm
-
-      - name: Build Release Package
+      - name: Build ${{ matrix.flavor }}
         env:
+          HYBRID_MOUNT_NOTIFY: "0"
           HYBRID_MOUNT_SIGN_KEY: ${{ secrets.SIGNING_KEY }}
           HYBRID_MOUNT_SIGN_CERT: ${{ secrets.SIGNING_CERT }}
-          HYBRID_MOUNT_KPM_DIR: ${{ github.workspace }}/nuke-kpm
-          HYBRID_MOUNT_KP_DIR: /tmp/apatch-kpm
           HYBRID_MOUNT_KASUMI_LKM_DIR: ${{ github.workspace }}/kasumi_lkm_artifacts
+        run: |
+          set -euo pipefail
+          ls -la "$HYBRID_MOUNT_KASUMI_LKM_DIR" || true
+          rm -rf output
+          cargo xtask build --release --tag "${{ github.ref_name }}" --flavor ${{ matrix.flavor }}
+
+          ZIP_PATH="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
+          test -n "$ZIP_PATH"
+          ZIP_FILENAME="$(basename "$ZIP_PATH")"
+          STAGED_ZIP="/tmp/$ZIP_FILENAME"
+          cp "$ZIP_PATH" "$STAGED_ZIP"
+          echo "STAGED_ZIP=$STAGED_ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload ${{ matrix.flavor }} Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.flavor }}
+          path: ${{ env.STAGED_ZIP }}
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Detect Release Type
+        id: release_type
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          prerelease=true
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            patch="${version##*.}"
+            if [[ "$patch" == "0" ]]; then
+              prerelease=false
+            fi
+          fi
+          if [[ "$prerelease" == "true" ]]; then
+            release_type="pre-release"
+          else
+            release_type="release"
+          fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: packages
+          pattern: package-*
+          merge-multiple: true
+
+      - name: Resolve package paths
+        id: paths
+        run: |
+          set -euo pipefail
+          FULL_ZIP="$(find packages -maxdepth 1 -type f -name '*.zip' ! -name '*-Lite-*' ! -name '*-Nano-*' | sort | head -n 1)"
+          LITE_ZIP="$(find packages -maxdepth 1 -type f -name '*-Lite-*' | sort | head -n 1)"
+          NANO_ZIP="$(find packages -maxdepth 1 -type f -name '*-Nano-*' | sort | head -n 1)"
+          test -n "$FULL_ZIP" && test -s "$FULL_ZIP"
+          test -n "$LITE_ZIP" && test -s "$LITE_ZIP"
+          test -n "$NANO_ZIP" && test -s "$NANO_ZIP"
+          echo "full_zip=$FULL_ZIP" >> "$GITHUB_OUTPUT"
+          echo "lite_zip=$LITE_ZIP" >> "$GITHUB_OUTPUT"
+          echo "nano_zip=$NANO_ZIP" >> "$GITHUB_OUTPUT"
+          echo "full_name=$(basename "$FULL_ZIP")" >> "$GITHUB_OUTPUT"
+          echo "lite_name=$(basename "$LITE_ZIP")" >> "$GITHUB_OUTPUT"
+          echo "nano_name=$(basename "$NANO_ZIP")" >> "$GITHUB_OUTPUT"
+          ls -la "$FULL_ZIP" "$LITE_ZIP" "$NANO_ZIP"
+
+      - name: Notify Telegram album
+        env:
           HYBRID_MOUNT_NOTIFY: "1"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          export ANDROID_NDK_LATEST_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
-          cargo xtask build --release --tag ${{ github.ref_name }}
+          set -euo pipefail
+          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
+          rm -rf "$NOTIFY_DIR"
+          mkdir -p "$NOTIFY_DIR"
+          cp "${{ steps.paths.outputs.full_zip }}" "$NOTIFY_DIR/"
+          cp "${{ steps.paths.outputs.lite_zip }}" "$NOTIFY_DIR/"
+          cp "${{ steps.paths.outputs.nano_zip }}" "$NOTIFY_DIR/"
+          cargo xtask notify \
+            --output "$NOTIFY_DIR" \
+            --label "丰收 (Harvest) [full+lite+nano] - ${{ github.ref_name }}" \
+            --topic-id 6
 
       - name: Prepare Release Metadata
-        id: meta
         run: |
-          ZIP_FILE=$(cd output && ls *.zip | head -n 1)
-          ZIP_NAME=$(basename "$ZIP_FILE")
+          set -euo pipefail
           REPO="${{ github.repository }}"
           TAG="${{ github.ref_name }}"
-          
           CLEAN_VERSION="${TAG#v}"
-          VERSION_CODE=$(echo $CLEAN_VERSION | awk -F. '{printf "%d%02d%02d", $1, $2, $3}')
-          
-          echo "ZIP_PATH=output/$ZIP_NAME" >> $GITHUB_ENV
-          
-          DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
-          CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/master/changelog.md"
-          
+          VERSION_CODE=$(awk -F. '{print $1 * 100000 + $2 * 1000 + $3}' <<< "$CLEAN_VERSION")
+
+          FULL_NAME="${{ steps.paths.outputs.full_name }}"
+          LITE_NAME="${{ steps.paths.outputs.lite_name }}"
+          NANO_NAME="${{ steps.paths.outputs.nano_name }}"
+          FULL_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$FULL_NAME"
+          LITE_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$LITE_NAME"
+          NANO_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$NANO_NAME"
+          CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/main/changelog.md"
+
           cat <<EOF > /tmp/update.json
           {
             "version": "$TAG",
             "versionCode": $VERSION_CODE,
-            "zipUrl": "$DOWNLOAD_URL",
+            "zipUrl": "$FULL_DOWNLOAD_URL",
             "changelog": "$CHANGELOG_URL"
           }
           EOF
+
+          cat <<EOF > /tmp/update-lite.json
+          {
+            "version": "$TAG",
+            "versionCode": $VERSION_CODE,
+            "zipUrl": "$LITE_DOWNLOAD_URL",
+            "changelog": "$CHANGELOG_URL"
+          }
+          EOF
+
+          cat <<EOF > /tmp/update-nano.json
+          {
+            "version": "$TAG",
+            "versionCode": $VERSION_CODE,
+            "zipUrl": "$NANO_DOWNLOAD_URL",
+            "changelog": "$CHANGELOG_URL"
+          }
+          EOF
+
+      - name: Ensure jq for git-cliff
+        run: |
+          set -euo pipefail
+          if command -v jq >/dev/null 2>&1; then
+            jq --version
+            exit 0
+          fi
+          apt-get update
+          apt-get install -y --no-install-recommends jq
+          rm -rf /var/lib/apt/lists/*
+          jq --version
 
       - name: Generate Changelog
         id: git-cliff
@@ -144,39 +269,65 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: false
-          prerelease: false
-          files: ${{ env.ZIP_PATH }}
-          body_path: /tmp/changelog.md
-          
-      - name: Create Remote Release (KernelSU-Repo)
-        uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-          repository: KernelSU-Modules-Repo/hybrid_mount
-          tag_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-          files: ${{ env.ZIP_PATH }}
+          prerelease: ${{ steps.release_type.outputs.prerelease }}
+          files: |
+            ${{ steps.paths.outputs.full_zip }}
+            ${{ steps.paths.outputs.lite_zip }}
+            ${{ steps.paths.outputs.nano_zip }}
           body_path: /tmp/changelog.md
 
-      - name: Sync Version to Master
+      - name: Create Remote Release (KernelSU-Repo)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="KernelSU-Modules-Repo/hybrid_mount"
+          tag="${{ github.ref_name }}"
+          prerelease="${{ steps.release_type.outputs.prerelease }}"
+
+          prerelease_flag=""
+          if [[ "$prerelease" == "true" ]]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          gh release create "$tag" \
+            --repo "$repo" \
+            --draft \
+            $prerelease_flag \
+            --title "$tag" \
+            --notes-file /tmp/changelog.md \
+            "${{ steps.paths.outputs.full_zip }}" \
+            "${{ steps.paths.outputs.lite_zip }}" \
+            "${{ steps.paths.outputs.nano_zip }}"
+
+          gh release edit "$tag" \
+            --repo "$repo" \
+            --draft=false
+
+      - name: Sync Version to Main
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
-          git fetch origin master
-          git checkout master
-          
+
+          git fetch origin main
+          git checkout main
+
           mv /tmp/update.json update.json
+          mv /tmp/update-lite.json update-lite.json
+          mv /tmp/update-nano.json update-nano.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
 
+          TAG="${{ github.ref_name }}"
+          CLEAN_VERSION="${TAG#v}"
+          sed -i "s/^version = \".*\"/version = \"${CLEAN_VERSION}\"/" Cargo.toml
+
           cargo update
-          
-          git add update.json changelog.md Cargo.toml Cargo.lock
-          
+
+          git add update.json update-lite.json update-nano.json changelog.md Cargo.toml Cargo.lock
+
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
-            git push origin master
+            git push origin main
           fi

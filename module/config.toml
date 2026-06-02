@@ -14,10 +14,8 @@
 
 moduledir = "/data/adb/modules"
 mountsource = "KSU"
-partitions = []
 overlay_mode = "ext4"
 disable_umount = false
-enable_overlay_fallback = false
 default_mode = "overlay"
 
 [kasumi]
@@ -33,6 +31,7 @@ enable_mount_hide = false
 enable_maps_spoof = false
 enable_statfs_spoof = false
 hide_uids = []
+uname_mode = "scoped"
 cmdline_value = ""
 
 [kasumi.mount_hide]

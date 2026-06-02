@@ -22,7 +22,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::defs::REPLACE_DIR_FILE_NAME;
+use crate::{defs::REPLACE_DIR_FILE_NAME, utils};
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum NodeFileType {
@@ -145,7 +145,7 @@ impl Node {
             }
         }
 
-        path.as_ref().join(REPLACE_DIR_FILE_NAME).exists()
+        utils::dir_contains_entry_case_insensitive(path.as_ref(), REPLACE_DIR_FILE_NAME)
     }
 
     pub fn new_root<S>(name: S) -> Self

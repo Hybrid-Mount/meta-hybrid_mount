@@ -34,11 +34,13 @@ export default function TopBar() {
     <>
       <header class="top-bar">
         <div class="top-bar-content">
-          <h1 class="screen-title">{uiStore.L?.common?.appName}</h1>
+          <h1 class="screen-title">
+            {uiStore.L?.common?.appName ?? "Hybrid Mount"}
+          </h1>
           <div class="top-actions">
             <md-icon-button
               onClick={openLangDialog}
-              title={uiStore.L?.common?.language}
+              title={uiStore.L?.common?.language ?? "Language"}
             >
               <md-icon>
                 <svg viewBox="0 0 24 24">

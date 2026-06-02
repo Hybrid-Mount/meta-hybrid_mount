@@ -13,9 +13,16 @@
 // limitations under the License.
 
 use std::{
-    fs,
+    ffi::OsStr,
+    fs, io,
     path::{Component, Path, PathBuf},
 };
+
+fn os_str_eq_ignore_ascii_case(value: &OsStr, expected: &str) -> bool {
+    value
+        .as_encoded_bytes()
+        .eq_ignore_ascii_case(expected.as_bytes())
+}
 
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
@@ -46,6 +53,44 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     }
 }
 
+pub fn path_file_name_eq_ignore_ascii_case(path: &Path, expected: &str) -> bool {
+    path.file_name()
+        .is_some_and(|name| os_str_eq_ignore_ascii_case(name, expected))
+}
+
+pub fn find_dir_entry_case_insensitive(dir: &Path, expected: &str) -> Option<PathBuf> {
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        if os_str_eq_ignore_ascii_case(&entry.file_name(), expected) {
+            return Some(entry.path());
+        }
+    }
+    None
+}
+
+pub fn dir_contains_entry_case_insensitive(dir: &Path, expected: &str) -> bool {
+    find_dir_entry_case_insensitive(dir, expected).is_some()
+}
+
+pub fn remove_dir_entries_case_insensitive(dir: &Path, expected: &str) -> io::Result<usize> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(err) => return Err(err),
+    };
+
+    let mut removed = 0usize;
+    for entry in entries {
+        let entry = entry?;
+        if os_str_eq_ignore_ascii_case(&entry.file_name(), expected) {
+            fs::remove_file(entry.path())?;
+            removed += 1;
+        }
+    }
+
+    Ok(removed)
+}
+
 pub fn resolve_link_path(path: &Path) -> PathBuf {
     match fs::read_link(path) {
         Ok(target) if target.is_absolute() => normalize_path(&target),
@@ -54,6 +99,7 @@ pub fn resolve_link_path(path: &Path) -> PathBuf {
     }
 }
 
+#[cfg(feature = "kasumi")]
 pub fn resolve_path_with_root(system_root: &Path, path: &Path) -> PathBuf {
     let virtual_path = if path.is_absolute() {
         path.to_path_buf()

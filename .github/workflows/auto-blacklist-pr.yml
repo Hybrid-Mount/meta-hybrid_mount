@@ -1,0 +1,106 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Auto Blacklist PR / 自动黑名单 PR
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  create-blacklist-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create blacklist PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUM: ${{ github.event.issue.number }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+        run: |
+          set -euo pipefail
+
+          # When triggered by a label event, only proceed if it's blacklist-request
+          if [ "$EVENT_ACTION" = "labeled" ]; then
+            if [ "$EVENT_LABEL" != "blacklist-request" ]; then
+              echo "Skipping: label '$EVENT_LABEL' is not blacklist-request"
+              exit 0
+            fi
+          fi
+
+          # Verify the issue actually carries the blacklist-request label
+          LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+          if ! echo "$LABELS" | grep -q "blacklist-request"; then
+            echo "Skipping: issue #${ISSUE_NUM} does not have blacklist-request label"
+            exit 0
+          fi
+
+          # Parse module ID from the issue body
+          MODULE_ID=$(echo "$ISSUE_BODY" | sed -n '/### Module ID/,/### /p' | grep -v '### ' | grep -v '^$' | head -1 | xargs)
+
+          if [ -z "$MODULE_ID" ]; then
+            gh issue comment "$ISSUE_NUM" --body "⚠️ Unable to parse module ID from the issue body. Please ensure you filled in the Module ID field. / 无法解析模块 ID，请确保已填写模块 ID 字段。"
+            exit 1
+          fi
+
+          echo "Parsed module ID: $MODULE_ID"
+
+          # Validate module ID format (alphanumeric, dots, underscores, hyphens only)
+          if ! echo "$MODULE_ID" | grep -qE '^[a-zA-Z0-9][a-zA-Z0-9._-]*$'; then
+            gh issue comment "$ISSUE_NUM" --body "⚠️ Module ID \`$MODULE_ID\` has an invalid format. Module IDs may only contain letters, digits, dots, underscores, and hyphens. / 模块 ID 格式无效。"
+            exit 1
+          fi
+
+          # Check if module ID is already in the blacklist
+          if grep -q "\"$MODULE_ID\"" module/module_blacklist.toml; then
+            gh issue comment "$ISSUE_NUM" --body "✅ Module \`$MODULE_ID\` is already in the blacklist — no action needed. / 模块已在黑名单中，无需重复添加。"
+            exit 0
+          fi
+
+          # Add module ID to blacklist
+          if grep -q 'blacklist = \[\]' module/module_blacklist.toml; then
+            sed -i "s/blacklist = \[\]/blacklist = [\"$MODULE_ID\"]/" module/module_blacklist.toml
+          else
+            sed -i "s/blacklist = \[/blacklist = [\"$MODULE_ID\", /" module/module_blacklist.toml
+          fi
+
+          echo "Updated module_blacklist.toml:"
+          cat module/module_blacklist.toml
+
+          # Create branch and PR
+          BRANCH="chore/blacklist-${MODULE_ID}-${ISSUE_NUM}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add module/module_blacklist.toml
+          git commit -m "chore(blacklist): add ${MODULE_ID}
+
+          Co-Authored-By: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create \
+            --title "chore(blacklist): add ${MODULE_ID}" \
+            --body "Closes #${ISSUE_NUM}
+
+          Auto-generated from blacklist request. / 由黑名单申请自动生成。" \
+            --base dev)
+
+          gh issue comment "$ISSUE_NUM" --body "✅ PR created: ${PR_URL} / 已创建 PR: ${PR_URL}"

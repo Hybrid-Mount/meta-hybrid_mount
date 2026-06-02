@@ -24,7 +24,7 @@ use crate::{
     sys, utils,
 };
 
-pub fn run(config: Config) -> Result<()> {
+pub fn run(config: Config) -> Result<Config> {
     let mut state = RecoveryState::new(&config)?;
 
     loop {
@@ -44,10 +44,8 @@ pub fn run(config: Config) -> Result<()> {
             MountController::new(config.clone(), &mnt_base)
                 .init_storage(&mnt_base)
                 .context("Failed to initialize storage")?
-                .scan_and_sync()
-                .context("Failed to scan and sync modules")?
-                .generate_plan()
-                .context("Failed to generate mount plan")?
+                .scan_and_prepare_plan()
+                .context("Failed to scan modules and prepare mount plan")?
                 .execute()
                 .context("Failed to execute mount plan")?
                 .finalize()
@@ -58,7 +56,7 @@ pub fn run(config: Config) -> Result<()> {
         match daemon_result {
             Ok(()) => {
                 state.log_completion();
-                return Ok(());
+                return Ok(config);
             }
             Err(e) => {
                 if let Some(module_failure) = e.downcast_ref::<ModuleStageFailure>() {
@@ -66,7 +64,8 @@ pub fn run(config: Config) -> Result<()> {
                         match state.handle_unattributed_failure(module_failure.stage.to_string()) {
                             RecoveryDecision::RetryUnattributed => continue,
                             RecoveryDecision::AbortRetryLimit => {
-                                return state.abort_on_retry_limit();
+                                state.abort_on_retry_limit()?;
+                                unreachable!();
                             }
                             RecoveryDecision::InspectModules => {}
                         }
@@ -120,7 +119,8 @@ pub fn run(config: Config) -> Result<()> {
                         match state.handle_newly_marked_modules(module_failure.stage.to_string()) {
                             RecoveryDecision::RetryUnattributed => continue,
                             RecoveryDecision::AbortRetryLimit => {
-                                return state.abort_on_retry_limit();
+                                state.abort_on_retry_limit()?;
+                                unreachable!();
                             }
                             RecoveryDecision::InspectModules => continue,
                         }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs,
     io::ErrorKind,
     os::unix::fs::MetadataExt,
@@ -24,25 +24,36 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{
-    core::storage::backends::Ext4Backend,
+    core::storage::{StorageHandle, StorageMode},
     mount::overlayfs::utils as overlay_utils,
-    sys::fs::{ensure_dir_exists, lsetfilecon},
+    sys::{
+        fs::{ensure_dir_exists, lsetfilecon},
+        nuke,
+    },
 };
+
+const EXT4_MIN_IMAGE_SIZE_BYTES: u64 = 64 * 1024 * 1024;
+const EXT4_GROWTH_FACTOR: f64 = 1.2;
+const STAT_BLOCK_SIZE_BYTES: u64 = 512;
+const MODULES_IMG_SELINUX_CONTEXT: &str = "u:object_r:ksu_file:s0";
+const MKFS_EXT4_BLOCK_SIZE: &str = "1024";
+const MKFS_EXT4_BYTES_PER_INODE: &str = "4096";
+const E2FSCK_SUCCESS_MAX_EXIT_CODE: i32 = 3;
 
 pub(super) fn setup_ext4_image(
     target: &Path,
     img_path: &Path,
     source_paths: &[PathBuf],
-) -> Result<Ext4Backend> {
+) -> Result<StorageHandle> {
     crate::scoped_log!(trace, "storage:ext4", "backend select: mode=ext4");
     let total_size = calculate_total_size(source_paths)?;
-    let min_size = 64 * 1024 * 1024;
-    let grow_size = std::cmp::max((total_size as f64 * 1.2) as u64, min_size);
+    let min_size = EXT4_MIN_IMAGE_SIZE_BYTES;
+    let grow_size = std::cmp::max((total_size as f64 * EXT4_GROWTH_FACTOR) as u64, min_size);
 
     fs::File::create(img_path)?.set_len(grow_size)?;
     format_ext4_image(img_path)?;
     check_image(img_path)?;
-    if let Err(e) = lsetfilecon(img_path, "u:object_r:ksu_file:s0") {
+    if let Err(e) = lsetfilecon(img_path, MODULES_IMG_SELINUX_CONTEXT) {
         crate::scoped_log!(
             warn,
             "storage",
@@ -54,26 +65,22 @@ pub(super) fn setup_ext4_image(
     ensure_dir_exists(target)?;
 
     mount_ext4_with_repair(img_path, target)?;
+    reset_mount_state(target);
 
-    Ok(Ext4Backend::new(target))
+    Ok(StorageHandle::new(target, StorageMode::Ext4))
 }
 
 fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
     let mut total_size = 0;
     let mut visited_node_map = HashSet::new();
+    let mut symlink_stats = SizeScanSymlinkStats::default();
     let mut stack: Vec<PathBuf> = paths.iter().filter(|path| path.exists()).cloned().collect();
 
     while let Some(current) = stack.pop() {
         let metadata = match fs::symlink_metadata(&current) {
             Ok(metadata) => metadata,
             Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
-                crate::scoped_log!(
-                    warn,
-                    "storage:ext4",
-                    "size skip: path={}, reason=symlink_loop, error={}",
-                    current.display(),
-                    err
-                );
+                symlink_stats.record_loop(&current);
                 continue;
             }
             Err(err) if err.kind() == ErrorKind::NotFound => {
@@ -97,7 +104,7 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
                 continue;
             }
 
-            total_size += metadata.blocks() * 512;
+            total_size += metadata.blocks() * STAT_BLOCK_SIZE_BYTES;
         } else if file_type.is_dir() {
             match current.read_dir() {
                 Ok(entries) => {
@@ -115,23 +122,61 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
                 }
             }
         } else if file_type.is_symlink() {
+            symlink_stats.record_skip(&current);
+        }
+    }
+    symlink_stats.log();
+    Ok(total_size)
+}
+
+#[derive(Default)]
+struct SizeScanSymlinkStats {
+    skipped: BTreeMap<String, usize>,
+    loops: BTreeMap<String, usize>,
+}
+
+impl SizeScanSymlinkStats {
+    fn record_skip(&mut self, path: &Path) {
+        *self.skipped.entry(module_log_key(path)).or_default() += 1;
+    }
+
+    fn record_loop(&mut self, path: &Path) {
+        *self.loops.entry(module_log_key(path)).or_default() += 1;
+    }
+
+    fn log(&self) {
+        for (module, count) in &self.skipped {
             crate::scoped_log!(
                 debug,
                 "storage:ext4",
-                "size skip: path={}, reason=symlink",
-                current.display()
+                "size skip summary: module={}, reason=symlink, count={}",
+                module,
+                count
+            );
+        }
+
+        for (module, count) in &self.loops {
+            crate::scoped_log!(
+                warn,
+                "storage:ext4",
+                "size skip summary: module={}, reason=symlink_loop, count={}",
+                module,
+                count
             );
         }
     }
-    Ok(total_size)
+}
+
+fn module_log_key(path: &Path) -> String {
+    crate::utils::extract_module_id(path).unwrap_or_else(|| "<unknown>".to_string())
 }
 
 fn format_ext4_image(img_path: &Path) -> Result<()> {
     let result = Command::new("mkfs.ext4")
         .arg("-b")
-        .arg("1024")
+        .arg(MKFS_EXT4_BLOCK_SIZE)
         .arg("-i")
-        .arg("4096")
+        .arg(MKFS_EXT4_BYTES_PER_INODE)
         .arg(img_path)
         .stdout(std::process::Stdio::piped())
         .output()?;
@@ -152,7 +197,7 @@ fn check_image(img_path: &Path) -> Result<()> {
         .context("e2fsck exited without an exit code (terminated by signal)")?;
 
     ensure!(
-        (0..=3).contains(&code),
+        (0..=E2FSCK_SUCCESS_MAX_EXIT_CODE).contains(&code),
         "e2fsck failed for {} with exit code {}",
         img_path.display(),
         code
@@ -169,4 +214,8 @@ fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn reset_mount_state(target: &Path) {
+    nuke::nuke_path(target);
 }

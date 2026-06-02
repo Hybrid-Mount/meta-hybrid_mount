@@ -27,7 +27,7 @@ use procfs::process::Process;
 use rustix::{
     fd::AsFd,
     fs::CWD,
-    mount::{MountFlags, MoveMountFlags, mount, move_mount},
+    mount::{MountFlags, MoveMountFlags, UnmountFlags, mount, move_mount, unmount as umount2},
 };
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -88,7 +88,7 @@ fn collect_child_mount_points(root_path: &Path) -> Result<Vec<String>> {
         .mountinfo()
         .with_context(|| "get mountinfo")?;
 
-    let mut mount_seq = mounts
+    let mut mount_seq: Vec<String> = mounts
         .0
         .iter()
         .filter(|m| {
@@ -96,8 +96,7 @@ fn collect_child_mount_points(root_path: &Path) -> Result<Vec<String>> {
             mp.starts_with(root_path) && mp != root_path
         })
         .filter_map(|m| m.mount_point.to_str().map(|p| p.to_string()))
-        .collect::<Vec<_>>();
-
+        .collect();
     mount_seq.sort();
     mount_seq.dedup();
     Ok(mount_seq)
@@ -172,6 +171,7 @@ pub fn mount_overlayfs(
 ) -> Result<()> {
     let mut current_layers: Vec<String> = lower_dirs.to_vec();
     current_layers.push(lowest.to_string());
+    let mut staging_dirs: Vec<PathBuf> = Vec::new();
 
     while current_layers.len() > MAX_LAYERS {
         let split_idx = current_layers.len().saturating_sub(MAX_LAYERS - 1);
@@ -191,18 +191,47 @@ pub fn mount_overlayfs(
 
         mount_overlay_core(&bottom_chunk, None, None, &staging_dir, mount_source)?;
 
-        let _ = send_umountable(&staging_dir);
-
+        // Staging dirs are temporary and self-cleaned below — do NOT
+        // register them with KSU's global umount list.
+        staging_dirs.push(staging_dir.clone());
         current_layers.push(staging_dir.to_string_lossy().into_owned());
     }
 
-    mount_overlay_core(
+    let result = mount_overlay_core(
         &current_layers,
         upperdir.as_deref(),
         workdir.as_deref(),
         dest.as_ref(),
         mount_source,
-    )
+    );
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        // Clean up staging overlay mounts. Use MNT_DETACH so the final overlay
+        // can keep its references to the merged lower layers alive until unmounted.
+        for staging_dir in staging_dirs.iter().rev() {
+            if let Err(e) = umount2(staging_dir.as_path(), UnmountFlags::DETACH) {
+                crate::scoped_log!(
+                    warn,
+                    "overlayfs",
+                    "failed to detach staging overlay {}: {:#}",
+                    staging_dir.display(),
+                    e
+                );
+            }
+            if let Err(e) = std::fs::remove_dir(staging_dir) {
+                crate::scoped_log!(
+                    debug,
+                    "overlayfs",
+                    "failed to remove staging dir {}: {:#}",
+                    staging_dir.display(),
+                    e
+                );
+            }
+        }
+    }
+
+    result
 }
 
 pub fn bind_mount(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
@@ -328,7 +357,15 @@ fn mount_overlay_child(
         );
         return Err(e);
     }
-    let _ = send_umountable(mount_point);
+    if let Err(e) = send_umountable(mount_point) {
+        crate::scoped_log!(
+            warn,
+            "overlayfs",
+            "failed to register umountable at {}: {:#}",
+            mount_point,
+            e
+        );
+    }
     Ok(())
 }
 

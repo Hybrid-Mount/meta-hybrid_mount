@@ -21,6 +21,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BUILD_MODE="debug"
+BUILD_FLAVOR="full"
 ARCH="arm64"
 ALL_ARCH=false
 SKIP_WEBUI=false
@@ -33,6 +34,8 @@ Usage: ./scripts/build-local.sh [options]
 
 Options:
   -r, --release               Build a release package
+      --lite                  Build the lite package (no Kasumi frontend/backend/LKM)
+      --nano                  Build the nano package (config-only, no WebUI/CLI/daemon)
   -a, --arch <arm64>
                               Build a single Android ABI (default: arm64)
       --all-arch              Build all supported Android ABIs (currently arm64 only)
@@ -76,6 +79,14 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 	-r | --release)
 		BUILD_MODE="release"
+		shift
+		;;
+	--lite)
+		BUILD_FLAVOR="lite"
+		shift
+		;;
+	--nano)
+		BUILD_FLAVOR="nano"
 		shift
 		;;
 	-a | --arch)
@@ -125,7 +136,7 @@ if ! cargo ndk --help >/dev/null 2>&1; then
 	exit 1
 fi
 
-if [[ "$SKIP_WEBUI" != "true" ]]; then
+if [[ "$BUILD_FLAVOR" != "nano" && "$SKIP_WEBUI" != "true" ]]; then
 	require_cmd pnpm
 fi
 
@@ -148,19 +159,26 @@ cd "$REPO_ROOT"
 
 echo "== Hybrid Mount local build =="
 echo "Mode: $BUILD_MODE"
+echo "Flavor: $BUILD_FLAVOR"
 if [[ "$ALL_ARCH" == "true" ]]; then
 	echo "Arch: all"
 else
 	echo "Arch: $ARCH"
 fi
 echo "NDK: $ANDROID_NDK_HOME"
-if [[ "$SKIP_WEBUI" == "true" ]]; then
+if [[ "$BUILD_FLAVOR" == "nano" ]]; then
+	echo "WebUI: omitted"
+elif [[ "$SKIP_WEBUI" == "true" ]]; then
 	echo "WebUI: skip"
 else
 	echo "WebUI: build"
 fi
 if [[ -n "${HYBRID_MOUNT_KASUMI_LKM_DIR:-}" ]]; then
-	echo "Kasumi LKM dir: ${HYBRID_MOUNT_KASUMI_LKM_DIR}"
+	if [[ "$BUILD_FLAVOR" != "full" ]]; then
+		echo "Kasumi LKM dir: ignored for $BUILD_FLAVOR build"
+	else
+		echo "Kasumi LKM dir: ${HYBRID_MOUNT_KASUMI_LKM_DIR}"
+	fi
 fi
 echo
 
@@ -174,6 +192,7 @@ build_args=(run -p xtask -- build)
 if [[ "$BUILD_MODE" == "release" ]]; then
 	build_args+=(--release)
 fi
+build_args+=(--flavor "$BUILD_FLAVOR")
 if [[ "$SKIP_WEBUI" == "true" ]]; then
 	build_args+=(--skip-webui)
 fi

@@ -27,6 +27,7 @@ on:
       - 'xtask/**'
       - 'build.rs'
       - 'scripts/build-local.sh'
+      - 'tools/notify/**'
       - '.github/workflows/build-kasumi-lkm.yml'
       - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/build.yml'
@@ -42,6 +43,7 @@ on:
       - 'xtask/**'
       - 'build.rs'
       - 'scripts/build-local.sh'
+      - 'tools/notify/**'
       - '.github/workflows/build-kasumi-lkm.yml'
       - '.github/workflows/kasumi-lkm.yml'
       - '.github/workflows/build.yml'
@@ -51,28 +53,42 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   build-kasumi-lkm:
     uses: ./.github/workflows/build-kasumi-lkm.yml
     secrets: inherit
 
   build:
-    needs: build-kasumi-lkm
+    needs: [build-kasumi-lkm]
+    name: Build ${{ matrix.flavor }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [full, lite, nano]
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          filter: 'tree:0'
 
-      - name: Checkout KPM Sources
-        uses: actions/checkout@v6
-        with:
-          repository: Hybrid-Mount/nuke-kpm
-          path: nuke-kpm
-          fetch-depth: 1
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Download Kasumi LKM artifacts
         uses: actions/download-artifact@v8
@@ -81,76 +97,103 @@ jobs:
           pattern: "*-kasumi-lkm"
           merge-multiple: true
 
-      - name: Setup Android NDK
-        uses: nttld/setup-ndk@v1
+      - name: Download Kasumi UAPI
+        uses: actions/download-artifact@v8
         with:
-          ndk-version: r29
+          name: kasumi-uapi
+          path: kasumi_uapi_artifact
 
-      - name: Setup Rust Toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          toolchain: nightly
-          targets: aarch64-linux-android
-          components: rust-src, clippy
+      - name: Sync Kasumi UAPI
+        run: |
+          set -euo pipefail
+          mapfile -t UAPI_FILES < <(find kasumi_uapi_artifact -type f -name kasumi_uapi.h | sort)
+          if [ "${#UAPI_FILES[@]}" -ne 1 ]; then
+            echo "Expected exactly one kasumi_uapi.h artifact, found ${#UAPI_FILES[@]}:"
+            find kasumi_uapi_artifact -type f -print | sort
+            exit 1
+          fi
+          cp "${UAPI_FILES[0]}" src/sys/kasumi_uapi.h
+          sha256sum src/sys/kasumi_uapi.h
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: "10"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "20"
-          cache: pnpm
-          cache-dependency-path: webui/pnpm-lock.yaml
-
-      - name: Install build dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-multilib
-          cargo install cargo-ndk --locked
-
-      - name: Prepare APatch KPM Sources
-        run: |
-          git clone --depth 1 https://github.com/AndroidPatch/kpm.git /tmp/apatch-kpm
-
-      - name: Build All
+      - name: Build ${{ matrix.flavor }}
         env:
-          HYBRID_MOUNT_KPM_DIR: ${{ github.workspace }}/nuke-kpm
-          HYBRID_MOUNT_KP_DIR: /tmp/apatch-kpm
+          HYBRID_MOUNT_NOTIFY: "0"
           HYBRID_MOUNT_KASUMI_LKM_DIR: ${{ github.workspace }}/kasumi_lkm_artifacts
-          HYBRID_MOUNT_NOTIFY: ${{ github.event_name != 'pull_request' && '1' || '0' }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          export ANDROID_NDK_LATEST_HOME="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
-          ls -la "$HYBRID_MOUNT_KASUMI_LKM_DIR"
-          cargo xtask build --ci
+          set -euo pipefail
+          ls -la "$HYBRID_MOUNT_KASUMI_LKM_DIR" || true
+          rm -rf output
+          cargo xtask build --ci --flavor ${{ matrix.flavor }}
 
-      - name: Detect Version and Name
-        run: |
-          ZIP_PATH=$(ls output/*.zip | head -n 1)
-          ZIP_FILENAME=$(basename "$ZIP_PATH")
+          ZIP_PATH="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
+          test -n "$ZIP_PATH"
+          ZIP_FILENAME="$(basename "$ZIP_PATH")"
           ARTIFACT_NAME="${ZIP_FILENAME%.*}"
-          VERSION="${ARTIFACT_NAME#Hybrid-Mount-}"
-          
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
-          echo "BUILD_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "ARTIFACT_ZIP=$ZIP_PATH" >> "$GITHUB_ENV"
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
 
-      - name: Prepare Artifact
-        run: |
-          mkdir -p output/artifact_content
-          unzip output/*.zip -d output/artifact_content
-          rm output/*.zip
-
-      - name: Upload Artifact
+      - name: Upload ${{ matrix.flavor }} Artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}
-          path: output/artifact_content
+          path: ${{ env.ARTIFACT_ZIP }}
+          compression-level: 0
+          if-no-files-found: error
+
+  notify:
+    needs: build
+    if: github.event_name != 'pull_request'
+    name: Notify packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: 'tree:0'
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: notify-output
+          pattern: Hybrid-Mount-*
+          merge-multiple: true
+
+      - name: Notify Telegram album
+        env:
+          HYBRID_MOUNT_NOTIFY: "1"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          mapfile -t ZIP_FILES < <(find notify-output -maxdepth 1 -type f -name '*.zip' | sort)
+          if [ "${#ZIP_FILES[@]}" -ne 3 ]; then
+            echo "Expected 3 package artifacts, found ${#ZIP_FILES[@]}:"
+            find notify-output -maxdepth 2 -type f -print | sort
+            exit 1
+          fi
+          cargo xtask notify \
+            --output notify-output \
+            --label "日常耕作 🌱 (Daily Tilling) [full+lite+nano] - ${{ github.ref_name }}" \
+            --topic-id 37

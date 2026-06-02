@@ -52,6 +52,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          filter: 'tree:0'
 
       - name: Validate target arch
         run: |
@@ -130,8 +131,6 @@ jobs:
               KO_FILE="${KMI}_${TARGET_ARCH}_kasumi_lkm.ko"
               if [ -f "$SRC/kasumi_lkm.ko" ]; then
                 BUILT_KO="$SRC/kasumi_lkm.ko"
-              elif [ -f "$SRC/hymofs_lkm.ko" ]; then
-                BUILT_KO="$SRC/hymofs_lkm.ko"
               else
                 mapfile -t BUILT_KOS < <(find "$SRC" -maxdepth 1 -type f -name "*.ko" | sort)
                 if [ "${#BUILT_KOS[@]}" -ne 1 ]; then

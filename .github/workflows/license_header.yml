@@ -25,6 +25,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
+        with:
+          filter: 'tree:0'
 
       - name: Run HawkEye License Check
         uses: korandoru/hawkeye@v6

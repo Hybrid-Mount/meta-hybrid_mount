@@ -22,6 +22,10 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{UnmountFlags, unmount as umount};
 
+#[cfg(feature = "kasumi")]
+use crate::core::kasumi_coordinator::KasumiCoordinator;
+#[cfg(feature = "kasumi")]
+use crate::core::recovery::ModuleStageFailure;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::mount::is_mounted;
 use crate::{
@@ -29,28 +33,20 @@ use crate::{
     core::{
         backend_capabilities::BackendCapabilities,
         inventory::{self},
-        kasumi_coordinator::KasumiCoordinator,
         ops::{
             executor::{self},
             plan::MountPlan,
-            planner, sync,
+            prepare,
         },
-        recovery::{FailureStage, ModuleStageFailure},
         runtime_finalization,
-        storage::{StorageHandle, StorageMode},
+        storage::StorageHandle,
     },
-    sys::nuke,
 };
 
 pub struct Init;
 
 pub struct StorageReady {
     pub handle: StorageHandle,
-}
-
-pub struct ModulesReady {
-    pub handle: StorageHandle,
-    pub modules: Vec<inventory::Module>,
 }
 
 pub struct Planned {
@@ -91,13 +87,17 @@ impl MountController<Init> {
             "start: mount_base={}",
             mnt_base.display()
         );
+        #[cfg(feature = "control-plane")]
+        let force_ext4 = matches!(
+            self.config.overlay_mode,
+            crate::conf::config::OverlayMode::Ext4
+        );
+        #[cfg(not(feature = "control-plane"))]
+        let force_ext4 = true;
         let handle = crate::core::storage::setup(
             mnt_base,
             &self.config.moduledir,
-            matches!(
-                self.config.overlay_mode,
-                crate::conf::config::OverlayMode::Ext4
-            ),
+            force_ext4,
             &self.config.mountsource,
             self.config.disable_umount,
         )?;
@@ -120,10 +120,10 @@ impl MountController<Init> {
 }
 
 impl MountController<StorageReady> {
-    pub fn scan_and_sync(mut self) -> Result<MountController<ModulesReady>> {
+    pub fn scan_and_prepare_plan(self) -> Result<MountController<Planned>> {
         crate::scoped_log!(
             info,
-            "controller:scan_and_sync",
+            "controller:scan_and_prepare_plan",
             "scan start: moduledir={}",
             self.config.moduledir.display()
         );
@@ -131,68 +131,62 @@ impl MountController<StorageReady> {
 
         crate::scoped_log!(
             info,
-            "controller:scan_and_sync",
+            "controller:scan_and_prepare_plan",
             "scan complete: modules={}",
             modules.len()
         );
 
-        crate::scoped_log!(info, "controller:scan_and_sync", "sync start");
-        sync::perform_sync(&modules, self.state.handle.mount_point(), &self.config)?;
-
-        self.state.handle.commit(self.config.disable_umount)?;
-
-        crate::scoped_log!(info, "controller:scan_and_sync", "commit complete");
-
-        let kasumi = KasumiCoordinator::new(&self.config);
-        kasumi
-            .prepare_mirror_storage(&self.backend_capabilities, &modules)
-            .map_err(|err| {
-                let module_ids = KasumiCoordinator::requested_module_ids(&modules);
-                ModuleStageFailure::new(
-                    FailureStage::Sync,
-                    module_ids,
-                    anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
-                )
-            })?;
-
-        Ok(MountController {
-            config: self.config,
-            backend_capabilities: self.backend_capabilities,
-            state: ModulesReady {
-                handle: self.state.handle,
-                modules,
-            },
-            tempdir: self.tempdir,
-        })
-    }
-}
-
-impl MountController<ModulesReady> {
-    pub fn generate_plan(self) -> Result<MountController<Planned>> {
-        crate::scoped_log!(info, "controller:generate_plan", "start");
-        let plan = planner::generate(
+        crate::scoped_log!(info, "controller:scan_and_prepare_plan", "prepare start");
+        let plan = prepare::prepare_mount_plan(
             &self.config,
-            &self.state.modules,
+            &modules,
             self.state.handle.mount_point(),
             &self.backend_capabilities,
         )?;
 
         crate::scoped_log!(
             info,
-            "controller:generate_plan",
-            "complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
+            "controller:scan_and_prepare_plan",
+            "prepare complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
             plan.overlay_ops.len(),
             plan.overlay_module_ids.len(),
             plan.magic_module_ids.len(),
-            plan.kasumi_module_ids.len()
+            {
+                #[cfg(feature = "kasumi")]
+                {
+                    plan.kasumi_module_ids.len()
+                }
+                #[cfg(not(feature = "kasumi"))]
+                {
+                    0usize
+                }
+            }
         );
+
+        #[cfg(feature = "kasumi")]
+        {
+            let kasumi = KasumiCoordinator::new(&self.config);
+            kasumi
+                .prepare_mirror_storage(
+                    &self.backend_capabilities,
+                    &modules,
+                    &plan,
+                    self.state.handle.mount_point(),
+                )
+                .map_err(|err| {
+                    ModuleStageFailure::sync(
+                        plan.kasumi_module_ids.clone(),
+                        anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
+                    )
+                })?;
+        }
 
         Ok(MountController {
             config: self.config,
             backend_capabilities: self.backend_capabilities,
             state: Planned {
                 handle: self.state.handle,
-                modules: self.state.modules,
+                modules,
                 plan,
             },
             tempdir: self.tempdir,
@@ -216,7 +210,7 @@ impl MountController<Planned> {
             "complete: overlay_mounted={}, magic_mounted={}, kasumi_mounted={}",
             result.overlay_module_ids.len(),
             result.magic_module_ids.len(),
-            result.kasumi_module_ids.len()
+            result.kasumi_count()
         );
 
         Ok(MountController {
@@ -241,8 +235,6 @@ impl MountController<Executed> {
             &self.state.result,
         )?;
 
-        nuke_before_cleanup(self.state.handle.mode(), self.state.handle.mount_point())?;
-
         clean_up(
             &self.tempdir,
             &self.config.kasumi.mirror_path,
@@ -254,21 +246,6 @@ impl MountController<Executed> {
 
         Ok(())
     }
-}
-
-fn nuke_before_cleanup(storage_mode: StorageMode, mount_point: &Path) -> Result<()> {
-    if storage_mode != StorageMode::Ext4 {
-        return Ok(());
-    }
-
-    crate::scoped_log!(
-        info,
-        "controller:finalize",
-        "cleanup nuke: mode={}, path={}",
-        storage_mode.as_str(),
-        mount_point.display()
-    );
-    nuke::nuke_path(mount_point)
 }
 
 fn clean_up(

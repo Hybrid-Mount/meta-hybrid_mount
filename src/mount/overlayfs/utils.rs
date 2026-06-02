@@ -12,17 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::{fs, io::Read};
+use std::fs;
+use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{os::fd::AsFd, os::unix::fs::PermissionsExt};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use anyhow::Context;
 use anyhow::Result;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use flate2::read::GzDecoder;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use loopdev::LoopControl;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -111,27 +109,7 @@ where
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn is_overlay_supported() -> Result<bool> {
-    let file = fs::File::open("/proc/config.gz")?;
-
-    let mut config = String::new();
-    let mut decoder = GzDecoder::new(file);
-    decoder.read_to_string(&mut config)?;
-
-    for i in config.lines() {
-        if i.starts_with("#") {
-            continue;
-        }
-
-        let Some((k, v)) = i.split_once('=') else {
-            continue;
-        };
-
-        if k.trim() == "CONFIG_OVERLAY_FS" && v.trim() == "y" {
-            return Ok(true);
-        }
-    }
-
-    Ok(false)
+    crate::sys::fs::check_kernel_config("CONFIG_OVERLAY_FS")
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -165,16 +143,18 @@ where
 {
     let fs = fsopen("overlay", FsOpenFlags::FSOPEN_CLOEXEC).context("Failed to fsopen overlay")?;
     let fs = fs.as_fd();
-    fsconfig_set_string(fs, "lowerdir", &lowerdir_config)
-        .context("Failed to fsconfig set string lowerdir with {lowerdir_config}")?;
+    fsconfig_set_string(fs, "lowerdir", &lowerdir_config).with_context(|| {
+        format!("Failed to fsconfig set string lowerdir with {lowerdir_config}")
+    })?;
     if let (Some(upperdir), Some(workdir)) = (&upperdir, &workdir) {
         fsconfig_set_string(fs, "upperdir", upperdir)
-            .context("Failed to fsconfig set string upperdir with {upperdir}")?;
+            .with_context(|| format!("Failed to fsconfig set string upperdir with {upperdir}"))?;
         fsconfig_set_string(fs, "workdir", workdir)
-            .context("Failed to fsconfig set string workdir with {workdir}")?;
+            .with_context(|| format!("Failed to fsconfig set string workdir with {workdir}"))?;
     }
-    fsconfig_set_string(fs, "source", source.to_string())
-        .context("Failed to fsconfig set string source with {source}")?;
+    let source_s = source.to_string();
+    fsconfig_set_string(fs, "source", &source_s)
+        .with_context(|| format!("Failed to fsconfig set string source with {source_s}"))?;
     fsconfig_create(fs).context("Failed to fsconfig create new fs")?;
     let mount = fsmount(fs, FsMountFlags::FSMOUNT_CLOEXEC, MountAttrFlags::empty())
         .context("Failed to mount")?;

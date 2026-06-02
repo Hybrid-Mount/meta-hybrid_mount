@@ -25,19 +25,22 @@ use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::fs::ioctl_ficlone;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fs::{Gid, Uid, chown};
+use rustix::fs::{CWD, FileType, Gid, Mode, Uid, chown, mknodat};
 use walkdir::WalkDir;
 
-use crate::defs;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::fs::{lgetfilecon, lsetfilecon};
+#[cfg(feature = "kasumi")]
+use crate::{defs, utils};
 
 #[derive(Debug, Default)]
+#[cfg(feature = "kasumi")]
 pub struct SyncDirStats {
     pub has_mount_content: bool,
     pub opaque_dirs: Vec<PathBuf>,
 }
 
+#[cfg(feature = "kasumi")]
 fn is_managed_partition_path(relative: &Path, managed_partitions: &[String]) -> bool {
     relative
         .components()
@@ -64,14 +67,12 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
         })?;
 
     tempfile.write_all(content.as_ref())?;
+    tempfile.flush()?;
 
-    fs::rename(tempfile.path(), path).with_context(|| {
-        format!(
-            "failed to atomically replace {} from {}",
-            path.display(),
-            tempfile.path().display()
-        )
-    })?;
+    tempfile
+        .persist(path)
+        .map(|_| ())
+        .with_context(|| format!("failed to atomically replace {}", path.display()))?;
 
     Ok(())
 }
@@ -96,7 +97,209 @@ pub fn reflink_or_copy(src: &Path, dest: &Path) -> Result<u64> {
     }
     drop(dest_file);
     drop(src_file);
-    fs::copy(src, dest).map_err(|e| e.into())
+    Ok(fs::copy(src, dest)?)
+}
+
+pub fn remove_path(path: &Path) -> Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => Ok(fs::remove_dir_all(path)?),
+        Ok(_) => Ok(fs::remove_file(path)?),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub struct PreparedDir {
+    id: String,
+    tmp_dst: PathBuf,
+    final_dst: PathBuf,
+    cleanup_tmp: bool,
+}
+
+impl PreparedDir {
+    pub fn new(target_base: &Path, id: &str) -> Result<Self> {
+        let tmp_dst = target_base.join(format!(".tmp_{id}"));
+        remove_path(&tmp_dst)?;
+        Ok(Self {
+            id: id.to_string(),
+            tmp_dst,
+            final_dst: target_base.join(id),
+            cleanup_tmp: true,
+        })
+    }
+
+    pub fn tmp_path(&self) -> &Path {
+        &self.tmp_dst
+    }
+
+    pub fn final_path(&self) -> &Path {
+        &self.final_dst
+    }
+
+    pub fn commit(mut self) -> Result<()> {
+        let backup_dst = self
+            .final_dst
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(format!(".backup_{}", self.id));
+        remove_path(&backup_dst)?;
+
+        let mut backup_created = false;
+        if self.final_dst.exists() {
+            fs::rename(&self.final_dst, &backup_dst).with_context(|| {
+                format!(
+                    "failed to back up prepared dir {} from {} to {}",
+                    self.id,
+                    self.final_dst.display(),
+                    backup_dst.display()
+                )
+            })?;
+            backup_created = true;
+        }
+
+        if let Err(err) = fs::rename(&self.tmp_dst, &self.final_dst).with_context(|| {
+            format!(
+                "failed to commit prepared dir {} from {} to {}",
+                self.id,
+                self.tmp_dst.display(),
+                self.final_dst.display()
+            )
+        }) {
+            if backup_created {
+                let _ = fs::rename(&backup_dst, &self.final_dst);
+            }
+            return Err(err);
+        }
+
+        self.cleanup_tmp = false;
+        if backup_created && let Err(err) = remove_path(&backup_dst) {
+            crate::scoped_log!(
+                warn,
+                "fs:copy",
+                "cleanup backup failed: id={}, path={}, error={:#}",
+                self.id,
+                backup_dst.display(),
+                err
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for PreparedDir {
+    fn drop(&mut self) {
+        if self.cleanup_tmp {
+            let _ = remove_path(&self.tmp_dst);
+        }
+    }
+}
+
+pub fn prune_orphaned_children<'a, I>(
+    target_base: &Path,
+    active_names: I,
+    preserved_names: &[&str],
+    log_scope: &str,
+) -> Result<()>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    if !target_base.exists() {
+        return Ok(());
+    }
+
+    let active_names: HashSet<&str> = active_names.into_iter().collect();
+
+    for entry in target_base.read_dir()?.flatten() {
+        let path = entry.path();
+        let name_os = entry.file_name();
+        let name = name_os.to_string_lossy();
+
+        if name.starts_with('.')
+            || active_names.contains(name.as_ref())
+            || preserved_names.iter().any(|preserved| *preserved == name)
+        {
+            continue;
+        }
+
+        log::info!("[{log_scope}] prune orphan: name={name}");
+        if let Err(err) = remove_path(&path) {
+            log::warn!("[{log_scope}] remove orphan failed: name={name}, error={err}");
+        }
+    }
+
+    Ok(())
+}
+
+pub fn ensure_dir_like(src: &Path, dst: &Path) -> Result<()> {
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+        if let Ok(src_meta) = src.metadata() {
+            let _ = fs::set_permissions(dst, src_meta.permissions());
+        }
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    }
+    Ok(())
+}
+
+pub fn copy_non_dir_entry(
+    src: &Path,
+    dst: &Path,
+    metadata: &fs::Metadata,
+    file_type: &fs::FileType,
+) -> Result<()> {
+    remove_path(dst)?;
+    if file_type.is_symlink() {
+        let link_target = fs::read_link(src)?;
+        symlink(&link_target, dst)?;
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    } else if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
+        let mode = metadata.permissions().mode();
+        let rdev = metadata.rdev();
+        make_device_node(dst, mode, rdev)?;
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    } else {
+        reflink_or_copy(src, dst)?;
+        clone_ownership(src, dst);
+        clone_selinux_context(src, dst);
+    }
+    Ok(())
+}
+
+pub fn finalize_copied_tree(id: &str, root: &Path, opaque_dirs: &[PathBuf]) {
+    if let Err(err) = prune_empty_dirs_preserving(root, opaque_dirs) {
+        crate::scoped_log!(
+            warn,
+            "fs:copy",
+            "prune empty dirs failed: id={}, error={}",
+            id,
+            err
+        );
+    }
+
+    for opaque_dir in opaque_dirs {
+        if let Err(err) = super::xattr::set_overlay_opaque(opaque_dir) {
+            crate::scoped_log!(
+                warn,
+                "fs:copy",
+                "apply overlay opaque failed: id={}, path={}, error={}",
+                id,
+                opaque_dir.display(),
+                err
+            );
+        } else {
+            crate::scoped_log!(
+                debug,
+                "fs:copy",
+                "set overlay opaque: id={}, path={}",
+                id,
+                opaque_dir.display()
+            );
+        }
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -106,7 +309,7 @@ fn clone_selinux_context(src: &Path, dst: &Path) {
         Err(err) => {
             crate::scoped_log!(
                 warn,
-                "sync",
+                "fs:copy",
                 "clone selinux context skipped: src={}, dst={}, error={:#}",
                 src.display(),
                 dst.display(),
@@ -126,7 +329,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
         Err(err) => {
             crate::scoped_log!(
                 warn,
-                "sync",
+                "fs:copy",
                 "clone ownership skipped: src={}, dst={}, error={}",
                 src.display(),
                 dst.display(),
@@ -142,7 +345,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
             Err(err) => {
                 crate::scoped_log!(
                     warn,
-                    "sync",
+                    "fs:copy",
                     "clone ownership skipped: src={}, dst={}, error={}",
                     src.display(),
                     dst.display(),
@@ -177,7 +380,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
     if let Err(err) = result {
         crate::scoped_log!(
             warn,
-            "sync",
+            "fs:copy",
             "clone ownership skipped: src={}, dst={}, uid={}, gid={}, error={}",
             src.display(),
             dst.display(),
@@ -191,6 +394,25 @@ fn clone_ownership(src: &Path, dst: &Path) {
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn clone_ownership(_src: &Path, _dst: &Path) {}
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
+    let file_type = FileType::from_raw_mode(mode);
+    if matches!(file_type, FileType::Unknown) {
+        bail!("mknod failed for {}: unknown file type", path.display());
+    }
+
+    mknodat(
+        CWD,
+        path,
+        file_type,
+        Mode::from_raw_mode(mode & 0o7777),
+        rdev as _,
+    )
+    .with_context(|| format!("mknod failed for {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
     let c_path = CString::new(path.as_os_str().as_encoded_bytes())?;
     let dev = rdev as libc::dev_t;
@@ -203,6 +425,7 @@ fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "kasumi")]
 fn native_cp_r(
     src: &Path,
     dst: &Path,
@@ -211,22 +434,16 @@ fn native_cp_r(
     visited: &mut HashSet<(u64, u64)>,
     stats: &mut SyncDirStats,
 ) -> Result<()> {
-    if !dst.exists() {
-        if src.is_dir() {
-            fs::create_dir_all(dst)?;
-        }
-        if let Ok(src_meta) = src.metadata() {
-            let _ = fs::set_permissions(dst, src_meta.permissions());
-        }
-        clone_ownership(src, dst);
-        clone_selinux_context(src, dst);
-    }
+    ensure_dir_like(src, dst)?;
 
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let src_path = entry.path();
         let file_name = entry.file_name();
-        if file_name.as_os_str() == defs::REPLACE_DIR_FILE_NAME {
+        if utils::path_file_name_eq_ignore_ascii_case(&src_path, defs::REPLACE_DIR_FILE_NAME) {
+            if is_managed_partition_path(relative, managed_partitions) {
+                stats.has_mount_content = true;
+            }
             stats.opaque_dirs.push(dst.to_path_buf());
             continue;
         }
@@ -254,32 +471,14 @@ fn native_cp_r(
                 visited,
                 stats,
             )?;
-        } else if ft.is_symlink() {
-            if dst_path.exists() {
-                fs::remove_file(&dst_path)?;
-            }
-            let link_target = fs::read_link(&src_path)?;
-            symlink(&link_target, &dst_path)?;
-            clone_ownership(&src_path, &dst_path);
-            clone_selinux_context(&src_path, &dst_path);
-        } else if ft.is_char_device() || ft.is_block_device() || ft.is_fifo() {
-            if dst_path.exists() {
-                fs::remove_file(&dst_path)?;
-            }
-            let mode = metadata.permissions().mode();
-            let rdev = metadata.rdev();
-            make_device_node(&dst_path, mode, rdev)?;
-            clone_ownership(&src_path, &dst_path);
-            clone_selinux_context(&src_path, &dst_path);
         } else {
-            reflink_or_copy(&src_path, &dst_path)?;
-            clone_ownership(&src_path, &dst_path);
-            clone_selinux_context(&src_path, &dst_path);
+            copy_non_dir_entry(&src_path, &dst_path, &metadata, &ft)?;
         }
     }
     Ok(())
 }
 
+#[cfg(feature = "kasumi")]
 pub fn sync_dir(src: &Path, dst: &Path, managed_partitions: &[String]) -> Result<SyncDirStats> {
     if !src.exists() {
         return Ok(SyncDirStats::default());
@@ -306,10 +505,15 @@ pub fn sync_dir(src: &Path, dst: &Path, managed_partitions: &[String]) -> Result
 }
 
 pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
-    let root = root.as_ref();
+    prune_empty_dirs_preserving(root.as_ref(), &[])
+}
+
+fn prune_empty_dirs_preserving(root: &Path, preserved_dirs: &[PathBuf]) -> Result<()> {
     if !root.exists() {
         return Ok(());
     }
+
+    let preserved_dirs: HashSet<PathBuf> = preserved_dirs.iter().cloned().collect();
 
     for entry in WalkDir::new(root)
         .min_depth(1)
@@ -319,6 +523,9 @@ pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
     {
         if entry.file_type().is_dir() {
             let path = entry.path();
+            if preserved_dirs.contains(path) {
+                continue;
+            }
             if fs::remove_dir(path).is_ok() {}
         }
     }

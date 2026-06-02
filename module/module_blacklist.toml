@@ -1,0 +1,6 @@
+# Hybrid Mount Module Blacklist
+# Modules listed here will be treated as Ignore (skipped during mount).
+# Add one module ID per line. Example:
+# blacklist = ["example_module_id", "another_module_id"]
+
+blacklist = []

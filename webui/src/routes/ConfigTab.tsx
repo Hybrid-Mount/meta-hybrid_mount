@@ -1,13 +1,15 @@
-import { createSignal, createEffect, createMemo, For } from "solid-js";
+import { createSignal, createEffect, createMemo, For, Show } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { configStore } from "../lib/stores/configStore";
 import { sysStore } from "../lib/stores/sysStore";
-import { kasumiStore } from "../lib/stores/kasumiStore";
 import { moduleStore } from "../lib/stores/moduleStore";
 import { ICONS } from "../lib/constants";
-import { API } from "../lib/api";
+import { ENABLE_KASUMI } from "../lib/constants_gen";
+import { features } from "../lib/features";
 import { getCookie, setCookie } from "../lib/cookies";
-import ChipInput from "../components/ChipInput";
+import { getErrorMessage } from "../lib/api/core/error";
+import { API } from "../lib/api";
+import { kasumiStore } from "../lib/stores/kasumiStore";
 import "./ConfigTab.css";
 import "@material/web/textfield/outlined-text-field.js";
 import "@material/web/icon/icon.js";
@@ -27,6 +29,9 @@ export default function ConfigTab() {
   const isValidPath = (p: string) => !p || (p.startsWith("/") && p.length > 1);
   const invalidModuleDir = createMemo(
     () => !isValidPath(configStore.config.moduledir),
+  );
+  const tmpfsXattrUnsupported = createMemo(
+    () => sysStore.systemInfo?.tmpfs_xattr_supported === false,
   );
 
   createEffect(() => {
@@ -64,7 +69,9 @@ export default function ConfigTab() {
     } else if (prevSnapshot) {
       try {
         configStore.config = JSON.parse(prevSnapshot) as AppConfig;
-      } catch {}
+      } catch (e) {
+        console.warn("Failed to restore config snapshot", e);
+      }
     }
     return saved;
   }
@@ -76,21 +83,22 @@ export default function ConfigTab() {
     }
   }
 
-  async function handlePartitionsChange(vals: string[]) {
-    const prev = [...configStore.config.partitions];
-    updateConfig("partitions", vals);
-    const saved = await saveCurrentConfig();
-    if (!saved) {
-      updateConfig("partitions", prev);
-    }
-  }
-
   async function toggle(key: keyof AppConfig) {
     const currentVal = configStore.config[key] as boolean;
     updateConfig(key, !currentVal);
     const saved = await saveCurrentConfig();
     if (!saved) {
       updateConfig(key, currentVal);
+    }
+  }
+
+  async function toggleDaemonMode() {
+    const current = configStore.config.daemon_startup_mode;
+    const next = current === "persistent" ? "on-demand" : "persistent";
+    updateConfig("daemon_startup_mode", next as "on-demand" | "persistent");
+    const saved = await saveCurrentConfig();
+    if (!saved) {
+      updateConfig("daemon_startup_mode", current);
     }
   }
 
@@ -104,7 +112,7 @@ export default function ConfigTab() {
   }
 
   async function handleKasumiToggle() {
-    const wantsEnable = !kasumiStore.enabled;
+    const wantsEnable = !features.kasumiEnabled;
 
     if (wantsEnable && getCookie(KASUMI_WARNING_COOKIE) !== "1") {
       setShowKasumiWarning(true);
@@ -120,7 +128,12 @@ export default function ConfigTab() {
     try {
       await API.setKasumiEnabled(enabled);
       kasumiStore.setEnabledOptimistic(enabled);
-      void kasumiStore.refreshStatus(false);
+      await kasumiStore.refreshStatus(false);
+      features.setKasumiStatus(
+        kasumiStore.enabled,
+        Boolean(kasumiStore.status?.available),
+        Boolean(kasumiStore.status?.kernel_supported),
+      );
       if (enabled) {
         setCookie(KASUMI_WARNING_COOKIE, "1");
       }
@@ -128,9 +141,9 @@ export default function ConfigTab() {
         uiStore.L.config?.kasumiConfigSaved || "Kasumi config saved.",
         "success",
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message || uiStore.L.config?.saveFailed || "Failed to save",
+        getErrorMessage(e, uiStore.L.config?.saveFailed ?? "Failed to save"),
         "error",
       );
     } finally {
@@ -164,30 +177,32 @@ export default function ConfigTab() {
 
   return (
     <>
-      <div class="dialog-container">
-        <md-dialog
-          open={showKasumiWarning()}
-          onclose={() => setShowKasumiWarning(false)}
-          class="transparent-scrim"
-        >
-          <div slot="headline">
-            {uiStore.L.config?.kasumiWarningTitle ??
-              "Enable Experimental Kasumi?"}
-          </div>
-          <div slot="content">
-            {uiStore.L.config?.kasumiWarningBody ??
-              "Kasumi is experimental. Enabling it will expose the Kasumi tab, allow Kasumi-backed module routing, and permit LKM autoload. Continue only if you know what you are testing."}
-          </div>
-          <div slot="actions">
-            <md-text-button onClick={() => setShowKasumiWarning(false)}>
-              {uiStore.L.common?.cancel ?? "Cancel"}
-            </md-text-button>
-            <md-text-button onClick={() => applyKasumiToggle(true)}>
-              {uiStore.L.config?.kasumiEnableConfirm ?? "Enable Kasumi"}
-            </md-text-button>
-          </div>
-        </md-dialog>
-      </div>
+      <Show when={ENABLE_KASUMI && features.kasumiKernelSupported}>
+        <div class="dialog-container">
+          <md-dialog
+            open={showKasumiWarning()}
+            onclose={() => setShowKasumiWarning(false)}
+            class="transparent-scrim"
+          >
+            <div slot="headline">
+              {uiStore.L.config?.kasumiWarningTitle ??
+                "Enable Experimental Kasumi?"}
+            </div>
+            <div slot="content">
+              {uiStore.L.config?.kasumiWarningBody ??
+                "Kasumi is experimental. Enabling it will expose the Kasumi tab, allow Kasumi-backed module routing, and permit LKM autoload. Continue only if you know what you are testing."}
+            </div>
+            <div slot="actions">
+              <md-text-button onClick={() => setShowKasumiWarning(false)}>
+                {uiStore.L.common?.cancel ?? "Cancel"}
+              </md-text-button>
+              <md-text-button onClick={() => applyKasumiToggle(true)}>
+                {uiStore.L.config?.kasumiEnableConfirm ?? "Enable Kasumi"}
+              </md-text-button>
+            </div>
+          </md-dialog>
+        </div>
+      </Show>
 
       <div class="config-container">
         <section class="config-group">
@@ -293,34 +308,6 @@ export default function ConfigTab() {
               <div class="card-icon">
                 <md-icon>
                   <svg viewBox="0 0 24 24">
-                    <path d={ICONS.storage} />
-                  </svg>
-                </md-icon>
-              </div>
-              <div class="card-text">
-                <span class="card-title">{uiStore.L.config.partitions}</span>
-                <span class="card-desc">
-                  {uiStore.L.config?.partitionsDesc ??
-                    "Add partitions to mount"}
-                </span>
-              </div>
-            </div>
-            <div class="p-input">
-              <ChipInput
-                values={configStore.config.partitions}
-                placeholder="e.g. product, system_ext..."
-                onValuesChange={(vals) => handlePartitionsChange(vals)}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section class="config-group">
-          <div class="config-card">
-            <div class="card-header">
-              <div class="card-icon">
-                <md-icon>
-                  <svg viewBox="0 0 24 24">
                     <path d={ICONS.save} />
                   </svg>
                 </md-icon>
@@ -341,6 +328,7 @@ export default function ConfigTab() {
                   <button
                     class={`mode-item ${configStore.config.overlay_mode === mode ? "selected" : ""}`}
                     onClick={() => setOverlayMode(mode)}
+                    type="button"
                   >
                     <md-ripple></md-ripple>
                     <div class="mode-info">
@@ -371,6 +359,7 @@ export default function ConfigTab() {
             <button
               class={`option-tile clickable tertiary ${configStore.config.disable_umount ? "active" : ""}`}
               onClick={() => toggle("disable_umount")}
+              type="button"
             >
               <md-ripple></md-ripple>
               <div class="tile-top">
@@ -388,68 +377,85 @@ export default function ConfigTab() {
             </button>
 
             <button
-              class={`option-tile clickable tertiary ${configStore.config.enable_overlay_fallback ? "active" : ""}`}
-              onClick={() => toggle("enable_overlay_fallback")}
+              class={`option-tile clickable tertiary ${configStore.config.daemon_startup_mode === "persistent" ? "active" : ""}`}
+              onClick={toggleDaemonMode}
+              type="button"
             >
               <md-ripple></md-ripple>
               <div class="tile-top">
                 <div class="tile-icon">
                   <md-icon>
                     <svg viewBox="0 0 24 24">
-                      <path d={ICONS.shield} />
+                      <path d={ICONS.power} />
                     </svg>
                   </md-icon>
                 </div>
               </div>
               <div class="tile-bottom">
                 <span class="tile-label">
-                  {uiStore.L.config?.enableOverlayFallback ||
-                    "Enable Overlay Fallback"}
+                  {uiStore.L.config?.daemonStartupMode || "Persistent Daemon"}
                 </span>
               </div>
             </button>
           </div>
         </section>
 
-        <section class="config-group">
-          <div class="webui-label">
-            {uiStore.L.config?.experimentalFeatures || "Experimental Features"}
-          </div>
-          <div class="options-grid">
-            <button
-              class={`option-tile clickable secondary ${kasumiStore.enabled ? "active" : ""}`}
-              onClick={handleKasumiToggle}
-              disabled={kasumiPending() || kasumiStore.loading}
-              type="button"
-              aria-pressed={kasumiStore.enabled}
-              aria-label={
-                uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
-              }
-            >
-              <md-ripple></md-ripple>
-              <div class="tile-top">
-                <div class="tile-icon">
-                  <md-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path
-                        d={
-                          kasumiStore.enabled
-                            ? ICONS.snowflake_filled
-                            : ICONS.snowflake
-                        }
-                      />
-                    </svg>
-                  </md-icon>
+        <Show when={ENABLE_KASUMI && features.kasumiKernelSupported}>
+          <section class="config-group">
+            <div class="webui-label">
+              {uiStore.L.config?.experimentalFeatures ||
+                "Experimental Features"}
+            </div>
+            <div class="options-grid">
+              <button
+                class={`option-tile clickable secondary ${features.kasumiEnabled ? "active" : ""}`}
+                onClick={handleKasumiToggle}
+                disabled={kasumiPending()}
+                type="button"
+                aria-pressed={features.kasumiEnabled}
+                aria-label={
+                  uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
+                }
+              >
+                <md-ripple></md-ripple>
+                <div class="tile-top">
+                  <div class="tile-icon">
+                    <md-icon>
+                      <svg viewBox="0 0 24 24">
+                        <path
+                          d={
+                            features.kasumiEnabled
+                              ? ICONS.snowflake_filled
+                              : ICONS.snowflake
+                          }
+                        />
+                      </svg>
+                    </md-icon>
+                  </div>
                 </div>
-              </div>
-              <div class="tile-bottom">
-                <span class="tile-label">
-                  {uiStore.L.config?.kasumiMasterTitle ?? "Experimental Kasumi"}
+                <div class="tile-bottom">
+                  <span class="tile-label">
+                    {uiStore.L.config?.kasumiMasterTitle ??
+                      "Experimental Kasumi"}
+                  </span>
+                </div>
+              </button>
+            </div>
+            <Show when={tmpfsXattrUnsupported()}>
+              <div class="kasumi-restriction-note">
+                <md-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path d={ICONS.info} />
+                  </svg>
+                </md-icon>
+                <span>
+                  {uiStore.L.config?.kasumiTmpfsRestriction ??
+                    "Per-module Kasumi mount is unavailable because tmpfs xattr is not supported on this kernel."}
                 </span>
               </div>
-            </button>
-          </div>
-        </section>
+            </Show>
+          </section>
+        </Show>
       </div>
     </>
   );

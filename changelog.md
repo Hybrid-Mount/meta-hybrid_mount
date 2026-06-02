@@ -1,4 +1,280 @@
 
+## v4.1.3
+
+
+### <!-- 1 --> Features
+
+- Update build and release workflows, remove WebUI build steps, and enhance kasumi feature handling
+
+- Enhance module validation and improve overlayfs staging cleanup
+
+- Enhance backup path handling, improve error logging, and update kernel config checks
+
+- Enhance Kasumi feature support with kernel compatibility checks
+
+- Add tmpfs xattr support checks and enhance Kasumi status handling
+
+- Implement module blacklist functionality and enhance module handling
+
+- Suggest ignore mode when mount_error modules contain shell mount commands Scan .sh files in modules with mount errors for mount/mkdir/touch/bind commands and display a hint in the WebUI suggesting the user set the module to "ignore" mode to avoid conflicts.
+
+- Add issue template for module blacklist requests and implement auto PR creation workflow
+
+
+
+### <!-- 2 --> Fixes
+
+- Update kernel status checks to reflect compatibility changes
+
+- Enhance kasumi feature handling and update version in Cargo.toml
+
+- `Kasumi` Fix redirecting and hiding This is a empty commit to get the latest kasumi ko
+
+- Update version code calculation in release workflow
+
+- Improve error logging for status loading, config loading, and ksu bridge initialization
+
+- Make cargo clippy happy
+
+- Make cargo clippy happy again
+
+- Correct typo in partition ignore constants
+
+
+
+### <!-- 4 --> Refactors
+
+- Clean up dead code, improve mount point collection, and enhance logging initialization
+
+- Simplify mode retrieval and enhance module display logic
+
+
+
+### <!-- 5 --> Documentation
+
+- Add AGENTS.md guide for AI coding agents
+
+- Update README files to include Cargo features and CI checks for all flavors
+
+- Move README files to docs/ and use absolute URLs Move all 9 language README variants into docs/ directory. Replace all cross-file relative links with absolute GitHub URLs to ensure links work correctly from any context. Update Cargo.toml and AGENTS.md to reflect the new paths. Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+
+
+### <!-- 7 --> CI / Tooling
+
+- Only auto-close bug reports missing attachments, add URL detection
+
+
+
+### <!-- 9 --> Other
+
+- Add files via upload Indonesian Language
+
+- Add Indonesian to language selector (#336) ### Motivation - The WebUI included a locale file `webui/src/locales/id-ID.json` but `id-ID` was not present in the `availableLanguages` list, so Bahasa Indonesia could not be chosen in the language dialog. ### Description - Inserted `{ code: "id-ID", name: "Bahasa Indonesia" }` into the `availableLanguages` array in `webui/src/lib/stores/uiStore.ts` so the Indonesian locale becomes selectable. ### Testing - Verified the change and locale presence using `git diff -- webui/src/lib/stores/uiStore.ts` and `nl -ba webui/src/locales/id-ID.json`, then committed the update with `git commit` (commands succeeded). ------ [Codex Task](https://chatgpt.com/codex/cloud/tasks/task_e_6a165edc5b2c8325bac2b9c862af1ab8)
+
+- Update api.mock.ts to suit new feature
+
+
+
+
+## v4.1.2
+
+
+### <!-- 2 --> Fixes
+
+- Update zip file naming conventions for consistency in package detection
+
+- Remove tree filter in release checkout and sync missing locale keys - Remove filter: 'tree:0' from release job checkout to fix git-cliff changelog generation error - Add 19 missing i18n keys across es-ES, it-IT, ja-JP, ru-RU, uk-UA, vi-VN, zh-TW locale files (kasumi uname, cmdline, unload warning, etc.)
+
+- Make clippy happy
+
+
+
+### <!-- 4 --> Refactors
+
+- Move build.rs module.prop to OUT_DIR and split KasumiTab into sub-components - build.rs: write module.prop to OUT_DIR instead of source tree; replace rerun-if-changed on .git directory with .git/HEAD; consolidate imports - KasumiTab: decompose 1332-line single component into index.tsx orchestrator and 6 focused section components (Lkm, Runtime, Identity, UserHide, Maps, Features), plus HeroCard, SectionShell, types, and utils
+
+- Replace catch (e: any) with unknown and add .catch() to void calls - Add getErrorMessage() helper to safely extract messages from unknown - Replace all 12 catch (e: any) with catch (e: unknown) using the helper - Add .catch() handlers to 3 void async calls in App.tsx that lacked them
+
+- Improve caption handling by introducing truncation functions
+
+- Streamline configuration structs by removing redundant serde defaults
+
+
+
+### <!-- 5 --> Documentation
+
+- Replace hardcoded version badge with dynamic latest-tag badge Use shields.io github/v/tag endpoint instead of hardcoded 4.0.5 so the version badge always reflects the latest release tag automatically.
+
+
+
+### <!-- 8 --> Maintenance
+
+- Remove overlay fallback feature and related configurations - Eliminated the `enable_overlay_fallback` option from configuration files and documentation across multiple languages. - Removed associated fallback logic from the codebase, including functions and references in the executor and magic mount modules. - Updated README files in various languages to reflect the removal of the overlay fallback feature. - Adjusted WebUI components and localization files to remove references to the overlay fallback option.
+
+
+
+
+## v4.1.0
+
+
+### <!-- 1 --> Features
+
+- Update summary in module.json to include 'Kasumi'
+
+- Update version in README files to 4.0.5
+
+- 添加对浅层覆盖的支持，优化挂载计划处理
+
+
+
+### <!-- 2 --> Fixes
+
+- Scope SELinux Guard to app zygote (#27) Kasumi Fix
+
+- `umount` Skip pairip-protected lib partitions to avoid SIGSEGV KSU detaching the overlay over /system/lib*, /vendor/lib* mid-flight crashes pairip-protected APKs in libpairipcore.so. Filter those paths out of the umount queue and dedupe via HashSet::insert so repeat calls are no-ops.
+
+- Handle module markers case-insensitively
+
+- Make clippy happy
+
+- 更新文档以更准确地描述构建版本的用途和功能
+
+
+
+### <!-- 4 --> Refactors
+
+- `notify` 重构 Telegram 通知消息排版 - 文件组不再附带独立 caption，三个文件干净排列 - 文件组后独立发送文字消息，包含标题、分支、产物数、commit 和日志链接 - 移除产物大小统计行
+
+- `nano` 用 marker 机制替换 OverlayFS 白名单 - 移除 overlay_whitelist 配置项和 NANO_OVERLAY_WHITELIST 常量 - Nano 改用模块目录下的 overlay/magic marker 文件来判断挂载模式 - metainstall.sh 增加 nano 检测、mode marker 写入和分区列表扩展 - 更新 README 文档说明 marker-based 模式 - inventory 模块增加 module_mount_mode_marker 及测试
+
+- `notify` 合并文件和文字为单条消息 Media group 第一个文件附带共享 caption，其余文件无独立文字
+
+- 重构模块规则和处理逻辑，添加后代规则前缀支持
+
+
+
+### <!-- 5 --> Documentation
+
+- `readme` List supported languages
+
+- `readme` Link available readme translations
+
+- `readme` Add localized readme translations
+
+
+
+### <!-- 9 --> Other
+
+- Add Telegram notification helper for Hybrid Mount build artifacts - Introduced a new `notify` tool to send notifications via Telegram for build artifacts. - Implemented functionality to find ZIP files in the output directory and send notifications with details such as branch name, commit message, and artifact sizes. - Created a `NotifyRequest` struct to encapsulate notification parameters. - Added command-line interface to allow specifying a topic ID and event label. - Included tests for the ZIP file detection functionality.
+
+- `notify` Apply cargo fmt
+
+
+
+
+## v4.0.5
+
+
+### <!-- 4 --> Refactors
+
+- `tests` Improve test function names for clarity and consistency
+
+- Reorganize imports for better clarity in main.rs
+
+
+
+
+## v4.0.1
+
+
+### <!-- 1 --> Features
+
+- Enhance daemon and web UI with system info and runtime validation - Refactor server handling to use poll for improved performance. - Introduce system_info in API responses and update related interfaces. - Add URL validation to prevent malformed requests. - Improve error handling in config and kasumi stores with warnings for missing data. - Update App initialization to load UI and daemon concurrently.
+
+- `App` Enhance app initialization phase tracking and loading UI
+
+- `daemon` Add daemon_startup_mode config with persistent boot and webui toggle Add a daemon_startup_mode config option (on-demand / persistent) that controls whether the daemon starts on-demand via KSU exec or persists at boot via service.sh. Includes ping-first bridge optimization for faster reconnection. Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+- Update TopBar to provide default app name and language title; add preconnect and styles in index.html
+
+- Add clear mount errors functionality and UI updates - Implemented clearMountErrors API method in both mock and real API. - Updated AppAPI interface to include clearMountErrors. - Added clear-mount-errors command to the daemon command payload. - Enhanced Module interface to include mount_error property. - Added localization strings for mount error messages in multiple languages. - Introduced error indicators and banners in the ModulesTab component to display mount errors. - Added a button to clear mount errors, with loading state management.
+
+- Enhance mount error handling and add clear mount errors functionality
+
+
+
+### <!-- 2 --> Fixes
+
+- `schema` Replace manual Default impl with derive macro for DaemonStartupMode
+
+- `nuke` Skip nuke execution if KSU is not loaded
+
+
+
+### <!-- 8 --> Maintenance
+
+- Revert "feat(App): enhance app initialization phase tracking and loading UI" This reverts commit 08534f6f316b3f73ca2e09b95efdea4a5f8ff8ba.
+
+
+
+
+## v4.0.0
+
+
+### <!-- 1 --> Features
+
+- Enhance ksu handling in module loading and add fallback check
+
+- `daemon` Implement command handling and HTTP server for WebUI - Added `commands.rs` to handle various daemon commands including status, configuration, and Kasumi operations. - Introduced `http.rs` to manage the HTTP server for WebUI interactions, including session management and SSE support. - Implemented request validation and response formatting for daemon commands. - Created validation schemas in `validation.ts` for structured error handling and response parsing in the WebUI.
+
+- `App` Ensure status is loaded during app initialization
+
+
+
+### <!-- 2 --> Fixes
+
+- Review and harden frontend-backend interaction - saveConfigToFile now includes kasumi and rules fields (was silently dropping) - Replace fastrand token generation with /dev/urandom CSPRNG - Use {err} instead of {err:#} in HTTP responses to avoid leaking filesystem paths - Remove Access-Control-Allow-Private-Network CORS header - Add /proc/<pid>/cmdline verification to PID file cleanup - Add config.toml.bak backup before overwriting config - Remove duplicate KasumiUnameMode enum, reuse schema::KasumiUnameMode - Replace inverted bool return with ConnectionAction enum in HTTP handler - Add typed DaemonCommandPayload discriminated union matching Rust serde tags - Add runDaemonCommand() bypassing JSON-in-shell-string round-trip - Preserve first error in bridge retry for debugging - Fix clearKasumiUname transaction order (clear runtime before config) - Fix ensureDaemonAwake TOCTOU race - Add proper types to RuntimeStatePayload stable fields - Rename parseHybridMountJsonOutput to parseDaemonJsonOutput - Clarify extractConfig fallback logic with comment
+
+
+
+### <!-- 4 --> Refactors
+
+- Remove module metadata from runtime entries and tests for cleaner payload handling
+
+- `runtime_state` Simplify conditional check in save method
+
+- `sysStore` Remove redundant systemInfo updates in handleSseUpdate
+
+
+
+### <!-- 8 --> Maintenance
+
+- Update .gitignore to include CLAUDE.md
+
+- Pnpm format
+
+- Make clippy happy
+
+
+
+### <!-- 9 --> Other
+
+- Refactor inventory discovery and planner modules for improved directory handling and performance
+
+
+
+
+## v3.6.1
+
+
+### <!-- 1 --> Features
+
+- Add jq installation to Dockerfile and ensure jq is available in release workflow
+
+
+
+
 ## v3.5.6
 
 

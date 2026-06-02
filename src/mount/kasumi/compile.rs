@@ -67,22 +67,15 @@ fn build_dtype(path: &Path) -> Result<(i32, bool)> {
         return Ok((libc::DT_UNKNOWN as i32, true));
     }
 
-    let d_type = if file_type.is_file() {
-        libc::DT_REG as i32
-    } else if file_type.is_symlink() {
-        libc::DT_LNK as i32
-    } else if file_type.is_dir() {
-        libc::DT_DIR as i32
-    } else if file_type.is_block_device() {
-        libc::DT_BLK as i32
-    } else if file_type.is_char_device() {
-        libc::DT_CHR as i32
-    } else if file_type.is_fifo() {
-        libc::DT_FIFO as i32
-    } else if file_type.is_socket() {
-        libc::DT_SOCK as i32
-    } else {
-        libc::DT_UNKNOWN as i32
+    let d_type = match metadata.mode() & libc::S_IFMT {
+        libc::S_IFREG => libc::DT_REG as i32,
+        libc::S_IFLNK => libc::DT_LNK as i32,
+        libc::S_IFDIR => libc::DT_DIR as i32,
+        libc::S_IFBLK => libc::DT_BLK as i32,
+        libc::S_IFCHR => libc::DT_CHR as i32,
+        libc::S_IFIFO => libc::DT_FIFO as i32,
+        libc::S_IFSOCK => libc::DT_SOCK as i32,
+        _ => libc::DT_UNKNOWN as i32,
     };
 
     Ok((d_type, false))
@@ -124,6 +117,7 @@ pub(super) fn compile_rules(
 
         let module_root = mirror_module_root(config, module)?;
         let mut scanned_partition_roots: HashSet<PathBuf> = HashSet::new();
+        let mut symlink_directory_skips = 0usize;
 
         for partition_name in &managed_partition_list {
             let partition_root = module_root.join(partition_name);
@@ -187,10 +181,7 @@ pub(super) fn compile_rules(
                     continue;
                 }
 
-                if path
-                    .file_name()
-                    .is_some_and(|name| name == defs::REPLACE_DIR_FILE_NAME)
-                {
+                if utils::path_file_name_eq_ignore_ascii_case(path, defs::REPLACE_DIR_FILE_NAME) {
                     continue;
                 }
 
@@ -213,13 +204,7 @@ pub(super) fn compile_rules(
                     && resolved_virtual_path.exists()
                     && resolved_virtual_path.is_dir()
                 {
-                    crate::scoped_log!(
-                        warn,
-                        "mount:kasumi",
-                        "symlink skip: module={}, path={}, reason=directory_target",
-                        module.id,
-                        resolved_virtual_path.display()
-                    );
+                    symlink_directory_skips += 1;
                     continue;
                 }
 
@@ -235,6 +220,16 @@ pub(super) fn compile_rules(
                     file_type,
                 });
             }
+        }
+
+        if symlink_directory_skips > 0 {
+            crate::scoped_log!(
+                warn,
+                "mount:kasumi",
+                "symlink skip summary: module={}, reason=directory_target, count={}",
+                module.id,
+                symlink_directory_skips
+            );
         }
     }
 

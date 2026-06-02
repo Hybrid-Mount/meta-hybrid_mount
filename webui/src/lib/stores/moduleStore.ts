@@ -1,7 +1,8 @@
 import { createSignal, createMemo, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { API } from "../api";
-import { normalizeModuleMode } from "../moduleMode";
+import { normalizeMountMode } from "../api/core/guards";
+import { getErrorMessage } from "../api/core/error";
 import { uiStore } from "./uiStore";
 import type { Module, ModeStats } from "../types";
 
@@ -15,23 +16,26 @@ const createModuleStore = () => {
   function normalizeModule(module: Module): Module {
     return {
       ...module,
-      mode: normalizeModuleMode(module.mode),
+      mode: normalizeMountMode(module.mode),
       rules: {
         ...module.rules,
-        default_mode: normalizeModuleMode(module.rules.default_mode),
+        default_mode: normalizeMountMode(module.rules.default_mode),
       },
     };
   }
 
   const modeStats = createMemo((): ModeStats => {
-    const stats = { overlay: 0, magic: 0, kasumi: 0 };
-    modules.forEach((module) => {
-      if (!module.is_mounted) return;
-      const mode = normalizeModuleMode(module.mode);
-      if (mode === "overlay") stats.overlay++;
-      else if (mode === "magic") stats.magic++;
-      else if (mode === "kasumi") stats.kasumi++;
-    });
+    const stats: ModeStats = {
+      overlay: 0,
+      magic: 0,
+      kasumi: 0,
+      blacklisted: 0,
+    };
+    for (const m of modules) {
+      if (m.is_mounted && m.mode in stats) {
+        stats[m.mode as keyof ModeStats]++;
+      }
+    }
     return stats;
   });
 
@@ -48,11 +52,12 @@ const createModuleStore = () => {
         setModulesStore(reconcile(data));
         hasLoaded = true;
         return true;
-      } catch (e: any) {
+      } catch (e: unknown) {
         uiStore.showToast(
-          e?.message ||
-            uiStore.L.modules?.scanError ||
-            "Failed to load modules",
+          getErrorMessage(
+            e,
+            uiStore.L.modules?.scanError ?? "Failed to load modules",
+          ),
           "error",
         );
         return false;
@@ -74,17 +79,18 @@ const createModuleStore = () => {
     hasLoaded = false;
   }
 
-  async function saveModules() {
+  async function saveCurrentModules() {
     setSaving(true);
     try {
       await API.saveModules(modules);
       uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       return true;
-    } catch (e: any) {
+    } catch (e: unknown) {
       uiStore.showToast(
-        e?.message ||
-          uiStore.L.modules?.saveFailed ||
-          "Failed to save module modes",
+        getErrorMessage(
+          e,
+          uiStore.L.modules?.saveFailed ?? "Failed to save module modes",
+        ),
         "error",
       );
       return false;
@@ -115,7 +121,7 @@ const createModuleStore = () => {
     ensureModulesLoaded,
     invalidate,
     loadModules,
-    saveModules,
+    saveModules: saveCurrentModules,
   };
 };
 

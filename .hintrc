@@ -4,6 +4,14 @@
   ],
   "hints": {
     "no-inline-styles": "off",
-    "axe/aria": "off"
+    "axe/aria": "off",
+    "compat-api/css": [
+      "default",
+      {
+        "ignore": [
+          "backdrop-filter"
+        ]
+      }
+    ]
   }
 }

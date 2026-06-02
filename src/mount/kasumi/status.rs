@@ -56,7 +56,7 @@ pub fn collect_runtime_info(config: &config::Config) -> KasumiRuntimeInfo {
     let feature_bits = kasumi::get_features().ok();
     let feature_names = feature_bits.map(kasumi::feature_names).unwrap_or_default();
     let hooks = hook_lines().unwrap_or_default();
-    let rule_count = kasumi::get_active_rules()
+    let rule_count = kasumi::list_rules()
         .map(|value| api::parse_kasumi_rule_listing(&value).len())
         .unwrap_or(0);
     let available = live_status == KasumiStatus::Available;
@@ -71,6 +71,7 @@ pub fn collect_runtime_info(config: &config::Config) -> KasumiRuntimeInfo {
     KasumiRuntimeInfo {
         status,
         available,
+        kernel_supported: kasumi::kernel_is_supported(),
         lkm_loaded,
         lkm_autoload: config.kasumi.lkm_autoload,
         lkm_kmi_override: config.kasumi.lkm_kmi_override.clone(),

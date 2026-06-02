@@ -36,8 +36,6 @@
     "moduleDirDesc": "設定模組儲存目錄",
     "mountSource": "掛載來源",
     "mountSourceDesc": "全域掛載來源命名空間 (例如 KSU)",
-    "partitions": "額外分區",
-    "partitionsDesc": "新增要掛載的分區",
     "reload": "重載",
     "save": "儲存",
     "resetConfig": "重置設定檔",
@@ -66,7 +64,8 @@
     "mode_tmpfsDesc": "基於 RAM，I/O 最快，重啟後重置。",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback 映像。可持久保存，節省 RAM。",
-    "enableOverlayFallback": "允許 Overlay 回退"
+    "daemonStartupMode": "持久化守護行程",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
   },
   "modules": {
     "reload": "重新整理",
@@ -83,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "未掛載",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -92,13 +91,18 @@
       }
     },
     "emptyState": "未找到模組。",
-    "umountHiddenHint": "Umount 模組已隱藏。",
+    "unmountedHiddenHint": "未掛載的模組已隱藏。",
     "defaultTag": "預設",
     "compatTag": "相容",
     "disableTag": "停用",
     "nativeTag": "隱身",
     "unavailableTag": "不可用",
-    "kasumiUnavailableHint": "Kasumi 已啟用，但目前不可用。"
+    "kasumiUnavailableHint": "Kasumi 已啟用，但目前不可用。",
+    "mountError": "掛載錯誤",
+    "clearMountErrors": "清除掛載錯誤",
+    "mountErrorsCleared": "掛載錯誤已清除",
+    "mountErrorsClearFailed": "清除掛載錯誤失敗",
+    "suggestIgnoreHint": "該模組的 .sh 檔案中包含掛載相關指令，建議將其模式設定為 \"Ignore\"（忽略）。"
   },
   "kasumi": {
     "title": "Kasumi 工作狀態",
@@ -155,6 +159,7 @@
     "userHidePathRequired": "隱藏路徑不可為空",
     "stealthUpdated": "Stealth 已更新",
     "hidexattrUpdated": "HideXattr 已更新",
+    "selinuxFixUpdated": "SELinux 守護已更新",
     "ignoreProtocolUpdated": "協定不匹配策略已更新",
     "kernelDebugUpdated": "核心除錯已更新",
     "kmiOverride": "KMI 覆寫",
@@ -163,6 +168,7 @@
     "lastError": "最後錯誤",
     "stealthTitle": "隱身",
     "hidexattrTitle": "隱藏 Xattr",
+    "selinuxFixTitle": "SELinux 守護",
     "ignoreProtocolTitle": "忽略協定不匹配",
     "ignoreProtocolHint": "當 userspace API 與核心協定未完全匹配時，仍允許 Kasumi 繼續運作。",
     "lkmUnavailableHint": "Kasumi 已啟用，但核心模組尚未載入。",
@@ -181,7 +187,25 @@
     "cmdlineValue": "Cmdline 值",
     "rulesVisibleSummary": "目前有 {count} 條可由 userspace 看到的啟用規則",
     "dtypeLabel": "dtype",
-    "loadError": "載入 Kasumi 狀態失敗"
+    "loadError": "載入 Kasumi 狀態失敗",
+    "statusConfigOffRuntimeOn": "Config Off / Runtime Still Loaded",
+    "unloadLkmWarningTitle": "注意！",
+    "unloadLkmWarningBody": "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？",
+    "unloadLkmWarningCancel": "取消",
+    "unloadLkmWarningConfirm": "确定",
+    "unameSpoofTitle": "Kernel version spoofing",
+    "unameEmptyHint": "No spoofed uname configured.",
+    "saveUname": "Save Uname",
+    "restoreUnameGlobal": "Restore original (global)",
+    "saveCmdline": "Save Cmdline",
+    "configOnlyHint": "Most settings below only update config. Runtime changes take effect the next time Kasumi is rebuilt or remounted.",
+    "unameMode": "Uname Mode",
+    "unameModeScoped": "Scoped",
+    "unameModeGlobal": "Global",
+    "unameModeScopedDesc": "Per-process: only Kasumi-hidden UIDs see fake values.",
+    "unameModeGlobalDesc": "System-wide: rewrites init_uts_ns, every task sees fake values.",
+    "unameReleaseDesc": "Kernel release, for example 5.15.0-generic.",
+    "unameVersionDesc": "Kernel version/build timestamp."
   },
   "logs": {
     "refresh": "重新整理"

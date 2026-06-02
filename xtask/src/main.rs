@@ -25,40 +25,19 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use fs_extra::{dir, file};
 use hybrid_mount_notify::{NotifyRequest, maybe_send_output_dir_notification};
-use serde::Deserialize;
 use zip::{CompressionMethod, write::FileOptions};
 
+#[path = "build_meta_shared.rs"]
+mod build_meta_shared;
 mod zip_ext;
 use crate::zip_ext::zip_create_from_directory_with_options;
 
-const KPM_ENV_DIR: &str = "HYBRID_MOUNT_KPM_DIR";
-const KPM_PROJECT_DIR_CANDIDATES: [&str; 2] = ["nuke-kpm", "kpm"];
-const KPM_MODULE_NAME: &str = "nuke_ext4_sysfs";
-const KPM_STAGE_NAME: &str = "nuke_ext4_sysfs.kpm";
 const KASUMI_LKM_STAGE_DIR: &str = "kasumi_lkm";
-
-#[derive(Deserialize)]
-struct HybridMountMetadata {
-    name: String,
-    update: String,
-}
-
-#[derive(Deserialize)]
-struct PackageMetadata {
-    hybrid_mount: HybridMountMetadata,
-}
-
-#[derive(Deserialize)]
-struct Package {
-    version: String,
-    description: String,
-    metadata: PackageMetadata,
-}
-
-#[derive(Deserialize)]
-struct CargoConfig {
-    package: Package,
-}
+const NANO_MARKER_FILE: &str = ".nano";
+const DEFAULT_LITE_UPDATE_JSON: &str =
+    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json";
+const DEFAULT_NANO_UPDATE_JSON: &str =
+    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-nano.json";
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 enum Arch {
@@ -66,12 +45,83 @@ enum Arch {
     Arm64,
 }
 
-impl Arch {
-    fn target(&self) -> &'static str {
+#[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
+enum BuildFlavor {
+    /// Complete build: control plane + WebUI + Kasumi userspace + LKM assets.
+    Full,
+    /// Management build: control plane + WebUI, without any Kasumi feature surface.
+    Lite,
+    /// Mount-only build: no control plane, no WebUI, no Kasumi.
+    Nano,
+}
+
+impl BuildFlavor {
+    fn label(self) -> &'static str {
         match self {
-            Arch::Arm64 => "arm64-v8a",
+            Self::Full => "full",
+            Self::Lite => "lite",
+            Self::Nano => "nano",
         }
     }
+
+    fn zip_stem(self, version: &str) -> String {
+        match self {
+            Self::Full => format!("Hybrid-Mount-{version}"),
+            Self::Lite => format!("Hybrid-Mount-Lite-{version}"),
+            Self::Nano => format!("Hybrid-Mount-Nano-{version}"),
+        }
+    }
+
+    fn module_name(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
+        match self {
+            Self::Full => meta.name.clone(),
+            Self::Lite => meta
+                .lite_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| format!("{} Lite", meta.name)),
+            Self::Nano => meta
+                .nano_name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| format!("{} Nano", meta.name)),
+        }
+    }
+
+    fn update_json(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
+        match self {
+            Self::Full => meta.update.clone(),
+            Self::Lite => meta
+                .lite_update
+                .clone()
+                .filter(|url| !url.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_LITE_UPDATE_JSON.to_string()),
+            Self::Nano => meta
+                .nano_update
+                .clone()
+                .filter(|url| !url.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_NANO_UPDATE_JSON.to_string()),
+        }
+    }
+
+    fn includes_kasumi_lkm(self) -> bool {
+        matches!(self, Self::Full)
+    }
+
+    fn includes_webui(self) -> bool {
+        !matches!(self, Self::Nano)
+    }
+
+    fn enable_kasumi(self) -> bool {
+        matches!(self, Self::Full)
+    }
+
+    fn enable_control_plane(self) -> bool {
+        !matches!(self, Self::Nano)
+    }
+}
+
+impl Arch {
     fn android_abi(&self) -> &'static str {
         match self {
             Arch::Arm64 => "aarch64-linux-android",
@@ -91,6 +141,8 @@ enum Commands {
     Build {
         #[arg(long)]
         release: bool,
+        #[arg(long, value_enum, default_value = "full")]
+        flavor: BuildFlavor,
         #[arg(long)]
         skip_webui: bool,
         #[arg(long, value_enum)]
@@ -99,6 +151,14 @@ enum Commands {
         ci: bool,
         #[arg(long)]
         tag: Option<String>,
+    },
+    Notify {
+        #[arg(long, default_value = "output")]
+        output: PathBuf,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        topic_id: Option<i64>,
     },
     Lint,
 }
@@ -115,11 +175,17 @@ struct NotifyPlan {
     event_label: String,
 }
 
+fn load_cargo_config() -> Result<build_meta_shared::CargoConfig> {
+    let toml = fs::read_to_string("Cargo.toml")?;
+    Ok(toml::from_str(&toml)?)
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Commands::Build {
             release,
+            flavor,
             skip_webui,
             arch,
             ci,
@@ -142,9 +208,10 @@ fn main() -> Result<()> {
                 resolve_local_or_ci_version()?
             };
 
-            let notify_plan = resolve_notify_plan(ci, tag.as_deref(), &version_info)?;
+            let notify_plan = resolve_notify_plan(ci, tag.as_deref(), &version_info, flavor)?;
 
-            build_full(
+            build_package(
+                flavor,
                 cargo_release,
                 webui_release,
                 skip_webui,
@@ -152,6 +219,13 @@ fn main() -> Result<()> {
                 &version_info,
                 notify_plan.as_ref(),
             )?;
+        }
+        Commands::Notify {
+            output,
+            label,
+            topic_id,
+        } => {
+            notify_output_dir(&output, label, topic_id)?;
         }
         Commands::Lint => {
             run_clippy()?;
@@ -181,7 +255,8 @@ fn run_clippy() -> Result<()> {
     Ok(())
 }
 
-fn build_full(
+fn build_package(
+    flavor: BuildFlavor,
     cargo_release: bool,
     webui_release: bool,
     skip_webui: bool,
@@ -196,19 +271,19 @@ fn build_full(
     }
     fs::create_dir_all(&stage_dir)?;
 
-    if !skip_webui {
-        build_webui(&version_info.clean_version, webui_release)?;
+    if flavor.includes_webui() && !skip_webui {
+        build_webui(&version_info.clean_version, webui_release, flavor)?;
     }
 
     for arch in target_archs {
-        compile_core(cargo_release, arch)?;
+        compile_core(cargo_release, arch, flavor)?;
         let bin_name = "hybrid-mount";
         let profile = if cargo_release { "release" } else { "debug" };
         let src_bin = Path::new("target")
             .join(arch.android_abi())
             .join(profile)
             .join(bin_name);
-        let stage_bin_dir = stage_dir.join("binaries").join(arch.target());
+        let stage_bin_dir = stage_dir.join("binaries");
         fs::create_dir_all(&stage_bin_dir)?;
         if src_bin.exists() {
             file::copy(
@@ -222,17 +297,23 @@ fn build_full(
     let module_src = Path::new("module");
     let options = dir::CopyOptions::new().overwrite(true).content_only(true);
     dir::copy(module_src, &stage_dir, &options)?;
-    stage_kpm_assets(&stage_dir, cargo_release)?;
-    stage_kasumi_lkm_assets(&stage_dir)?;
+    prune_flavor_assets(&stage_dir, flavor)?;
+    configure_flavor_config(&stage_dir, flavor)?;
+    if flavor.includes_kasumi_lkm() {
+        stage_kasumi_lkm_assets(&stage_dir)?;
+    }
 
-    generate_module_prop(&stage_dir, version_info)?;
+    generate_module_prop(&stage_dir, version_info, flavor)?;
 
     let gitignore = stage_dir.join(".gitignore");
     if gitignore.exists() {
         fs::remove_file(gitignore)?;
     }
 
-    let zip_file = output_dir.join(format!("Hybrid-Mount-{}.zip", version_info.full_version));
+    let zip_file = output_dir.join(format!(
+        "{}.zip",
+        flavor.zip_stem(&version_info.full_version)
+    ));
     let zip_options = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .compression_level(Some(9));
@@ -240,6 +321,71 @@ fn build_full(
 
     maybe_notify_build(output_dir, notify_plan)?;
 
+    Ok(())
+}
+
+fn prune_flavor_assets(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
+    if flavor.includes_webui() {
+        return Ok(());
+    }
+
+    remove_path_if_exists(&stage_dir.join("webroot"))?;
+    remove_path_if_exists(&stage_dir.join("launcher.png"))?;
+    remove_path_if_exists(&stage_dir.join("service.sh"))?;
+    fs::write(stage_dir.join(NANO_MARKER_FILE), b"nano\n")?;
+    Ok(())
+}
+
+fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
+    let config_path = stage_dir.join("config.toml");
+    let content = fs::read_to_string(&config_path)
+        .with_context(|| format!("failed to read staged config {}", config_path.display()))?;
+    let mut table = strip_toml_preamble(&content)
+        .parse::<toml::Table>()
+        .with_context(|| format!("failed to parse staged config {}", config_path.display()))?;
+
+    if !flavor.enable_kasumi() {
+        table.remove("kasumi");
+    }
+
+    if matches!(flavor, BuildFlavor::Nano) {
+        table.insert(
+            "default_mode".to_string(),
+            toml::Value::String("magic".to_string()),
+        );
+        table.remove("daemon_startup_mode");
+    }
+
+    fs::write(&config_path, toml::to_string_pretty(&table)?)
+        .with_context(|| format!("failed to write staged config {}", config_path.display()))?;
+    Ok(())
+}
+
+fn strip_toml_preamble(content: &str) -> &str {
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let mut offset = 0;
+
+    for line in content.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            offset += line.len();
+            continue;
+        }
+        break;
+    }
+
+    &content[offset..]
+}
+
+fn remove_path_if_exists(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        fs::remove_dir_all(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
     Ok(())
 }
 
@@ -260,10 +406,40 @@ fn maybe_notify_build(output_dir: &Path, notify_plan: Option<&NotifyPlan>) -> Re
     Ok(())
 }
 
+fn notify_output_dir(
+    output_dir: &Path,
+    label: Option<String>,
+    topic_id: Option<i64>,
+) -> Result<()> {
+    let event_label = label
+        .or_else(|| {
+            env::var("HYBRID_MOUNT_NOTIFY_LABEL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "New Yield (新产物)".to_string());
+    let topic_id = topic_id.or(env::var("HYBRID_MOUNT_NOTIFY_TOPIC_ID")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .with_context(|| format!("invalid HYBRID_MOUNT_NOTIFY_TOPIC_ID: {value}"))
+        })
+        .transpose()?);
+    let notify_plan = NotifyPlan {
+        topic_id,
+        event_label,
+    };
+
+    maybe_notify_build(output_dir, Some(&notify_plan))
+}
+
 fn resolve_notify_plan(
     ci: bool,
     tag: Option<&str>,
     version_info: &VersionInfo,
+    flavor: BuildFlavor,
 ) -> Result<Option<NotifyPlan>> {
     let notify_enabled = env_truthy("HYBRID_MOUNT_NOTIFY").unwrap_or(false);
     let topic_override = env::var("HYBRID_MOUNT_NOTIFY_TOPIC_ID")
@@ -284,14 +460,19 @@ fn resolve_notify_plan(
     }
 
     let default_label = if let Some(tag) = tag {
-        format!("丰收 (Harvest) - {tag}")
+        format!("丰收 (Harvest) [{}] - {tag}", flavor.label())
     } else if ci {
         format!(
-            "日常耕作 🌱 (Daily Tilling) - {}",
+            "日常耕作 🌱 (Daily Tilling) [{}] - {}",
+            flavor.label(),
             version_info.full_version
         )
     } else {
-        format!("新产物 (New Yield) - {}", version_info.full_version)
+        format!(
+            "新产物 (New Yield) [{}] - {}",
+            flavor.label(),
+            version_info.full_version
+        )
     };
 
     let default_topic_id = if tag.is_some() {
@@ -306,46 +487,6 @@ fn resolve_notify_plan(
         topic_id: topic_override.or(default_topic_id),
         event_label: label_override.unwrap_or(default_label),
     }))
-}
-
-fn stage_kpm_assets(stage_dir: &Path, require_kpm: bool) -> Result<()> {
-    let Some(kpm_project_dir) = resolve_kpm_project_dir() else {
-        if require_kpm {
-            bail!(
-                "KPM project directory not found. Set {} or clone one of: {}",
-                KPM_ENV_DIR,
-                KPM_PROJECT_DIR_CANDIDATES.join(", ")
-            );
-        }
-        return Ok(());
-    };
-
-    let artifact = ensure_kpm_artifact(&kpm_project_dir, require_kpm)?;
-    let Some(artifact) = artifact else {
-        return Ok(());
-    };
-
-    let kpm_stage_dir = stage_dir.join("kpm");
-    fs::create_dir_all(&kpm_stage_dir)?;
-    file::copy(
-        &artifact,
-        kpm_stage_dir.join(KPM_STAGE_NAME),
-        &file::CopyOptions::new().overwrite(true),
-    )?;
-    Ok(())
-}
-
-fn resolve_kpm_project_dir() -> Option<PathBuf> {
-    if let Some(path) = env::var_os(KPM_ENV_DIR).map(PathBuf::from)
-        && path.is_dir()
-    {
-        return Some(path);
-    }
-
-    KPM_PROJECT_DIR_CANDIDATES
-        .iter()
-        .map(PathBuf::from)
-        .find(|path| path.is_dir())
 }
 
 fn stage_kasumi_lkm_assets(stage_dir: &Path) -> Result<()> {
@@ -404,48 +545,6 @@ fn collect_kasumi_lkm_artifacts(source_dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(artifacts)
 }
 
-fn ensure_kpm_artifact(project_dir: &Path, require_kpm: bool) -> Result<Option<PathBuf>> {
-    if should_attempt_kpm_build() {
-        build_kpm(project_dir)?;
-        let built = find_kpm_artifact(project_dir)?;
-        if built.is_none() {
-            bail!(
-                "KPM build completed but no artifact named {}*.kpm was found in {}",
-                KPM_MODULE_NAME,
-                project_dir.join("out").display()
-            );
-        }
-        return Ok(built);
-    }
-
-    let existing = find_kpm_artifact(project_dir)?;
-    if existing.is_some() {
-        return Ok(existing);
-    }
-
-    if require_kpm {
-        bail!(
-            "APatch KPM artifact is required for release builds. Set {} to the KPM source \
-repo, set HYBRID_MOUNT_KP_DIR/KP_DIR and Android NDK env vars, or prebuild {} under {}.",
-            KPM_ENV_DIR,
-            KPM_STAGE_NAME,
-            project_dir.display()
-        );
-    }
-
-    eprintln!(
-        "warning: skipping KPM packaging; no artifact found and build prerequisites were not detected"
-    );
-    Ok(None)
-}
-
-fn should_attempt_kpm_build() -> bool {
-    match env_truthy("HYBRID_MOUNT_BUILD_KPM") {
-        Some(value) => value,
-        None => has_kpm_kernel_tree() && has_kpm_toolchain(),
-    }
-}
-
 fn env_truthy(name: &str) -> Option<bool> {
     let value = env::var(name).ok()?;
     let normalized = value.trim().to_ascii_lowercase();
@@ -455,83 +554,22 @@ fn env_truthy(name: &str) -> Option<bool> {
     ))
 }
 
-fn has_kpm_kernel_tree() -> bool {
-    env::var_os("HYBRID_MOUNT_KP_DIR")
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("KP_DIR").map(PathBuf::from))
-        .map(|path| path.join("kernel").is_dir())
-        .unwrap_or_else(|| {
-            env::var_os("HOME")
-                .map(PathBuf::from)
-                .is_some_and(|home| home.join("AndroidPatch/kpm/kernel").is_dir())
-        })
-}
-
-fn has_kpm_toolchain() -> bool {
-    env::var_os("TARGET_COMPILE").is_some()
-        || env::var_os("ANDROID_NDK_LATEST_HOME").is_some()
-        || env::var_os("ANDROID_NDK").is_some()
-}
-
-fn build_kpm(project_dir: &Path) -> Result<()> {
-    let mut command = Command::new("make");
-    command.arg("-C").arg(project_dir);
-
-    if let Ok(kp_dir) = env::var("HYBRID_MOUNT_KP_DIR") {
-        command.env("KP_DIR", kp_dir);
-    }
-
-    let status = command
-        .status()
-        .with_context(|| format!("failed to build KPM in {}", project_dir.display()))?;
-    if !status.success() {
-        bail!("KPM build failed with exit code {:?}", status.code());
-    }
-    Ok(())
-}
-
-fn find_kpm_artifact(project_dir: &Path) -> Result<Option<PathBuf>> {
-    let out_dir = project_dir.join("out");
-    if !out_dir.is_dir() {
-        return Ok(None);
-    }
-
-    let mut artifacts = Vec::new();
-    for entry in fs::read_dir(&out_dir)? {
-        let path = entry?.path();
-        if path.extension() == Some(OsStr::new("kpm"))
-            && path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with(KPM_MODULE_NAME))
-        {
-            artifacts.push(path);
-        }
-    }
-
-    artifacts.sort();
-    Ok(artifacts.pop())
-}
-
-fn generate_module_prop(stage_dir: &Path, info: &VersionInfo) -> Result<()> {
-    let toml_content = fs::read_to_string("Cargo.toml")?;
-    let config: CargoConfig = toml::from_str(&toml_content)?;
+fn generate_module_prop(stage_dir: &Path, info: &VersionInfo, flavor: BuildFlavor) -> Result<()> {
+    let config = load_cargo_config()?;
 
     let meta = config.package.metadata.hybrid_mount;
-
-    let prop_content = format!(
-        r#"id=hybrid_mount
-name={}
-version={}
-versionCode={}
-author=Hybrid Mount Developers
-description={}
-updateJson={}
-metamodule=1
-webuiIcon=launcher.png
-"#,
-        meta.name, info.full_version, info.version_code, config.package.description, meta.update
-    );
+    let name = flavor.module_name(&meta);
+    let update_json = flavor.update_json(&meta);
+    let prop_content = build_meta_shared::render_module_prop(&build_meta_shared::ModulePropData {
+        id: "hybrid_mount",
+        name: &name,
+        version: &info.full_version,
+        version_code: &info.version_code,
+        author: "Hybrid Mount Developers",
+        description: &config.package.description,
+        update_json: &update_json,
+        webui_icon: flavor.includes_webui(),
+    });
 
     let prop_path = stage_dir.join("module.prop");
     let mut file = fs::File::create(prop_path)?;
@@ -540,8 +578,8 @@ webuiIcon=launcher.png
     Ok(())
 }
 
-fn build_webui(version: &str, is_release: bool) -> Result<()> {
-    generate_webui_constants(version, is_release)?;
+fn build_webui(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<()> {
+    generate_webui_constants(version, is_release, flavor)?;
     let webui_dir = Path::new("webui");
     let pnpm = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
     let status = Command::new(pnpm)
@@ -561,18 +599,18 @@ fn build_webui(version: &str, is_release: bool) -> Result<()> {
     Ok(())
 }
 
-fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
+fn generate_webui_constants(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<()> {
     let path = Path::new("webui/src/lib/constants_gen.ts");
-    let content = format!(
-        r#"
-export const APP_VERSION = "{version}";
-export const IS_RELEASE = {is_release};
-export const RUST_PATHS = {{
-  CONFIG: "/data/adb/hybrid-mount/config.toml",
-  DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",
-  BINARY: "/data/adb/modules/hybrid_mount/hybrid-mount",
-}} as const;
-"#
+    let content = build_meta_shared::render_webui_constants(
+        version,
+        is_release,
+        flavor.enable_kasumi(),
+        build_meta_shared::defs::CONFIG_FILE,
+        build_meta_shared::defs::STATE_FILE,
+        &format!(
+            "{}/hybrid-mount",
+            build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR
+        ),
     );
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -581,7 +619,7 @@ export const RUST_PATHS = {{
     Ok(())
 }
 
-fn compile_core(release: bool, arch: Arch) -> Result<()> {
+fn compile_core(release: bool, _arch: Arch, flavor: BuildFlavor) -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.args([
         "+nightly",
@@ -595,37 +633,34 @@ fn compile_core(release: bool, arch: Arch) -> Result<()> {
         "--platform",
         "26",
         "-t",
-        arch.target(),
+        "arm64-v8a",
         "build",
     ])
     .env("RUSTFLAGS", "-C default-linker-libraries");
     if release {
         cmd.arg("-r");
     }
+    if !flavor.enable_kasumi() {
+        cmd.arg("--no-default-features");
+    }
+    if flavor.enable_control_plane() && !flavor.enable_kasumi() {
+        cmd.args(["--features", "control-plane"]);
+    }
     let mut ret = cmd.spawn()?;
     let status = ret.wait()?;
     if !status.success() {
-        anyhow::bail!("Compilation failed for {}", arch.target());
+        anyhow::bail!("Compilation failed for arm64-v8a");
     }
     Ok(())
-}
-
-fn calculate_version_code(version_str: &str) -> Result<String> {
-    let parts: Vec<&str> = version_str.split('.').collect();
-    anyhow::ensure!(parts.len() >= 3, "invalid version: {}", version_str);
-    let major: usize = parts[0].parse()?;
-    let minor: usize = parts[1].parse()?;
-    let patch: usize = parts[2].parse()?;
-    Ok((major * 100000 + minor * 1000 + patch).to_string())
 }
 
 fn resolve_release_version(tag: &str) -> Result<VersionInfo> {
     let clean_version = tag.trim_start_matches('v');
     update_cargo_toml_version(clean_version)?;
 
-    let commit_count = cal_git_code()?;
+    let commit_count = build_meta_shared::git_commit_count()?;
     let full_version = format!("{}-{}", clean_version, commit_count);
-    let version_code = calculate_version_code(clean_version)?;
+    let version_code = build_meta_shared::calculate_version_code(clean_version)?;
 
     Ok(VersionInfo {
         clean_version: clean_version.to_string(),
@@ -635,13 +670,12 @@ fn resolve_release_version(tag: &str) -> Result<VersionInfo> {
 }
 
 fn resolve_local_or_ci_version() -> Result<VersionInfo> {
-    let toml = fs::read_to_string("Cargo.toml")?;
-    let data: CargoConfig = toml::from_str(&toml)?;
+    let data = load_cargo_config()?;
     let clean_version = data.package.version;
-    let commit_count = cal_git_code()?;
+    let commit_count = build_meta_shared::git_commit_count()?;
 
     let full_version = format!("{}-{}", clean_version, commit_count);
-    let version_code = calculate_version_code(&clean_version)?;
+    let version_code = build_meta_shared::calculate_version_code(&clean_version)?;
 
     Ok(VersionInfo {
         clean_version,
@@ -671,14 +705,117 @@ fn update_cargo_toml_version(version: &str) -> Result<()> {
     Ok(())
 }
 
-// NOTE: keep in sync with build.rs cal_git_code()
-fn cal_git_code() -> Result<i32> {
-    Ok(String::from_utf8(
-        Command::new("git")
-            .args(["rev-list", "--count", "HEAD"])
-            .output()?
-            .stdout,
-    )?
-    .trim()
-    .parse::<i32>()?)
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use super::{BuildFlavor, configure_flavor_config, strip_toml_preamble};
+
+    struct TestDir(std::path::PathBuf);
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!("{name}-{nanos}"));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn strips_leading_comment_block_before_toml() {
+        let input = r#"# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+
+key = "value"
+"#;
+
+        assert_eq!(strip_toml_preamble(input), "key = \"value\"\n");
+    }
+
+    #[test]
+    fn keeps_non_comment_toml_untouched() {
+        let input = "key = \"value\"\n";
+
+        assert_eq!(strip_toml_preamble(input), input);
+    }
+
+    #[test]
+    fn lite_config_removes_kasumi_but_keeps_daemon_settings() {
+        let temp = TestDir::new("xtask-lite-config");
+        fs::write(
+            temp.path().join("config.toml"),
+            r#"
+default_mode = "overlay"
+daemon_startup_mode = "persistent"
+
+[kasumi]
+enabled = false
+"#,
+        )
+        .unwrap();
+
+        configure_flavor_config(temp.path(), BuildFlavor::Lite).unwrap();
+        let table = fs::read_to_string(temp.path().join("config.toml"))
+            .unwrap()
+            .parse::<toml::Table>()
+            .unwrap();
+
+        assert!(!table.contains_key("kasumi"));
+        assert_eq!(
+            table.get("default_mode").and_then(toml::Value::as_str),
+            Some("overlay")
+        );
+        assert_eq!(
+            table
+                .get("daemon_startup_mode")
+                .and_then(toml::Value::as_str),
+            Some("persistent")
+        );
+    }
+
+    #[test]
+    fn nano_config_removes_control_plane_and_kasumi_settings() {
+        let temp = TestDir::new("xtask-nano-config");
+        fs::write(
+            temp.path().join("config.toml"),
+            r#"
+default_mode = "overlay"
+daemon_startup_mode = "persistent"
+
+[kasumi]
+enabled = false
+"#,
+        )
+        .unwrap();
+
+        configure_flavor_config(temp.path(), BuildFlavor::Nano).unwrap();
+        let table = fs::read_to_string(temp.path().join("config.toml"))
+            .unwrap()
+            .parse::<toml::Table>()
+            .unwrap();
+
+        assert!(!table.contains_key("kasumi"));
+        assert!(!table.contains_key("daemon_startup_mode"));
+        assert_eq!(
+            table.get("default_mode").and_then(toml::Value::as_str),
+            Some("magic")
+        );
+    }
 }

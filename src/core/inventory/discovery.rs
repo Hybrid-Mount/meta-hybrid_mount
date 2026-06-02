@@ -21,20 +21,6 @@ use anyhow::Result;
 
 use crate::{conf::config, core::inventory, domain::ModuleRules};
 
-fn load_module_rules(module_id: &str, cfg: &config::Config) -> ModuleRules {
-    let mut rules = ModuleRules {
-        default_mode: cfg.default_mode.as_mount_mode(),
-        ..Default::default()
-    };
-
-    if let Some(global_rules) = cfg.rules.get(module_id) {
-        rules.default_mode = global_rules.default_mode;
-        rules.paths.extend(global_rules.paths.clone());
-    }
-
-    rules
-}
-
 #[derive(Debug, Clone)]
 pub struct Module {
     pub id: String,
@@ -47,24 +33,30 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         return Ok(Vec::new());
     }
 
-    let dir_entries = fs::read_dir(source_dir)?.collect::<std::io::Result<Vec<_>>>()?;
-
     let mut modules = Vec::new();
     let mut skipped_reserved = 0usize;
     let mut skipped_blocked = 0usize;
+    let mut skipped_blacklisted = 0usize;
 
-    for entry in dir_entries {
-        let path = entry.path();
-
-        if !path.is_dir() {
+    for entry in fs::read_dir(source_dir)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        if !file_type.is_dir() {
             continue;
         }
 
+        let path = entry.path();
         let id = entry.file_name().to_string_lossy().into_owned();
 
         if inventory::is_reserved_module_dir(&id) {
             skipped_reserved += 1;
             crate::scoped_log!(debug, "scanner", "skip: module={}, reason=reserved_dir", id);
+            continue;
+        }
+
+        if cfg.module_blacklist.contains(&id) {
+            skipped_blacklisted += 1;
+            crate::scoped_log!(debug, "scanner", "skip: module={}, reason=blacklisted", id);
             continue;
         }
 
@@ -84,18 +76,19 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         modules.push(Module {
             id: id.clone(),
             source_path: path,
-            rules: load_module_rules(&id, cfg),
+            rules: inventory::load_module_rules(cfg, &id),
         });
     }
 
     crate::scoped_log!(
         info,
         "scanner",
-        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}",
-        modules.len() + skipped_reserved + skipped_blocked,
+        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}",
+        modules.len() + skipped_reserved + skipped_blocked + skipped_blacklisted,
         modules.len(),
         skipped_reserved,
-        skipped_blocked
+        skipped_blocked,
+        skipped_blacklisted
     );
 
     modules.sort_by(|a, b| a.id.cmp(&b.id));

@@ -51,7 +51,38 @@ on:
         type: string
 
 jobs:
+  export-kasumi-uapi:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - name: Resolve Kasumi UAPI
+        id: resolve
+        run: |
+          set -euo pipefail
+
+          git init kasumi_src
+          (
+            cd kasumi_src
+            git remote add origin "https://github.com/Anatdx/Kasumi.git"
+            git fetch --depth 1 origin "${{ inputs.kasumi_ref }}"
+            git checkout FETCH_HEAD
+            SHA="$(git rev-parse HEAD)"
+            test -s src/include/kasumi_uapi.h
+            cp src/include/kasumi_uapi.h "$GITHUB_WORKSPACE/kasumi_uapi.h"
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+            echo "Resolved Kasumi to $SHA"
+          )
+          sha256sum kasumi_uapi.h
+
+      - name: Upload Kasumi UAPI
+        uses: actions/upload-artifact@v7
+        with:
+          name: kasumi-uapi
+          path: kasumi_uapi.h
+
   build-kasumi-lkm:
+    needs: export-kasumi-uapi
     strategy:
       fail-fast: false
       matrix:
@@ -70,5 +101,5 @@ jobs:
     with:
       kmi: ${{ matrix.kmi }}
       arch: ${{ matrix.arch }}
-      kasumi_ref: ${{ inputs.kasumi_ref }}
+      kasumi_ref: ${{ needs.export-kasumi-uapi.outputs.sha }}
       ddk_release: ${{ inputs.ddk_release }}

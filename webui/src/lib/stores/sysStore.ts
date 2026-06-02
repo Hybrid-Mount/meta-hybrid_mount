@@ -1,8 +1,16 @@
 import { createSignal, createRoot } from "solid-js";
 import { API } from "../api";
+import type { InitPayload } from "../api/contracts";
 import { APP_VERSION } from "../constants_gen";
 import { uiStore } from "./uiStore";
-import type { StorageStatus, SystemInfo } from "../types";
+import {
+  isBoolean,
+  isRecord,
+  isString,
+  isStringArray,
+} from "../api/core/guards";
+import { buildModeStats, buildMountedCount } from "../api/codec/runtimeCodec";
+import type { OverlayMode, StorageStatus, SystemInfo } from "../types";
 
 const createSysStore = () => {
   const [version, setVersion] = createSignal(APP_VERSION);
@@ -19,6 +27,56 @@ const createSysStore = () => {
   let pendingVersionLoad: Promise<void> | null = null;
   let hasLoaded = false;
   let hasLoadedVersion = false;
+
+  function loadFromInit(payload: InitPayload) {
+    if (isString(payload.version)) {
+      setVersion(payload.version);
+      hasLoadedVersion = true;
+    } else {
+      console.warn("sysStore: init payload missing version");
+    }
+    const status = isRecord(payload.status) ? payload.status : null;
+    if (status) {
+      const modeStats = buildModeStats(status);
+      setStorage({
+        type:
+          isString(status.storage_mode) && status.storage_mode.trim()
+            ? (status.storage_mode as StorageStatus["type"])
+            : "unknown",
+        supported_modes: ["tmpfs", "ext4"],
+        modeStats,
+        mountedCount: buildMountedCount(status, modeStats),
+      });
+      setActivePartitions(
+        isStringArray(status.active_mounts) ? status.active_mounts : [],
+      );
+    } else {
+      console.warn("sysStore: init payload missing status object");
+    }
+
+    const sysInfo = isRecord(payload.system_info) ? payload.system_info : null;
+    if (sysInfo) {
+      setSystemInfo({
+        kernel: isString(sysInfo.kernel) ? sysInfo.kernel : "Unknown",
+        selinux: isString(sysInfo.selinux) ? sysInfo.selinux : "Unknown",
+        mountBase: isString(sysInfo.mount_base) ? sysInfo.mount_base : "-",
+        activeMounts: isStringArray(sysInfo.active_mounts)
+          ? sysInfo.active_mounts
+          : [],
+        tmpfs_xattr_supported: isBoolean(sysInfo.tmpfs_xattr_supported)
+          ? sysInfo.tmpfs_xattr_supported
+          : undefined,
+        supported_overlay_modes:
+          Array.isArray(sysInfo.supported_overlay_modes) &&
+          sysInfo.supported_overlay_modes.every(isString)
+            ? (sysInfo.supported_overlay_modes as OverlayMode[])
+            : ["tmpfs", "ext4"],
+      });
+      hasLoaded = true;
+    } else {
+      console.warn("sysStore: init payload missing system_info");
+    }
+  }
 
   async function loadStatus() {
     if (pendingLoad) return pendingLoad;
@@ -100,6 +158,24 @@ const createSysStore = () => {
     return loadVersion();
   }
 
+  function handleSseUpdate(state: unknown) {
+    const status = isRecord(state) ? state : null;
+    if (!status) return;
+    const modeStats = buildModeStats(status);
+    setStorage({
+      type:
+        isString(status.storage_mode) && (status.storage_mode as string).trim()
+          ? (status.storage_mode as StorageStatus["type"])
+          : "unknown",
+      supported_modes: ["tmpfs", "ext4"],
+      modeStats,
+      mountedCount: buildMountedCount(status, modeStats),
+    });
+    setActivePartitions(
+      isStringArray(status.active_mounts) ? status.active_mounts : [],
+    );
+  }
+
   return {
     get version() {
       return version();
@@ -118,8 +194,10 @@ const createSysStore = () => {
     },
     ensureStatusLoaded,
     ensureVersionLoaded,
+    loadFromInit,
     loadStatus,
     loadVersion,
+    handleSseUpdate,
   };
 };
 

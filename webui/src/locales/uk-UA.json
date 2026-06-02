@@ -36,8 +36,6 @@
     "moduleDirDesc": "Встановіть каталог, де зберігаються модулі",
     "mountSource": "Джерело монтування",
     "mountSourceDesc": "Глобальний простір імен (наприклад, KSU)",
-    "partitions": "Додаткові розділи",
-    "partitionsDesc": "Додати розділи для монтування",
     "reload": "Перезавантажити",
     "save": "Зберегти",
     "resetConfig": "Скинути конфіг",
@@ -66,7 +64,8 @@
     "mode_tmpfsDesc": "На основі оперативної пам'яті. Найшвидший ввід/вивід, скидання після перезавантаження.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Образ з циклічним замиканням. Постійне, економить оперативну пам'ять.",
-    "enableOverlayFallback": "Увімкнути fallback overlay"
+    "daemonStartupMode": "Постійний демон",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
   },
   "modules": {
     "reload": "Оновити",
@@ -83,7 +82,7 @@
       "overlay": "OverlayFS",
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
-      "umount": "Umount",
+      "unmounted": "Unmounted",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -92,13 +91,18 @@
       }
     },
     "emptyState": "Модулів не знайдено.",
-    "umountHiddenHint": "Модулі Umount приховано.",
+    "unmountedHiddenHint": "Модулі Unmounted приховано.",
     "defaultTag": "Типово",
     "compatTag": "Сумісн.",
     "disableTag": "Вимкнено",
     "nativeTag": "Стелс",
     "unavailableTag": "Недоступно",
-    "kasumiUnavailableHint": "Kasumi увімкнено, але зараз він недоступний."
+    "kasumiUnavailableHint": "Kasumi увімкнено, але зараз він недоступний.",
+    "mountError": "Помилка монтування",
+    "clearMountErrors": "Очистити помилки",
+    "mountErrorsCleared": "Помилки очищено",
+    "mountErrorsClearFailed": "Не вдалося очистити помилки",
+    "suggestIgnoreHint": "Цей модуль містить команди монтування у своїх .sh файлах. Розгляньте встановлення режиму \"Ignore\"."
   },
   "kasumi": {
     "title": "Стан Kasumi",
@@ -155,6 +159,7 @@
     "userHidePathRequired": "Шлях для приховування не може бути порожнім",
     "stealthUpdated": "Stealth оновлено",
     "hidexattrUpdated": "HideXattr оновлено",
+    "selinuxFixUpdated": "SELinux Guard оновлено",
     "ignoreProtocolUpdated": "Політику невідповідності протоколу оновлено",
     "kernelDebugUpdated": "Налагодження ядра оновлено",
     "kmiOverride": "Перевизначення KMI",
@@ -163,6 +168,7 @@
     "lastError": "Остання помилка",
     "stealthTitle": "Стелс",
     "hidexattrTitle": "Приховування xattr",
+    "selinuxFixTitle": "SELinux Guard",
     "ignoreProtocolTitle": "Ігнорувати невідповідність протоколу",
     "ignoreProtocolHint": "Дозволяє Kasumi продовжувати роботу, навіть якщо userspace API і протокол ядра не повністю збігаються.",
     "lkmUnavailableHint": "Kasumi увімкнено, але модуль ядра ще не завантажено.",
@@ -181,7 +187,25 @@
     "cmdlineValue": "Значення cmdline",
     "rulesVisibleSummary": "{count} активних правил видно з userspace",
     "dtypeLabel": "dtype",
-    "loadError": "Не вдалося завантажити стан Kasumi"
+    "loadError": "Не вдалося завантажити стан Kasumi",
+    "statusConfigOffRuntimeOn": "Config Off / Runtime Still Loaded",
+    "unloadLkmWarningTitle": "注意！",
+    "unloadLkmWarningBody": "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？",
+    "unloadLkmWarningCancel": "取消",
+    "unloadLkmWarningConfirm": "确定",
+    "unameSpoofTitle": "Kernel version spoofing",
+    "unameEmptyHint": "No spoofed uname configured.",
+    "saveUname": "Save Uname",
+    "restoreUnameGlobal": "Restore original (global)",
+    "saveCmdline": "Save Cmdline",
+    "configOnlyHint": "Most settings below only update config. Runtime changes take effect the next time Kasumi is rebuilt or remounted.",
+    "unameMode": "Uname Mode",
+    "unameModeScoped": "Scoped",
+    "unameModeGlobal": "Global",
+    "unameModeScopedDesc": "Per-process: only Kasumi-hidden UIDs see fake values.",
+    "unameModeGlobalDesc": "System-wide: rewrites init_uts_ns, every task sees fake values.",
+    "unameReleaseDesc": "Kernel release, for example 5.15.0-generic.",
+    "unameVersionDesc": "Kernel version/build timestamp."
   },
   "logs": {
     "refresh": "Оновити"

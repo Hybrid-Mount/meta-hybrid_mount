@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{conf::config::Config, sys::kasumi};
+use crate::conf::config::Config;
+#[cfg(feature = "kasumi")]
+use crate::sys::kasumi;
 
 #[derive(Debug, Clone, Default)]
 pub struct BackendCapabilities {
@@ -22,11 +24,23 @@ pub struct BackendCapabilities {
 
 impl BackendCapabilities {
     pub fn detect(config: &Config) -> Self {
-        let status = kasumi::check_status();
+        #[cfg(not(feature = "kasumi"))]
+        {
+            let _ = config;
+            Self {
+                kasumi_status: "disabled".to_string(),
+                kasumi_usable: false,
+            }
+        }
 
-        Self {
-            kasumi_status: kasumi::status_name(status).to_string(),
-            kasumi_usable: config.kasumi.enabled && kasumi::can_operate(),
+        #[cfg(feature = "kasumi")]
+        {
+            let status = kasumi::check_status();
+
+            Self {
+                kasumi_status: kasumi::status_name(status).to_string(),
+                kasumi_usable: config.kasumi.enabled && kasumi::can_operate(),
+            }
         }
     }
 

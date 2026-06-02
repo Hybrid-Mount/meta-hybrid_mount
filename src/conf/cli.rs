@@ -43,20 +43,28 @@ pub enum Commands {
         #[command(subcommand)]
         command: ApiCommands,
     },
+    Daemon {
+        #[command(subcommand)]
+        command: DaemonCommands,
+    },
+    #[cfg(feature = "kasumi")]
     Lkm {
         #[command(subcommand)]
         command: LkmCommands,
     },
+    #[cfg(feature = "kasumi")]
     Hide {
         #[command(subcommand)]
         command: HideCommands,
     },
+    #[cfg(feature = "kasumi")]
     Kasumi {
         #[command(subcommand)]
         command: KasumiCommands,
     },
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum KasumiCommands {
     Status,
@@ -64,6 +72,8 @@ pub enum KasumiCommands {
     Version,
     Features,
     Hooks,
+    #[command(name = "apply-config-runtime")]
+    ApplyConfigRuntime,
     Clear,
     #[command(name = "release-connection")]
     ReleaseConnection,
@@ -71,12 +81,27 @@ pub enum KasumiCommands {
     InvalidateCache,
     #[command(name = "fix-mounts")]
     FixMounts,
+    #[command(name = "restore-uname-global")]
+    RestoreUnameGlobal,
+    #[command(name = "set-uname")]
+    SetUname {
+        #[arg(long = "mode", default_value = "scoped")]
+        mode: String,
+        release: String,
+        version: String,
+    },
+    #[command(name = "clear-uname")]
+    ClearUname {
+        #[arg(long = "mode", default_value = "scoped")]
+        mode: String,
+    },
     Rule {
         #[command(subcommand)]
         command: KasumiRuleCommands,
     },
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum HideCommands {
     List,
@@ -93,11 +118,67 @@ pub enum ApiCommands {
     #[command(name = "mount-topology")]
     MountTopology,
     Partitions,
+    #[command(name = "system-info")]
+    SystemInfo,
+    Version,
+    #[command(name = "config-get")]
+    ConfigGet,
+    #[command(name = "config-set")]
+    ConfigSet {
+        config: String,
+    },
+    #[command(name = "config-patch")]
+    ConfigPatch {
+        #[arg(long = "apply-runtime")]
+        apply_runtime: bool,
+        patch: String,
+    },
+    #[command(name = "config-reset")]
+    ConfigReset,
+    #[command(name = "modules-list")]
+    ModulesList {
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    #[command(name = "modules-apply")]
+    ModulesApply {
+        modules: String,
+    },
+    #[cfg(feature = "kasumi")]
     Lkm,
+    #[cfg(feature = "kasumi")]
     Features,
+    #[cfg(feature = "kasumi")]
     Hooks,
+    #[command(name = "kernel-uname")]
+    KernelUname,
+    #[command(name = "open-url")]
+    OpenUrl {
+        url: String,
+    },
+    Reboot,
+    #[cfg(feature = "kasumi")]
+    #[command(name = "kasumi-maps-add")]
+    KasumiMapsAdd {
+        rule: String,
+    },
+    #[cfg(feature = "kasumi")]
+    #[command(name = "kasumi-maps-clear")]
+    KasumiMapsClear,
 }
 
+#[derive(Subcommand, Debug)]
+pub enum DaemonCommands {
+    Launch,
+    Serve,
+    Ping,
+    #[command(name = "webui-start")]
+    WebuiStart,
+    Stop,
+    Status,
+}
+
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum LkmCommands {
     Load,
@@ -105,6 +186,7 @@ pub enum LkmCommands {
     Status,
 }
 
+#[cfg(feature = "kasumi")]
 #[derive(Subcommand, Debug)]
 pub enum KasumiRuleCommands {
     Add {

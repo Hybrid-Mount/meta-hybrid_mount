@@ -46,6 +46,18 @@ impl ModuleStageFailure {
             source,
         }
     }
+
+    pub fn sync(module_ids: Vec<String>, source: Error) -> Self {
+        Self::new(FailureStage::Sync, module_ids, source)
+    }
+
+    pub fn execute(module_ids: Vec<String>, source: Error) -> Self {
+        Self::new(FailureStage::Execute, module_ids, source)
+    }
+
+    pub fn sync_one(module_id: &str, source: Error) -> Self {
+        Self::sync(vec![module_id.to_string()], source)
+    }
 }
 
 impl fmt::Display for ModuleStageFailure {

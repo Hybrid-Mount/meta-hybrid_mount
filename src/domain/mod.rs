@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    path::Path,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +25,6 @@ pub enum DefaultMode {
     #[default]
     Overlay,
     Magic,
-    #[serde(alias = "hymofs")]
     Kasumi,
 }
 
@@ -42,7 +44,6 @@ pub enum MountMode {
     #[default]
     Overlay,
     Magic,
-    #[serde(alias = "hymofs")]
     Kasumi,
     Ignore,
 }
@@ -59,35 +60,53 @@ impl MountMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ModuleRules {
-    #[serde(default)]
     pub default_mode: MountMode,
-    #[serde(default)]
     pub paths: HashMap<String, MountMode>,
 }
 
 impl ModuleRules {
     pub fn get_mode(&self, relative_path: &str) -> MountMode {
-        let mut best_match = None;
-        let mut best_len = 0usize;
-
-        for (path, mode) in &self.paths {
-            let is_exact = relative_path == path;
-            let is_prefix = relative_path.len() > path.len()
-                && relative_path.starts_with(path)
-                && relative_path.as_bytes().get(path.len()) == Some(&b'/');
-
-            if (is_exact || is_prefix) && path.len() >= best_len {
-                best_match = Some(*mode);
-                best_len = path.len();
+        let mut candidate = Some(relative_path);
+        while let Some(path) = candidate {
+            if let Some(mode) = self.paths.get(path) {
+                return *mode;
             }
-        }
-
-        if let Some(mode) = best_match {
-            return mode;
+            candidate = path.rsplit_once('/').map(|(parent, _)| parent);
         }
 
         self.default_mode
+    }
+
+    pub fn effective_mode(&self, relative_path: &Path, use_kasumi: bool) -> MountMode {
+        let mode = self.get_mode(relative_path.to_string_lossy().as_ref());
+        if matches!(mode, MountMode::Kasumi) && !use_kasumi {
+            MountMode::Ignore
+        } else {
+            mode
+        }
+    }
+
+    pub fn has_descendant_rule(&self, relative_path: &Path) -> bool {
+        let relative = relative_path.to_string_lossy();
+        let prefix = format!("{relative}/");
+        self.paths.keys().any(|path| path.starts_with(&prefix))
+    }
+
+    pub fn descendant_rule_prefixes(&self) -> HashSet<String> {
+        let mut prefixes = HashSet::new();
+        for path in self.paths.keys() {
+            let mut current = path.as_str();
+            while let Some((parent, _)) = current.rsplit_once('/') {
+                if parent.is_empty() {
+                    break;
+                }
+                prefixes.insert(parent.to_string());
+                current = parent;
+            }
+        }
+        prefixes
     }
 }
 
@@ -103,21 +122,27 @@ mod tests {
     }
 
     #[test]
-    fn exact_match_wins() {
+    fn exact_match_rules() {
+        // Exact path match takes precedence over prefix
         let rules = make_rules(MountMode::Overlay, &[("system", MountMode::Magic)]);
         assert_eq!(rules.get_mode("system"), MountMode::Magic);
+
+        // Duplicate keys: later entry overwrites (HashMap semantics)
+        let rules = make_rules(
+            MountMode::Overlay,
+            &[("sys", MountMode::Magic), ("sys", MountMode::Kasumi)],
+        );
+        assert_eq!(rules.get_mode("sys"), MountMode::Kasumi);
     }
 
     #[test]
-    fn prefix_match_wins() {
+    fn prefix_match_rules() {
+        // Prefix match: "system" covers "system/app"
         let rules = make_rules(MountMode::Overlay, &[("system", MountMode::Magic)]);
         assert_eq!(rules.get_mode("system/app"), MountMode::Magic);
-    }
 
-    #[test]
-    fn prefix_not_partial_word() {
+        // "sys" is a substring, not a path-component prefix of "system"
         let rules = make_rules(MountMode::Overlay, &[("sys", MountMode::Magic)]);
-        // "system" starts with "sys" but "sys" is not a path component prefix
         assert_eq!(rules.get_mode("system"), MountMode::Overlay);
     }
 
@@ -135,33 +160,37 @@ mod tests {
     }
 
     #[test]
-    fn default_mode_fallback() {
+    fn default_mode_rules() {
         let rules = make_rules(MountMode::Ignore, &[]);
         assert_eq!(rules.get_mode("any/path"), MountMode::Ignore);
-    }
 
-    #[test]
-    fn empty_rules_returns_default() {
         let rules = make_rules(MountMode::Kasumi, &[]);
         assert_eq!(rules.get_mode("system"), MountMode::Kasumi);
     }
 
     #[test]
-    fn exact_and_prefix_same_len_exact_wins() {
-        let rules = make_rules(
-            MountMode::Overlay,
-            &[
-                ("sys", MountMode::Magic),
-                ("sys", MountMode::Kasumi), // later entry overwrites in HashMap
-            ],
-        );
-        assert_eq!(rules.get_mode("sys"), MountMode::Kasumi);
+    fn trailing_slash_not_prefix() {
+        // "system/" is not a prefix of "system" because the slash requires
+        // deeper path components
+        let rules = make_rules(MountMode::Overlay, &[("system/", MountMode::Magic)]);
+        assert_eq!(rules.get_mode("system"), MountMode::Overlay);
     }
 
     #[test]
-    fn root_slash_path_not_matched_as_prefix() {
-        let rules = make_rules(MountMode::Overlay, &[("system/", MountMode::Magic)]);
-        // "system" is not a prefix match for key "system/" because there's no trailing slash
-        assert_eq!(rules.get_mode("system"), MountMode::Overlay);
+    fn descendant_rule_prefixes_include_rule_ancestors_only() {
+        let rules = make_rules(
+            MountMode::Overlay,
+            &[
+                ("system/app/private", MountMode::Magic),
+                ("vendor/lib", MountMode::Kasumi),
+            ],
+        );
+        let prefixes = rules.descendant_rule_prefixes();
+
+        assert!(prefixes.contains("system"));
+        assert!(prefixes.contains("system/app"));
+        assert!(prefixes.contains("vendor"));
+        assert!(!prefixes.contains("system/app/private"));
+        assert!(!prefixes.contains("vendor/lib"));
     }
 }

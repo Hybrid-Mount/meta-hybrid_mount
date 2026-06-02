@@ -353,6 +353,88 @@
   gap: 14px;
 }
 
+.uname-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.uname-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.uname-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+
+.uname-panel-subtitle {
+  margin-top: 4px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.uname-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.uname-mode-row {
+  display: grid;
+  grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.uname-segmented {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-height: 40px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background-color: var(--md-sys-color-surface);
+}
+
+.uname-segmented button {
+  border: 0;
+  border-right: 1px solid var(--md-sys-color-outline);
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.uname-segmented button:last-child {
+  border-right: 0;
+}
+
+.uname-segmented button.selected {
+  background-color: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+
+.uname-segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.uname-mode-desc {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .status-row {
   display: flex;
   justify-content: space-between;
@@ -527,5 +609,19 @@
 
   .sub-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .uname-field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .uname-panel-head {
+    flex-direction: column;
+  }
+
+  .uname-mode-row {
+    grid-template-columns: 1fr;
   }
 }

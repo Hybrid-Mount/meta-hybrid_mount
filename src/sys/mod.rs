@@ -13,7 +13,9 @@
 // limitations under the License.
 
 pub mod fs;
+#[cfg(feature = "kasumi")]
 pub mod kasumi;
+#[cfg(feature = "kasumi")]
 pub mod lkm;
 pub mod mount;
 pub mod nuke;

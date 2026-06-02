@@ -18,21 +18,28 @@ use anyhow::{Context, Result, bail};
 
 use super::{
     common::{
-        effective_maps_spoof_enabled, effective_mount_hide_enabled, effective_statfs_spoof_enabled,
-        effective_stealth_enabled, feature_supported, has_uname_spoof_config, to_c_long, to_c_uint,
-        to_c_ulong,
+        effective_maps_spoof_enabled, effective_mount_hide_enabled, effective_selinux_fix_enabled,
+        effective_statfs_spoof_enabled, effective_stealth_enabled, feature_supported,
+        has_uname_spoof_config, to_c_long, to_c_ulong,
     },
     compile::{CompiledRules, compile_rules, log_compiled_rule_summary},
     status::{can_operate, hook_lines},
 };
 use crate::{
-    conf::{config, schema},
+    conf::{
+        config,
+        schema::{self, KasumiUnameMode},
+    },
     core::{inventory::Module, ops::plan::MountPlan, user_hide_rules},
     defs,
-    sys::kasumi::{
-        self, HYMO_FEATURE_CMDLINE_SPOOF, HYMO_FEATURE_KSTAT_SPOOF, HYMO_FEATURE_MAPS_SPOOF,
-        HYMO_FEATURE_MOUNT_HIDE, HYMO_FEATURE_STATFS_SPOOF, HYMO_FEATURE_UNAME_SPOOF, HymoMapsRule,
-        HymoMountHideArg, HymoSpoofKstat, HymoSpoofUname, HymoStatfsSpoofArg,
+    sys::{
+        kasumi::{
+            self, KSM_FEATURE_CMDLINE_SPOOF, KSM_FEATURE_KSTAT_SPOOF, KSM_FEATURE_MAPS_SPOOF,
+            KSM_FEATURE_MOUNT_HIDE, KSM_FEATURE_SELINUX_FIX, KSM_FEATURE_STATFS_SPOOF,
+            KSM_FEATURE_UNAME_SPOOF, KasumiMapsRule, KasumiMountHideArg, KasumiSpoofKstat,
+            KasumiSpoofUname, KasumiStatfsSpoofArg,
+        },
+        lkm,
     },
 };
 
@@ -46,6 +53,7 @@ fn auxiliary_features_requested(config: &config::Config) -> bool {
         || effective_mount_hide_enabled(config)
         || effective_maps_spoof_enabled(config)
         || effective_statfs_spoof_enabled(config)
+        || effective_selinux_fix_enabled(config)
         || has_uname_spoof_config(config)
         || !config.kasumi.cmdline_value.is_empty()
         || !config.kasumi.hide_uids.is_empty()
@@ -142,7 +150,7 @@ fn apply_runtime_switches(
 
     let mount_hide_enabled = effective_mount_hide_enabled(config);
     if mount_hide_enabled {
-        if feature_supported(features, HYMO_FEATURE_MOUNT_HIDE) {
+        if feature_supported(features, KSM_FEATURE_MOUNT_HIDE) {
             if let Err(err) = apply_mount_hide_from_config(config) {
                 crate::scoped_log!(
                     warn,
@@ -166,14 +174,14 @@ fn apply_runtime_switches(
             "maps_spoof",
             true,
             features,
-            HYMO_FEATURE_MAPS_SPOOF,
+            KSM_FEATURE_MAPS_SPOOF,
             kasumi::set_maps_spoof,
         );
     }
 
     let statfs_spoof_enabled = effective_statfs_spoof_enabled(config);
     if statfs_spoof_enabled {
-        if feature_supported(features, HYMO_FEATURE_STATFS_SPOOF) {
+        if feature_supported(features, KSM_FEATURE_STATFS_SPOOF) {
             if let Err(err) = apply_statfs_spoof_from_config(config) {
                 crate::scoped_log!(
                     warn,
@@ -191,6 +199,25 @@ fn apply_runtime_switches(
         }
     }
 
+    let selinux_fix_enabled = effective_selinux_fix_enabled(config);
+    if feature_supported(features, KSM_FEATURE_SELINUX_FIX) {
+        if let Err(err) = kasumi::set_selinux_fix(selinux_fix_enabled) {
+            crate::scoped_log!(
+                warn,
+                "mount:kasumi",
+                "feature apply failed: name=selinux_fix, enabled={}, error={:#}",
+                selinux_fix_enabled,
+                err
+            );
+        }
+    } else if selinux_fix_enabled {
+        crate::scoped_log!(
+            warn,
+            "mount:kasumi",
+            "feature skip: name=selinux_fix, enabled=true, reason=unsupported"
+        );
+    }
+
     Ok(())
 }
 
@@ -199,7 +226,7 @@ pub fn apply_mount_hide_from_config(config: &config::Config) -> Result<()> {
 
     if enabled && !config.kasumi.mount_hide.path_pattern.as_os_str().is_empty() {
         let arg =
-            HymoMountHideArg::new(true, Some(config.kasumi.mount_hide.path_pattern.as_path()))?;
+            KasumiMountHideArg::new(true, Some(config.kasumi.mount_hide.path_pattern.as_path()))?;
         kasumi::set_mount_hide_config(&arg)
     } else {
         kasumi::set_mount_hide(enabled)
@@ -213,7 +240,7 @@ pub fn apply_statfs_spoof_from_config(config: &config::Config) -> Result<()> {
         && (!config.kasumi.statfs_spoof.path.as_os_str().is_empty()
             || config.kasumi.statfs_spoof.spoof_f_type != 0)
     {
-        let arg = HymoStatfsSpoofArg::with_path_and_f_type(
+        let arg = KasumiStatfsSpoofArg::with_path_and_f_type(
             true,
             config.kasumi.statfs_spoof.path.as_path(),
             to_c_ulong(
@@ -228,7 +255,7 @@ pub fn apply_statfs_spoof_from_config(config: &config::Config) -> Result<()> {
 }
 
 pub fn apply_uname_from_config(config: &config::Config) -> Result<()> {
-    let mut uname = HymoSpoofUname::default();
+    let mut uname = KasumiSpoofUname::default();
     if !config.kasumi.uname.sysname.is_empty() {
         uname.set_sysname(&config.kasumi.uname.sysname)?;
     }
@@ -247,17 +274,20 @@ pub fn apply_uname_from_config(config: &config::Config) -> Result<()> {
     if !config.kasumi.uname.domainname.is_empty() {
         uname.set_domainname(&config.kasumi.uname.domainname)?;
     }
-    kasumi::set_uname(&uname)
+    match config.kasumi.uname_mode {
+        KasumiUnameMode::Scoped => kasumi::set_uname(&uname),
+        KasumiUnameMode::Global => kasumi::set_uname_global(&uname),
+    }
 }
 
 pub fn apply_kstat_rule(rule: &schema::KasumiKstatRuleConfig) -> Result<()> {
-    let mut native_rule = HymoSpoofKstat::new(
+    let mut native_rule = KasumiSpoofKstat::new(
         to_c_ulong(rule.target_ino, "target_ino")?,
         &rule.target_pathname,
     )?;
     native_rule.spoofed_ino = to_c_ulong(rule.spoofed_ino, "spoofed_ino")?;
     native_rule.spoofed_dev = to_c_ulong(rule.spoofed_dev, "spoofed_dev")?;
-    native_rule.spoofed_nlink = to_c_uint(rule.spoofed_nlink, "spoofed_nlink");
+    native_rule.spoofed_nlink = rule.spoofed_nlink;
     native_rule.spoofed_size = rule.spoofed_size;
     native_rule.spoofed_atime_sec = to_c_long(rule.spoofed_atime_sec, "spoofed_atime_sec")?;
     native_rule.spoofed_atime_nsec = to_c_long(rule.spoofed_atime_nsec, "spoofed_atime_nsec")?;
@@ -291,9 +321,11 @@ pub fn apply_kstat_rule(rule: &schema::KasumiKstatRuleConfig) -> Result<()> {
 
 fn apply_spoof_settings(config: &config::Config, features: Option<i32>) -> Result<()> {
     let has_uname_config = has_uname_spoof_config(config);
-    if feature_supported(features, HYMO_FEATURE_UNAME_SPOOF) && has_uname_config {
+    let should_apply_uname =
+        has_uname_config || matches!(config.kasumi.uname_mode, KasumiUnameMode::Global);
+    if feature_supported(features, KSM_FEATURE_UNAME_SPOOF) && should_apply_uname {
         apply_uname_from_config(config)?;
-    } else if has_uname_config {
+    } else if should_apply_uname {
         crate::scoped_log!(
             warn,
             "mount:kasumi",
@@ -301,7 +333,7 @@ fn apply_spoof_settings(config: &config::Config, features: Option<i32>) -> Resul
         );
     }
 
-    if feature_supported(features, HYMO_FEATURE_CMDLINE_SPOOF)
+    if feature_supported(features, KSM_FEATURE_CMDLINE_SPOOF)
         && !config.kasumi.cmdline_value.is_empty()
     {
         kasumi::set_cmdline_str(&config.kasumi.cmdline_value)?;
@@ -326,7 +358,7 @@ fn apply_spoof_settings(config: &config::Config, features: Option<i32>) -> Resul
     }
 
     if !config.kasumi.kstat_rules.is_empty() {
-        if !feature_supported(features, HYMO_FEATURE_KSTAT_SPOOF) {
+        if !feature_supported(features, KSM_FEATURE_KSTAT_SPOOF) {
             crate::scoped_log!(
                 warn,
                 "mount:kasumi",
@@ -341,7 +373,7 @@ fn apply_spoof_settings(config: &config::Config, features: Option<i32>) -> Resul
     }
 
     if !config.kasumi.maps_rules.is_empty() {
-        if !feature_supported(features, HYMO_FEATURE_MAPS_SPOOF) {
+        if !feature_supported(features, KSM_FEATURE_MAPS_SPOOF) {
             crate::scoped_log!(
                 warn,
                 "mount:kasumi",
@@ -350,7 +382,7 @@ fn apply_spoof_settings(config: &config::Config, features: Option<i32>) -> Resul
             );
         } else {
             for rule in &config.kasumi.maps_rules {
-                let native_rule = HymoMapsRule::new(
+                let native_rule = KasumiMapsRule::new(
                     to_c_ulong(rule.target_ino, "target_ino")?,
                     to_c_ulong(rule.target_dev, "target_dev")?,
                     to_c_ulong(rule.spoofed_ino, "spoofed_ino")?,
@@ -406,6 +438,37 @@ pub fn reset_runtime(config: &config::Config) -> Result<bool> {
         );
     }
 
+    Ok(true)
+}
+
+pub fn apply_runtime_config(config: &config::Config) -> Result<bool> {
+    // When the user enables Kasumi but the LKM hasn't been loaded yet, attempt
+    // autoload so the deadlock ("switch hidden because LKM not loaded, LKM not
+    // loaded because switch hidden") is broken.
+    if config.kasumi.enabled && !can_operate(config) {
+        let _ = lkm::autoload_if_needed(&config.kasumi);
+    }
+
+    if !can_operate(config) {
+        return Ok(false);
+    }
+
+    let runtime_requested = config.kasumi.enabled && auxiliary_features_requested(config);
+    let reset = reset_runtime(config)?;
+    let features = get_features();
+    log_feature_summary(features);
+
+    if !runtime_requested {
+        kasumi::set_enabled(false)?;
+        return Ok(reset);
+    }
+
+    apply_runtime_switches(config, true, features)?;
+    apply_spoof_settings(config, features)?;
+    kasumi::set_enabled(true)?;
+    if let Err(err) = kasumi::fix_mounts() {
+        crate::scoped_log!(debug, "mount:kasumi", "fix_mounts skipped: error={:#}", err);
+    }
     Ok(true)
 }
 

@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "control-plane")]
 pub mod cli;
+#[cfg(feature = "control-plane")]
 pub mod cli_handlers;
 pub mod config;
 pub mod loader;

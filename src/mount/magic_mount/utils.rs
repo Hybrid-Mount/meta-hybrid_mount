@@ -23,7 +23,7 @@ use std::{
 use anyhow::{Result, bail};
 use rustix::fs::{Gid, Mode, Uid, chmod, chown};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::mount::mount_bind;
+pub(super) use rustix::mount::mount_bind;
 
 use crate::{
     core::inventory::{self, Module},
@@ -34,7 +34,7 @@ use crate::{
 };
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn mount_bind<P, Q>(_from: P, _to: Q) -> Result<()>
+pub(super) fn mount_bind<P, Q>(_from: P, _to: Q) -> Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
@@ -56,6 +56,16 @@ where
     }
 }
 
+fn copy_metadata(src: &Path, dst: &Path, metadata: &Metadata) -> Result<()> {
+    chmod(dst, Mode::from_raw_mode(metadata.mode() as _))?;
+    chown(
+        dst,
+        Some(Uid::from_raw(metadata.uid())),
+        Some(Gid::from_raw(metadata.gid())),
+    )?;
+    lsetfilecon(dst, lgetfilecon(src)?.as_str())
+}
+
 pub fn tmpfs_skeleton<P>(path: P, work_dir_path: P, node: &Node) -> Result<()>
 where
     P: AsRef<Path>,
@@ -72,15 +82,7 @@ where
     create_dir_all(work_dir_path)?;
 
     let (metadata, path) = metadata_path(path, node)?;
-
-    chmod(work_dir_path, Mode::from_raw_mode(metadata.mode() as _))?;
-    chown(
-        work_dir_path,
-        Some(Uid::from_raw(metadata.uid())),
-        Some(Gid::from_raw(metadata.gid())),
-    )?;
-    lsetfilecon(work_dir_path, lgetfilecon(path)?.as_str())?;
-
+    copy_metadata(&path, work_dir_path, &metadata)?;
     Ok(())
 }
 
@@ -111,14 +113,7 @@ where
             work_dir_path.display()
         );
         create_dir(&work_dir_path)?;
-        let metadata = entry.metadata()?;
-        chmod(&work_dir_path, Mode::from_raw_mode(metadata.mode() as _))?;
-        chown(
-            &work_dir_path,
-            Some(Uid::from_raw(metadata.uid())),
-            Some(Gid::from_raw(metadata.gid())),
-        )?;
-        lsetfilecon(&work_dir_path, lgetfilecon(&path)?.as_str())?;
+        copy_metadata(&path, &work_dir_path, &entry.metadata()?)?;
         for entry_result in path.read_dir()? {
             let entry = match entry_result {
                 Ok(entry) => entry,
@@ -136,48 +131,10 @@ where
             mount_mirror(&path, &work_dir_path, &entry)?;
         }
     } else if file_type.is_symlink() {
-        crate::scoped_log!(
-            debug,
-            "magic:collect",
-            "mirror symlink: src={}, dst={}",
-            path.display(),
-            work_dir_path.display()
-        );
         clone_symlink(&path, &work_dir_path)?;
     }
 
     Ok(())
-}
-
-fn effective_mode(mode: &MountMode, use_kasumi: bool) -> MountMode {
-    if matches!(mode, MountMode::Kasumi) && !use_kasumi {
-        MountMode::Ignore
-    } else {
-        *mode
-    }
-}
-
-fn path_has_descendant_rule(rules: &ModuleRules, relative_path: &Path) -> bool {
-    let relative = relative_path.to_string_lossy();
-    let prefix = format!("{relative}/");
-    rules.paths.keys().any(|path| path.starts_with(&prefix))
-}
-
-fn should_fallback_overlay_files(
-    rules: &ModuleRules,
-    relative_path: &Path,
-    use_kasumi: bool,
-    overlay_fallback_enabled: bool,
-) -> bool {
-    overlay_fallback_enabled
-        && matches!(
-            effective_mode(
-                &rules.get_mode(relative_path.to_string_lossy().as_ref()),
-                use_kasumi
-            ),
-            MountMode::Overlay
-        )
-        && path_has_descendant_rule(rules, relative_path)
 }
 
 fn collect_magic_subtree(
@@ -185,12 +142,10 @@ fn collect_magic_subtree(
     module_dir: &Path,
     relative_path: &Path,
     rules: &ModuleRules,
+    descendant_rule_prefixes: &HashSet<String>,
     use_kasumi: bool,
-    overlay_fallback_enabled: bool,
 ) -> Result<bool> {
     let mut has_file = false;
-    let overlay_file_fallback =
-        should_fallback_overlay_files(rules, relative_path, use_kasumi, overlay_fallback_enabled);
 
     for entry_result in module_dir.read_dir()? {
         let entry = match entry_result {
@@ -211,14 +166,13 @@ fn collect_magic_subtree(
         let name = file_name.to_string_lossy().into_owned();
         let entry_path = entry.path();
         let next_relative = relative_path.join(&file_name);
-        let effective_mode = effective_mode(
-            &rules.get_mode(next_relative.to_string_lossy().as_ref()),
-            use_kasumi,
-        );
+        let next_relative_key = next_relative.to_string_lossy();
+        let effective_mode = rules.effective_mode(&next_relative, use_kasumi);
 
         match entry.file_type() {
             Ok(file_type) if file_type.is_dir() => {
-                let has_descendant_rules = path_has_descendant_rule(rules, &next_relative);
+                let has_descendant_rules =
+                    descendant_rule_prefixes.contains(next_relative_key.as_ref());
                 if matches!(effective_mode, MountMode::Magic) && !has_descendant_rules {
                     if let Some(mut node) = Node::new_module(&name, &entry) {
                         let subtree_has_file =
@@ -243,8 +197,8 @@ fn collect_magic_subtree(
                     &entry_path,
                     &next_relative,
                     rules,
+                    descendant_rule_prefixes,
                     use_kasumi,
-                    overlay_fallback_enabled,
                 )? || node.replace;
                 if subtree_has_file {
                     target.children.insert(name, node);
@@ -252,19 +206,9 @@ fn collect_magic_subtree(
                 }
             }
             Ok(_) => {
-                let use_magic_fallback =
-                    overlay_file_fallback && matches!(effective_mode, MountMode::Overlay);
-                if (matches!(effective_mode, MountMode::Magic) || use_magic_fallback)
+                if matches!(effective_mode, MountMode::Magic)
                     && let Some(node) = Node::new_module(&name, &entry)
                 {
-                    if use_magic_fallback {
-                        crate::scoped_log!(
-                            debug,
-                            "magic:collect",
-                            "overlay direct entry fallback: relative={}",
-                            next_relative.display()
-                        );
-                    }
                     if target.children.get(&name).is_some_and(|existing| {
                         existing.file_type != crate::mount::node::NodeFileType::Symlink
                     }) {
@@ -294,7 +238,6 @@ pub fn collect_module_files(
     managed_partitions: &[String],
     magic_modules: &[Module],
     use_kasumi: bool,
-    overlay_fallback_enabled: bool,
 ) -> Result<Option<Node>> {
     let mut root = Node::new_root("");
     let mut system = Node::new_root("system");
@@ -410,6 +353,7 @@ pub fn collect_module_files(
             "module collect: path={}",
             module_path.display()
         );
+        let descendant_rule_prefixes = rules.descendant_rule_prefixes();
 
         for p in touched_partitions {
             if p == "system" {
@@ -418,8 +362,8 @@ pub fn collect_module_files(
                     &module_path.join(&p),
                     Path::new(&p),
                     rules,
+                    &descendant_rule_prefixes,
                     use_kasumi,
-                    overlay_fallback_enabled,
                 )?);
                 continue;
             }
@@ -439,8 +383,8 @@ pub fn collect_module_files(
                 &module_path.join(&p),
                 Path::new(&p),
                 rules,
+                &descendant_rule_prefixes,
                 use_kasumi,
-                overlay_fallback_enabled,
             )?);
         }
     }
@@ -504,23 +448,14 @@ where
 {
     let src_symlink = read_link(src.as_ref())?;
     symlink(&src_symlink, dst.as_ref())?;
-    if let Err(err) = lsetfilecon(dst.as_ref(), lgetfilecon(src.as_ref())?.as_str()) {
+    if let Err(e) = lsetfilecon(dst.as_ref(), lgetfilecon(src.as_ref())?.as_str()) {
         crate::scoped_log!(
             debug,
-            "magic:collect",
-            "clone symlink context skipped: dst={}, src={}, error={:#}",
+            "magic_mount",
+            "clone symlink selinux context failed: dst={}, error={:#}",
             dst.as_ref().display(),
-            src.as_ref().display(),
-            err
+            e
         );
     }
-    crate::scoped_log!(
-        debug,
-        "magic:collect",
-        "clone symlink: dst={}, src={}, target={}",
-        dst.as_ref().display(),
-        src.as_ref().display(),
-        src_symlink.display()
-    );
     Ok(())
 }

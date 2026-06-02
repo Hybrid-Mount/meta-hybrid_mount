@@ -2,8 +2,9 @@ import { createMemo, createSignal, Show, For } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { sysStore } from "../lib/stores/sysStore";
 import { configStore } from "../lib/stores/configStore";
-import { kasumiStore } from "../lib/stores/kasumiStore";
 import { ICONS } from "../lib/constants";
+import { ENABLE_KASUMI } from "../lib/constants_gen";
+import { features } from "../lib/features";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
 import { API } from "../lib/api";
@@ -38,7 +39,7 @@ export default function StatusTab() {
 
   const modeDistribution = createMemo(() => {
     const stats = modeStats();
-    const showKasumi = kasumiStore.enabled;
+    const showKasumi = ENABLE_KASUMI && features.kasumiEnabled;
     const overlay = stats.overlay;
     const magic = stats.magic;
     const kasumi = showKasumi ? stats.kasumi : 0;
@@ -178,7 +179,7 @@ export default function StatusTab() {
               class="bar-segment bar-magic"
               style={{ width: `${modeDistribution().magic}%` }}
             ></div>
-            <Show when={kasumiStore.enabled}>
+            <Show when={ENABLE_KASUMI && features.kasumiEnabled}>
               <div
                 class="bar-segment bar-kasumi"
                 style={{ width: `${modeDistribution().kasumi}%` }}
@@ -202,7 +203,7 @@ export default function StatusTab() {
                   modeStats().magic}
               </span>
             </div>
-            <Show when={kasumiStore.enabled}>
+            <Show when={ENABLE_KASUMI && features.kasumiEnabled}>
               <div class="legend-item">
                 <div class="legend-dot dot-kasumi"></div>
                 <span>

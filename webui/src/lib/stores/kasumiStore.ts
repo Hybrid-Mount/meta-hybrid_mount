@@ -1,6 +1,9 @@
 import { createSignal, createRoot } from "solid-js";
 import type { KasumiStatus } from "../types";
+import type { InitPayload } from "../api/contracts";
 import { API } from "../api";
+import { DEFAULT_CONFIG } from "../constants";
+import { buildKasumiStatusFromPayload } from "../api/codec/runtimeCodec";
 import { uiStore } from "./uiStore";
 
 const STATUS_CACHE_TTL_MS = 3000;
@@ -14,6 +17,25 @@ const createKasumiStore = () => {
 
   function hasFreshStatus() {
     return hasLoaded && Date.now() - lastLoadedAt < STATUS_CACHE_TTL_MS;
+  }
+
+  function loadFromInit(payload: InitPayload) {
+    if (payload.kasumi_status != null) {
+      const s = buildKasumiStatusFromPayload(
+        payload.kasumi_status,
+        DEFAULT_CONFIG.kasumi,
+        {},
+      );
+      if (s) {
+        setStatus(s);
+        hasLoaded = true;
+        lastLoadedAt = Date.now();
+      } else {
+        console.warn("kasumiStore: failed to parse init kasumi_status payload");
+      }
+    } else {
+      console.warn("kasumiStore: init payload missing kasumi_status");
+    }
   }
 
   async function loadStatus(showError = true, force = false) {
@@ -50,12 +72,51 @@ const createKasumiStore = () => {
 
   function setEnabledOptimistic(enabled: boolean) {
     const current = status();
-    if (!current) return;
+    if (!current) {
+      setStatus({
+        status: "unknown",
+        available: false,
+        kernel_supported: false,
+        protocol_version: null,
+        feature_names: [],
+        hooks: [],
+        rule_count: 0,
+        user_hide_rule_count: 0,
+        mirror_path: "/dev/kasumi_mirror",
+        lkm: { loaded: false, autoload: false, kmi_override: "" },
+        config: { ...DEFAULT_CONFIG.kasumi, enabled },
+        runtime: { snapshot: {}, kasumi_modules: [] },
+      });
+      hasLoaded = true;
+      lastLoadedAt = Date.now();
+      return;
+    }
     setStatus({
       ...current,
       config: {
         ...current.config,
         enabled,
+      },
+    });
+    hasLoaded = true;
+    lastLoadedAt = Date.now();
+  }
+
+  function handleSseUpdate(state: unknown) {
+    const current = status();
+    if (!current) return;
+    const s = state as Record<string, unknown> | null;
+    if (!s || typeof s !== "object") return;
+    const kasumi = s.kasumi as Record<string, unknown> | null;
+    const kasumiModules = Array.isArray(s.kasumi_modules)
+      ? (s.kasumi_modules as string[])
+      : [];
+    setStatus({
+      ...current,
+      runtime: {
+        ...current.runtime,
+        snapshot: kasumi ?? current.runtime?.snapshot ?? {},
+        kasumi_modules: kasumiModules,
       },
     });
     hasLoaded = true;
@@ -73,9 +134,11 @@ const createKasumiStore = () => {
       return loading();
     },
     ensureStatusLoaded,
+    loadFromInit,
     refreshStatus: (showError = true, force = true) =>
       loadStatus(showError, force),
     setEnabledOptimistic,
+    handleSseUpdate,
   };
 };
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod fallback;
 mod magic;
 mod overlay;
 
@@ -20,26 +19,42 @@ use std::{collections::BTreeSet, path::Path};
 
 use anyhow::{Result, bail};
 
+#[cfg(feature = "kasumi")]
+use crate::core::kasumi_coordinator::KasumiCoordinator;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr;
 use crate::{
     conf::config,
     core::{
         inventory::Module,
-        kasumi_coordinator::KasumiCoordinator,
-        ops::plan::MountPlan,
+        ops::plan::{MountPlan, OverlayOperation},
         recovery::{FailureStage, ModuleStageFailure},
         runtime_state::MountStatistics,
     },
+    utils,
 };
 
 pub struct ExecutionResult {
     pub overlay_module_ids: Vec<String>,
     pub overlay_partitions: Vec<String>,
     pub magic_module_ids: Vec<String>,
+    #[cfg(feature = "kasumi")]
     pub kasumi_module_ids: Vec<String>,
     pub kasumi_runtime_enabled: bool,
     pub mount_stats: MountStatistics,
+}
+
+impl ExecutionResult {
+    pub fn kasumi_count(&self) -> usize {
+        #[cfg(feature = "kasumi")]
+        {
+            self.kasumi_module_ids.len()
+        }
+        #[cfg(not(feature = "kasumi"))]
+        {
+            0
+        }
+    }
 }
 
 pub struct Executor;
@@ -60,15 +75,18 @@ impl Executor {
             "start: overlay_ops={}, preselected_magic_modules={}, preselected_kasumi_modules={}",
             plan.overlay_ops.len(),
             plan.magic_module_ids.len(),
-            plan.kasumi_module_ids.len()
+            plan.kasumi_count()
         );
         let mut final_magic_ids: BTreeSet<String> = plan.magic_module_ids.iter().cloned().collect();
         let mut final_overlay_ids: BTreeSet<String> = BTreeSet::new();
         let mut final_overlay_partitions: BTreeSet<String> = BTreeSet::new();
+        #[cfg(feature = "kasumi")]
         let planned_kasumi_ids = plan.kasumi_module_ids.clone();
         let mut mount_stats = MountStatistics::default();
+        #[cfg(feature = "kasumi")]
         let kasumi = KasumiCoordinator::new(config);
 
+        #[cfg(feature = "kasumi")]
         let kasumi_available = if config.kasumi.enabled {
             kasumi.reset_runtime().map_err(|err| {
                 ModuleStageFailure::new(
@@ -85,6 +103,9 @@ impl Executor {
             );
             false
         };
+        #[cfg(not(feature = "kasumi"))]
+        let kasumi_available = false;
+        #[cfg(feature = "kasumi")]
         if !kasumi_available && !planned_kasumi_ids.is_empty() {
             return Err(ModuleStageFailure::new(
                 FailureStage::Execute,
@@ -105,7 +126,12 @@ impl Executor {
                     op.target,
                     op.lowerdirs.len()
                 );
-                match overlay::mount_overlay(op, config, &kasumi) {
+                #[cfg(feature = "kasumi")]
+                let overlay_result = overlay::mount_overlay(op, config, &kasumi);
+                #[cfg(not(feature = "kasumi"))]
+                let overlay_result = overlay::mount_overlay(op, config);
+
+                match overlay_result {
                     Ok(ids) => {
                         crate::scoped_log!(
                             info,
@@ -119,35 +145,14 @@ impl Executor {
                         mount_stats.record_overlay_mount();
                     }
                     Err(err) => {
-                        let involved_modules = fallback::collect_involved_modules(op);
-                        let is_symlink_loop = fallback::is_symlink_loop_mount_error(&err);
-                        if is_symlink_loop {
-                            if !fallback::overlay_fallback_allowed(config) {
-                                crate::scoped_log!(
-                                    error,
-                                    "executor",
-                                    "overlay fallback denied: target={}, reason=symlink_loop, enable_overlay_fallback=false",
-                                    op.target
-                                );
-                            } else if involved_modules.is_empty() {
-                                crate::scoped_log!(
-                                    error,
-                                    "executor",
-                                    "overlay fallback denied: target={}, reason=symlink_loop_no_modules",
-                                    op.target
-                                );
-                            } else {
-                                crate::scoped_log!(
-                                    warn,
-                                    "executor",
-                                    "overlay fallback: target={}, reason=symlink_loop, modules={}",
-                                    op.target,
-                                    involved_modules.join(", ")
-                                );
-                                mount_stats.record_failed();
-                                final_magic_ids.extend(involved_modules);
-                                continue;
-                            }
+                        let involved_modules = collect_involved_modules(op);
+                        if is_symlink_loop_mount_error(&err) {
+                            crate::scoped_log!(
+                                error,
+                                "executor",
+                                "overlay failed: target={}, reason=symlink_loop",
+                                op.target
+                            );
                         } else {
                             crate::scoped_log!(
                                 error,
@@ -167,23 +172,7 @@ impl Executor {
             }
         } else {
             if !plan.overlay_ops.is_empty() {
-                if fallback::overlay_fallback_allowed(config) {
-                    let fallback_ids = fallback::collect_overlay_modules_for_magic_fallback(plan);
-                    if fallback_ids.is_empty() {
-                        bail!(
-                            "[executor] overlayfs unsupported and no modules could be inferred for magic fallback"
-                        );
-                    }
-                    crate::scoped_log!(
-                        warn,
-                        "executor",
-                        "overlayfs fallback: supported=false, switched_modules={}",
-                        fallback_ids.len()
-                    );
-                    final_magic_ids.extend(fallback_ids);
-                } else {
-                    bail!("[executor] overlayfs unsupported and overlay operations are pending");
-                }
+                bail!("[executor] overlayfs unsupported and overlay operations are pending");
             }
             crate::scoped_log!(
                 info,
@@ -192,9 +181,13 @@ impl Executor {
             );
         }
 
-        plan.kasumi_add_rules.clear();
-        plan.kasumi_merge_rules.clear();
-        plan.kasumi_hide_rules.clear();
+        #[cfg(feature = "kasumi")]
+        {
+            plan.kasumi_add_rules.clear();
+            plan.kasumi_merge_rules.clear();
+            plan.kasumi_hide_rules.clear();
+        }
+        #[cfg(feature = "kasumi")]
         let final_kasumi_ids = plan.kasumi_module_ids.clone();
 
         let magic_need_list: Vec<String> = final_magic_ids.iter().cloned().collect();
@@ -214,8 +207,7 @@ impl Executor {
                 kasumi_available,
             )
             .map_err(|err| {
-                let failed_module_ids =
-                    fallback::resolve_magic_failure_modules(&err, &magic_need_list);
+                let failed_module_ids = resolve_magic_failure_modules(&err, &magic_need_list);
                 ModuleStageFailure::new(
                     FailureStage::Execute,
                     failed_module_ids.clone(),
@@ -237,6 +229,7 @@ impl Executor {
             );
         }
 
+        #[cfg(feature = "kasumi")]
         let kasumi_runtime_enabled = if config.kasumi.enabled {
             kasumi.apply_runtime(plan, modules).map_err(|err| {
                 ModuleStageFailure::new(
@@ -253,10 +246,14 @@ impl Executor {
             );
             false
         };
+        #[cfg(not(feature = "kasumi"))]
+        let kasumi_runtime_enabled = false;
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if !config.disable_umount {
-            let _ = umount_mgr::commit();
+            if let Err(e) = umount_mgr::commit() {
+                crate::scoped_log!(warn, "executor", "umount_mgr commit failed: {:#}", e);
+            }
         }
 
         let result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
@@ -275,6 +272,7 @@ impl Executor {
             overlay_module_ids: result_overlay,
             overlay_partitions: final_overlay_partitions.into_iter().collect(),
             magic_module_ids: result_magic,
+            #[cfg(feature = "kasumi")]
             kasumi_module_ids: final_kasumi_ids,
             kasumi_runtime_enabled,
             mount_stats,
@@ -284,4 +282,36 @@ impl Executor {
     fn is_supported() -> Result<bool> {
         crate::mount::overlayfs::utils::is_overlay_supported()
     }
+}
+
+fn resolve_magic_failure_modules(err: &anyhow::Error, fallback: &[String]) -> Vec<String> {
+    if let Some(magic_failure) = err.downcast_ref::<ModuleStageFailure>()
+        && !magic_failure.module_ids.is_empty()
+    {
+        return magic_failure.module_ids.clone();
+    }
+    fallback.to_vec()
+}
+
+fn is_symlink_loop_mount_error(err: &anyhow::Error) -> bool {
+    let mut cursor = Some(err.as_ref() as &(dyn std::error::Error + 'static));
+    while let Some(current) = cursor {
+        let msg = current.to_string();
+        if msg.contains("Too many symbolic links") || msg.contains("os error 40") {
+            return true;
+        }
+        cursor = current.source();
+    }
+    false
+}
+
+fn collect_involved_modules(op: &OverlayOperation) -> Vec<String> {
+    let mut involved_modules: Vec<String> = op
+        .lowerdirs
+        .iter()
+        .filter_map(|p| utils::extract_module_id(p))
+        .collect();
+    involved_modules.sort();
+    involved_modules.dedup();
+    involved_modules
 }

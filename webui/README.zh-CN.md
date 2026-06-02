@@ -1,6 +1,6 @@
 # Hybrid Mount WebUI
 
-<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
+<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/icon.svg" align="right" width="120" />
 
 ![语言](https://img.shields.io/badge/Language-TypeScript-3178C6?style=flat-square&logo=typescript)
 ![框架](https://img.shields.io/badge/Framework-SolidJS-2C4F7C?style=flat-square&logo=solid)
@@ -10,7 +10,7 @@
 Hybrid Mount WebUI 是 **Hybrid Mount** 的 Material Design 3 前端控制台，
 面向 KernelSU 场景提供配置管理、模块策略编辑、运行诊断和运维动作入口。
 
-**[🇺🇸 English](README.md)**
+**[English](README.md)** &nbsp; **[简体中文](README.zh-CN.md)**
 
 ---
 
@@ -18,6 +18,7 @@ Hybrid Mount WebUI 是 **Hybrid Mount** 的 Material Design 3 前端控制台，
 
 - [设计目标](#设计目标)
 - [架构说明](#架构说明)
+- [国际化](#国际化)
 - [仓库结构](#仓库结构)
 - [接口契约](#接口契约)
 - [构建与开发](#构建与开发)
@@ -49,6 +50,22 @@ WebUI 运行流程如下：
 - `src/lib/api.ts`：统一后端桥接层（`AppAPI`、`RealAPI`、`MockAPI`）。
 - `src/lib/types.ts`：配置、模块、状态等数据契约。
 - `src/lib/stores/*`：配置/系统/模块/UI 状态管理。
+
+## 国际化
+
+WebUI 目前提供以下语言：
+
+- 英语 (`en-US`，默认)
+- 西班牙语 (`es-ES`)
+- 意大利语 (`it-IT`)
+- 日语 (`ja-JP`)
+- 俄语 (`ru-RU`)
+- 乌克兰语 (`uk-UA`)
+- 越南语 (`vi-VN`)
+- 简体中文 (`zh-CN`)
+- 繁體中文 (`zh-TW`)
+
+README 文档提供 [English](README.md) 和 [简体中文](README.zh-CN.md) 版本。
 
 ## 仓库结构
 
@@ -107,6 +124,8 @@ pnpm build
 pnpm preview
 pnpm lint
 ```
+
+`pnpm dev` 默认使用 `MockAPI`。如需在开发服务器中连接真实 KernelSU bridge，可使用 `VITE_USE_MOCK=false pnpm dev`。
 
 ## 适配说明
 

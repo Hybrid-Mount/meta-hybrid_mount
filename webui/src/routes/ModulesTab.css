@@ -213,6 +213,61 @@
   letter-spacing: 0.3px;
 }
 
+.mode-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.error-indicator {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  background-color: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+  flex-shrink: 0;
+}
+
+.error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background-color: var(--md-sys-color-error-container);
+  border-radius: var(--radius-md);
+  color: var(--md-sys-color-on-error-container);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.error-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  opacity: 0.8;
+}
+
+.error-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.error-text {
+  word-break: break-word;
+}
+
+.suggest-ignore-hint {
+  font-size: 11px;
+  opacity: 0.85;
+  background-color: rgba(0, 0, 0, 0.08);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  line-height: 1.4;
+}
+
 .mode-overlay {
   background-color: var(--md-sys-color-secondary-container);
   color: var(--md-sys-color-on-secondary-container);
@@ -231,6 +286,16 @@
 .mode-ignore {
   background-color: var(--md-sys-color-surface-variant);
   color: var(--md-sys-color-on-surface-variant);
+}
+
+.mode-blacklisted {
+  background-color: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+
+.blacklisted-indicator {
+  background-color: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
 }
 
 /* 动画核心样式 */

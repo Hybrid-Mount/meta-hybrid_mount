@@ -1,124 +1,109 @@
-// Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+use std::{env, fs, path::PathBuf};
 
-use std::{fs, io::Write, process::Command};
+use anyhow::{Context, Result, anyhow};
 
-use anyhow::Result;
-use serde::Deserialize;
+#[path = "xtask/src/build_meta_shared.rs"]
+mod build_meta_shared;
 
-#[derive(Deserialize)]
-struct Package {
-    authors: Vec<String>,
-    name: String,
-    version: String,
-    description: String,
-    metadata: Metadata,
-}
-
-#[derive(Deserialize)]
-struct CargoConfig {
-    package: Package,
-}
-
-#[derive(Deserialize)]
-struct Metadata {
-    hybrid_mount: Update,
-}
-
-#[derive(Deserialize)]
-struct Update {
-    update: String,
-    name: String,
+fn load_cargo_config() -> Result<build_meta_shared::CargoConfig> {
+    let toml = fs::read_to_string("Cargo.toml")?;
+    Ok(toml::from_str(&toml)?)
 }
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=Cargo.lock");
     println!("cargo:rerun-if-changed=Cargo.toml");
-    println!("cargo:rerun-if-changed=.git");
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=xtask/src/build_meta_shared.rs");
+    println!("cargo:rerun-if-changed=src/defs.rs");
 
-    let toml = fs::read_to_string("Cargo.toml")?;
-    let data: CargoConfig = toml::from_str(&toml)?;
+    let data = load_cargo_config()?;
 
+    #[cfg(feature = "kasumi")]
+    gen_kasumi_uapi_bindings()?;
     gen_module_prop(&data)?;
 
     Ok(())
 }
 
-fn cal_version_code(version: &str) -> Result<usize> {
-    let major = version
-        .split('.')
-        .next()
-        .ok_or_else(|| anyhow::anyhow!("Invalid version format"))?;
-    let major: usize = major.parse()?;
-    let minor = version
-        .split('.')
-        .nth(1)
-        .ok_or_else(|| anyhow::anyhow!("Invalid version format"))?;
-    let minor: usize = minor.parse()?;
-    let patch = version
-        .split('.')
-        .nth(2)
-        .ok_or_else(|| anyhow::anyhow!("Invalid version format"))?;
-    let patch: usize = patch.parse()?;
-
-    Ok(major * 100000 + minor * 1000 + patch)
+#[cfg(feature = "kasumi")]
+fn kasumi_uapi_header_path() -> PathBuf {
+    PathBuf::from("src/sys/kasumi_uapi.h")
 }
 
-// NOTE: keep in sync with xtask/src/main.rs cal_git_code()
-fn cal_git_code() -> Result<i32> {
-    Ok(String::from_utf8(
-        Command::new("git")
-            .args(["rev-list", "--count", "HEAD"])
-            .output()?
-            .stdout,
-    )?
-    .trim()
-    .parse::<i32>()?)
+#[cfg(feature = "kasumi")]
+fn gen_kasumi_uapi_bindings() -> Result<()> {
+    let header = kasumi_uapi_header_path();
+    let header = fs::canonicalize(&header)
+        .with_context(|| format!("failed to resolve Kasumi UAPI header {}", header.display()))?;
+    println!("cargo:rerun-if-changed={}", header.display());
+
+    let out_dir = PathBuf::from(
+        env::var_os("OUT_DIR").ok_or_else(|| anyhow!("OUT_DIR is not set for build script"))?,
+    );
+    let wrapper = out_dir.join("kasumi_uapi_wrapper.h");
+    let bindings = out_dir.join("kasumi_uapi.rs");
+
+    fs::write(
+        &wrapper,
+        format!(
+            r#"#include <stdint.h>
+#include <stddef.h>
+#ifndef __u32
+typedef uint32_t __u32;
+#endif
+#ifndef __aligned_u64
+typedef uint64_t __aligned_u64;
+#endif
+#include "{}"
+"#,
+            header.display()
+        ),
+    )?;
+
+    bindgen::Builder::default()
+        .header(wrapper.to_string_lossy())
+        .allowlist_type("kasumi_.*")
+        .allowlist_var("KSM_.*")
+        .derive_debug(true)
+        .derive_copy(true)
+        .derive_default(false)
+        .layout_tests(false)
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
+        .generate()
+        .map_err(|err| anyhow!("failed to generate Kasumi UAPI bindings: {err}"))?
+        .write_to_file(&bindings)
+        .with_context(|| format!("failed to write {}", bindings.display()))?;
+
+    Ok(())
 }
 
-fn gen_module_prop(data: &CargoConfig) -> Result<()> {
+fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
     let package = &data.package;
     let id = package.name.replace('-', "_");
-    let version_code = cal_version_code(&package.version)?;
-    let authors = &package.authors;
-    let mut author = String::new();
-    let mut count = 0;
-    for a in authors {
-        count += 1;
-        if count > 1 {
-            author += &format!("& {a} ");
-        } else {
-            author += &format!("{a} ");
-        }
-    }
-    let author = author.trim();
-    let version = format!("{}-{}", package.version, cal_git_code()?);
+    let version_code = build_meta_shared::calculate_version_code(&package.version)?;
+    let author = package.authors.join(" & ");
+    let version = format!(
+        "{}-{}",
+        package.version,
+        build_meta_shared::git_commit_count()?
+    );
+    let rendered_version = format!("v{}", version.trim());
+    let content = build_meta_shared::render_module_prop(&build_meta_shared::ModulePropData {
+        id: &id,
+        name: &package.metadata.hybrid_mount.name,
+        version: &rendered_version,
+        version_code: &version_code,
+        author: &author,
+        description: &package.description,
+        update_json: &package.metadata.hybrid_mount.update,
+        webui_icon: true,
+    });
 
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open("module/module.prop")?;
-
-    writeln!(file, "id={id}")?;
-    writeln!(file, "name={}", package.metadata.hybrid_mount.name)?;
-    writeln!(file, "version=v{}", version.trim())?;
-    writeln!(file, "versionCode={version_code}")?;
-    writeln!(file, "author={author}")?;
-    writeln!(file, "updateJson={}", package.metadata.hybrid_mount.update)?;
-    writeln!(file, "description={}", package.description)?;
-    writeln!(file, "metamodule=1")?;
-    writeln!(file, "webuiIcon=launcher.png")?;
+    let out_dir = PathBuf::from(
+        env::var_os("OUT_DIR")
+            .ok_or_else(|| anyhow::anyhow!("OUT_DIR is not set for build script"))?,
+    );
+    fs::write(out_dir.join("module.prop"), content.as_bytes())?;
     Ok(())
 }

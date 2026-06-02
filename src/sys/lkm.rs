@@ -202,13 +202,9 @@ fn candidate_file_names(kmi: &str) -> Vec<String> {
     if !kmi.is_empty() {
         candidates.push(format!("{kmi}{suffix}_kasumi_lkm.ko"));
         candidates.push(format!("{kmi}_kasumi_lkm.ko"));
-        candidates.push(format!("{kmi}{suffix}_hymofs_lkm.ko"));
-        candidates.push(format!("{kmi}_hymofs_lkm.ko"));
     }
     candidates.push(format!("{suffix}_kasumi_lkm.ko"));
     candidates.push("kasumi_lkm.ko".to_string());
-    candidates.push(format!("{suffix}_hymofs_lkm.ko"));
-    candidates.push("hymofs_lkm.ko".to_string());
 
     let mut seen = HashSet::new();
     candidates.retain(|value| seen.insert(value.clone()));
@@ -258,11 +254,7 @@ fn loaded_module_name() -> Option<String> {
     let content = fs::read_to_string("/proc/modules").ok()?;
     content.lines().find_map(|line| {
         let name = line.split_whitespace().next()?;
-        matches!(
-            name,
-            defs::KASUMI_LKM_MODULE_NAME | "kasumi" | "hymofs_lkm" | "hymofs"
-        )
-        .then(|| name.to_string())
+        matches!(name, defs::KASUMI_LKM_MODULE_NAME | "kasumi").then(|| name.to_string())
     })
 }
 
@@ -293,6 +285,8 @@ fn load_module_via_init(ko_path: &Path, params: &str) -> Result<()> {
     let mut image = Vec::new();
     file.read_to_end(&mut image)
         .with_context(|| format!("failed to read module {}", ko_path.display()))?;
+    // params is always an empty string for the current callers; validation
+    // exists in case module params are added as a config-driven feature later.
     let params = CString::new(params).context("module params contain interior NUL")?;
 
     let ret = unsafe {
@@ -324,6 +318,7 @@ fn load_module_via_init(_ko_path: &Path, _params: &str) -> Result<()> {
 fn load_module_via_finit(ko_path: &Path, params: &str) -> Result<()> {
     let file = fs::File::open(ko_path)
         .with_context(|| format!("failed to open module {}", ko_path.display()))?;
+    // Same empty-params invariant as load_module_via_init above.
     let params = CString::new(params).context("module params contain interior NUL")?;
 
     let ret = unsafe { libc::syscall(SYS_FINIT_MODULE_NUM, file.as_raw_fd(), params.as_ptr(), 0) };
@@ -365,12 +360,17 @@ fn unload_module_via_syscall(_module_name: &str) -> Result<()> {
 }
 
 fn load_module_via_ksud(ko_path: &Path, params: &str) -> Result<()> {
-    let candidates = ["/data/adb/ksud", "ksud"];
+    let candidates = [
+        ("/data/adb/ksud", &["debug", "insmod"][..]),
+        ("ksud", &["debug", "insmod"][..]),
+        ("/data/adb/ksud", &["insmod"][..]),
+        ("ksud", &["insmod"][..]),
+    ];
     let mut last_failure = None;
 
-    for candidate in candidates {
+    for (candidate, subcommand) in candidates {
         let mut cmd = Command::new(candidate);
-        cmd.arg("insmod").arg(ko_path);
+        cmd.args(subcommand).arg(ko_path);
         if !params.is_empty() {
             cmd.arg(params);
         }
@@ -381,8 +381,9 @@ fn load_module_via_ksud(ko_path: &Path, params: &str) -> Result<()> {
                 let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
                 let detail = if !stderr.is_empty() { stderr } else { stdout };
                 last_failure = Some(anyhow!(
-                    "{} insmod {} failed with status {}{}",
+                    "{} {} {} failed with status {}{}",
                     candidate,
+                    subcommand.join(" "),
                     ko_path.display(),
                     output.status,
                     if detail.is_empty() {
@@ -400,6 +401,10 @@ fn load_module_via_ksud(ko_path: &Path, params: &str) -> Result<()> {
 
     Err(last_failure
         .unwrap_or_else(|| anyhow!("ksud debug insmod failed for {}", ko_path.display())))
+}
+
+fn should_try_ksud_fallback() -> bool {
+    KSU.load(Ordering::Relaxed) || Path::new("/data/adb/ksud").exists()
 }
 
 fn unload_module_via_rmmod(module_name: &str) -> Result<()> {
@@ -451,9 +456,9 @@ pub fn load(config: &KasumiConfig) -> Result<()> {
         )
     })?;
 
-    let params = format!("hymo_syscall_nr={}", kasumi::HYMO_SYSCALL_NR);
+    let params = String::new();
     if let Err(primary_err) = load_module_via_finit(&ko_path, &params) {
-        if KSU.load(Ordering::Relaxed) {
+        if should_try_ksud_fallback() {
             crate::scoped_log!(
                 warn,
                 "lkm",
@@ -544,7 +549,12 @@ pub fn unload(config: &KasumiConfig) -> Result<()> {
 }
 
 pub fn autoload_if_needed(config: &KasumiConfig) -> Result<bool> {
-    if !config.enabled || !config.lkm_autoload || is_loaded() || !has_module_assets(config) {
+    if !config.enabled
+        || !config.lkm_autoload
+        || is_loaded()
+        || !has_module_assets(config)
+        || kasumi::check_status() == kasumi::KasumiStatus::KernelNotSupported
+    {
         return Ok(false);
     }
 

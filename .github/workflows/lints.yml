@@ -32,21 +32,25 @@ env:
 jobs:
   lints-check:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      checks: write
+      contents: read
+      packages: read
     steps:
       - uses: actions/checkout@v6
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: nightly
-          targets: aarch64-linux-android
-          components: rustfmt, clippy
+          filter: 'tree:0'
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
       - name: Format codes
-        uses: LoliGothick/rustfmt-check@master
-        with:
-          token: ${{ github.token }}
-          working-directory: ./
+        run: cargo fmt --all -- --check
       - name: Clippy code
         run: cargo clippy --all-targets -- -D warnings
       - name: Run unit tests
@@ -54,21 +58,36 @@ jobs:
 
   webui-lints:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      packages: read
     defaults:
       run:
         working-directory: webui
     steps:
       - uses: actions/checkout@v6
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
         with:
-          version: "10"
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+          filter: 'tree:0'
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: |
+          set -euo pipefail
+          STORE_PATH="$(pnpm store path --silent)"
+          mkdir -p "$STORE_PATH"
+          echo "path=$STORE_PATH" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm store
+        uses: actions/cache@v5
         with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: webui/pnpm-lock.yaml
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate constants
@@ -76,6 +95,7 @@ jobs:
           cat <<'EOF' > src/lib/constants_gen.ts
           export const APP_VERSION = "dev";
           export const IS_RELEASE = false;
+          export const ENABLE_KASUMI = true;
           export const RUST_PATHS = {
             CONFIG: "/data/adb/hybrid-mount/config.toml",
             DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",

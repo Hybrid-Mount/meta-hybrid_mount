@@ -58,7 +58,7 @@ pub fn init_logging() -> Result<()> {
                 .with_max_level(log::LevelFilter::Trace)
                 .with_tag("Hybrid_Logger"),
         );
-        let _ = LOGGER_INIT.set(());
+        LOGGER_INIT.set(()).ok();
     }
 
     #[cfg(not(target_os = "android"))]
@@ -66,7 +66,6 @@ pub fn init_logging() -> Result<()> {
         use std::io::Write;
 
         let mut builder = env_logger::Builder::new();
-
         builder.format(|buf, record| {
             writeln!(
                 buf,
@@ -76,7 +75,6 @@ pub fn init_logging() -> Result<()> {
                 record.args()
             )
         });
-        // try_init returns Err if a logger is already set — that's harmless
         builder
             .filter_level(log::LevelFilter::Trace)
             .try_init()

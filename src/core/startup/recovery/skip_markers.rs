@@ -20,7 +20,7 @@ use std::{
 
 use anyhow::{Context, Result};
 
-use crate::defs;
+use crate::{defs, utils};
 
 pub(super) struct MarkOutcome {
     pub(super) newly_marked: Vec<String>,
@@ -81,6 +81,13 @@ pub(super) fn list_module_dirs(base: &Path) -> Result<HashMap<String, PathBuf>> 
 
 fn create_mount_error_marker(module_dir: &Path) -> Result<()> {
     let marker = module_dir.join(defs::MOUNT_ERROR_FILE_NAME);
+    utils::remove_dir_entries_case_insensitive(module_dir, defs::MOUNT_ERROR_FILE_NAME)
+        .with_context(|| {
+            format!(
+                "Failed to clear existing markers in {}",
+                module_dir.display()
+            )
+        })?;
     crate::scoped_log!(
         info,
         "recovery:markers",

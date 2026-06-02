@@ -1,6 +1,6 @@
 # Hybrid Mount WebUI
 
-<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/master/icon.svg" align="right" width="120" />
+<img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/icon.svg" align="right" width="120" />
 
 ![Language](https://img.shields.io/badge/Language-TypeScript-3178C6?style=flat-square&logo=typescript)
 ![Framework](https://img.shields.io/badge/Framework-SolidJS-2C4F7C?style=flat-square&logo=solid)
@@ -10,7 +10,7 @@
 Hybrid Mount WebUI is a Material Design 3 frontend for **Hybrid Mount** runtime management.
 It provides a stable UI contract for configuration, module policy editing, runtime diagnostics, and operational actions in KernelSU environments.
 
-**[🇨🇳 中文文档](README.zh-CN.md)**
+**[English](README.md)** &nbsp; **[简体中文](README.zh-CN.md)**
 
 ---
 
@@ -18,6 +18,7 @@ It provides a stable UI contract for configuration, module policy editing, runti
 
 - [Design Goals](#design-goals)
 - [Architecture](#architecture)
+- [Internationalization](#internationalization)
 - [Repository Layout](#repository-layout)
 - [API Contract](#api-contract)
 - [Build and Development](#build-and-development)
@@ -49,6 +50,22 @@ Core frontend layers:
 - `src/lib/api.ts`: unified backend bridge (`AppAPI`, `RealAPI`, `MockAPI`).
 - `src/lib/types.ts`: shared data contracts for config, module, and status payloads.
 - `src/lib/stores/*`: state containers for config/system/module/UI domains.
+
+## Internationalization
+
+The UI currently ships with these locales:
+
+- English (`en-US`, default)
+- Español (`es-ES`)
+- Italiano (`it-IT`)
+- 日本語 (`ja-JP`)
+- Русский (`ru-RU`)
+- Українська (`uk-UA`)
+- Tiếng Việt (`vi-VN`)
+- 简体中文 (`zh-CN`)
+- 繁體中文 (`zh-TW`)
+
+README documentation is available in [English](README.md) and [Simplified Chinese](README.zh-CN.md).
 
 ## Repository Layout
 
@@ -107,6 +124,8 @@ pnpm build
 pnpm preview
 pnpm lint
 ```
+
+`pnpm dev` uses `MockAPI` by default. To run the dev server against a real KernelSU bridge, start it with `VITE_USE_MOCK=false pnpm dev`.
 
 ## Adapter Notes
 

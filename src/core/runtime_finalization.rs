@@ -38,15 +38,22 @@ pub fn finalize(
         mount_point.display(),
         result.overlay_module_ids.len(),
         result.magic_module_ids.len(),
-        result.kasumi_module_ids.len()
+        result.kasumi_count()
     );
+
+    let blacklisted_count = config
+        .module_blacklist
+        .iter()
+        .filter(|id| config.moduledir.join(id).is_dir())
+        .count();
 
     module_status::update_description(
         storage_mode,
         config.kasumi.enabled,
         result.overlay_module_ids.len(),
         result.magic_module_ids.len(),
-        result.kasumi_module_ids.len(),
+        result.kasumi_count(),
+        blacklisted_count,
     );
 
     let state = RuntimeState::build_from_execution(config, storage_mode, mount_point, result);

@@ -12,17 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
+#[cfg(feature = "kasumi")]
+use crate::conf::cli::{HideCommands, KasumiCommands, KasumiRuleCommands, LkmCommands};
 use crate::{
     conf::{
-        cli::{
-            ApiCommands, Cli, Commands, HideCommands, KasumiCommands, KasumiRuleCommands,
-            LkmCommands,
-        },
-        cli_handlers,
+        cli::{ApiCommands, Cli, Commands, DaemonCommands},
+        cli_handlers, loader,
     },
-    core::api,
+    core::{
+        api,
+        daemon::{self, DaemonCommand, dispatch},
+        startup,
+    },
 };
 
 fn run_api_command<F>(f: F) -> Result<()>
@@ -44,60 +47,166 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
     match command {
         Commands::GenConfig { output, force } => cli_handlers::handle_gen_config(output, *force),
         Commands::Logs { lines } => cli_handlers::handle_logs(*lines),
-        Commands::Api { command } => run_api_command(|| match command {
-            ApiCommands::Storage => cli_handlers::handle_api_storage(),
-            ApiCommands::MountStats => cli_handlers::handle_api_mount_stats(),
-            ApiCommands::MountTopology => cli_handlers::handle_api_mount_topology(cli),
-            ApiCommands::Partitions => cli_handlers::handle_api_partitions(cli),
-            ApiCommands::Lkm => cli_handlers::handle_api_lkm(cli),
-            ApiCommands::Features => cli_handlers::handle_api_features(),
-            ApiCommands::Hooks => cli_handlers::handle_api_hooks(cli),
+        Commands::Api { command } => run_api_command(|| match api_daemon_command(command)? {
+            Some(command) => dispatch(cli, command),
+            None => cli_handlers::handle_api_features(),
         }),
-        Commands::Lkm { command } => match command {
-            LkmCommands::Load => cli_handlers::handle_lkm_load(cli),
-            LkmCommands::Unload => cli_handlers::handle_lkm_unload(cli),
-            LkmCommands::Status => cli_handlers::handle_lkm_status(cli),
+        Commands::Daemon { command } => match command {
+            DaemonCommands::Launch => startup::run_and_serve(cli),
+            DaemonCommands::Serve => {
+                let config = loader::load_config(cli)?;
+                daemon::serve(config)
+            }
+            _ => run_api_command(|| dispatch(cli, daemon_daemon_command(command))),
         },
-        Commands::Hide { command } => match command {
-            HideCommands::List => cli_handlers::handle_hide_list(),
-            HideCommands::Add { path } => cli_handlers::handle_hide_add(cli, path),
-            HideCommands::Remove { path } => cli_handlers::handle_hide_remove(path),
-            HideCommands::Apply => cli_handlers::handle_hide_apply(cli),
+        #[cfg(feature = "kasumi")]
+        Commands::Lkm { command } => dispatch(cli, lkm_daemon_command(command)),
+        #[cfg(feature = "kasumi")]
+        Commands::Hide { command } => dispatch(cli, hide_daemon_command(command)),
+        #[cfg(feature = "kasumi")]
+        Commands::Kasumi { command } => dispatch(cli, kasumi_daemon_command(command)),
+    }
+}
+
+fn api_daemon_command(command: &ApiCommands) -> Result<Option<DaemonCommand>> {
+    Ok(Some(match command {
+        ApiCommands::Storage => DaemonCommand::ApiStorage,
+        ApiCommands::MountStats => DaemonCommand::ApiMountStats,
+        ApiCommands::MountTopology => DaemonCommand::ApiMountTopology,
+        ApiCommands::Partitions => DaemonCommand::ApiPartitions,
+        ApiCommands::SystemInfo => DaemonCommand::ApiSystemInfo,
+        ApiCommands::Version => DaemonCommand::ApiVersion,
+        ApiCommands::ConfigGet => DaemonCommand::ApiConfigGet,
+        ApiCommands::ConfigSet { config } => DaemonCommand::ApiConfigSet {
+            config: parse_json(config, "Failed to parse config JSON payload")?,
         },
-        Commands::Kasumi { command } => match command {
-            KasumiCommands::Status => cli_handlers::handle_kasumi_status(cli),
-            KasumiCommands::List => cli_handlers::handle_kasumi_list(cli),
-            KasumiCommands::Version => cli_handlers::handle_kasumi_version(cli),
-            KasumiCommands::Features => cli_handlers::handle_kasumi_features(),
-            KasumiCommands::Hooks => cli_handlers::handle_kasumi_hooks(),
-            KasumiCommands::Clear => cli_handlers::handle_kasumi_clear(),
-            KasumiCommands::ReleaseConnection => cli_handlers::handle_kasumi_release_connection(),
-            KasumiCommands::InvalidateCache => cli_handlers::handle_kasumi_invalidate_cache(),
-            KasumiCommands::FixMounts => cli_handlers::handle_kasumi_fix_mounts(),
-            KasumiCommands::Rule { command } => match command {
-                KasumiRuleCommands::Add {
-                    target,
-                    source,
-                    file_type,
-                } => cli_handlers::handle_kasumi_rule_add(cli, target, source, *file_type),
-                KasumiRuleCommands::Merge { target, source } => {
-                    cli_handlers::handle_kasumi_rule_merge(cli, target, source)
-                }
-                KasumiRuleCommands::Hide { path } => {
-                    cli_handlers::handle_kasumi_rule_hide(cli, path)
-                }
-                KasumiRuleCommands::Delete { path } => {
-                    cli_handlers::handle_kasumi_rule_delete(cli, path)
-                }
-                KasumiRuleCommands::AddDir {
-                    target_base,
-                    source_dir,
-                } => cli_handlers::handle_kasumi_rule_add_dir(cli, target_base, source_dir),
-                KasumiRuleCommands::RemoveDir {
-                    target_base,
-                    source_dir,
-                } => cli_handlers::handle_kasumi_rule_remove_dir(cli, target_base, source_dir),
-            },
+        ApiCommands::ConfigPatch {
+            patch,
+            apply_runtime,
+        } => DaemonCommand::ApiConfigPatch {
+            patch: parse_json(patch, "Failed to parse config patch JSON payload")?,
+            apply_runtime: *apply_runtime,
+        },
+        ApiCommands::ConfigReset => DaemonCommand::ApiConfigReset,
+        ApiCommands::ModulesList { path } => DaemonCommand::ApiModulesList { path: path.clone() },
+        ApiCommands::ModulesApply { modules } => DaemonCommand::ApiModulesApply {
+            modules: serde_json::from_str(modules)
+                .context("Failed to parse modules JSON payload")?,
+        },
+        #[cfg(feature = "kasumi")]
+        ApiCommands::Lkm => DaemonCommand::ApiLkm,
+        #[cfg(feature = "kasumi")]
+        ApiCommands::Features => return Ok(None),
+        #[cfg(feature = "kasumi")]
+        ApiCommands::Hooks => DaemonCommand::ApiHooks,
+        ApiCommands::KernelUname => DaemonCommand::ApiKernelUname,
+        ApiCommands::OpenUrl { url } => DaemonCommand::ApiOpenUrl { url: url.clone() },
+        ApiCommands::Reboot => DaemonCommand::ApiReboot,
+        #[cfg(feature = "kasumi")]
+        ApiCommands::KasumiMapsAdd { rule } => DaemonCommand::ApiKasumiMapsAdd {
+            rule: parse_json(rule, "Failed to parse Kasumi maps rule JSON payload")?,
+        },
+        #[cfg(feature = "kasumi")]
+        ApiCommands::KasumiMapsClear => DaemonCommand::ApiKasumiMapsClear,
+    }))
+}
+
+fn daemon_daemon_command(command: &DaemonCommands) -> DaemonCommand {
+    match command {
+        DaemonCommands::Ping => DaemonCommand::Ping,
+        DaemonCommands::WebuiStart => DaemonCommand::WebuiStart,
+        DaemonCommands::Stop => DaemonCommand::Shutdown,
+        DaemonCommands::Status => DaemonCommand::Status,
+        DaemonCommands::Launch | DaemonCommands::Serve => unreachable!("handled before dispatch"),
+    }
+}
+
+#[cfg(feature = "kasumi")]
+fn lkm_daemon_command(command: &LkmCommands) -> DaemonCommand {
+    match command {
+        LkmCommands::Load => DaemonCommand::LkmLoad,
+        LkmCommands::Unload => DaemonCommand::LkmUnload,
+        LkmCommands::Status => DaemonCommand::LkmStatus,
+    }
+}
+
+#[cfg(feature = "kasumi")]
+fn hide_daemon_command(command: &HideCommands) -> DaemonCommand {
+    match command {
+        HideCommands::List => DaemonCommand::HideList,
+        HideCommands::Add { path } => DaemonCommand::HideAdd { path: path.clone() },
+        HideCommands::Remove { path } => DaemonCommand::HideRemove { path: path.clone() },
+        HideCommands::Apply => DaemonCommand::HideApply,
+    }
+}
+
+#[cfg(feature = "kasumi")]
+fn kasumi_daemon_command(command: &KasumiCommands) -> DaemonCommand {
+    match command {
+        KasumiCommands::Status => DaemonCommand::KasumiStatus,
+        KasumiCommands::List => DaemonCommand::KasumiList,
+        KasumiCommands::Version => DaemonCommand::KasumiVersion,
+        KasumiCommands::Features => DaemonCommand::KasumiFeatures,
+        KasumiCommands::Hooks => DaemonCommand::KasumiHooks,
+        KasumiCommands::ApplyConfigRuntime => DaemonCommand::KasumiApplyConfigRuntime,
+        KasumiCommands::Clear => DaemonCommand::KasumiClear,
+        KasumiCommands::ReleaseConnection => DaemonCommand::KasumiReleaseConnection,
+        KasumiCommands::InvalidateCache => DaemonCommand::KasumiInvalidateCache,
+        KasumiCommands::FixMounts => DaemonCommand::KasumiFixMounts,
+        KasumiCommands::RestoreUnameGlobal => DaemonCommand::KasumiRestoreUnameGlobal,
+        KasumiCommands::SetUname {
+            mode,
+            release,
+            version,
+        } => DaemonCommand::KasumiSetUname {
+            mode: mode.clone(),
+            release: release.clone(),
+            version: version.clone(),
+        },
+        KasumiCommands::ClearUname { mode } => {
+            DaemonCommand::KasumiClearUname { mode: mode.clone() }
+        }
+        KasumiCommands::Rule { command } => kasumi_rule_daemon_command(command),
+    }
+}
+
+#[cfg(feature = "kasumi")]
+fn kasumi_rule_daemon_command(command: &KasumiRuleCommands) -> DaemonCommand {
+    match command {
+        KasumiRuleCommands::Add {
+            target,
+            source,
+            file_type,
+        } => DaemonCommand::KasumiRuleAdd {
+            target: target.clone(),
+            source: source.clone(),
+            file_type: *file_type,
+        },
+        KasumiRuleCommands::Merge { target, source } => DaemonCommand::KasumiRuleMerge {
+            target: target.clone(),
+            source: source.clone(),
+        },
+        KasumiRuleCommands::Hide { path } => DaemonCommand::KasumiRuleHide { path: path.clone() },
+        KasumiRuleCommands::Delete { path } => {
+            DaemonCommand::KasumiRuleDelete { path: path.clone() }
+        }
+        KasumiRuleCommands::AddDir {
+            target_base,
+            source_dir,
+        } => DaemonCommand::KasumiRuleAddDir {
+            target_base: target_base.clone(),
+            source_dir: source_dir.clone(),
+        },
+        KasumiRuleCommands::RemoveDir {
+            target_base,
+            source_dir,
+        } => DaemonCommand::KasumiRuleRemoveDir {
+            target_base: target_base.clone(),
+            source_dir: source_dir.clone(),
         },
     }
+}
+
+fn parse_json(input: &str, context: &'static str) -> Result<serde_json::Value> {
+    serde_json::from_str(input).context(context)
 }

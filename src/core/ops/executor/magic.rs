@@ -49,8 +49,7 @@ pub(super) fn mount_magic(
         .filter(|module| module_ids.contains(&module.id))
         .cloned()
         .collect();
-    let managed_partitions =
-        partitions::managed_partition_names(&config.moduledir, &config.partitions);
+    let managed_partitions = partitions::managed_partition_names();
 
     let (mounted_ids, stats) = magic_mount::magic_mount(
         &magic_ws_path,
@@ -59,7 +58,6 @@ pub(super) fn mount_magic(
             mount_source: &config.mountsource,
             managed_partitions: &managed_partitions,
             use_kasumi,
-            overlay_fallback_enabled: config.enable_overlay_fallback,
         },
         &selected_modules,
         !config.disable_umount,

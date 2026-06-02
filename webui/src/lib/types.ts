@@ -8,11 +8,10 @@ export type OverlayMode = "tmpfs" | "ext4";
 export interface AppConfig {
   moduledir: string;
   mountsource: string;
-  partitions: string[];
   overlay_mode: OverlayMode;
   disable_umount: boolean;
-  enable_overlay_fallback: boolean;
   default_mode: MountMode;
+  daemon_startup_mode: "on-demand" | "persistent";
   kasumi: KasumiConfig;
   rules: Record<string, ModuleRules>;
 }
@@ -30,6 +29,8 @@ export interface Module {
   enabled?: boolean;
   source_path?: string;
   rules: ModuleRules;
+  mount_error?: string;
+  suggest_ignore?: boolean;
 }
 
 export interface StorageStatus {
@@ -47,11 +48,6 @@ export interface SystemInfo {
   activeMounts: string[];
   supported_overlay_modes?: OverlayMode[];
   tmpfs_xattr_supported?: boolean;
-}
-
-export interface KasumiFeatureSet {
-  bitmask: number;
-  names: string[];
 }
 
 export interface KasumiLkmStatus {
@@ -73,6 +69,8 @@ export interface KasumiUnameConfig {
   machine: string;
   domainname: string;
 }
+
+export type KasumiUnameMode = "scoped" | "global";
 
 export interface KernelUnameValues {
   release: string;
@@ -125,15 +123,15 @@ export interface KasumiConfig {
   enable_kernel_debug: boolean;
   enable_stealth: boolean;
   enable_hidexattr: boolean;
+  enable_selinux_fix: boolean;
   enable_mount_hide: boolean;
   enable_maps_spoof: boolean;
   enable_statfs_spoof: boolean;
   mount_hide: KasumiMountHideConfig;
   statfs_spoof: KasumiStatfsSpoofConfig;
   hide_uids: number[];
+  uname_mode: KasumiUnameMode;
   uname: KasumiUnameConfig;
-  uname_release: string;
-  uname_version: string;
   cmdline_value: string;
   kstat_rules: KasumiKstatRuleConfig[];
   maps_rules: KasumiMapsRuleConfig[];
@@ -147,6 +145,7 @@ export interface KasumiRuntimeInfo {
 export interface KasumiStatus {
   status: string;
   available: boolean;
+  kernel_supported: boolean;
   protocol_version: number | null;
   feature_bits?: number | null;
   feature_names: string[];
@@ -176,4 +175,5 @@ export interface ModeStats {
   overlay: number;
   magic: number;
   kasumi: number;
+  blacklisted: number;
 }
