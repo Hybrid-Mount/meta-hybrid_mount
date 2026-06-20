@@ -33,12 +33,8 @@ interface KsuModule {
   exec: (cmd: string, options?: unknown) => Promise<KsuExecResult>;
 }
 
-// Discriminated union matching Rust DaemonCommand sub-enums.
-// Wire format is flat: {"type": "kebab-case-name"}.
-// Organized by domain group to match the Rust SystemCommand / ConfigCommand /
-// ModulesCommand / KasumiCommand / BatchCommand sub-enums.
+// Discriminated union matching Rust DaemonCommand #[serde(tag = "type", rename_all = "kebab-case")]
 export type DaemonCommandPayload =
-  // ── SystemCommand: health, lifecycle, storage, info ──
   | { type: "ping" }
   | { type: "webui-start" }
   | { type: "shutdown" }
@@ -50,19 +46,20 @@ export type DaemonCommandPayload =
   | { type: "api-partitions" }
   | { type: "api-system-info" }
   | { type: "api-version" }
-  | { type: "api-kernel-uname" }
-  | { type: "api-open-url"; url: string }
-  | { type: "api-reboot" }
-  | { type: "clear-mount-errors" }
-  // ── ConfigCommand: config CRUD ──
   | { type: "api-config-get" }
   | { type: "api-config-set"; config: unknown }
   | { type: "api-config-patch"; patch: unknown; apply_runtime?: boolean }
   | { type: "api-config-reset" }
-  // ── ModulesCommand: module operations ──
   | { type: "api-modules-list"; path?: string | null }
   | { type: "api-modules-apply"; modules: unknown[] }
-  // ── KasumiCommand: LKM, rules, hide, maps, uname, runtime ──
+  | { type: "api-lkm" }
+  | { type: "api-hooks" }
+  | { type: "api-kernel-uname" }
+  | { type: "api-open-url"; url: string }
+  | { type: "api-reboot" }
+  | { type: "api-kasumi-maps-add"; rule: unknown }
+  | { type: "api-kasumi-maps-clear" }
+  | { type: "clear-mount-errors" }
   | { type: "kasumi-status" }
   | { type: "kasumi-list" }
   | { type: "kasumi-version" }
@@ -94,11 +91,6 @@ export type DaemonCommandPayload =
   | { type: "lkm-status" }
   | { type: "lkm-load" }
   | { type: "lkm-unload" }
-  | { type: "api-lkm" }
-  | { type: "api-hooks" }
-  | { type: "api-kasumi-maps-add"; rule: unknown }
-  | { type: "api-kasumi-maps-clear" }
-  // ── BatchCommand ──
   | { type: "batch"; commands: DaemonCommandPayload[] };
 
 let ksuExec: KsuModule["exec"] | null = null;
@@ -354,27 +346,7 @@ async function runDaemonHttp(
   return payload;
 }
 
-// In-flight request deduplication: identical concurrent commands share one promise.
-const inflightRequests = new Map<string, Promise<unknown>>();
-
 export async function runDaemonCommand(
-  command: DaemonCommandPayload,
-  binaryPath: string,
-): Promise<unknown> {
-  const key = JSON.stringify(command);
-  const existing = inflightRequests.get(key);
-  if (existing) return existing;
-
-  const promise = runDaemonCommandInternal(command, binaryPath);
-  inflightRequests.set(key, promise);
-  try {
-    return await promise;
-  } finally {
-    inflightRequests.delete(key);
-  }
-}
-
-async function runDaemonCommandInternal(
   command: DaemonCommandPayload,
   binaryPath: string,
 ): Promise<unknown> {

@@ -16,12 +16,20 @@
 
 import { PATHS } from "../../constants";
 import type { Module, ModuleRules } from "../../types";
-import { runDaemonCommand } from "../core/bridge";
-import {
-  moduleRuntimeEntrySchema,
-  type ModuleRuntimeEntryRaw,
-} from "../schemas";
-import { normalizeMountMode } from "../core/guards";
+import { readModuleProp, runDaemonCommand } from "../core/bridge";
+import { isBoolean, isRecord, isString } from "../core/guards";
+import { normalizeMountMode, normalizeStringMap } from "../codec/configCodec";
+
+interface ModuleRuntimeEntry {
+  id: string;
+  mode: Module["mode"];
+  is_mounted: boolean;
+  enabled: boolean;
+  source_path?: string;
+  rules: ModuleRules;
+  mount_error?: string;
+  suggest_ignore?: boolean;
+}
 
 interface ModuleMetadata {
   name: string;
@@ -39,41 +47,82 @@ function defaultModuleMetadata(moduleId: string): ModuleMetadata {
   };
 }
 
-function normalizeMetadataField(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function extractMetadata(entry: ModuleRuntimeEntryRaw): ModuleMetadata {
-  const defaults = defaultModuleMetadata(entry.id);
+function normalizeModuleRuntimeEntry(value: unknown): ModuleRuntimeEntry {
+  const payload = isRecord(value) ? value : {};
+  const rulesPayload = isRecord(payload.rules) ? payload.rules : {};
   return {
-    name: normalizeMetadataField(entry.name) ?? defaults.name,
-    version: normalizeMetadataField(entry.version) ?? defaults.version,
-    author: normalizeMetadataField(entry.author) ?? defaults.author,
-    description:
-      normalizeMetadataField(entry.description) ?? defaults.description,
+    id: isString(payload.id) ? payload.id : "",
+    mode: normalizeMountMode(payload.mode),
+    is_mounted: isBoolean(payload.is_mounted) ? payload.is_mounted : false,
+    enabled: isBoolean(payload.enabled) ? payload.enabled : true,
+    source_path: isString(payload.source_path)
+      ? payload.source_path
+      : undefined,
+    rules: {
+      default_mode: normalizeMountMode(rulesPayload.default_mode),
+      paths: normalizeStringMap(rulesPayload.paths),
+    },
+    mount_error:
+      isString(payload.mount_error) && payload.mount_error.trim()
+        ? payload.mount_error
+        : undefined,
+    suggest_ignore: isBoolean(payload.suggest_ignore)
+      ? payload.suggest_ignore
+      : undefined,
   };
 }
 
-function toModule(
-  entry: ModuleRuntimeEntryRaw,
-  metadata: ModuleMetadata,
-): Module {
-  const rules = entry.rules ?? { default_mode: "overlay" as const, paths: {} };
+function parseModuleMetadata(raw: string, moduleId: string): ModuleMetadata {
+  const metadata = defaultModuleMetadata(moduleId);
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+    const separator = trimmed.indexOf("=");
+    if (separator < 0) {
+      continue;
+    }
+    const key = trimmed.slice(0, separator).trim();
+    const value = trimmed.slice(separator + 1).trim();
+    if (!value) {
+      continue;
+    }
+    if (key in metadata) {
+      (metadata as unknown as Record<string, string>)[key] = value;
+    }
+  }
+  return metadata;
+}
+
+async function loadModuleMetadata(
+  entry: ModuleRuntimeEntry,
+): Promise<ModuleMetadata> {
+  if (!entry.source_path?.trim()) {
+    return defaultModuleMetadata(entry.id);
+  }
+
+  try {
+    const raw = await readModuleProp(entry.source_path.trim());
+    return parseModuleMetadata(raw, entry.id);
+  } catch {
+    return defaultModuleMetadata(entry.id);
+  }
+}
+
+function toModule(entry: ModuleRuntimeEntry, metadata: ModuleMetadata): Module {
   return {
     id: entry.id,
     name: metadata.name,
     version: metadata.version,
     author: metadata.author,
     description: metadata.description,
-    mode: normalizeMountMode(entry.mode),
+    mode: entry.mode,
     is_mounted: entry.is_mounted,
     enabled: entry.enabled,
     source_path: entry.source_path,
-    rules: {
-      default_mode: normalizeMountMode(rules.default_mode),
-      paths: rules.paths ?? {},
-    },
-    mount_error: entry.mount_error?.trim() || undefined,
+    rules: entry.rules,
+    mount_error: entry.mount_error,
     suggest_ignore: entry.suggest_ignore,
   };
 }
@@ -85,7 +134,7 @@ async function applyModulesPayload(modules: Module[]): Promise<void> {
     source_path: module.source_path,
     rules: {
       default_mode: normalizeMountMode(module.rules.default_mode),
-      paths: module.rules.paths ?? {},
+      paths: normalizeStringMap(module.rules.paths),
     },
   }));
   await runDaemonCommand(
@@ -106,8 +155,9 @@ export async function scanModules(path?: string): Promise<Module[]> {
     throw new Error("modules payload is invalid");
   }
 
-  const entries = payload.map((item) => moduleRuntimeEntrySchema.parse(item));
-  return entries.map((entry) => toModule(entry, extractMetadata(entry)));
+  const entries = payload.map(normalizeModuleRuntimeEntry);
+  const metadataList = await Promise.all(entries.map(loadModuleMetadata));
+  return entries.map((entry, index) => toModule(entry, metadataList[index]));
 }
 
 export async function saveModules(modules: Module[]): Promise<void> {
@@ -123,7 +173,7 @@ export async function saveModuleRules(
     enabled: true,
     rules: {
       default_mode: normalizeMountMode(rules.default_mode),
-      paths: rules.paths ?? {},
+      paths: normalizeStringMap(rules.paths),
     },
   } as Module;
   await applyModulesPayload([module]);
@@ -137,7 +187,7 @@ export async function saveAllModuleRules(
     enabled: true,
     rules: {
       default_mode: normalizeMountMode(moduleRules.default_mode),
-      paths: moduleRules.paths ?? {},
+      paths: normalizeStringMap(moduleRules.paths),
     },
   })) as Module[];
   await applyModulesPayload(payload);

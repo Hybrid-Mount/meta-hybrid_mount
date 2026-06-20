@@ -15,18 +15,32 @@
  */
 
 import type { AppConfig, KasumiStatus, StorageStatus } from "../../types";
-import type { RuntimeStatePayload } from "../schemas";
+import type {
+  RuntimeModeStatsPayload,
+  RuntimeStatePayload,
+} from "../repos/runtimeRepo";
 import { ENABLE_KASUMI } from "../../constants_gen";
+import {
+  isBoolean,
+  isNumber,
+  isRecord,
+  isString,
+  isStringArray,
+  toNonNegativeInt,
+} from "../core/guards";
+import { normalizeKasumiConfig } from "./configCodec";
 
 export function buildModeStats(
   state: RuntimeStatePayload,
 ): NonNullable<StorageStatus["modeStats"]> {
-  const ms = state.mode_stats;
+  const modeStats = isRecord(state.mode_stats)
+    ? (state.mode_stats as RuntimeModeStatsPayload)
+    : {};
   return {
-    overlay: ms?.overlayfs ?? 0,
-    magic: ms?.magicmount ?? 0,
-    kasumi: ENABLE_KASUMI ? (ms?.kasumi ?? 0) : 0,
-    blacklisted: ms?.blacklisted ?? 0,
+    overlay: toNonNegativeInt(modeStats.overlayfs),
+    magic: toNonNegativeInt(modeStats.magicmount),
+    kasumi: ENABLE_KASUMI ? toNonNegativeInt(modeStats.kasumi) : 0,
+    blacklisted: toNonNegativeInt(modeStats.blacklisted),
   };
 }
 
@@ -34,9 +48,16 @@ export function buildMountedCount(
   state: RuntimeStatePayload,
   modeStats: NonNullable<StorageStatus["modeStats"]>,
 ): number {
-  const overlay = state.overlay_modules?.length ?? 0;
-  const magic = state.magic_modules?.length ?? 0;
-  const kasumi = ENABLE_KASUMI ? (state.kasumi_modules?.length ?? 0) : 0;
+  const overlay = isStringArray(state.overlay_modules)
+    ? state.overlay_modules.length
+    : 0;
+  const magic = isStringArray(state.magic_modules)
+    ? state.magic_modules.length
+    : 0;
+  const kasumi =
+    ENABLE_KASUMI && isStringArray(state.kasumi_modules)
+      ? state.kasumi_modules.length
+      : 0;
   const total = overlay + magic + kasumi;
   return total > 0
     ? total
@@ -48,98 +69,76 @@ export function buildKasumiStatusFromPayload(
   fallbackConfig: AppConfig["kasumi"],
   fallbackState: RuntimeStatePayload,
 ): KasumiStatus | null {
-  if (!payload || typeof payload !== "object") return null;
+  if (!isRecord(payload)) return null;
 
-  const p = payload as Record<string, unknown>;
-  const lkmPayload = (
-    p.lkm && typeof p.lkm === "object" ? p.lkm : {}
-  ) as Record<string, unknown>;
-  const runtimePayload = (
-    p.runtime && typeof p.runtime === "object" ? p.runtime : {}
-  ) as Record<string, unknown>;
+  const lkmPayload = isRecord(payload.lkm) ? payload.lkm : {};
+  const configPayload = isRecord(payload.config)
+    ? payload.config
+    : fallbackConfig;
+  const runtimePayload = isRecord(payload.runtime) ? payload.runtime : {};
 
   return {
-    status:
-      typeof p.status === "string"
-        ? p.status
-        : fallbackConfig.enabled
-          ? "unavailable"
-          : "disabled",
-    available: typeof p.available === "boolean" ? p.available : false,
-    kernel_supported:
-      typeof p.kernel_supported === "boolean" ? p.kernel_supported : false,
+    status: isString(payload.status)
+      ? payload.status
+      : fallbackConfig.enabled
+        ? "unavailable"
+        : "disabled",
+    available: isBoolean(payload.available) ? payload.available : false,
+    kernel_supported: isBoolean(payload.kernel_supported)
+      ? payload.kernel_supported
+      : false,
     protocol_version:
-      p.protocol_version === null || typeof p.protocol_version === "number"
-        ? ((p.protocol_version as number | null | undefined) ?? null)
+      payload.protocol_version === null || isNumber(payload.protocol_version)
+        ? ((payload.protocol_version as number | null | undefined) ?? null)
         : null,
     feature_bits:
-      p.feature_bits === null || typeof p.feature_bits === "number"
-        ? ((p.feature_bits as number | null | undefined) ?? null)
+      payload.feature_bits === null || isNumber(payload.feature_bits)
+        ? ((payload.feature_bits as number | null | undefined) ?? null)
         : null,
-    feature_names: Array.isArray(p.feature_names)
-      ? p.feature_names.filter((f): f is string => typeof f === "string")
+    feature_names: isStringArray(payload.feature_names)
+      ? payload.feature_names
       : [],
-    hooks: Array.isArray(p.hooks)
-      ? p.hooks.filter((h): h is string => typeof h === "string")
-      : [],
-    rule_count:
-      typeof p.rule_count === "number"
-        ? Math.max(0, Math.trunc(p.rule_count))
-        : 0,
-    user_hide_rule_count:
-      typeof p.user_hide_rule_count === "number"
-        ? Math.max(0, Math.trunc(p.user_hide_rule_count))
-        : 0,
-    mirror_path:
-      typeof p.mirror_path === "string"
-        ? p.mirror_path
-        : fallbackConfig.mirror_path,
+    hooks: isStringArray(payload.hooks) ? payload.hooks : [],
+    rule_count: toNonNegativeInt(payload.rule_count),
+    user_hide_rule_count: toNonNegativeInt(payload.user_hide_rule_count),
+    mirror_path: isString(payload.mirror_path)
+      ? payload.mirror_path
+      : fallbackConfig.mirror_path,
     lkm: {
-      loaded:
-        typeof lkmPayload.loaded === "boolean" ? lkmPayload.loaded : false,
-      module_name:
-        typeof lkmPayload.module_name === "string"
-          ? lkmPayload.module_name
-          : undefined,
-      autoload:
-        typeof lkmPayload.autoload === "boolean"
-          ? lkmPayload.autoload
-          : fallbackConfig.lkm_autoload,
-      kmi_override:
-        typeof lkmPayload.kmi_override === "string"
-          ? lkmPayload.kmi_override
-          : fallbackConfig.lkm_kmi_override,
-      current_kmi:
-        typeof lkmPayload.current_kmi === "string"
-          ? lkmPayload.current_kmi
-          : "",
-      search_dir:
-        typeof lkmPayload.search_dir === "string"
-          ? lkmPayload.search_dir
-          : fallbackConfig.lkm_dir,
-      module_file:
-        typeof lkmPayload.module_file === "string"
-          ? lkmPayload.module_file
-          : undefined,
+      loaded: isBoolean(lkmPayload.loaded) ? lkmPayload.loaded : false,
+      module_name: isString(lkmPayload.module_name)
+        ? lkmPayload.module_name
+        : undefined,
+      autoload: isBoolean(lkmPayload.autoload)
+        ? lkmPayload.autoload
+        : fallbackConfig.lkm_autoload,
+      kmi_override: isString(lkmPayload.kmi_override)
+        ? lkmPayload.kmi_override
+        : fallbackConfig.lkm_kmi_override,
+      current_kmi: isString(lkmPayload.current_kmi)
+        ? lkmPayload.current_kmi
+        : "",
+      search_dir: isString(lkmPayload.search_dir)
+        ? lkmPayload.search_dir
+        : fallbackConfig.lkm_dir,
+      module_file: isString(lkmPayload.module_file)
+        ? lkmPayload.module_file
+        : undefined,
       last_error:
-        lkmPayload.last_error === null ||
-        typeof lkmPayload.last_error === "string"
+        lkmPayload.last_error === null || isString(lkmPayload.last_error)
           ? ((lkmPayload.last_error as string | null | undefined) ?? null)
           : null,
     },
-    config: fallbackConfig,
+    config: normalizeKasumiConfig(configPayload),
     runtime: {
-      snapshot: (runtimePayload.snapshot &&
-      typeof runtimePayload.snapshot === "object"
-        ? runtimePayload.snapshot
-        : fallbackState.kasumi && typeof fallbackState.kasumi === "object"
-          ? fallbackState.kasumi
-          : {}) as Record<string, unknown>,
-      kasumi_modules: Array.isArray(runtimePayload.kasumi_modules)
-        ? runtimePayload.kasumi_modules.filter(
-            (m): m is string => typeof m === "string",
-          )
-        : Array.isArray(fallbackState.kasumi_modules)
+      snapshot: isRecord(runtimePayload.snapshot)
+        ? (runtimePayload.snapshot as Record<string, unknown>)
+        : isRecord(fallbackState.kasumi)
+          ? (fallbackState.kasumi as Record<string, unknown>)
+          : {},
+      kasumi_modules: isStringArray(runtimePayload.kasumi_modules)
+        ? runtimePayload.kasumi_modules
+        : isStringArray(fallbackState.kasumi_modules)
           ? fallbackState.kasumi_modules
           : [],
     },

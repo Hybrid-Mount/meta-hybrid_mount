@@ -14,23 +14,21 @@
  * limitations under the License.
  */
 
-import { describe, expect, it } from "vitest";
-import { normalizeMountMode } from "./api/core/guards";
+import { createApp } from "vue";
+// import Vconsole from "vconsole";
+import i18n, { initI18n } from "./locales";
+import "./style.css";
+import "miuix-vue/style.css";
+import App from "./App.vue";
 
-describe("normalizeMountMode", () => {
-  it("returns magic when mode is magic", () => {
-    expect(normalizeMountMode("magic")).toBe("magic");
-  });
+const app = createApp(App);
+app.use(i18n);
+// new Vconsole(); // unless need to debug,dont uncomment it
+const init = async () => {
+  const savedLocale = localStorage.getItem("locale");
+  await initI18n(savedLocale ?? undefined);
 
-  it("returns kasumi when mode is kasumi", () => {
-    expect(normalizeMountMode("kasumi")).toBe("kasumi");
-  });
+  app.mount("#app");
+};
 
-  it("returns ignore when mode is ignore", () => {
-    expect(normalizeMountMode("ignore")).toBe("ignore");
-  });
-
-  it("falls back to overlay for unknown mode", () => {
-    expect(normalizeMountMode("unknown")).toBe("overlay");
-  });
-});
+init();

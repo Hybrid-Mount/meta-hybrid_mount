@@ -1,13 +1,13 @@
-# Hybrid Mount WebUI
+# Hybrid Miuix WebUI
 
 <img src="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/icon.svg" align="right" width="120" />
 
 ![Language](https://img.shields.io/badge/Language-TypeScript-3178C6?style=flat-square&logo=typescript)
-![Framework](https://img.shields.io/badge/Framework-SolidJS-2C4F7C?style=flat-square&logo=solid)
+![Framework](https://img.shields.io/badge/Framework-vue.js-35495e?style=flat-square&logo=vuedotjs)
 ![Platform](https://img.shields.io/badge/Platform-Android%20%2F%20KernelSU-green?style=flat-square&logo=android)
 ![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)
 
-Hybrid Mount WebUI is a Material Design 3 frontend for **Hybrid Mount** runtime management.
+Hybrid Miuix WebUI is a miuix-vue frontend for **Hybrid Mount** runtime management.
 It provides a stable UI contract for configuration, module policy editing, runtime diagnostics, and operational actions in KernelSU environments.
 
 **[English](README.md)** &nbsp; **[简体中文](README.zh-CN.md)**
@@ -112,20 +112,20 @@ Primary schemas (`src/lib/types.ts`):
 
 Requirements:
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 24+
+- yarn
 
 Commands:
 
 ```bash
-pnpm install
-pnpm dev
-pnpm build
-pnpm preview
-pnpm lint
+yarn install
+yarn dev
+yarn build
+yarn preview
+yarn lint
 ```
 
-`pnpm dev` uses `MockAPI` by default. To run the dev server against a real KernelSU bridge, start it with `VITE_USE_MOCK=false pnpm dev`.
+`yarn dev` uses `MockAPI` by default. To run the dev server against a real KernelSU bridge, start it with `VITE_USE_MOCK=false yarn dev`.
 
 ## Adapter Notes
 

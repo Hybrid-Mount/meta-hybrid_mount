@@ -15,12 +15,14 @@
  */
 
 export class AppError extends Error {
-  constructor(
-    public message: string,
-    public code?: number,
-  ) {
+  message: string;
+  code?: number;
+
+  constructor(message: string, code?: number) {
     super(message);
     this.name = "AppError";
+    this.message = message;
+    this.code = code;
   }
 }
 

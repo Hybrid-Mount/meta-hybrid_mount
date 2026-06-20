@@ -1,37 +1,51 @@
 {
-  "name": "hybrid-mount-webui",
-  "private": true,
-  "version": "1.0.1",
+  "name": "hybrid-mount-miuix",
   "license": "Apache-2.0",
-  "type": "module",
-  "scripts": {
-    "generate:info-tab-data": "node ./scripts/generate-info-tab-data.mjs",
-    "prebuild": "pnpm generate:info-tab-data",
-    "dev": "vite",
-    "build": "vite build --emptyOutDir",
-    "preview": "vite preview",
-    "lint": "eslint . && tsc --noEmit",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "test": "vitest run --environment node",
-    "test:watch": "vitest --environment node"
+  "author": {
+    "name": "luyanci"
   },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@testing-library/jest-dom": "^6.9.1",
-    "eslint": "^10.5.0",
-    "globals": "^17.6.0",
-    "prettier": "^3.8.4",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.1",
-    "vite": "^8.0.16",
-    "vite-plugin-solid": "^2.11.12",
-    "vitest": "^4.1.9"
+  "description": "hybrid mount metamodule's webui miuix version,based on miuix-vue.(WIP)",
+  "private": true,
+  "version": "0.1.0-alpha",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "format": "prettier --write .",
+    "lint": "eslint . && prettier --check .",
+    "lint:fix": "eslint . --fix && prettier --write .",
+    "typecheck": "vue-tsc -b",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@material/web": "^2.4.1",
-    "kernelsu": "^3.0.2",
-    "solid-js": "^1.9.13",
+    "vue": "^3.5.38",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@rayxiom/prettier-config": "^4.5.1",
+    "@types/node": "^24.13.2",
+    "@typescript-eslint/eslint-plugin": "^8.61.1",
+    "@typescript-eslint/parser": "^8.61.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/eslint-config-typescript": "^14.8.0",
+    "@vue/tsconfig": "^0.9.1",
+    "@vueuse/core": "^14.3.0",
+    "axios": "^1.18.0",
+    "eslint": "^10.5.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "kernelsu": "^3.0.2",
+    "miuix-vue": "^0.1.1",
+    "motion-v": "^2.3.0",
+    "prettier": "^3.8.4",
+    "typescript": "~6.0.3",
+    "vconsole": "^3.15.1",
+    "vite": "^8.0.16",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-i18n": "^11.4.6",
+    "vue-tsc": "^3.3.5"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   }
 }

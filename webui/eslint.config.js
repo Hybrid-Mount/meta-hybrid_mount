@@ -14,48 +14,47 @@
  * limitations under the License.
  */
 
-import js from "@eslint/js";
-import globals from "globals";
-import tseslint from "typescript-eslint";
+import tsParser from "@typescript-eslint/parser";
+import tsPlugin from "@typescript-eslint/eslint-plugin";
+import vuePlugin from "eslint-plugin-vue";
+import vueParser from "vue-eslint-parser";
+
+const tsRules = {
+  "@typescript-eslint/no-explicit-any": "warn",
+  "@typescript-eslint/no-non-null-assertion": "warn",
+  "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+  "@typescript-eslint/consistent-type-imports": [
+    "error",
+    { prefer: "type-imports" },
+  ],
+};
 
 export default [
   {
-    ...js.configs.recommended,
-    files: ["**/*.{js,mjs,cjs}"],
-    languageOptions: {
-      globals: {
-        ...globals.browser,
-        ...globals.node,
-      },
+    files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
+    plugins: {
+      "@typescript-eslint": tsPlugin,
     },
+    languageOptions: {
+      parser: tsParser,
+    },
+    rules: tsRules,
   },
-  ...tseslint.configs.recommended.map((config) => ({
-    ...config,
-    files: ["**/*.{ts,tsx}"],
+  {
+    files: ["**/*.vue"],
+    plugins: {
+      vue: vuePlugin,
+      "@typescript-eslint": tsPlugin,
+    },
     languageOptions: {
-      ...config.languageOptions,
+      parser: vueParser,
       parserOptions: {
-        ...config.languageOptions?.parserOptions,
-        projectService: true,
-      },
-      globals: {
-        ...globals.browser,
-        ...globals.node,
+        parser: tsParser,
       },
     },
-  })),
-  {
-    files: ["**/*.{ts,tsx}"],
     rules: {
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": [
-        "error",
-        {
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          caughtErrorsIgnorePattern: "^_",
-        },
-      ],
+      ...tsRules,
+      "vue/multi-word-component-names": "off",
     },
   },
   {

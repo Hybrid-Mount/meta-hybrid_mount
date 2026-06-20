@@ -24,13 +24,14 @@ import type {
   StorageStatus,
   SystemInfo,
 } from "../types";
+import type { RuntimeStatePayload } from "./repos/runtimeRepo";
 
 export interface InitPayload {
-  status: unknown;
-  config: unknown;
+  status: RuntimeStatePayload;
+  config: AppConfig;
   version: string;
-  kasumi_status?: unknown;
-  system_info: unknown;
+  kasumi_status?: KasumiStatus;
+  system_info: SystemInfo;
 }
 
 export interface AppAPI {

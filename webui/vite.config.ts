@@ -15,13 +15,13 @@
  */
 
 import { defineConfig } from "vite";
-import solid from "vite-plugin-solid";
+import vue from "@vitejs/plugin-vue";
 
+// https://vite.dev/config/
 export default defineConfig({
   base: "./",
+  plugins: [vue()],
   build: {
     outDir: "../module/webroot",
-    target: "esnext",
   },
-  plugins: [solid()],
 });
