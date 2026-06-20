@@ -11,7 +11,7 @@
   "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "vite --host",
-    "build": "vite build",
+    "build": "vite build --emptyOutDir",
     "format": "prettier --write .",
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
