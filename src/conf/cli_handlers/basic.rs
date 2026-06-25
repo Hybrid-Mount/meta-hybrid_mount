@@ -65,7 +65,7 @@ pub fn handle_logs(lines: usize) -> Result<()> {
             println!("{line}");
         }
 
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(target_os = "android"))]

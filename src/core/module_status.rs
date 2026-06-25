@@ -16,6 +16,7 @@ use std::{
     fs,
     io::{BufRead, BufReader},
     path::Path,
+    process::Command,
 };
 
 use crate::{core::storage::StorageMode, defs, sys::fs::atomic_write};
@@ -91,6 +92,46 @@ pub fn update_crash_description(reason: &str) {
 }
 
 fn set_description(prop_path: &Path, desc_text: &str) {
+    let cmd = if crate::utils::KSU.load(std::sync::atomic::Ordering::Relaxed) {
+        "ksud"
+    } else {
+        "apd"
+    };
+
+    let output = match Command::new(cmd)
+        .args([
+            "module",
+            "config",
+            "set",
+            "override.description",
+            desc_text,
+            "--temp",
+        ])
+        .envs([
+            ("KSU_MODULE", env!("MODULE_ID")),
+            ("AP_MODULE", env!("MODULE_ID")),
+        ])
+        .output()
+    {
+        Ok(c) => c,
+        Err(_) => {
+            legacy_set_description(prop_path, desc_text);
+            return;
+        }
+    };
+
+    if output.status.success() {
+        log::debug!("module config override.description successful set!");
+    } else {
+        log::warn!(
+            "failed to set module config override.description: {}, fallback to write regular file",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        legacy_set_description(prop_path, desc_text);
+    }
+}
+
+fn legacy_set_description(prop_path: &Path, desc_text: &str) {
     let lines: Vec<String> = match fs::File::open(prop_path) {
         Ok(file) => BufReader::new(file)
             .lines()
