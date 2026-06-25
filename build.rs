@@ -121,7 +121,7 @@ fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("OUT_DIR is not set for build script"))?,
     );
     fs::write(out_dir.join("module.prop"), content.as_bytes())?;
-    
-      println!("cargo:rustc-env=MODULE_ID={}", id);
+
+    println!("cargo:rustc-env=MODULE_ID={}", id);
     Ok(())
 }
