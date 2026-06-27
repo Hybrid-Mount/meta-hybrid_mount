@@ -18,7 +18,7 @@ resolver = "2"
 
 [package]
 name = "hybrid-mount"
-version = "4.1.3"
+version = "4.2.0"
 edition = "2024"
 description = "Mount orchestration metamodule for KernelSU and APatch"
 authors = ["Hybrid Mount Developers"]

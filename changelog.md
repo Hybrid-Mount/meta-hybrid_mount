@@ -1,4 +1,104 @@
 
+## v4.2.0
+
+
+### <!-- 1 --> Features
+
+- Add cleanup for stale overlays and loop mounts in recovery process
+
+- Implement best-effort detach for mount points and improve logging for kasumi fixes
+
+- Enhance linting and testing workflows, update package description, and improve atomic write functionality
+
+- Implement logic to skip KSU umount for specific paths and enhance related tests
+
+- Enhance module metadata handling with additional fields and improved parsing
+
+
+
+### <!-- 2 --> Fixes
+
+- Improve error handling and type casting in executor and recovery modules
+
+- Handle kasumi module count conditionally based on feature flag
+
+- `mount` Harden mount execution flow
+
+- Fix overlay stale-detach detection for hybrid mounts
+
+- Prevent loop device leak on mount failure When mount_ext4_loop() fails to mount the ext4 image, the loop device was left attached because autoclear only triggers after a successful mount followed by umount. This exhausts the finite pool of loop devices over repeated failures. Now explicitly detach the loop device in the mount failure path while preserving autoclear for the success path (where kernel cleanup is more reliable). Fixes resource leak identified in mount flow analysis. Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+- Update running_description to use prefixed variables and conditionally include kasumi count
+
+- Load and run on strict jump-table CFI (5.10/5.15) This is a empty commit to get the latest kasumi ko
+
+- Harden SELinux app zygote oracle guards and default all features off until userspace enables them This is a empty commit to get the latest kasumi ko
+
+- Improve error handling, mutex recovery, and logging - Add lock_or_recover() helper to handle poisoned mutexes gracefully instead of panicking, allowing recovery of valid data - Replace all .lock().expect() calls with lock_or_recover() in daemon server components (9 locations) - Add comprehensive logging for critical operations: * prepare.rs: module processing, storage root creation * http.rs: SSE client connections/disconnections * overlayfs.rs: mount success and staging layer creation - Improve error handling consistency: * Replace silent Err(_) patterns with logged errors * Add context to error branches in module_status, daemon server, system API, and kasumi status checks (10 locations) This improves stability by preventing mutex-related panics and enhances debuggability with better error visibility. Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+- Skip self-mounting modules
+
+- Fix modules.prop null byte error First, try using the `module config` command; if it fails, automatically fallback to the original logic. fixes #354
+
+
+
+### <!-- 4 --> Refactors
+
+- Clean up redundant allocations and improve error logging - Replace .map_err(Into::into) with ? operator in fs/file.rs - Replace BTreeSet+collect with Vec+sort+dedup in overlayfs - Extract duplicated kasumi count logic into helper methods - Avoid allocation in os_str_eq_ignore_ascii_case via as_encoded_bytes - Add debug/warn logging for previously silently swallowed errors - Document MaybeUninit safety assumption for impl_zeroed_default
+
+- API schemas and payload handling - Introduced Zod schemas for runtime validation and type inference across various API responses, including system info, version, and kasumi status. - Updated `configCodec.ts` to utilize new schemas for improved payload validation and normalization. - Refactored `runtimeCodec.ts` to streamline state handling and leverage schemas for runtime state validation. - Enhanced `bridge.ts` to implement request deduplication for concurrent daemon commands. - Simplified module service logic by integrating schemas for module runtime entries and metadata extraction. - Improved error handling and type safety in service functions across the application. - Removed redundant type checks and guards in favor of schema validation.
+
+- Establish modular structure for prepare.rs (phase 1) Create a new modular structure for the large prepare.rs file (1092 lines) to improve maintainability and code organization. Changes: - Create src/core/ops/prepare/ directory with module structure - Extract data structures to types.rs (ModulePlanOutcome, PrepareContext, etc.) - Extract helper functions to plan_builder.rs (queue_overlay, merge_overlay_groups, etc.) - Create placeholder files for dir_walker.rs and module_processor.rs - Rename prepare.rs to prepare_old.rs as temporary fallback - New mod.rs re-exports prepare_mount_plan from prepare_old.rs This is phase 1 of the refactor - establishes the module skeleton. The old implementation remains functional via prepare_old.rs while migration continues incrementally. All tests pass and lint checks succeed. Next phases will migrate: - Directory traversal logic to dir_walker.rs (~300 lines) - Module processing to module_processor.rs (~120 lines) - Top-level coordination to coordinator.rs (~250 lines) - Test code to tests.rs (~350 lines) Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+- Complete modular restructure of prepare.rs (phase 2) Complete the migration from monolithic prepare.rs (1092 lines) to a modular structure with clear separation of concerns. Changes: - Implement dir_walker.rs (~300 lines): directory traversal and file copying * PrepareContext::process_dir - recursive directory processing * PrepareContext::apply_plan_decision - mount strategy application * PrepareContext::resolve_target_cached - target path resolution * PrepareContext::should_split_overlay_target - overlay splitting logic - Implement module_processor.rs (~130 lines): single module preparation * prepare_module() - module processing entry point * module_requests_kasumi() - kasumi detection * module_sync_error() - error wrapping - Implement coordinator.rs (~260 lines): top-level orchestration * prepare_mount_plan() - public API entry * prepare_mount_plan_with_root() - internal coordination * Module iteration, storage management, plan building - Implement tests.rs (~350 lines): all test cases * 10 comprehensive tests covering overlay, magic, kasumi modes * Test helpers: write_file, make_module, test_config * Full test coverage maintained from original implementation - Remove prepare_old.rs: migration complete - Clean up all temporary #[allow(dead_code)] attributes Module structure: types.rs - Data structures (90 lines) plan_builder.rs - Helper functions (95 lines) dir_walker.rs - Directory traversal (300 lines) module_processor.rs - Module processing (130 lines) coordinator.rs - Top-level coordination (260 lines) tests.rs - Test suite (350 lines) mod.rs - Module exports (25 lines) Results: - All 60 tests pass - Lint checks pass - Zero behavioral changes - Each file now has single, clear responsibility - Easier to navigate, maintain, and extend Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+
+
+### <!-- 5 --> Documentation
+
+- Move English README to root, clean up doc layout Move README.md (English) from docs/ to repo root for visibility, and move AGENTS.md into docs/. Update cross-reference links in all 9 README language variants and Cargo.toml to reflect the new paths. Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
+
+
+### <!-- 8 --> Maintenance
+
+- Minor changes
+
+- Update Vietnamese (#341)
+
+- Revert umount flow to pre-b8237d5 behavior
+
+
+
+### <!-- 9 --> Other
+
+- Blacklist AaTempSpoof
+
+- Fix clippy warnings
+
+- Simplify umount cleanup and normalize queued paths
+
+- Deduplicate pending umount queue paths
+
+- Skip stale overlay detach for package manager paths
+
+- Harden hybrid mount detection and umount registration
+
+- Normalize umount paths
+
+- Normalize umount paths without forcing absoluteness
+
+- Expose module.prop id matching and add scan tests
+
+- Refactor daemon command structure and enhance API response handling - Removed the public export of `DaemonCommand` in `mod.rs`. - Introduced a new `DaemonResponse` struct for standardized API responses. - Updated `DaemonCommand` to use untagged enums for better command organization. - Refactored command dispatching logic in `commands.rs` to handle new command structure. - Added new commands for system, config, modules, and kasumi operations. - Enhanced TypeScript definitions in `bridge.ts` to match updated Rust command structure. - Improved error handling and response formatting for batch command execution.
+
+- Fix caption
+
+- Fix license header
+
+
+
+
 ## v4.1.3
 
 
