@@ -1,16 +1,6 @@
 // Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: GPL-3.0-only
 
 use std::{
     fs,
@@ -358,9 +348,23 @@ fn handle_http_request(
     }
 
     let close_after_response = request.close_after_response;
-    let request: super::super::protocol::DaemonRequest =
-        serde_json::from_slice(&request.body).context("Failed to parse WebUI daemon request")?;
-    let config_path = PathBuf::from(defs::CONFIG_FILE);
+    let request: super::super::protocol::DaemonRequest = match serde_json::from_slice(&request.body)
+    {
+        Ok(request) => request,
+        Err(err) => {
+            write_http_json(
+                stream,
+                400,
+                "Bad Request",
+                &DaemonResponse::error(format!("failed to parse WebUI daemon request: {err}")),
+                ConnectionAction::Close,
+            )?;
+            return Ok(ConnectionAction::Close);
+        }
+    };
+    let config_path = request
+        .config_path
+        .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
     let effective_config = super::commands::load_runtime_config(config_cache, &config_path)?;
     let ctx = super::commands::CommandContext::new(
         &effective_config,

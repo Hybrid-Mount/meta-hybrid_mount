@@ -23,6 +23,11 @@ export const daemonErrorEnvelopeSchema = z.object({
   error: z.string(),
 });
 
+export const daemonFailureEnvelopeSchema = z.object({
+  ok: z.literal(false),
+  error: z.string(),
+});
+
 export const daemonSuccessEnvelopeSchema = z.object({
   ok: z.literal(true),
   data: z.unknown().optional(),
@@ -32,6 +37,7 @@ export const daemonSuccessEnvelopeSchema = z.object({
 // or a raw payload. We validate the common patterns.
 export const daemonResponseSchema = z.union([
   daemonErrorEnvelopeSchema,
+  daemonFailureEnvelopeSchema,
   daemonSuccessEnvelopeSchema,
 ]);
 
@@ -50,11 +56,8 @@ export function extractStructuredError(payload: unknown): string | null {
   const parsed = daemonErrorEnvelopeSchema.safeParse(payload);
   if (parsed.success) return parsed.data.error;
 
-  // Also check the { ok: false, error: "..." } pattern from batch sub-commands
-  const batchErr = z
-    .object({ ok: z.literal(false), error: z.string() })
-    .safeParse(payload);
-  if (batchErr.success) return batchErr.data.error;
+  const failure = daemonFailureEnvelopeSchema.safeParse(payload);
+  if (failure.success) return failure.data.error;
 
   return null;
 }

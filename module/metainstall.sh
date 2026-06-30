@@ -1,23 +1,13 @@
 # Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# SPDX-License-Identifier: GPL-3.0-only
 
 export KSU_HAS_METAMODULE="true"
 export KSU_METAMODULE="hybrid-mount"
 BASE_DIR="/data/adb/hybrid-mount"
 MANAGED_PARTITIONS="odm product system_ext vendor apex mi_ext my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_reserve my_stock oem optics prism"
 MODE_MARKERS="overlay magic"
-SELF_MOUNTING_MODULE_BLOCKLIST="scene_swap_controller"
+SELF_MOUNTING_MODULE_BLOCKLIST="scene_swap_controller AAaTempSpoof"
 NANO_MODE=false
 
 detect_nano_mode() {
@@ -89,6 +79,20 @@ module_has_managed_partitions() {
     fi
   done
   return 1
+}
+
+normalize_symlinked_partition_layout() {
+  local partition
+  for partition in vendor product system_ext; do
+    if [ -L "/system/$partition" ] && [ -d "$MODPATH/system/$partition" ]; then
+      if [ -d "$MODPATH/$partition" ]; then
+        cp -a "$MODPATH/system/$partition/." "$MODPATH/$partition/" && rm -rf "$MODPATH/system/$partition"
+      else
+        mv "$MODPATH/system/$partition" "$MODPATH/$partition"
+      fi
+      ui_print "- normalized /system/$partition layout"
+    fi
+  done
 }
 
 current_module_id() {
@@ -227,6 +231,7 @@ ui_print "- Using Hybrid Mount metainstall"
 
 install_module
 mark_self_mounting_blocklisted_module
+normalize_symlinked_partition_layout
 
 if detect_nano_mode; then
   NANO_MODE=true

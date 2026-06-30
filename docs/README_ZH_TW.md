@@ -4,7 +4,7 @@
 
 ![Language](https://img.shields.io/badge/Language-Rust-orange?style=flat-square&logo=rust)
 ![Platform](https://img.shields.io/badge/Platform-Android-green?style=flat-square&logo=android)
-![License](https://img.shields.io/badge/License-Apache--2.0-blue?style=flat-square)
+![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)
 ![Version](https://img.shields.io/github/v/tag/Hybrid-Mount/meta-hybrid_mount?label=Version&color=8A2BE2&style=flat-square)
 
 Hybrid Mount 是面向 **KernelSU** 與 **APatch** 的掛載編排元模組。
@@ -280,4 +280,4 @@ cargo +nightly test
 
 ## 授權
 
-本專案採用 [Apache-2.0](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/LICENSE) 授權。
+本專案採用 [GPL-3.0](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/LICENSE) 授權。
