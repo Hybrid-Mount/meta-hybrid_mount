@@ -19,12 +19,12 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^6.9.1",
-    "eslint": "^10.5.0",
-    "globals": "^17.6.0",
-    "prettier": "^3.8.4",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.1",
-    "vite": "^8.0.16",
+    "typescript-eslint": "^8.62.1",
+    "vite": "^8.1.2",
     "vite-plugin-solid": "^2.11.12",
     "vitest": "^4.1.9"
   },
