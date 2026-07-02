@@ -32,7 +32,7 @@ jobs:
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           filter: 'tree:0'
       - name: Trust checkout directory
@@ -64,7 +64,7 @@ jobs:
       run:
         working-directory: webui
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           filter: 'tree:0'
       - name: Resolve pnpm store path
@@ -76,7 +76,7 @@ jobs:
           mkdir -p "$STORE_PATH"
           echo "path=$STORE_PATH" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
