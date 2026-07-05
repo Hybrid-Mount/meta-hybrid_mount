@@ -24,11 +24,21 @@
   display: flex;
   align-items: center;
   overflow: visible;
+  background: color-mix(
+    in srgb,
+    var(--md-sys-color-background) 92%,
+    transparent
+  );
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--md-sys-color-outline-variant) 72%, transparent);
+  backdrop-filter: blur(18px) saturate(1.15);
 }
 .top-bar-content {
   height: 100%;
   width: 100%;
-  padding: 20px;
+  max-width: 908px;
+  margin: 0 auto;
+  padding: 16px 20px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -37,16 +47,22 @@
 }
 .screen-title {
   flex-grow: 1;
+  min-width: 0;
   margin: 0;
-  font-size: 22px;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.15;
   transform-origin: left bottom;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .top-actions {
   display: flex;
   align-items: center;
   gap: 4px;
   z-index: 50;
+  margin-left: 12px;
 }
 md-icon svg {
   fill: currentColor;

@@ -18,7 +18,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 0 100px 0;
+  padding: 4px 0 24px 0;
   width: 100%;
 }
 
@@ -30,12 +30,13 @@
   top: 0;
   z-index: 50;
   margin: -12px 0 0 0;
-  padding: 0 0 8px 0;
+  padding: 12px 0 10px 0;
   background: linear-gradient(
     180deg,
-    var(--md-sys-color-background) 85%,
+    var(--md-sys-color-background) 78%,
     transparent
   );
+  backdrop-filter: blur(12px);
 }
 
 .search-bar {
@@ -46,11 +47,15 @@
   align-items: center;
   padding: 0 16px;
   gap: 12px;
-  transition: background-color 0.2s;
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
+  border: 1px solid transparent;
 }
 
 .search-bar:focus-within {
   background-color: var(--md-sys-color-surface-container-highest);
+  border-color: var(--md-sys-color-primary);
 }
 
 .search-icon {
@@ -82,6 +87,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .btn-icon {
@@ -134,7 +140,8 @@
     border-color 0.3s cubic-bezier(0.2, 0, 0, 1),
     opacity 0.3s cubic-bezier(0.2, 0, 0, 1);
   position: relative;
-  border: 1px solid transparent;
+  border: 1px solid
+    color-mix(in srgb, var(--md-sys-color-outline-variant) 52%, transparent);
   overflow: hidden;
 }
 
@@ -144,6 +151,11 @@
 
 .module-card.expanded {
   background-color: var(--md-sys-color-surface-container-high);
+  border-color: color-mix(
+    in srgb,
+    var(--md-sys-color-primary) 26%,
+    var(--md-sys-color-outline-variant)
+  );
 }
 
 .module-card.unmounted {
@@ -167,6 +179,12 @@
   color: inherit;
   text-align: left;
   font: inherit;
+  min-width: 0;
+}
+
+.module-header:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -4px;
 }
 
 .module-info {
@@ -195,6 +213,7 @@
   align-items: center;
   white-space: nowrap;
   overflow: hidden;
+  min-width: 0;
 }
 
 .module-id {
@@ -228,6 +247,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
 }
 
 .error-indicator {
@@ -360,6 +380,7 @@
   line-height: 1.45;
   margin-bottom: 12px;
   margin-top: 12px;
+  overflow-wrap: anywhere;
 }
 
 .strategy-selector {
@@ -385,6 +406,12 @@
     opacity 0.2s ease;
   background: transparent;
   color: var(--md-sys-color-on-surface);
+  min-width: 0;
+}
+
+.strategy-option:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
 }
 
 .strategy-option:hover {
@@ -409,6 +436,9 @@
 .opt-title {
   font-weight: 600;
   font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .opt-sub {
@@ -443,5 +473,16 @@
 @media (min-width: 680px) {
   .strategy-selector {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .filter-select {
+    max-width: 112px;
+  }
+
+  .mode-group {
+    flex-direction: column;
+    align-items: flex-end;
   }
 }
