@@ -278,7 +278,7 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
             guard.mount_error_reasons.clear();
             guard.save()?;
             drop(guard);
-            http::broadcast_sse_event(state, sse_clients, "state_update");
+            http::broadcast_sse_event(state, sse_clients, "mount_errors_cleared");
             to_value(&json!({ "cleared": cleared, "removed_markers": removed_markers }))
         }
     }
@@ -813,7 +813,7 @@ fn refresh_runtime_snapshot(
         .map_err(|e| anyhow::anyhow!("Failed to cache status value: {e}"))?;
     guard.save()?;
     drop(guard);
-    http::broadcast_sse_event(state, sse_clients, "state_update");
+    http::broadcast_sse_event(state, sse_clients, "runtime_changed");
     Ok(())
 }
 

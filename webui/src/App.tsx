@@ -232,7 +232,7 @@ export default function App() {
       const [payload] = await Promise.all([API.init(), uiStore.init()]);
       if (disposed) return;
       sysStore.loadFromInit(payload);
-      onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
+      onSseStateUpdate((event) => sysStore.handleSseUpdate(event.payload));
       configStore.loadFromInit(payload);
       setInitialDataReady(true);
       startRoutePreload();
@@ -262,8 +262,8 @@ export default function App() {
         Boolean(kasumiStore.status?.available),
         Boolean(kasumiStore.status?.kernel_supported),
       );
-      onSseStateUpdate((state) => {
-        kasumiStore.handleSseUpdate(state);
+      onSseStateUpdate((event) => {
+        kasumiStore.handleSseUpdate(event.payload);
         features.setKasumiStatus(
           kasumiStore.enabled,
           Boolean(kasumiStore.status?.available),

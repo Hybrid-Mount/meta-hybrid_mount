@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import rustProtocol from "../../../../../src/core/daemon/protocol.rs?raw";
 import tsBridge from "./bridge.ts?raw";
+import { DAEMON_COMMAND_TYPES } from "./protocol.generated";
 
 function uniqueSorted(matches: IterableIterator<RegExpMatchArray>): string[] {
   return [...new Set(Array.from(matches, (match) => match[1]))].sort();
@@ -30,7 +31,9 @@ describe("daemon protocol contract", () => {
     const tsCommandTypes = uniqueSorted(
       tsBridge.matchAll(/\|\s*\{\s*type:\s*"([^"]+)"/g),
     );
+    const generatedCommandTypes = [...DAEMON_COMMAND_TYPES].sort();
 
-    expect(tsCommandTypes).toEqual(rustCommandTypes);
+    expect(generatedCommandTypes).toEqual(rustCommandTypes);
+    expect(tsCommandTypes).toEqual(generatedCommandTypes);
   });
 });

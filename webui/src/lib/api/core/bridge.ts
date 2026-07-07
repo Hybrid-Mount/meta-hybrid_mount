@@ -22,6 +22,7 @@ import {
   webuiSessionSchema,
   type WebuiSession,
 } from "./validation";
+import type { DaemonCommandType } from "./protocol.generated";
 
 interface KsuExecResult {
   errno: number;
@@ -101,8 +102,6 @@ export type DaemonCommandPayload =
   // ── BatchCommand ──
   | { type: "batch"; commands: DaemonCommandPayload[] };
 
-export type DaemonCommandType = DaemonCommandPayload["type"];
-
 interface DaemonCommandMetadata {
   dedupeInFlight: boolean;
   timeoutMs: number;
@@ -179,7 +178,14 @@ const DAEMON_PING_TIMEOUT_MS = 2000;
 let daemonReady: Promise<void> | null = null;
 let webuiSession: WebuiSession | null = null;
 let sseSource: EventSource | null = null;
-type SseStateHandler = (state: unknown) => void;
+export interface SseStateUpdateEvent {
+  schemaVersion: number;
+  id: number | null;
+  kind: string;
+  payload: unknown;
+}
+
+type SseStateHandler = (event: SseStateUpdateEvent) => void;
 let sseHandlers: SseStateHandler[] = [];
 
 export function getDaemonCommandMetadata(
@@ -348,6 +354,37 @@ export function parseDaemonJsonOutput(raw: string): unknown {
   }
 }
 
+export function parseSseStateUpdateData(
+  raw: string,
+  lastEventId?: string,
+): SseStateUpdateEvent {
+  const parsed = JSON.parse(raw) as unknown;
+  const fallbackId =
+    lastEventId && /^\d+$/.test(lastEventId) ? Number(lastEventId) : null;
+
+  if (parsed && typeof parsed === "object") {
+    const record = parsed as Record<string, unknown>;
+    if ("payload" in record) {
+      return {
+        schemaVersion:
+          typeof record.schema_version === "number"
+            ? record.schema_version
+            : 1,
+        id: typeof record.id === "number" ? record.id : fallbackId,
+        kind: typeof record.kind === "string" ? record.kind : "state_update",
+        payload: record.payload,
+      };
+    }
+  }
+
+  return {
+    schemaVersion: 0,
+    id: fallbackId,
+    kind: "legacy_state_update",
+    payload: parsed,
+  };
+}
+
 async function runDaemonHttp(
   session: WebuiSession,
   command: DaemonCommandPayload,
@@ -485,10 +522,13 @@ export function startSse(): void {
 
   sseSource.addEventListener("state_update", (event: MessageEvent) => {
     try {
-      const state = JSON.parse(event.data as string) as unknown;
+      const update = parseSseStateUpdateData(
+        event.data as string,
+        event.lastEventId,
+      );
       for (const handler of sseHandlers) {
         try {
-          handler(state);
+          handler(update);
         } catch (e) {
           console.error("SSE handler error", e);
         }

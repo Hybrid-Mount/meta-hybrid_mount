@@ -9,7 +9,7 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -98,6 +98,8 @@ pub(super) struct WebuiHttpRequest {
 
 pub(super) const MAX_WEBUI_HTTP_BODY_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_WEBUI_CONNECTIONS: usize = 64;
+const SSE_SCHEMA_VERSION: u32 = 1;
+static SSE_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WebuiHttpRequestReadError {
@@ -481,13 +483,9 @@ fn handle_sse_endpoint(
 
     crate::scoped_log!(info, "daemon:sse", "client connected");
 
-    // Send initial event
-    let initial = {
-        let mut guard = lock_or_recover(state);
-        serde_json::to_string(guard.status_value()?).unwrap_or_default()
-    };
-    write!(stream, "event: state_update\ndata: {initial}\n\n")
-        .context("Failed to write SSE initial event")?;
+    let initial = format_sse_event(state, "state_update", "runtime_snapshot")
+        .context("Failed to encode SSE initial event")?;
+    write!(stream, "{initial}").context("Failed to write SSE initial event")?;
     stream
         .flush()
         .context("Failed to flush SSE initial event")?;
@@ -532,37 +530,35 @@ fn handle_sse_endpoint(
     Ok(ConnectionAction::Close)
 }
 
+fn format_sse_event(state: &Arc<Mutex<RuntimeState>>, event: &str, kind: &str) -> Result<String> {
+    let id = SSE_EVENT_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+    let payload = {
+        let mut guard = lock_or_recover(state);
+        guard
+            .status_value()
+            .context("Failed to build runtime status for SSE")?
+            .clone()
+    };
+    let envelope = json!({
+        "schema_version": SSE_SCHEMA_VERSION,
+        "id": id,
+        "kind": kind,
+        "payload": payload,
+    });
+    let data = serde_json::to_string(&envelope).context("Failed to serialize SSE payload")?;
+    Ok(format!("id: {id}\nevent: {event}\ndata: {data}\n\n"))
+}
+
 pub(super) fn broadcast_sse_event(
     state: &Arc<Mutex<RuntimeState>>,
     sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
-    event: &str,
+    kind: &str,
 ) {
-    let body = {
-        let mut guard = match state.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                crate::scoped_log!(
-                    error,
-                    "daemon:sse",
-                    "state lock poisoned during broadcast: {:#}",
-                    e
-                );
-                return;
-            }
-        };
-        let json = match guard.status_value() {
-            Ok(v) => v.clone(),
-            Err(e) => {
-                crate::scoped_log!(error, "daemon:sse", "status_value() failed: {:#}", e);
-                return;
-            }
-        };
-        match serde_json::to_string(&json) {
-            Ok(s) => format!("event: {event}\ndata: {s}\n\n"),
-            Err(e) => {
-                crate::scoped_log!(error, "daemon:sse", "JSON serialization failed: {:#}", e);
-                return;
-            }
+    let body = match format_sse_event(state, "state_update", kind) {
+        Ok(body) => body,
+        Err(e) => {
+            crate::scoped_log!(error, "daemon:sse", "failed to encode event: {:#}", e);
+            return;
         }
     };
 
@@ -664,13 +660,22 @@ mod tests {
             .unwrap();
 
         sse_clients.lock().unwrap().push(server);
-        broadcast_sse_event(&state, &sse_clients, "state_update");
+        broadcast_sse_event(&state, &sse_clients, "runtime_changed");
 
         let mut buf = [0u8; 4096];
         let n = client.read(&mut buf).unwrap();
         let text = String::from_utf8_lossy(&buf[..n]);
+        assert!(text.contains("id: "), "missing id field");
         assert!(text.contains("event: state_update"), "missing event field");
         assert!(text.contains("data:"), "missing data field");
+        assert!(
+            text.contains("\"schema_version\":1"),
+            "missing schema version"
+        );
+        assert!(
+            text.contains("\"kind\":\"runtime_changed\""),
+            "missing event kind"
+        );
     }
 
     #[test]
@@ -689,7 +694,7 @@ mod tests {
             .expect("shutdown write on server socket");
 
         sse_clients.lock().unwrap().push(server);
-        broadcast_sse_event(&state, &sse_clients, "state_update");
+        broadcast_sse_event(&state, &sse_clients, "runtime_changed");
 
         assert!(
             sse_clients.lock().unwrap().is_empty(),

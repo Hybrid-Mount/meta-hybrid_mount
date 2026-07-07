@@ -19,6 +19,7 @@ import { AppError } from "./error";
 import {
   getDaemonCommandMetadata,
   parseDaemonJsonOutput,
+  parseSseStateUpdateData,
   readModuleProp,
   resolveShouldUseMock,
   shouldUseMock,
@@ -111,6 +112,38 @@ describe("daemon command metadata", () => {
     expect(getDaemonCommandMetadata({ type: "api-reboot" })).toMatchObject({
       dedupeInFlight: false,
       timeoutMs: 30000,
+    });
+  });
+});
+
+describe("SSE state update parsing", () => {
+  it("parses versioned SSE envelopes", () => {
+    expect(
+      parseSseStateUpdateData(
+        JSON.stringify({
+          schema_version: 1,
+          id: 42,
+          kind: "runtime_changed",
+          payload: { storage_mode: "ext4" },
+        }),
+        "42",
+      ),
+    ).toEqual({
+      schemaVersion: 1,
+      id: 42,
+      kind: "runtime_changed",
+      payload: { storage_mode: "ext4" },
+    });
+  });
+
+  it("keeps legacy daemon SSE payloads readable", () => {
+    expect(
+      parseSseStateUpdateData('{"storage_mode":"tmpfs"}', "7"),
+    ).toEqual({
+      schemaVersion: 0,
+      id: 7,
+      kind: "legacy_state_update",
+      payload: { storage_mode: "tmpfs" },
     });
   });
 });
