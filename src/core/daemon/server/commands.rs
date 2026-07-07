@@ -235,11 +235,11 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
     let sse_clients = ctx.sse_clients;
 
     match cmd {
-        SystemCommand::Ping => to_value(&json!({ "status": "ok" })),
+        SystemCommand::Ping => Ok(json!({ "status": "ok" })),
         SystemCommand::WebuiStart => Ok(webui.session_payload()),
         SystemCommand::Shutdown => {
             shutdown.store(true, Ordering::Relaxed);
-            to_value(&json!({ "shutdown": true }))
+            Ok(json!({ "shutdown": true }))
         }
         SystemCommand::Init => dispatch_init(ctx),
         SystemCommand::Status => cached_status_value(state),
@@ -264,11 +264,11 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
         SystemCommand::ApiKernelUname => to_value(&read_kernel_uname_payload()?),
         SystemCommand::ApiOpenUrl { url } => {
             open_url(&url)?;
-            to_value(&json!({ "opened": true }))
+            Ok(json!({ "opened": true }))
         }
         SystemCommand::ApiReboot => {
             reboot_device()?;
-            to_value(&json!({ "reboot": true }))
+            Ok(json!({ "reboot": true }))
         }
         SystemCommand::ClearMountErrors => {
             let removed_markers = clear_mount_error_markers(config)?;
@@ -279,7 +279,7 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
             guard.save()?;
             drop(guard);
             http::broadcast_sse_event(state, sse_clients, "mount_errors_cleared");
-            to_value(&json!({ "cleared": cleared, "removed_markers": removed_markers }))
+            Ok(json!({ "cleared": cleared, "removed_markers": removed_markers }))
         }
     }
 }
@@ -319,7 +319,7 @@ fn dispatch_init(ctx: &CommandContext<'_>) -> Result<Value> {
     #[cfg(feature = "kasumi")]
     {
         let kasumi_status_value = build_kasumi_runtime_json(config, &snapshot)?;
-        to_value(&json!({
+        Ok(json!({
             "status": status_value,
             "config": config_value,
             "version": version_value,
@@ -328,7 +328,7 @@ fn dispatch_init(ctx: &CommandContext<'_>) -> Result<Value> {
         }))
     }
     #[cfg(not(feature = "kasumi"))]
-    to_value(&json!({
+    Ok(json!({
         "status": status_value,
         "config": config_value,
         "version": version_value,
@@ -628,7 +628,7 @@ fn dispatch_batch(ctx: &CommandContext<'_>, commands: Vec<DaemonCommand>) -> Res
         results.push(result);
     }
     ctx.refresh_runtime_snapshot(ctx.config)?;
-    to_value(&json!({ "results": results }))
+    Ok(json!({ "results": results }))
 }
 
 fn patch_config_file(config_path: &Path, patch: Value) -> Result<Config> {
@@ -677,7 +677,7 @@ fn read_kernel_uname_payload() -> Result<Value> {
         .context("failed to read /proc/sys/kernel/version")?
         .trim()
         .to_string();
-    to_value(&json!({ "release": release, "version": version }))
+    Ok(json!({ "release": release, "version": version }))
 }
 
 fn open_url(url: &str) -> Result<()> {
@@ -878,7 +878,7 @@ fn detect_rule_file_type(path: &Path) -> Result<i32> {
 #[cfg(feature = "kasumi")]
 fn build_kasumi_runtime_json(config: &Config, runtime_state: &RuntimeState) -> Result<Value> {
     let kasumi_info = kasumi_mount::collect_runtime_info(config);
-    to_value(&json!({
+    Ok(json!({
         "status": kasumi_info.status,
         "available": kasumi_info.available,
         "kernel_supported": kasumi_info.kernel_supported,
