@@ -62,13 +62,7 @@ export default function NavBar(props: Props) {
             onClick={() => props.onTabChange(tab.id)}
             ref={(el) => (tabRefs[tab.id] = el)}
             type="button"
-            aria-label={
-              uiStore.L.tabs?.[tab.id as keyof typeof uiStore.L.tabs] || tab.id
-            }
             aria-current={props.activeTab === tab.id ? "page" : undefined}
-            title={
-              uiStore.L.tabs?.[tab.id as keyof typeof uiStore.L.tabs] || tab.id
-            }
           >
             <div class="icon-container">
               <md-icon>

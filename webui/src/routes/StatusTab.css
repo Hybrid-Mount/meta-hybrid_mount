@@ -15,8 +15,8 @@
  */
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   padding-bottom: 24px;
 }
@@ -33,10 +33,6 @@
   justify-content: space-between;
   min-height: 140px;
   gap: 24px;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
-  box-shadow: 0 14px 34px
-    color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
 }
 
 .hero-card::after {
@@ -66,11 +62,10 @@
 }
 
 .hero-value {
-  font-size: clamp(34px, 9vw, 48px);
+  font-size: 42px;
   line-height: 1.1;
   font-weight: 600;
-  letter-spacing: 0;
-  overflow-wrap: anywhere;
+  letter-spacing: -1px;
 }
 
 .mount-base-chip {
@@ -119,9 +114,6 @@
   gap: 16px;
   position: relative;
   overflow: hidden;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
-  min-width: 0;
 }
 
 .metric-icon-bg {
@@ -138,12 +130,10 @@
 }
 
 .metric-value {
-  font-size: clamp(26px, 7vw, 34px);
+  font-size: 32px;
   font-weight: 600;
   color: var(--md-sys-color-primary);
   line-height: 1;
-  max-width: 100%;
-  overflow-wrap: anywhere;
 }
 
 .metric-label {
@@ -159,8 +149,6 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 56%, transparent);
 }
 
 .card-title {
@@ -243,8 +231,6 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 56%, transparent);
 }
 
 .info-row {
@@ -265,8 +251,6 @@
 .info-key {
   font-size: 14px;
   color: var(--md-sys-color-on-surface-variant);
-  padding-right: 16px;
-  flex-shrink: 0;
 }
 
 .info-val {
@@ -317,36 +301,6 @@
   align-items: center;
 }
 
-.status-actions-card {
-  background-color: var(--md-sys-color-surface-container);
-  border-radius: var(--radius-2xl);
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 56%, transparent);
-}
-
-.status-actions-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.status-actions-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--md-sys-color-on-surface);
-}
-
-.status-actions-desc {
-  font-size: 12px;
-  color: var(--md-sys-color-on-surface-variant);
-}
-
 .spacer {
   flex: 1;
 }
@@ -372,26 +326,5 @@ md-icon svg {
 @media (max-width: 640px) {
   .hero-content {
     max-width: 100%;
-  }
-
-  .metrics-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (min-width: 760px) {
-  .dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .hero-card,
-  .mode-stats-card,
-  .info-card,
-  .status-actions-card {
-    grid-column: 1 / -1;
-  }
-
-  .metrics-row {
-    display: contents;
   }
 }

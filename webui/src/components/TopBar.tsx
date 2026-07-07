@@ -57,7 +57,6 @@ export default function TopBar() {
             <md-icon-button
               onClick={openLangDialog}
               title={uiStore.L?.common?.language ?? "Language"}
-              aria-label={uiStore.L?.common?.language ?? "Language"}
             >
               <md-icon>
                 <svg viewBox="0 0 24 24">

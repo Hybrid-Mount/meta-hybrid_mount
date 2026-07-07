@@ -22,6 +22,7 @@ import { ICONS } from "../lib/constants";
 import { ENABLE_KASUMI } from "../lib/constants_gen";
 import { features } from "../lib/features";
 import Skeleton from "../components/Skeleton";
+import BottomActions from "../components/BottomActions";
 import { API } from "../lib/api";
 import "./StatusTab.css";
 
@@ -283,45 +284,36 @@ export default function StatusTab() {
             </Show>
           </div>
         </div>
-
-        <div class="status-actions-card">
-          <div class="status-actions-copy">
-            <span class="status-actions-title">
-              {uiStore.L?.logs?.refresh ?? "Refresh"}
-            </span>
-            <span class="status-actions-desc">
-              {uiStore.L?.common?.reboot ?? "Reboot"}
-            </span>
-          </div>
-          <div class="action-row">
-            <md-filled-tonal-icon-button
-              onClick={() => sysStore.loadStatus()}
-              disabled={sysStore.loading}
-              title={uiStore.L?.logs?.refresh ?? "Refresh"}
-              aria-label={uiStore.L?.logs?.refresh ?? "Refresh"}
-            >
-              <md-icon>
-                <svg viewBox="0 0 24 24">
-                  <path d={ICONS.refresh} />
-                </svg>
-              </md-icon>
-            </md-filled-tonal-icon-button>
-
-            <md-filled-tonal-icon-button
-              class="reboot-btn"
-              onClick={() => setShowRebootConfirm(true)}
-              title={uiStore.L?.common?.reboot ?? "Reboot"}
-              aria-label={uiStore.L?.common?.reboot ?? "Reboot"}
-            >
-              <md-icon>
-                <svg viewBox="0 0 24 24">
-                  <path d={ICONS.power} />
-                </svg>
-              </md-icon>
-            </md-filled-tonal-icon-button>
-          </div>
-        </div>
       </div>
+
+      <BottomActions>
+        <div class="spacer"></div>
+        <div class="action-row">
+          <md-filled-tonal-icon-button
+            class="reboot-btn"
+            onClick={() => setShowRebootConfirm(true)}
+            title="Reboot"
+          >
+            <md-icon>
+              <svg viewBox="0 0 24 24">
+                <path d={ICONS.power} />
+              </svg>
+            </md-icon>
+          </md-filled-tonal-icon-button>
+
+          <md-filled-tonal-icon-button
+            onClick={() => sysStore.loadStatus()}
+            disabled={sysStore.loading}
+            title={uiStore.L?.logs?.refresh}
+          >
+            <md-icon>
+              <svg viewBox="0 0 24 24">
+                <path d={ICONS.refresh} />
+              </svg>
+            </md-icon>
+          </md-filled-tonal-icon-button>
+        </div>
+      </BottomActions>
     </>
   );
 }

@@ -17,7 +17,7 @@
 .config-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   padding-bottom: 24px;
 }
 .config-group {
@@ -36,14 +36,11 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 58%, transparent);
 }
 .card-header {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-width: 0;
 }
 .card-icon {
   width: 40px;
@@ -58,7 +55,6 @@
 .card-text {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 .card-title {
   font-size: 16px;
@@ -69,7 +65,6 @@
   font-size: 12px;
   color: var(--md-sys-color-on-surface-variant);
   white-space: pre-line;
-  overflow-wrap: anywhere;
 }
 .input-stack {
   display: flex;
@@ -92,12 +87,10 @@
   transition:
     background-color 0.2s cubic-bezier(0.2, 0, 0, 1),
     transform 0.2s;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 52%, transparent);
+  border: none;
   text-align: left;
   position: relative;
   overflow: hidden;
-  min-width: 0;
 }
 .option-tile.clickable {
   cursor: pointer;
@@ -108,12 +101,6 @@
 }
 .option-tile.clickable:active {
   transform: scale(0.98);
-}
-
-.option-tile.clickable:focus-visible,
-.mode-item:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
 }
 .option-tile:disabled:active {
   transform: none;
@@ -150,7 +137,6 @@
   color: var(--md-sys-color-on-surface);
   line-height: 1.2;
   white-space: pre-line;
-  overflow-wrap: anywhere;
 }
 .tile-supporting-text {
   font-size: 12px;
@@ -250,12 +236,10 @@ md-icon svg {
   align-items: center;
   justify-content: space-between;
   padding: 8px 0;
-  gap: 16px;
 }
 .list-text {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 .list-title {
   font-size: 14px;
@@ -265,7 +249,6 @@ md-icon svg {
 .list-desc {
   font-size: 12px;
   color: var(--md-sys-color-on-surface-variant);
-  overflow-wrap: anywhere;
 }
 .item-separator {
   height: 1px;
@@ -320,7 +303,6 @@ md-icon svg {
 .mode-info {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 .mode-title {
   font-weight: 500;
@@ -331,7 +313,6 @@ md-icon svg {
   font-size: 0.8rem;
   opacity: 0.8;
   white-space: pre-line;
-  overflow-wrap: anywhere;
 }
 .mode-check {
   margin-left: auto;
@@ -339,7 +320,6 @@ md-icon svg {
   transition: opacity 0.2s;
   display: flex;
   align-items: center;
-  flex-shrink: 0;
 }
 .mode-item.selected .mode-check {
   opacity: 1;
@@ -356,18 +336,10 @@ md-icon svg {
   font-size: 13px;
   line-height: 1.45;
   color: var(--md-sys-color-on-surface-variant);
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 44%, transparent);
 }
 .kasumi-restriction-note md-icon {
   flex-shrink: 0;
   width: 18px;
   height: 18px;
   color: var(--md-sys-color-on-surface-variant);
-}
-
-@media (max-width: 420px) {
-  .options-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }

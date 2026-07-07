@@ -30,23 +30,6 @@
   border-radius: var(--radius-4xl);
   box-shadow: none;
   user-select: none;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 56%, transparent);
-  position: relative;
-  overflow: hidden;
-}
-
-.project-header::before {
-  content: "";
-  position: absolute;
-  inset: -40% -20% auto;
-  height: 180px;
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent) 0,
-    transparent 68%
-  );
-  pointer-events: none;
 }
 .app-logo {
   width: 120px;
@@ -56,7 +39,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1;
 }
 .app-logo svg {
   width: 100%;
@@ -64,14 +46,11 @@
   overflow: visible;
 }
 .app-name {
-  font-size: clamp(26px, 8vw, 34px);
+  font-size: 32px;
   font-weight: 600;
   color: var(--md-sys-color-on-surface);
   margin-top: 8px;
-  letter-spacing: 0;
-  text-align: center;
-  overflow-wrap: anywhere;
-  z-index: 1;
+  letter-spacing: -0.5px;
 }
 .app-version {
   font-family: var(--md-ref-typeface-mono);
@@ -81,7 +60,6 @@
   border-radius: var(--radius-full);
   color: var(--md-sys-color-primary);
   font-weight: 500;
-  z-index: 1;
 }
 .action-buttons {
   display: grid;
@@ -140,12 +118,6 @@
   cursor: pointer;
   font: inherit;
   color: inherit;
-  border-radius: var(--radius-md);
-}
-
-.group-link:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: 4px;
 }
 .group-title {
   font-size: 16px;
@@ -167,8 +139,6 @@
   background-color: var(--md-sys-color-surface-container-low);
   border-radius: var(--radius-2xl);
   overflow: hidden;
-  border: 1px solid
-    color-mix(in srgb, var(--md-sys-color-outline-variant) 50%, transparent);
 }
 .contributors-list {
   background: transparent;
@@ -177,11 +147,6 @@
 
 .contributor-link {
   cursor: pointer;
-}
-
-.contributor-link:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: -2px;
 }
 .c-avatar {
   width: 40px;
@@ -210,25 +175,6 @@
   color: var(--md-sys-color-on-error-container);
   border-radius: var(--radius-2xl);
   margin: 0 12px;
-}
-
-@media (max-width: 420px) {
-  .project-header {
-    padding: 32px 16px;
-  }
-
-  .app-logo {
-    width: 96px;
-    height: 96px;
-  }
-
-  .action-buttons {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .donate-btn {
-    grid-column: auto;
-  }
 }
 
 @keyframes logo-spin-cw {
