@@ -200,7 +200,7 @@ export type KasumiConfigPayload = z.infer<typeof kasumiConfigSchema>;
 export const appConfigSchema = z.object({
   moduledir: z.string().default("/data/adb/modules"),
   mountsource: z.string().default("/data/adb/hybrid-mount"),
-  overlay_mode: overlayModeSchema.default("tmpfs"),
+  overlay_mode: overlayModeSchema.default("ext4"),
   disable_umount: z.boolean().default(false),
   default_mode: mountModeSchema.default("overlay"),
   daemon_startup_mode: daemonStartupModeSchema.default("on-demand"),

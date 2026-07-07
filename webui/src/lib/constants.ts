@@ -51,7 +51,7 @@ export const DEFAULT_CONFIG = {
   moduledir: "/data/adb/modules",
   mountsource: "KSU",
   disable_umount: false,
-  overlay_mode: "tmpfs",
+  overlay_mode: "ext4",
   default_mode: "overlay",
   daemon_startup_mode: "on-demand",
   rules: {},
