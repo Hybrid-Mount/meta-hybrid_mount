@@ -101,6 +101,38 @@ export type DaemonCommandPayload =
   // ── BatchCommand ──
   | { type: "batch"; commands: DaemonCommandPayload[] };
 
+export type DaemonCommandType = DaemonCommandPayload["type"];
+
+interface DaemonCommandMetadata {
+  dedupeInFlight: boolean;
+  timeoutMs: number;
+}
+
+const READ_COMMAND_TYPES = new Set<DaemonCommandType>([
+  "ping",
+  "webui-start",
+  "init",
+  "status",
+  "api-storage",
+  "api-mount-stats",
+  "api-mount-topology",
+  "api-partitions",
+  "api-system-info",
+  "api-version",
+  "api-kernel-uname",
+  "api-config-get",
+  "api-modules-list",
+  "kasumi-status",
+  "kasumi-list",
+  "kasumi-version",
+  "kasumi-features",
+  "kasumi-hooks",
+  "hide-list",
+  "lkm-status",
+  "api-lkm",
+  "api-hooks",
+]);
+
 let ksuExec: KsuModule["exec"] | null = null;
 
 interface MockModeEnv {
@@ -149,6 +181,18 @@ let webuiSession: WebuiSession | null = null;
 let sseSource: EventSource | null = null;
 type SseStateHandler = (state: unknown) => void;
 let sseHandlers: SseStateHandler[] = [];
+
+export function getDaemonCommandMetadata(
+  command: DaemonCommandPayload,
+): DaemonCommandMetadata {
+  return {
+    dedupeInFlight: READ_COMMAND_TYPES.has(command.type),
+    timeoutMs:
+      command.type === "api-modules-list"
+        ? DAEMON_MODULES_TIMEOUT_MS
+        : DAEMON_HTTP_TIMEOUT_MS,
+  };
+}
 
 function loadStoredSession(): WebuiSession | null {
   try {
@@ -309,10 +353,7 @@ async function runDaemonHttp(
   command: DaemonCommandPayload,
 ): Promise<unknown> {
   const controller = new AbortController();
-  const timeoutMs =
-    command.type === "api-modules-list"
-      ? DAEMON_MODULES_TIMEOUT_MS
-      : DAEMON_HTTP_TIMEOUT_MS;
+  const { timeoutMs } = getDaemonCommandMetadata(command);
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   let text: string;
@@ -361,7 +402,12 @@ export async function runDaemonCommand(
   command: DaemonCommandPayload,
   binaryPath: string,
 ): Promise<unknown> {
-  const key = JSON.stringify(command);
+  const metadata = getDaemonCommandMetadata(command);
+  if (!metadata.dedupeInFlight) {
+    return runDaemonCommandInternal(command, binaryPath);
+  }
+
+  const key = JSON.stringify({ binaryPath, command });
   const existing = inflightRequests.get(key);
   if (existing) return existing;
 

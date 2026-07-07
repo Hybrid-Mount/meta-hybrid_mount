@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./error";
 import {
+  getDaemonCommandMetadata,
   parseDaemonJsonOutput,
   readModuleProp,
   resolveShouldUseMock,
@@ -87,5 +88,29 @@ describe("parseDaemonJsonOutput", () => {
     await expect(readModuleProp("/tmp/module")).rejects.toThrow(
       "No KSU environment",
     );
+  });
+});
+
+describe("daemon command metadata", () => {
+  it("deduplicates concurrent reads but keeps writes independent", () => {
+    expect(
+      getDaemonCommandMetadata({ type: "api-modules-list", path: null }),
+    ).toMatchObject({
+      dedupeInFlight: true,
+      timeoutMs: 15000,
+    });
+    expect(
+      getDaemonCommandMetadata({
+        type: "api-config-patch",
+        patch: { default_mode: "magic" },
+      }),
+    ).toMatchObject({
+      dedupeInFlight: false,
+      timeoutMs: 30000,
+    });
+    expect(getDaemonCommandMetadata({ type: "api-reboot" })).toMatchObject({
+      dedupeInFlight: false,
+      timeoutMs: 30000,
+    });
   });
 });
