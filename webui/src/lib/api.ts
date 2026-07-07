@@ -17,6 +17,7 @@
 import { AppError } from "./api/core/error";
 import { PATHS } from "./constants";
 import { ENABLE_KASUMI } from "./constants_gen";
+import { loadMockApi } from "./api.mock-loader";
 import {
   ensureDaemonAwake,
   hasExecBridge,
@@ -33,15 +34,11 @@ import {
 } from "./api/services/systemService";
 import {
   loadConfigFromFile,
+  patchConfigFile,
   resetConfigFile,
   saveConfigToFile,
 } from "./api/repos/configRepo";
-import {
-  scanModules,
-  saveModules,
-  saveModuleRules,
-  saveAllModuleRules,
-} from "./api/services/moduleService";
+import { scanModules, saveModuleRules } from "./api/services/moduleService";
 import type { AppAPI } from "./api/contracts";
 
 function loadKasumiService() {
@@ -120,13 +117,12 @@ const RealAPI = {
   init,
   loadConfig: loadConfigFromFile,
   saveConfig: saveConfigToFile,
+  patchConfig: patchConfigFile,
   resetConfig: async () => {
     await resetConfigFile();
   },
   scanModules,
-  saveModules,
   saveModuleRules,
-  saveAllModuleRules,
   getStorageUsage,
   getSystemInfo,
   getVersion,
@@ -143,7 +139,5 @@ const RealAPI = {
 export { AppError, hasExecBridge, runDaemonCommand };
 export type { AppAPI } from "./api/contracts";
 export type { DaemonCommandPayload } from "./api/core/bridge";
-const mockApi = shouldUseMock
-  ? ((await import("./api.mock")).MockAPI as unknown as AppAPI)
-  : null;
+const mockApi = shouldUseMock ? await loadMockApi() : null;
 export const API: AppAPI = mockApi ?? RealAPI;

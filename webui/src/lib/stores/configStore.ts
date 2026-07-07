@@ -29,6 +29,10 @@ interface SaveConfigOptions {
   showError?: boolean;
 }
 
+interface PatchConfigOptions extends SaveConfigOptions {
+  applyRuntime?: boolean;
+}
+
 const createConfigStore = () => {
   const [config, setConfigStore] = createStore<AppConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = createSignal(false);
@@ -114,6 +118,42 @@ const createConfigStore = () => {
     }
   }
 
+  async function patchConfig(
+    patch: Partial<AppConfig>,
+    options: PatchConfigOptions = {},
+  ) {
+    const {
+      showSuccess = true,
+      showError = true,
+      applyRuntime = true,
+    } = options;
+
+    setSaving(true);
+    try {
+      const updated = await API.patchConfig(patch as Record<string, unknown>, {
+        applyRuntime,
+      });
+      setConfigStore(reconcile(normalizeConfig(updated)));
+      if (showSuccess) {
+        uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
+      }
+      return true;
+    } catch (e: unknown) {
+      if (showError) {
+        uiStore.showToast(
+          getErrorMessage(
+            e,
+            uiStore.L.config?.saveFailed ?? "Failed to save config",
+          ),
+          "error",
+        );
+      }
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function resetConfig() {
     setSaving(true);
     try {
@@ -163,6 +203,7 @@ const createConfigStore = () => {
     loadConfig,
     loadFromInit,
     saveConfig,
+    patchConfig,
     resetConfig,
   };
 };

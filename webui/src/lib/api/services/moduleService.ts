@@ -30,6 +30,13 @@ interface ModuleMetadata {
   description: string;
 }
 
+type ModuleApplyRulesPayload = {
+  default_mode: ModuleRules["default_mode"];
+  paths: ModuleRules["paths"];
+};
+
+type ModuleRulesApplyEntry = { id: string; rules: ModuleApplyRulesPayload };
+
 function defaultModuleMetadata(moduleId: string): ModuleMetadata {
   return {
     name: moduleId,
@@ -78,20 +85,21 @@ function toModule(
   };
 }
 
-async function applyModulesPayload(modules: Module[]): Promise<void> {
-  const payload = modules.map((module) => ({
-    id: module.id,
-    enabled: module.enabled ?? true,
-    source_path: module.source_path,
-    rules: {
-      default_mode: normalizeMountMode(module.rules.default_mode),
-      paths: module.rules.paths ?? {},
-    },
-  }));
-  await runDaemonCommand(
-    { type: "api-modules-apply", modules: payload },
-    PATHS.BINARY,
-  );
+function moduleRulesPayload(rules: ModuleRules): ModuleApplyRulesPayload {
+  return {
+    default_mode: normalizeMountMode(rules.default_mode),
+    paths: rules.paths ?? {},
+  };
+}
+
+function moduleRulesApplyEntry(
+  moduleId: string,
+  rules: ModuleRules,
+): ModuleRulesApplyEntry {
+  return {
+    id: moduleId,
+    rules: moduleRulesPayload(rules),
+  };
 }
 
 export async function scanModules(path?: string): Promise<Module[]> {
@@ -110,35 +118,15 @@ export async function scanModules(path?: string): Promise<Module[]> {
   return entries.map((entry) => toModule(entry, extractMetadata(entry)));
 }
 
-export async function saveModules(modules: Module[]): Promise<void> {
-  await applyModulesPayload(modules);
-}
-
 export async function saveModuleRules(
   moduleId: string,
   rules: ModuleRules,
 ): Promise<void> {
-  const module = {
-    id: moduleId,
-    enabled: true,
-    rules: {
-      default_mode: normalizeMountMode(rules.default_mode),
-      paths: rules.paths ?? {},
+  await runDaemonCommand(
+    {
+      type: "api-modules-apply",
+      modules: [moduleRulesApplyEntry(moduleId, rules)],
     },
-  } as Module;
-  await applyModulesPayload([module]);
-}
-
-export async function saveAllModuleRules(
-  rules: Record<string, ModuleRules>,
-): Promise<void> {
-  const payload = Object.entries(rules).map(([moduleId, moduleRules]) => ({
-    id: moduleId,
-    enabled: true,
-    rules: {
-      default_mode: normalizeMountMode(moduleRules.default_mode),
-      paths: moduleRules.paths ?? {},
-    },
-  })) as Module[];
-  await applyModulesPayload(payload);
+    PATHS.BINARY,
+  );
 }

@@ -14,14 +14,35 @@
  * limitations under the License.
  */
 
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import solid from "vite-plugin-solid";
 
-export default defineConfig({
-  base: "./",
-  build: {
-    outDir: "../module/webroot",
-    target: "esnext",
-  },
-  plugins: [solid()],
+function envFlagEnabled(value: string | undefined): boolean {
+  return ["true", "1", "on"].includes(value?.trim().toLowerCase() ?? "");
+}
+
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, ".", "");
+  const useDevMockLoader =
+    command === "serve" || mode === "test" || envFlagEnabled(env.VITE_USE_MOCK);
+  const mockLoaderPath = useDevMockLoader
+    ? "./src/lib/api.mock-loader.dev.ts"
+    : "./src/lib/api.mock-loader.ts";
+
+  return {
+    base: "./",
+    build: {
+      outDir: "../module/webroot",
+      target: "esnext",
+    },
+    plugins: [solid()],
+    resolve: {
+      alias: [
+        {
+          find: "./api.mock-loader",
+          replacement: new URL(mockLoaderPath, import.meta.url).pathname,
+        },
+      ],
+    },
+  };
 });

@@ -107,9 +107,11 @@ export default function ModulesTab() {
   }
 
   async function updateDefaultMode(mod: Module, mode: MountMode) {
+    if (mod.rules.default_mode === mode) return;
+
     const newRules = { ...mod.rules, default_mode: mode };
     updateModuleRules(mod.id, () => newRules);
-    const saved = await moduleStore.saveModules();
+    const saved = await moduleStore.saveModuleRules(mod.id, newRules);
     if (!saved) {
       await moduleStore.loadModules(true);
     }

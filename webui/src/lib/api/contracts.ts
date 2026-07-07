@@ -38,11 +38,13 @@ export interface AppAPI {
   init: () => Promise<InitPayload>;
   loadConfig: () => Promise<AppConfig>;
   saveConfig: (config: AppConfig) => Promise<void>;
+  patchConfig: (
+    patch: Record<string, unknown>,
+    options?: { applyRuntime?: boolean },
+  ) => Promise<AppConfig>;
   resetConfig: () => Promise<void>;
   scanModules: (path?: string) => Promise<Module[]>;
-  saveModules: (modules: Module[]) => Promise<void>;
   saveModuleRules: (moduleId: string, rules: ModuleRules) => Promise<void>;
-  saveAllModuleRules: (rules: Record<string, ModuleRules>) => Promise<void>;
   getStorageUsage: () => Promise<StorageStatus>;
   getSystemInfo: () => Promise<SystemInfo>;
   getVersion: () => Promise<string>;

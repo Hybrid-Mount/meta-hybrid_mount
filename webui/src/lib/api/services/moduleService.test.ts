@@ -21,7 +21,7 @@ vi.mock("../core/bridge", () => ({
 }));
 
 import { runDaemonCommand } from "../core/bridge";
-import { scanModules } from "./moduleService";
+import { saveModuleRules, scanModules } from "./moduleService";
 
 const mockRunDaemonCommand = vi.mocked(runDaemonCommand);
 
@@ -144,5 +144,36 @@ describe("scanModules", () => {
       enabled: false,
       mount_error: "stage=execute; error=overlay failed",
     });
+  });
+});
+
+describe("saveModuleRules", () => {
+  beforeEach(() => {
+    mockRunDaemonCommand.mockReset();
+  });
+
+  it("sends a rules-only module apply payload", async () => {
+    mockRunDaemonCommand.mockResolvedValue(undefined);
+
+    await saveModuleRules("alpha", {
+      default_mode: "magic",
+      paths: { "/system/bin/app_process": "overlay" },
+    });
+
+    expect(mockRunDaemonCommand).toHaveBeenCalledWith(
+      {
+        type: "api-modules-apply",
+        modules: [
+          {
+            id: "alpha",
+            rules: {
+              default_mode: "magic",
+              paths: { "/system/bin/app_process": "overlay" },
+            },
+          },
+        ],
+      },
+      expect.any(String),
+    );
   });
 });

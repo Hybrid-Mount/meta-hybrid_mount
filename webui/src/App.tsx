@@ -77,6 +77,7 @@ export default function App() {
   let ticking = false;
   let rafId: number | null = null;
   let cancelRoutePreload: (() => void) | undefined;
+  const preloadedRouteIds = new Set<string>();
   let disposed = false;
 
   const visibleRoutes = createMemo(() =>
@@ -181,7 +182,7 @@ export default function App() {
     } else if (currentOffset > threshold && currentIndex > 0) {
       nextIndex = currentIndex - 1;
     }
-    if (nextIndex !== currentIndex) setActiveTab(tabs[nextIndex]);
+    if (nextIndex !== currentIndex) changeActiveTab(tabs[nextIndex]);
     setDragOffset(0);
   }
 
@@ -201,10 +202,21 @@ export default function App() {
     return () => globalThis.clearTimeout(timerId);
   }
 
-  function startRoutePreload() {
-    const pendingRoutes = visibleRoutes().filter(
-      (route) => route.id !== activeTab(),
+  function scheduleAdjacentRoutePreload(tabId = activeTab(), timeout = 2500) {
+    cancelRoutePreload?.();
+
+    const tabs = visibleTabs();
+    const currentIndex = tabs.indexOf(tabId);
+    if (currentIndex < 0) return;
+
+    const routeById = new Map(
+      visibleRoutes().map((route) => [route.id, route]),
     );
+    const pendingRoutes = [tabs[currentIndex + 1], tabs[currentIndex - 1]]
+      .filter((id): id is string => Boolean(id))
+      .filter((id) => !preloadedRouteIds.has(id))
+      .map((id) => routeById.get(id))
+      .filter((route): route is (typeof routes)[number] => Boolean(route));
     let nextIndex = 0;
 
     const preloadNextRoute = () => {
@@ -213,6 +225,7 @@ export default function App() {
       const nextRoute = pendingRoutes[nextIndex++];
       if (!nextRoute) return;
 
+      preloadedRouteIds.add(nextRoute.id);
       void nextRoute.load();
 
       if (nextIndex < pendingRoutes.length) {
@@ -220,7 +233,13 @@ export default function App() {
       }
     };
 
-    cancelRoutePreload = scheduleIdleTask(preloadNextRoute);
+    cancelRoutePreload = scheduleIdleTask(preloadNextRoute, timeout);
+  }
+
+  function changeActiveTab(tabId: string) {
+    if (tabId === activeTab()) return;
+    setActiveTab(tabId);
+    scheduleAdjacentRoutePreload(tabId);
   }
 
   onMount(() => {
@@ -235,7 +254,7 @@ export default function App() {
       onSseStateUpdate((event) => sysStore.handleSseUpdate(event.payload));
       configStore.loadFromInit(payload);
       setInitialDataReady(true);
-      startRoutePreload();
+      scheduleAdjacentRoutePreload(activeTab(), 4000);
       if (ENABLE_KASUMI) {
         void initializeKasumi(payload);
       }
@@ -317,7 +336,7 @@ export default function App() {
       </main>
       <NavBar
         activeTab={activeTab()}
-        onTabChange={setActiveTab}
+        onTabChange={changeActiveTab}
         tabs={visibleRoutes()}
       />
       <Toast />

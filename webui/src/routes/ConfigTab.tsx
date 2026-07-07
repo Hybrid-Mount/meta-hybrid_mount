@@ -37,7 +37,8 @@ import type { OverlayMode, AppConfig } from "../lib/types";
 const KASUMI_WARNING_COOKIE = "mhm_kasumi_warning_ack";
 
 export default function ConfigTab() {
-  const [lastSavedConfig, setLastSavedConfig] = createSignal("");
+  const [lastSavedConfig, setLastSavedConfig] =
+    createSignal<Partial<AppConfig> | null>(null);
   const [showKasumiWarning, setShowKasumiWarning] = createSignal(false);
   const [kasumiPending, setKasumiPending] = createSignal(false);
   let mountSourceInputRef: HTMLElement | undefined;
@@ -52,9 +53,13 @@ export default function ConfigTab() {
 
   createEffect(() => {
     if (!configStore.loading && configStore.config && !lastSavedConfig()) {
-      setLastSavedConfig(JSON.stringify(configStore.config));
+      recordSavedConfig();
     }
   });
+
+  function recordSavedConfig() {
+    setLastSavedConfig({ ...configStore.config });
+  }
 
   function updateConfig<K extends keyof AppConfig>(
     key: K,
@@ -71,60 +76,67 @@ export default function ConfigTab() {
     }
   }
 
-  async function saveCurrentConfig(): Promise<boolean> {
-    if (invalidModuleDir()) {
+  function shouldApplyRuntime(key: keyof AppConfig) {
+    return key !== "daemon_startup_mode";
+  }
+
+  async function saveConfigField<K extends keyof AppConfig>(
+    key: K,
+    value: AppConfig[K],
+    previousValue: AppConfig[K],
+  ): Promise<boolean> {
+    if (key === "moduledir" && invalidModuleDir()) {
       uiStore.showToast(uiStore.L.config.invalidPath, "error");
       return false;
     }
-    const prevSnapshot = lastSavedConfig();
-    const saved = await configStore.saveConfig(configStore.config, {
-      showSuccess: false,
-    });
+
+    const saved = await configStore.patchConfig(
+      { [key]: value } as Partial<AppConfig>,
+      {
+        applyRuntime: shouldApplyRuntime(key),
+        showSuccess: false,
+      },
+    );
     if (saved) {
-      setLastSavedConfig(JSON.stringify(configStore.config));
-    } else if (prevSnapshot) {
-      try {
-        configStore.config = JSON.parse(prevSnapshot) as AppConfig;
-      } catch (e) {
-        console.warn("Failed to restore config snapshot", e);
-      }
+      recordSavedConfig();
+    } else {
+      updateConfig(key, previousValue);
     }
     return saved;
   }
 
-  async function handleTextFieldCommit(key: keyof AppConfig) {
-    const saved = await saveCurrentConfig();
+  async function handleTextFieldCommit<K extends keyof AppConfig>(key: K) {
+    const value = configStore.config[key];
+    const previous = (lastSavedConfig()?.[key] ?? value) as AppConfig[K];
+    if (Object.is(value, previous)) return;
+
+    const saved = await saveConfigField(key, value, previous);
     if (saved && key === "moduledir") {
       await refreshModulesForConfigChange();
     }
   }
 
-  async function toggle(key: keyof AppConfig) {
+  async function toggle<K extends keyof AppConfig>(key: K) {
     const currentVal = configStore.config[key] as boolean;
-    updateConfig(key, !currentVal);
-    const saved = await saveCurrentConfig();
-    if (!saved) {
-      updateConfig(key, currentVal);
-    }
+    const nextValue = !currentVal as AppConfig[K];
+    updateConfig(key, nextValue);
+    await saveConfigField(key, nextValue, currentVal as AppConfig[K]);
   }
 
   async function toggleDaemonMode() {
     const current = configStore.config.daemon_startup_mode;
     const next = current === "persistent" ? "on-demand" : "persistent";
-    updateConfig("daemon_startup_mode", next as "on-demand" | "persistent");
-    const saved = await saveCurrentConfig();
-    if (!saved) {
-      updateConfig("daemon_startup_mode", current);
-    }
+    updateConfig("daemon_startup_mode", next);
+    await saveConfigField("daemon_startup_mode", next, current);
   }
 
   async function setOverlayMode(mode: string) {
     const prev = configStore.config.overlay_mode;
-    updateConfig("overlay_mode", mode as OverlayMode);
-    const saved = await saveCurrentConfig();
-    if (!saved) {
-      updateConfig("overlay_mode", prev);
-    }
+    const next = mode as OverlayMode;
+    if (prev === next) return;
+
+    updateConfig("overlay_mode", next);
+    await saveConfigField("overlay_mode", next, prev);
   }
 
   async function handleKasumiToggle() {

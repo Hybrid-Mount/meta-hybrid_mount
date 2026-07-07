@@ -20,7 +20,7 @@ import { API } from "../api";
 import { normalizeMountMode } from "../api/core/guards";
 import { getErrorMessage } from "../api/core/error";
 import { uiStore } from "./uiStore";
-import type { Module, ModeStats } from "../types";
+import type { Module, ModuleRules, ModeStats } from "../types";
 
 const createModuleStore = () => {
   const [modules, setModulesStore] = createStore<Module[]>([]);
@@ -95,10 +95,10 @@ const createModuleStore = () => {
     hasLoaded = false;
   }
 
-  async function saveCurrentModules() {
+  async function saveCurrentModuleRules(moduleId: string, rules: ModuleRules) {
     setSaving(true);
     try {
-      await API.saveModules(modules);
+      await API.saveModuleRules(moduleId, rules);
       uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       return true;
     } catch (e: unknown) {
@@ -137,7 +137,7 @@ const createModuleStore = () => {
     ensureModulesLoaded,
     invalidate,
     loadModules,
-    saveModules: saveCurrentModules,
+    saveModuleRules: saveCurrentModuleRules,
   };
 };
 

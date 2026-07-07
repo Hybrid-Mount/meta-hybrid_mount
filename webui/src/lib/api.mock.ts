@@ -30,12 +30,24 @@ import type {
   SystemInfo,
 } from "./types";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const KASUMI_LKM_DIR = "/data/adb/modules/hybrid_mount/kasumi_lkm";
 const KASUMI_CURRENT_KMI = "android16-6.12";
 const KASUMI_LKM_FILE =
   "/data/adb/modules/hybrid_mount/kasumi_lkm/android16-6.12_arm64_kasumi_lkm.ko";
+
+function emptyUname(): KasumiUnameConfig {
+  return {
+    sysname: "",
+    nodename: "",
+    release: "",
+    version: "",
+    machine: "",
+    domainname: "",
+  };
+}
 
 function createMockState() {
   return {
@@ -61,12 +73,9 @@ function createMockState() {
       cmdline: "androidboot.verifiedbootstate=green",
       unameMode: "scoped" as "scoped" | "global",
       uname: {
-        sysname: "",
-        nodename: "",
+        ...emptyUname(),
         release: "6.12.0-android16-gki",
         version: "#1 SMP PREEMPT",
-        machine: "",
-        domainname: "",
       },
       originalKernel: {
         release: "6.12.0-android16-gki",
@@ -88,6 +97,15 @@ function createMockState() {
 }
 
 const mockState = createMockState();
+
+async function setKasumi<K extends keyof typeof mockState.kasumi>(
+  key: K,
+  value: (typeof mockState.kasumi)[K],
+  ms = 200,
+): Promise<void> {
+  await delay(ms);
+  mockState.kasumi[key] = value;
+}
 
 function buildMockLkmStatus(): KasumiLkmStatus {
   const { kasumi } = mockState;
@@ -139,33 +157,16 @@ function buildMockKasumiConfig(enabled: boolean): KasumiStatus["config"] {
 function buildMockKasumiStatus(): KasumiStatus {
   const { kasumi } = mockState;
   const lkm = buildMockLkmStatus();
-
-  if (!kasumi.enabled) {
-    return {
-      status: "disabled",
-      available: false,
-      kernel_supported: false,
-      protocol_version: null,
-      feature_bits: null,
-      feature_names: [],
-      hooks: [],
-      rule_count: 0,
-      user_hide_rule_count: kasumi.userHideRules.length,
-      mirror_path: kasumi.mirrorPath,
-      lkm,
-      config: buildMockKasumiConfig(false),
-      runtime: {
-        snapshot: { status: "disabled" },
-        kasumi_modules: [],
-      },
-    };
-  }
-
-  const available = kasumi.lkmLoaded;
+  const available = kasumi.enabled && kasumi.lkmLoaded;
+  const status = !kasumi.enabled
+    ? "disabled"
+    : available
+      ? "available"
+      : "unavailable";
   return {
-    status: available ? "available" : "unavailable",
+    status,
     available,
-    kernel_supported: true,
+    kernel_supported: kasumi.enabled,
     protocol_version: available ? 16 : null,
     feature_bits: available ? 0x7f7 : null,
     feature_names: available
@@ -187,10 +188,14 @@ function buildMockKasumiStatus(): KasumiStatus {
     user_hide_rule_count: kasumi.userHideRules.length,
     mirror_path: kasumi.mirrorPath,
     lkm,
-    config: buildMockKasumiConfig(true),
+    config: buildMockKasumiConfig(kasumi.enabled),
     runtime: {
       snapshot: {
-        status: available ? "enabled" : "unavailable",
+        status: kasumi.enabled
+          ? available
+            ? "enabled"
+            : "unavailable"
+          : "disabled",
       },
       kasumi_modules: available ? ["playintegrityfix"] : [],
     },
@@ -208,39 +213,44 @@ function buildMockSystemInfo(): SystemInfo {
   };
 }
 
+function mockModule(
+  module: Partial<Module> & Pick<Module, "id" | "mode" | "name">,
+): Module {
+  return {
+    version: "1.0.0",
+    author: "Developer",
+    description: "This is a mock module for testing.",
+    is_mounted: module.mode !== "ignore",
+    enabled: true,
+    source_path: `/data/adb/modules/${module.id}`,
+    rules: {
+      default_mode: module.mode,
+      paths: {},
+    },
+    ...module,
+  };
+}
+
 function buildMockModules(): Module[] {
   return [
-    {
+    mockModule({
       id: "magisk_module_1",
       name: "Example Module",
-      version: "1.0.0",
-      author: "Developer",
-      description: "This is a mock module for testing.",
       mode: "magic",
-      is_mounted: true,
-      enabled: true,
-      source_path: "/data/adb/modules/magisk_module_1",
       rules: {
         default_mode: "magic",
         paths: { "system/fonts": "overlay" },
       },
-    },
-    {
+    }),
+    mockModule({
       id: "overlay_module_2",
       name: "System UI Overlay",
       version: "2.5",
       author: "Google",
       description: "Changes system colors.",
       mode: "overlay",
-      is_mounted: true,
-      enabled: true,
-      source_path: "/data/adb/modules/overlay_module_2",
-      rules: {
-        default_mode: "overlay",
-        paths: {},
-      },
-    },
-    {
+    }),
+    mockModule({
       id: "playintegrityfix",
       name: "Play Integrity Fix",
       version: "14.2",
@@ -248,48 +258,28 @@ function buildMockModules(): Module[] {
       description:
         "Mirror-backed Kasumi module for passing Play Integrity checks.",
       mode: "kasumi",
-      is_mounted: true,
-      enabled: true,
-      source_path: "/data/adb/modules/playintegrityfix",
-      rules: {
-        default_mode: "kasumi",
-        paths: {},
-      },
-    },
-    {
+    }),
+    mockModule({
       id: "disabled_module",
       name: "Umount Module",
       version: "0.1",
       author: "Tester",
       description: "This module has a mount error.",
       mode: "ignore",
-      is_mounted: false,
-      enabled: true,
-      source_path: "/data/adb/modules/disabled_module",
       mount_error: mockState.mountErrorsCleared
         ? undefined
         : "stage=execute; error=mock mount failure",
       suggest_ignore: mockState.mountErrorsCleared ? undefined : true,
-      rules: {
-        default_mode: "ignore",
-        paths: {},
-      },
-    },
-    {
+    }),
+    mockModule({
       id: "blacklisted_example",
       name: "Blacklisted Module",
       version: "0.5",
       author: "Unknown",
       description: "This module is blacklisted and skipped during mount.",
       mode: "ignore",
-      is_mounted: false,
       enabled: false,
-      source_path: "/data/adb/modules/blacklisted_example",
-      rules: {
-        default_mode: "ignore",
-        paths: {},
-      },
-    },
+    }),
   ];
 }
 
@@ -303,9 +293,7 @@ function buildModeStats(): ModeStats {
 }
 
 export const MockAPI: AppAPI = {
-  async wakeDaemon(): Promise<void> {
-    await delay(20);
-  },
+  wakeDaemon: () => delay(20),
 
   async init() {
     await delay(200);
@@ -346,6 +334,11 @@ export const MockAPI: AppAPI = {
     console.log("[Mock] Config saved:", config);
   },
 
+  async patchConfig(patch: Record<string, unknown>): Promise<AppConfig> {
+    await delay(180);
+    return { ...DEFAULT_CONFIG, ...(patch as Partial<AppConfig>) };
+  },
+
   async resetConfig(): Promise<void> {
     await delay(500);
     console.log("[Mock] Config reset to defaults");
@@ -356,19 +349,9 @@ export const MockAPI: AppAPI = {
     return buildMockModules();
   },
 
-  async saveModules(modules: Module[]): Promise<void> {
-    await delay(400);
-    console.log("[Mock] Modules saved:", modules);
-  },
-
   async saveModuleRules(moduleId: string, rules: ModuleRules): Promise<void> {
     await delay(400);
     console.log(`[Mock] Rules saved for ${moduleId}:`, rules);
-  },
-
-  async saveAllModuleRules(rules: Record<string, ModuleRules>): Promise<void> {
-    await delay(400);
-    console.log("[Mock] All module rules saved:", rules);
   },
 
   async getVersion(): Promise<string> {
@@ -396,40 +379,19 @@ export const MockAPI: AppAPI = {
     return buildMockKasumiStatus();
   },
 
-  async setKasumiEnabled(enabled: boolean): Promise<void> {
-    await delay(200);
-    mockState.kasumi.enabled = enabled;
-  },
-
-  async setKasumiStealth(enabled: boolean): Promise<void> {
-    await delay(200);
-    mockState.kasumi.stealth = enabled;
-  },
-
-  async setKasumiHidexattr(enabled: boolean): Promise<void> {
-    await delay(200);
-    mockState.kasumi.hideXattr = enabled;
-  },
-
-  async setKasumiSelinuxFix(enabled: boolean): Promise<void> {
-    await delay(200);
-    mockState.kasumi.selinuxFix = enabled;
-  },
-
-  async setKasumiDebug(enabled: boolean): Promise<void> {
-    await delay(200);
-    mockState.kasumi.kernelDebug = enabled;
-  },
+  setKasumiEnabled: (enabled: boolean) => setKasumi("enabled", enabled),
+  setKasumiStealth: (enabled: boolean) => setKasumi("stealth", enabled),
+  setKasumiHidexattr: (enabled: boolean) => setKasumi("hideXattr", enabled),
+  setKasumiSelinuxFix: (enabled: boolean) => setKasumi("selinuxFix", enabled),
+  setKasumiDebug: (enabled: boolean) => setKasumi("kernelDebug", enabled),
 
   async getOriginalKernelUname(): Promise<KernelUnameValues> {
     await delay(120);
     return { ...mockState.kasumi.originalKernel };
   },
 
-  async setKasumiUnameMode(mode: "scoped" | "global"): Promise<void> {
-    await delay(120);
-    mockState.kasumi.unameMode = mode;
-  },
+  setKasumiUnameMode: (mode: "scoped" | "global") =>
+    setKasumi("unameMode", mode, 120),
 
   async setKasumiUname(uname: Partial<KasumiUnameConfig>): Promise<void> {
     await delay(220);
@@ -452,38 +414,17 @@ export const MockAPI: AppAPI = {
   async clearKasumiUname(mode: "scoped" | "global" = "scoped"): Promise<void> {
     await delay(160);
     mockState.kasumi.unameMode = mode;
-    mockState.kasumi.uname = {
-      sysname: "",
-      nodename: "",
-      release: "",
-      version: "",
-      machine: "",
-      domainname: "",
-    };
+    mockState.kasumi.uname = emptyUname();
   },
 
   async restoreKasumiUnameGlobal(): Promise<void> {
     await delay(160);
     mockState.kasumi.unameMode = "global";
-    mockState.kasumi.uname = {
-      sysname: "",
-      nodename: "",
-      release: "",
-      version: "",
-      machine: "",
-      domainname: "",
-    };
+    mockState.kasumi.uname = emptyUname();
   },
 
-  async setKasumiCmdline(value: string): Promise<void> {
-    await delay(220);
-    mockState.kasumi.cmdline = value;
-  },
-
-  async clearKasumiCmdline(): Promise<void> {
-    await delay(160);
-    mockState.kasumi.cmdline = "";
-  },
+  setKasumiCmdline: (value: string) => setKasumi("cmdline", value, 220),
+  clearKasumiCmdline: () => setKasumi("cmdline", "", 160),
 
   async addKasumiMapsRule(rule): Promise<void> {
     await delay(180);
@@ -536,58 +477,27 @@ export const MockAPI: AppAPI = {
     );
   },
 
-  async applyUserHideRules(): Promise<void> {
-    await delay(180);
-  },
-
-  async loadKasumiLkm(): Promise<void> {
-    await delay(260);
-    mockState.kasumi.lkmLoaded = true;
-  },
-
-  async unloadKasumiLkm(): Promise<void> {
-    await delay(260);
-    mockState.kasumi.lkmLoaded = false;
-  },
-
-  async setKasumiLkmAutoload(enabled: boolean): Promise<void> {
-    await delay(160);
-    mockState.kasumi.lkmAutoload = enabled;
-  },
-
-  async setKasumiLkmKmi(value: string): Promise<void> {
-    await delay(160);
-    mockState.kasumi.kmiOverride = value;
-  },
-
-  async clearKasumiLkmKmi(): Promise<void> {
-    await delay(160);
-    mockState.kasumi.kmiOverride = "";
-  },
-
-  async fixKasumiMounts(): Promise<void> {
-    await delay(180);
-  },
+  applyUserHideRules: () => delay(180),
+  loadKasumiLkm: () => setKasumi("lkmLoaded", true, 260),
+  unloadKasumiLkm: () => setKasumi("lkmLoaded", false, 260),
+  setKasumiLkmAutoload: (enabled: boolean) =>
+    setKasumi("lkmAutoload", enabled, 160),
+  setKasumiLkmKmi: (value: string) => setKasumi("kmiOverride", value, 160),
+  clearKasumiLkmKmi: () => setKasumi("kmiOverride", "", 160),
+  fixKasumiMounts: () => delay(180),
 
   async clearKasumiRules(): Promise<void> {
     await delay(180);
     mockState.kasumi.ruleCount = 0;
   },
 
-  async releaseKasumiConnection(): Promise<void> {
-    await delay(120);
-  },
-
-  async invalidateKasumiCache(): Promise<void> {
-    await delay(120);
-  },
+  releaseKasumiConnection: () => delay(120),
+  invalidateKasumiCache: () => delay(120),
 
   async openLink(url: string): Promise<void> {
     await delay(100);
     window.open(url, "_blank", "noopener,noreferrer");
   },
 
-  async reboot(): Promise<void> {
-    await delay(120);
-  },
+  reboot: () => delay(120),
 };
