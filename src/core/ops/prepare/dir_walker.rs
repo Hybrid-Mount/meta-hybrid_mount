@@ -129,12 +129,10 @@ impl PrepareContext {
             let shallow_final_path = item.shallow_final_dir.join(&file_name);
             let next_relative = item.relative_path.join(&file_name);
 
-            let file_type = entry
-                .file_type()
-                .with_context(|| format!("failed to inspect {}", source_path.display()))?;
             let metadata = fs::symlink_metadata(&source_path).with_context(|| {
                 format!("failed to read metadata for {}", source_path.display())
             })?;
+            let file_type = metadata.file_type();
 
             if file_type.is_dir() {
                 ensure_dir_like(&source_path, &copy_path)?;

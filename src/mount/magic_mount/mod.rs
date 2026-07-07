@@ -153,8 +153,7 @@ fn infer_module_ids(node: &Node) -> Vec<String> {
     module_ids
 }
 
-fn wrap_with_module_context(err: anyhow::Error, node: &Node) -> anyhow::Error {
-    let module_ids = infer_module_ids(node);
+fn wrap_with_module_ids(err: anyhow::Error, module_ids: Vec<String>) -> anyhow::Error {
     if module_ids.is_empty() {
         err
     } else {
@@ -170,11 +169,6 @@ struct MountContext {
 }
 
 impl MountContext {
-    fn record_failed_node(&mut self, node: &Node) {
-        self.stats.record_failed();
-        self.failed_module_ids.extend(infer_module_ids(node));
-    }
-
     fn record_symlink(&mut self, module_path: &Path) {
         self.stats.record_symlink();
         let module_id =
@@ -200,7 +194,7 @@ struct MagicMount {
 
 impl MagicMount {
     fn new<P>(
-        node: &Node,
+        node: Node,
         path: P,
         work_dir_path: P,
         has_tmpfs: bool,
@@ -209,10 +203,12 @@ impl MagicMount {
     where
         P: AsRef<Path>,
     {
+        let path = path.as_ref().join(&node.name);
+        let work_dir_path = work_dir_path.as_ref().join(&node.name);
         Self {
-            path: path.as_ref().join(&node.name),
-            work_dir_path: work_dir_path.as_ref().join(&node.name),
-            node: node.clone(),
+            node,
+            path,
+            work_dir_path,
             has_tmpfs,
             #[cfg(any(target_os = "linux", target_os = "android"))]
             umount,
@@ -354,11 +350,12 @@ impl MagicMount {
             crate::scoped_log!(debug, "magic", "replace dir: path={}", self.path.display());
         }
 
-        for (name, node) in &self.node.children {
+        for (name, node) in std::mem::take(&mut self.node.children) {
             if node.skip {
                 continue;
             }
 
+            let failed_module_ids = infer_module_ids(&node);
             if let Err(e) = {
                 Self::new(
                     node,
@@ -373,9 +370,8 @@ impl MagicMount {
             .with_context(|| format!("magic mount {}/{name}", self.path.display()))
             {
                 if has_tmpfs {
-                    return Err(wrap_with_module_context(e, node));
+                    return Err(wrap_with_module_ids(e, failed_module_ids));
                 }
-                let failed_module_ids = infer_module_ids(node);
                 crate::scoped_log!(
                     error,
                     "magic",
@@ -384,7 +380,10 @@ impl MagicMount {
                     name,
                     e
                 );
-                context.record_failed_node(node);
+                context.stats.record_failed();
+                context
+                    .failed_module_ids
+                    .extend(failed_module_ids.iter().cloned());
                 if !failed_module_ids.is_empty() {
                     return Err(ModuleStageFailure::execute(failed_module_ids, e).into());
                 }
@@ -443,7 +442,7 @@ impl MagicMount {
                     failed_module_ids = Some(infer_module_ids(&node));
 
                     Self::new(
-                        &node,
+                        node,
                         &self.path,
                         &self.work_dir_path,
                         has_tmpfs,
@@ -530,8 +529,9 @@ where
         .context("mount tmp")?;
         mount_change(&tmp_dir, MountPropagationFlags::PRIVATE).context("make tmp private")?;
 
+        let root_module_ids = infer_module_ids(&root);
         let ret = MagicMount::new(
-            &root,
+            root,
             Path::new("/"),
             tmp_dir.as_path(),
             false,
@@ -539,9 +539,9 @@ where
             umount,
         )
         .do_mount(&mut context)
-        .map_err(|e| wrap_with_module_context(e, &root));
+        .map_err(|e| wrap_with_module_ids(e, root_module_ids.clone()));
 
-        let mut mounted_module_ids = infer_module_ids(&root);
+        let mut mounted_module_ids = root_module_ids;
         mounted_module_ids.retain(|id| !context.failed_module_ids.contains(id));
 
         if let Err(e) = unmount(&tmp_dir, UnmountFlags::DETACH) {

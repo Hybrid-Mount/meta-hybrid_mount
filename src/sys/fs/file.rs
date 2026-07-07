@@ -240,10 +240,22 @@ where
 pub fn ensure_dir_like(src: &Path, dst: &Path) -> Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
-        if let Ok(src_meta) = src.metadata() {
-            let _ = fs::set_permissions(dst, src_meta.permissions());
+        match fs::symlink_metadata(src) {
+            Ok(src_meta) => {
+                let _ = fs::set_permissions(dst, src_meta.permissions());
+                clone_ownership_from_metadata(src, dst, &src_meta);
+            }
+            Err(err) => {
+                crate::scoped_log!(
+                    warn,
+                    "fs:copy",
+                    "clone directory metadata skipped: src={}, dst={}, error={}",
+                    src.display(),
+                    dst.display(),
+                    err
+                );
+            }
         }
-        clone_ownership(src, dst);
         clone_selinux_context(src, dst);
     }
     Ok(())
@@ -259,17 +271,17 @@ pub fn copy_non_dir_entry(
     if file_type.is_symlink() {
         let link_target = fs::read_link(src)?;
         symlink(&link_target, dst)?;
-        clone_ownership(src, dst);
+        clone_ownership_from_metadata(src, dst, metadata);
         clone_selinux_context(src, dst);
     } else if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
         let mode = metadata.permissions().mode();
         let rdev = metadata.rdev();
         make_device_node(dst, mode, rdev)?;
-        clone_ownership(src, dst);
+        clone_ownership_from_metadata(src, dst, metadata);
         clone_selinux_context(src, dst);
     } else {
         reflink_or_copy(src, dst)?;
-        clone_ownership(src, dst);
+        clone_ownership_from_metadata(src, dst, metadata);
         clone_selinux_context(src, dst);
     }
     Ok(())
@@ -329,22 +341,7 @@ fn clone_selinux_context(src: &Path, dst: &Path) {
 fn clone_selinux_context(_src: &Path, _dst: &Path) {}
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn clone_ownership(src: &Path, dst: &Path) {
-    let metadata = match fs::symlink_metadata(src) {
-        Ok(metadata) => metadata,
-        Err(err) => {
-            crate::scoped_log!(
-                warn,
-                "fs:copy",
-                "clone ownership skipped: src={}, dst={}, error={}",
-                src.display(),
-                dst.display(),
-                err
-            );
-            return;
-        }
-    };
-
+fn clone_ownership_from_metadata(src: &Path, dst: &Path, metadata: &fs::Metadata) {
     let result = if metadata.file_type().is_symlink() {
         let c_path = match CString::new(dst.as_os_str().as_encoded_bytes()) {
             Ok(path) => path,
@@ -398,7 +395,7 @@ fn clone_ownership(src: &Path, dst: &Path) {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn clone_ownership(_src: &Path, _dst: &Path) {}
+fn clone_ownership_from_metadata(_src: &Path, _dst: &Path, _metadata: &fs::Metadata) {}
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
@@ -456,8 +453,8 @@ fn native_cp_r(
         let dst_path = dst.join(&file_name);
         let next_relative = relative.join(&file_name);
 
-        let ft = entry.file_type()?;
         let metadata = fs::symlink_metadata(&src_path)?;
+        let ft = metadata.file_type();
         let dev = metadata.dev();
         let ino = metadata.ino();
 

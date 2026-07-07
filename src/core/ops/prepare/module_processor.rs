@@ -52,11 +52,9 @@ pub(super) fn prepare_module(
         let copy_path = tmp_dst.join(&file_name);
         let final_path = final_dst.join(&file_name);
         let relative_path = PathBuf::from(&file_name);
-        let file_type = entry
-            .file_type()
-            .with_context(|| format!("failed to inspect {}", source_path.display()))?;
         let metadata = fs::symlink_metadata(&source_path)
             .with_context(|| format!("failed to read metadata for {}", source_path.display()))?;
+        let file_type = metadata.file_type();
 
         let top_level_partition = file_name
             .to_str()
