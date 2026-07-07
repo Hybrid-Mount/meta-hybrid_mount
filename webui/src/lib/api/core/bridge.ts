@@ -173,7 +173,7 @@ const DAEMON_HTTP_TIMEOUT_MS = 30000;
 const DAEMON_MODULES_TIMEOUT_MS = 15000;
 
 const SESSION_STORAGE_KEY = "mhm_webui_session";
-const DAEMON_PING_TIMEOUT_MS = 2000;
+const DAEMON_PING_TIMEOUT_MS = 750;
 
 let daemonReady: Promise<void> | null = null;
 let webuiSession: WebuiSession | null = null;
@@ -202,9 +202,7 @@ export function getDaemonCommandMetadata(
 
 function loadStoredSession(): WebuiSession | null {
   try {
-    const raw =
-      sessionStorage.getItem(SESSION_STORAGE_KEY) ??
-      localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = webuiSessionSchema.safeParse(JSON.parse(raw));
     return parsed.success ? parsed.data : null;
@@ -217,7 +215,6 @@ function persistSession(session: WebuiSession): void {
   try {
     const raw = JSON.stringify(session);
     sessionStorage.setItem(SESSION_STORAGE_KEY, raw);
-    localStorage.setItem(SESSION_STORAGE_KEY, raw);
   } catch {
     /* storage unavailable */
   }
@@ -323,7 +320,6 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
       const stored = loadStoredSession();
       if (stored && (await pingDaemonHttp(stored))) {
         webuiSession = stored;
-        startSse();
         return;
       }
       clearStoredSession();
@@ -331,7 +327,6 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
       const session = await coldStartDaemon(binaryPath);
       webuiSession = session;
       persistSession(session);
-      startSse();
     })().catch((error) => {
       daemonReady = null;
       webuiSession = null;
@@ -502,20 +497,22 @@ async function runDaemonCommandInternal(
 
 export function onSseStateUpdate(handler: SseStateHandler): () => void {
   sseHandlers.push(handler);
+  startSse();
   return () => {
     sseHandlers = sseHandlers.filter((h) => h !== handler);
+    if (sseHandlers.length === 0) {
+      stopSse();
+    }
   };
 }
 
 export function startSse(): void {
   if (shouldUseMock || !hasExecBridge) return;
+  if (sseHandlers.length === 0) return;
   const session = webuiSession;
   if (!session) return;
 
-  if (sseSource) {
-    sseSource.close();
-    sseSource = null;
-  }
+  if (sseSource) return;
 
   const url = `${session.base_url}/events?token=${encodeURIComponent(session.token)}`;
   sseSource = new EventSource(url);
