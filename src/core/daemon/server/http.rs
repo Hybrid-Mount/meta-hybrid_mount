@@ -89,6 +89,7 @@ impl WebuiHttpSession {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct WebuiHttpRequest {
     pub(super) request_line: String,
     pub(super) authorized: bool,
@@ -98,11 +99,19 @@ pub(super) struct WebuiHttpRequest {
 
 pub(super) const MAX_WEBUI_HTTP_BODY_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_WEBUI_CONNECTIONS: usize = 64;
+pub(super) const MAX_WEBUI_HTTP_REQUEST_LINE_BYTES: usize = 8 * 1024;
+pub(super) const MAX_WEBUI_HTTP_HEADER_LINE_BYTES: usize = 8 * 1024;
+pub(super) const MAX_WEBUI_HTTP_HEADER_BYTES: usize = 64 * 1024;
+pub(super) const MAX_WEBUI_HTTP_HEADERS: usize = 64;
 const SSE_SCHEMA_VERSION: u32 = 1;
 static SSE_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WebuiHttpRequestReadError {
+    InvalidRequest,
+    RequestLineTooLarge,
+    RequestHeaderTooLarge,
+    TooManyHeaders,
     InvalidContentLength,
     RequestBodyTooLarge,
 }
@@ -110,6 +119,18 @@ pub(super) enum WebuiHttpRequestReadError {
 impl WebuiHttpRequestReadError {
     fn status(self) -> (u16, &'static str, &'static str) {
         match self {
+            Self::InvalidRequest => (400, "Bad Request", "invalid HTTP request"),
+            Self::RequestLineTooLarge => (414, "URI Too Long", "request line too large"),
+            Self::RequestHeaderTooLarge => (
+                431,
+                "Request Header Fields Too Large",
+                "request header too large",
+            ),
+            Self::TooManyHeaders => (
+                431,
+                "Request Header Fields Too Large",
+                "too many request headers",
+            ),
             Self::InvalidContentLength => (400, "Bad Request", "invalid content-length header"),
             Self::RequestBodyTooLarge => (413, "Payload Too Large", "request body too large"),
         }
@@ -223,33 +244,43 @@ pub(super) fn handle_http_connection(
     Ok(())
 }
 
-fn read_http_request(
-    reader: &mut BufReader<TcpStream>,
+fn read_http_request<R>(
+    reader: &mut R,
     webui: &WebuiHttpSession,
-) -> Result<Option<WebuiHttpRequest>> {
-    let mut request_line = String::new();
-    let bytes = match reader.read_line(&mut request_line) {
-        Ok(bytes) => bytes,
-        Err(err) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-            return Ok(None);
-        }
-        Err(err) => return Err(err).context("Failed to read WebUI HTTP request line"),
-    };
-    if bytes == 0 {
+) -> Result<Option<WebuiHttpRequest>>
+where
+    R: BufRead + Read,
+{
+    let Some(request_line) = read_limited_line(
+        reader,
+        MAX_WEBUI_HTTP_REQUEST_LINE_BYTES,
+        WebuiHttpRequestReadError::RequestLineTooLarge,
+    )
+    .context("Failed to read WebUI HTTP request line")?
+    else {
         return Ok(None);
-    }
+    };
 
     let mut content_length = 0usize;
     let mut authorized = false;
     let mut close_after_response = request_line.contains("HTTP/1.0");
+    let mut header_bytes = 0usize;
+    let mut header_count = 0usize;
     loop {
-        let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .context("Failed to read WebUI HTTP header")?;
+        let line = read_limited_header_line(reader).context("Failed to read WebUI HTTP header")?;
+        header_bytes = header_bytes
+            .checked_add(line.len())
+            .ok_or_else(|| Error::new(WebuiHttpRequestReadError::RequestHeaderTooLarge))?;
+        if header_bytes > MAX_WEBUI_HTTP_HEADER_BYTES {
+            return Err(Error::new(WebuiHttpRequestReadError::RequestHeaderTooLarge));
+        }
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
             break;
+        }
+        header_count += 1;
+        if header_count > MAX_WEBUI_HTTP_HEADERS {
+            return Err(Error::new(WebuiHttpRequestReadError::TooManyHeaders));
         }
         if let Some((name, value)) = trimmed.split_once(':') {
             let name = name.trim();
@@ -280,6 +311,58 @@ fn read_http_request(
         close_after_response,
         body,
     }))
+}
+
+fn read_limited_header_line<R: BufRead>(reader: &mut R) -> Result<String> {
+    read_limited_line(
+        reader,
+        MAX_WEBUI_HTTP_HEADER_LINE_BYTES,
+        WebuiHttpRequestReadError::RequestHeaderTooLarge,
+    )?
+    .ok_or_else(|| Error::new(WebuiHttpRequestReadError::InvalidRequest))
+}
+
+fn read_limited_line<R: BufRead>(
+    reader: &mut R,
+    max_bytes: usize,
+    too_large: WebuiHttpRequestReadError,
+) -> Result<Option<String>> {
+    let mut line = Vec::new();
+    loop {
+        let available = match reader.fill_buf() {
+            Ok(available) => available,
+            Err(err)
+                if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
+                    && line.is_empty() =>
+            {
+                return Ok(None);
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if available.is_empty() {
+            if line.is_empty() {
+                return Ok(None);
+            }
+            break;
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let take_len = newline.map_or(available.len(), |index| index + 1);
+        if line.len() + take_len > max_bytes {
+            return Err(Error::new(too_large));
+        }
+
+        line.extend_from_slice(&available[..take_len]);
+        reader.consume(take_len);
+
+        if newline.is_some() {
+            break;
+        }
+    }
+
+    String::from_utf8(line)
+        .map(Some)
+        .map_err(|_| Error::new(WebuiHttpRequestReadError::InvalidRequest))
 }
 
 fn parse_content_length(value: &str) -> Result<usize> {
@@ -493,6 +576,7 @@ fn handle_sse_endpoint(
     let sse_stream = stream
         .try_clone()
         .context("Failed to clone stream for SSE broadcast")?;
+    let client_key = tcp_stream_key(&sse_stream);
     {
         let mut clients = lock_or_recover(sse_clients);
         clients.push(sse_stream);
@@ -526,8 +610,24 @@ fn handle_sse_endpoint(
     }
 
     crate::scoped_log!(info, "daemon:sse", "client disconnected");
+    if let Some((local_addr, peer_addr)) = client_key {
+        remove_sse_client(sse_clients, local_addr, peer_addr);
+    }
 
     Ok(ConnectionAction::Close)
+}
+
+fn tcp_stream_key(stream: &TcpStream) -> Option<(SocketAddr, SocketAddr)> {
+    Some((stream.local_addr().ok()?, stream.peer_addr().ok()?))
+}
+
+fn remove_sse_client(
+    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr,
+) {
+    let mut clients = lock_or_recover(sse_clients);
+    clients.retain(|client| tcp_stream_key(client) != Some((local_addr, peer_addr)));
 }
 
 fn format_sse_event(state: &Arc<Mutex<RuntimeState>>, event: &str, kind: &str) -> Result<String> {
@@ -599,6 +699,19 @@ pub(super) fn broadcast_sse_event(
 mod tests {
     use super::*;
 
+    fn test_webui_session() -> WebuiHttpSession {
+        WebuiHttpSession {
+            addr: "127.0.0.1:42321".parse().unwrap(),
+            token: "secret".to_string(),
+            bearer_token: "Bearer secret".to_string(),
+        }
+    }
+
+    fn read_test_request(input: String) -> Result<Option<WebuiHttpRequest>> {
+        let mut reader = std::io::BufReader::new(std::io::Cursor::new(input.into_bytes()));
+        read_http_request(&mut reader, &test_webui_session())
+    }
+
     #[test]
     fn parse_content_length_validates_and_rejects() {
         assert_eq!(parse_content_length("128").unwrap(), 128);
@@ -613,6 +726,49 @@ mod tests {
         assert_eq!(
             err.downcast_ref::<WebuiHttpRequestReadError>(),
             Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_long_request_line() {
+        let request = format!(
+            "GET /{} HTTP/1.1\r\n\r\n",
+            "x".repeat(MAX_WEBUI_HTTP_REQUEST_LINE_BYTES)
+        );
+
+        let err = read_test_request(request).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::RequestLineTooLarge)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_oversized_header_line() {
+        let request = format!(
+            "POST /rpc HTTP/1.1\r\nX-Long: {}\r\n\r\n",
+            "x".repeat(MAX_WEBUI_HTTP_HEADER_LINE_BYTES)
+        );
+
+        let err = read_test_request(request).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::RequestHeaderTooLarge)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_too_many_headers() {
+        let mut request = "POST /rpc HTTP/1.1\r\n".to_string();
+        for index in 0..=MAX_WEBUI_HTTP_HEADERS {
+            request.push_str(&format!("X-Test-{index}: value\r\n"));
+        }
+        request.push_str("\r\n");
+
+        let err = read_test_request(request).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::TooManyHeaders)
         );
     }
 
@@ -700,5 +856,23 @@ mod tests {
             sse_clients.lock().unwrap().is_empty(),
             "dead client should be removed"
         );
+    }
+
+    #[test]
+    fn remove_sse_client_removes_matching_stream() {
+        let sse_clients = Arc::new(Mutex::new(Vec::new()));
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _client = std::net::TcpStream::connect(addr).unwrap();
+        let (server, _peer) = listener.accept().unwrap();
+        let key = tcp_stream_key(&server).unwrap();
+
+        sse_clients
+            .lock()
+            .unwrap()
+            .push(server.try_clone().unwrap());
+        remove_sse_client(&sse_clients, key.0, key.1);
+
+        assert!(sse_clients.lock().unwrap().is_empty());
     }
 }

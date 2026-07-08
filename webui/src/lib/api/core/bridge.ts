@@ -174,10 +174,13 @@ const DAEMON_MODULES_TIMEOUT_MS = 15000;
 
 const SESSION_STORAGE_KEY = "mhm_webui_session";
 const DAEMON_PING_TIMEOUT_MS = 750;
+const SSE_RECONNECT_DELAY_MS = 1000;
 
 let daemonReady: Promise<void> | null = null;
 let webuiSession: WebuiSession | null = null;
 let sseSource: EventSource | null = null;
+let sseSourceUrl: string | null = null;
+let sseReconnectTimer: number | null = null;
 export interface SseStateUpdateEvent {
   schemaVersion: number;
   id: number | null;
@@ -218,6 +221,37 @@ function persistSession(session: WebuiSession): void {
   } catch {
     /* storage unavailable */
   }
+}
+
+export function buildSseUrl(session: WebuiSession): string {
+  return `${session.base_url}/events?token=${encodeURIComponent(session.token)}`;
+}
+
+function clearPendingSseReconnect(): void {
+  if (sseReconnectTimer !== null) {
+    window.clearTimeout(sseReconnectTimer);
+    sseReconnectTimer = null;
+  }
+}
+
+function scheduleSseReconnect(): void {
+  if (sseReconnectTimer !== null) return;
+  if (!webuiSession || sseHandlers.length === 0) return;
+
+  sseReconnectTimer = window.setTimeout(() => {
+    sseReconnectTimer = null;
+    startSse();
+  }, SSE_RECONNECT_DELAY_MS);
+}
+
+function setWebuiSession(session: WebuiSession): void {
+  webuiSession = session;
+  startSse();
+}
+
+function clearWebuiSession(): void {
+  webuiSession = null;
+  stopSse();
 }
 
 function clearStoredSession(): void {
@@ -319,17 +353,17 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
     daemonReady = (async () => {
       const stored = loadStoredSession();
       if (stored && (await pingDaemonHttp(stored))) {
-        webuiSession = stored;
+        setWebuiSession(stored);
         return;
       }
       clearStoredSession();
 
       const session = await coldStartDaemon(binaryPath);
-      webuiSession = session;
+      setWebuiSession(session);
       persistSession(session);
     })().catch((error) => {
       daemonReady = null;
-      webuiSession = null;
+      clearWebuiSession();
       clearStoredSession();
       throw error;
     });
@@ -362,9 +396,7 @@ export function parseSseStateUpdateData(
     if ("payload" in record) {
       return {
         schemaVersion:
-          typeof record.schema_version === "number"
-            ? record.schema_version
-            : 1,
+          typeof record.schema_version === "number" ? record.schema_version : 1,
         id: typeof record.id === "number" ? record.id : fallbackId,
         kind: typeof record.kind === "string" ? record.kind : "state_update",
         payload: record.payload,
@@ -477,7 +509,7 @@ async function runDaemonCommandInternal(
       }
       console.debug("daemon HTTP bridge request failed", error);
       daemonReady = null;
-      webuiSession = null;
+      clearWebuiSession();
 
       if (attempt === 0) {
         await ensureDaemonAwake(binaryPath);
@@ -512,12 +544,19 @@ export function startSse(): void {
   const session = webuiSession;
   if (!session) return;
 
-  if (sseSource) return;
+  const url = buildSseUrl(session);
+  if (sseSource) {
+    if (sseSourceUrl === url) return;
+    stopSse();
+  }
 
-  const url = `${session.base_url}/events?token=${encodeURIComponent(session.token)}`;
-  sseSource = new EventSource(url);
+  clearPendingSseReconnect();
 
-  sseSource.addEventListener("state_update", (event: MessageEvent) => {
+  const source = new EventSource(url);
+  sseSource = source;
+  sseSourceUrl = url;
+
+  source.addEventListener("state_update", (event: MessageEvent) => {
     try {
       const update = parseSseStateUpdateData(
         event.data as string,
@@ -535,16 +574,22 @@ export function startSse(): void {
     }
   });
 
-  sseSource.onerror = () => {
-    console.debug("SSE connection error, will retry on next ensureDaemonAwake");
-    sseSource?.close();
-    sseSource = null;
+  source.onerror = () => {
+    console.debug("SSE connection error, scheduling reconnect");
+    source.close();
+    if (sseSource === source) {
+      sseSource = null;
+      sseSourceUrl = null;
+      scheduleSseReconnect();
+    }
   };
 }
 
 export function stopSse(): void {
+  clearPendingSseReconnect();
   if (sseSource) {
     sseSource.close();
     sseSource = null;
   }
+  sseSourceUrl = null;
 }

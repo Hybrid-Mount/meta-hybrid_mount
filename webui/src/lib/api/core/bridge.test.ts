@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./error";
 import {
+  buildSseUrl,
   getDaemonCommandMetadata,
   parseDaemonJsonOutput,
   parseSseStateUpdateData,
@@ -117,6 +118,17 @@ describe("daemon command metadata", () => {
 });
 
 describe("SSE state update parsing", () => {
+  it("builds SSE URLs with encoded bearer tokens", () => {
+    expect(
+      buildSseUrl({
+        base_url: "http://127.0.0.1:42321",
+        token: "token with + and /",
+      }),
+    ).toBe(
+      "http://127.0.0.1:42321/events?token=token%20with%20%2B%20and%20%2F",
+    );
+  });
+
   it("parses versioned SSE envelopes", () => {
     expect(
       parseSseStateUpdateData(
@@ -137,9 +149,7 @@ describe("SSE state update parsing", () => {
   });
 
   it("keeps legacy daemon SSE payloads readable", () => {
-    expect(
-      parseSseStateUpdateData('{"storage_mode":"tmpfs"}', "7"),
-    ).toEqual({
+    expect(parseSseStateUpdateData('{"storage_mode":"tmpfs"}', "7")).toEqual({
       schemaVersion: 0,
       id: 7,
       kind: "legacy_state_update",
