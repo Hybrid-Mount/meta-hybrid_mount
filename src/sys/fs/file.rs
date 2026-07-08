@@ -6,7 +6,7 @@ use std::{
     collections::HashSet,
     ffi::CString,
     fs::{self, File},
-    io::Write,
+    io::{ErrorKind, Write},
     os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink},
     path::{Path, PathBuf},
 };
@@ -84,8 +84,19 @@ fn sync_parent_dir(parent: &Path) {
 }
 
 pub fn ensure_dir_exists<T: AsRef<Path>>(dir: T) -> Result<()> {
-    if !dir.as_ref().exists() {
-        fs::create_dir_all(&dir)?;
+    let dir = dir.as_ref();
+    if let Err(err) = fs::create_dir_all(dir) {
+        if let Ok(metadata) = fs::metadata(dir)
+            && !metadata.is_dir()
+        {
+            bail!("path exists but is not a directory: {}", dir.display());
+        }
+        return Err(err).with_context(|| format!("failed to create directory {}", dir.display()));
+    }
+    let metadata = fs::metadata(dir)
+        .with_context(|| format!("failed to inspect directory {}", dir.display()))?;
+    if !metadata.is_dir() {
+        bail!("path exists but is not a directory: {}", dir.display());
     }
     Ok(())
 }
@@ -216,7 +227,14 @@ where
 
     let active_names: HashSet<&str> = active_names.into_iter().collect();
 
-    for entry in target_base.read_dir()?.flatten() {
+    for entry in target_base.read_dir()? {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                log::warn!("[{log_scope}] skip unreadable directory entry: error={err:#}");
+                continue;
+            }
+        };
         let path = entry.path();
         let name_os = entry.file_name();
         let name = name_os.to_string_lossy();
@@ -238,26 +256,38 @@ where
 }
 
 pub fn ensure_dir_like(src: &Path, dst: &Path) -> Result<()> {
-    if !dst.exists() {
-        fs::create_dir_all(dst)?;
-        match fs::symlink_metadata(src) {
-            Ok(src_meta) => {
-                let _ = fs::set_permissions(dst, src_meta.permissions());
-                clone_ownership_from_metadata(src, dst, &src_meta);
+    match fs::symlink_metadata(dst) {
+        Ok(metadata) => {
+            if metadata.file_type().is_dir() {
+                return Ok(());
             }
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "fs:copy",
-                    "clone directory metadata skipped: src={}, dst={}, error={}",
-                    src.display(),
-                    dst.display(),
-                    err
-                );
-            }
+            bail!("path exists but is not a directory: {}", dst.display());
         }
-        clone_selinux_context(src, dst);
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(err).with_context(|| format!("failed to inspect {}", dst.display()));
+        }
     }
+
+    fs::create_dir_all(dst)
+        .with_context(|| format!("failed to create directory {}", dst.display()))?;
+    match fs::symlink_metadata(src) {
+        Ok(src_meta) => {
+            let _ = fs::set_permissions(dst, src_meta.permissions());
+            clone_ownership_from_metadata(src, dst, &src_meta);
+        }
+        Err(err) => {
+            crate::scoped_log!(
+                warn,
+                "fs:copy",
+                "clone directory metadata skipped: src={}, dst={}, error={}",
+                src.display(),
+                dst.display(),
+                err
+            );
+        }
+    }
+    clone_selinux_context(src, dst);
     Ok(())
 }
 
@@ -522,8 +552,14 @@ fn prune_empty_dirs_preserving(root: &Path, preserved_dirs: &[PathBuf]) -> Resul
         .min_depth(1)
         .contents_first(true)
         .into_iter()
-        .filter_map(|e| e.ok())
     {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                log::warn!("[fs:prune-empty] skip unreadable entry: error={err:#}");
+                continue;
+            }
+        };
         if entry.file_type().is_dir() {
             let path = entry.path();
             if preserved_dirs.contains(path) {
@@ -533,4 +569,49 @@ fn prune_empty_dirs_preserving(root: &Path, preserved_dirs: &[PathBuf]) -> Resul
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_dir_exists_creates_nested_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("a").join("b");
+
+        ensure_dir_exists(&path).unwrap();
+
+        assert!(path.is_dir());
+    }
+
+    #[test]
+    fn ensure_dir_exists_rejects_existing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("not-a-dir");
+        fs::write(&path, b"file").unwrap();
+
+        let err = ensure_dir_exists(&path).unwrap_err();
+
+        assert!(
+            format!("{err:#}").contains("not a directory"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn ensure_dir_like_rejects_existing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let src = temp.path().join("src");
+        let dst = temp.path().join("dst");
+        fs::create_dir(&src).unwrap();
+        fs::write(&dst, b"file").unwrap();
+
+        let err = ensure_dir_like(&src, &dst).unwrap_err();
+
+        assert!(
+            format!("{err:#}").contains("not a directory"),
+            "unexpected error: {err:#}"
+        );
+    }
 }

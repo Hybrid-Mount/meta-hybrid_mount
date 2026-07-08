@@ -9,7 +9,10 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 
-use crate::{defs, sys::kasumi};
+use crate::{
+    defs,
+    sys::{fs::atomic_write, kasumi},
+};
 
 fn load_user_hide_rules_from(path: &Path) -> Result<Vec<PathBuf>> {
     if !path.exists() {
@@ -39,7 +42,7 @@ fn save_user_hide_rules_to(path: &Path, rules: &[PathBuf]) -> Result<()> {
         .collect();
     let payload =
         serde_json::to_string_pretty(&values).context("failed to serialize user hide rules")?;
-    fs::write(path, payload)
+    atomic_write(path, payload.as_bytes())
         .with_context(|| format!("failed to write user hide rules file {}", path.display()))?;
     Ok(())
 }
@@ -114,4 +117,31 @@ pub fn apply_user_hide_rules_from_paths(rules: &[PathBuf]) -> Result<(usize, usi
     }
 
     Ok((success, failed))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn save_user_hide_rules_round_trips_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("user_hide_rules.json");
+        let rules = vec![
+            PathBuf::from("/system/bin/example"),
+            PathBuf::from("/vendor/lib64/libexample.so"),
+        ];
+
+        save_user_hide_rules_to(&path, &rules).unwrap();
+
+        assert_eq!(load_user_hide_rules_from(&path).unwrap(), rules);
+    }
+
+    #[test]
+    fn load_user_hide_rules_returns_empty_when_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.json");
+
+        assert!(load_user_hide_rules_from(&path).unwrap().is_empty());
+    }
 }
