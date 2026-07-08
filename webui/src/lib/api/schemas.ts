@@ -197,13 +197,19 @@ export type KasumiConfigPayload = z.infer<typeof kasumiConfigSchema>;
 
 // ── App config (api-config-get / api-config-patch response) ─────────────
 
+export const customBindMountSchema = z.object({
+  source: z.string(),
+  target: z.string(),
+});
+
 export const appConfigSchema = z.object({
   moduledir: z.string().default("/data/adb/modules"),
-  mountsource: z.string().default("/data/adb/hybrid-mount"),
+  mountsource: z.string().default("KSU"),
   overlay_mode: overlayModeSchema.default("ext4"),
   disable_umount: z.boolean().default(false),
   default_mode: mountModeSchema.default("overlay"),
   daemon_startup_mode: daemonStartupModeSchema.default("on-demand"),
+  custom_mounts: z.array(customBindMountSchema).default([]),
   rules: z.record(z.string(), moduleRulesSchema).default({}),
   kasumi: kasumiConfigSchema.optional(),
 });
@@ -258,6 +264,7 @@ export const runtimeStateSchema = z
     overlay_modules: z.array(z.string()).optional(),
     magic_modules: z.array(z.string()).optional(),
     kasumi_modules: z.array(z.string()).optional(),
+    custom_mounts: z.array(z.string()).optional(),
     mount_error_modules: z.array(z.string()).optional(),
     mount_error_reasons: z.record(z.string(), z.string()).optional(),
     skip_mount_modules: z.array(z.string()).optional(),

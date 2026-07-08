@@ -65,7 +65,15 @@
     "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
-    "daemonStartupMode": "Persistent Daemon"
+    "daemonStartupMode": "Persistent Daemon",
+    "customMounts": "Custom Bind Mounts",
+    "customMountsDesc": "Bind explicit source paths onto existing targets",
+    "customMountsEmpty": "No custom bind mounts configured.",
+    "customMountSource": "Source Path",
+    "customMountTarget": "Target Path",
+    "addCustomMount": "Add",
+    "removeCustomMount": "Remove",
+    "invalidCustomMount": "Invalid custom mount path"
   },
   "modules": {
     "reload": "Refresh",

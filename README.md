@@ -138,6 +138,16 @@ default_mode = "magic"
 "system/bin/problematic_binary" = "ignore"
 ```
 
+### Custom bind mounts
+
+```toml
+[[custom_mounts]]
+source = "/data/local/tmp/replacement.conf"
+target = "/system/etc/replacement.conf"
+```
+
+Custom bind mounts run after module OverlayFS/Magic Mount execution. The source and target must both exist and must both be files or both be directories.
+
 ---
 
 ## Mount Modes

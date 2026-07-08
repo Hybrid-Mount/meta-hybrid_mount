@@ -65,7 +65,15 @@
     "mode_tmpfsDesc": "基于内存，I/O性能优秀，重启即焚",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "节省内存，使用 Loop 设备",
-    "daemonStartupMode": "持久化守护进程"
+    "daemonStartupMode": "持久化守护进程",
+    "customMounts": "自定义 Bind 挂载",
+    "customMountsDesc": "将指定来源路径绑定到已存在的目标路径",
+    "customMountsEmpty": "暂无自定义 Bind 挂载。",
+    "customMountSource": "来源路径",
+    "customMountTarget": "目标路径",
+    "addCustomMount": "添加",
+    "removeCustomMount": "移除",
+    "invalidCustomMount": "自定义挂载路径无效"
   },
   "modules": {
     "reload": "刷新",

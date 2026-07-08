@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
+pub mod custom_bind;
 #[cfg(feature = "kasumi")]
 pub mod kasumi;
 pub mod magic_mount;

@@ -54,6 +54,7 @@ export const DEFAULT_CONFIG = {
   overlay_mode: "ext4",
   default_mode: "overlay",
   daemon_startup_mode: "on-demand",
+  custom_mounts: [],
   rules: {},
   ...(ENABLE_KASUMI ? { kasumi: DEFAULT_KASUMI_CONFIG } : {}),
 } as AppConfig;

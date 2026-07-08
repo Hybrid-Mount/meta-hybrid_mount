@@ -164,6 +164,22 @@ pub struct BlacklistConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(default)]
+pub struct CustomBindMount {
+    pub source: PathBuf,
+    pub target: PathBuf,
+}
+
+impl Default for CustomBindMount {
+    fn default() -> Self {
+        Self {
+            source: PathBuf::new(),
+            target: PathBuf::new(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Config {
     pub moduledir: PathBuf,
     pub mountsource: String,
@@ -174,6 +190,8 @@ pub struct Config {
     pub kasumi: KasumiConfig,
     pub rules: HashMap<String, ModuleRules>,
     pub daemon_startup_mode: DaemonStartupMode,
+    #[serde(default, alias = "customMounts", skip_serializing_if = "Vec::is_empty")]
+    pub custom_mounts: Vec<CustomBindMount>,
     #[serde(skip)]
     pub module_blacklist: Vec<String>,
 }
@@ -204,6 +222,7 @@ impl Default for Config {
             kasumi: KasumiConfig::default(),
             rules: HashMap::new(),
             daemon_startup_mode: DaemonStartupMode::default(),
+            custom_mounts: Vec::new(),
             module_blacklist: Vec::new(),
         }
     }

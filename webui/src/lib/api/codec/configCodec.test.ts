@@ -25,4 +25,22 @@ describe("config codec defaults", () => {
     expect(normalizeConfig({}).overlay_mode).toBe("ext4");
     expect(appConfigSchema.parse({}).overlay_mode).toBe("ext4");
   });
+
+  it("uses a valid mount source schema default", () => {
+    expect(appConfigSchema.parse({}).mountsource).toBe("KSU");
+  });
+
+  it("normalizes custom bind mounts from snake or camel case payloads", () => {
+    expect(
+      normalizeConfig({
+        custom_mounts: [{ source: "/data/local/foo", target: "/system/foo" }],
+      }).custom_mounts,
+    ).toEqual([{ source: "/data/local/foo", target: "/system/foo" }]);
+
+    expect(
+      normalizeConfig({
+        customMounts: [{ source: "/data/local/bar", target: "/system/bar" }],
+      }).custom_mounts,
+    ).toEqual([{ source: "/data/local/bar", target: "/system/bar" }]);
+  });
 });

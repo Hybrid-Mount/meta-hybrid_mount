@@ -52,6 +52,7 @@ export async function saveConfigToFile(config: AppConfig): Promise<void> {
     disable_umount: normalized.disable_umount,
     default_mode: normalized.default_mode,
     daemon_startup_mode: normalized.daemon_startup_mode,
+    custom_mounts: normalized.custom_mounts,
     rules: normalized.rules,
     ...(ENABLE_KASUMI ? { kasumi: normalized.kasumi } : {}),
   };

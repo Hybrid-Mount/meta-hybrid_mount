@@ -78,6 +78,9 @@ export function normalizeConfig(value: unknown): AppConfig {
     default_mode: defaultMode,
     daemon_startup_mode:
       next.daemon_startup_mode === "persistent" ? "persistent" : "on-demand",
+    custom_mounts: normalizeCustomMounts(
+      next.custom_mounts ?? next.customMounts,
+    ),
     rules,
   };
 
@@ -85,6 +88,26 @@ export function normalizeConfig(value: unknown): AppConfig {
     ...normalized,
     ...(ENABLE_KASUMI ? { kasumi: normalizeKasumiConfig(next.kasumi) } : {}),
   } as AppConfig;
+}
+
+function normalizeCustomMounts(value: unknown): AppConfig["custom_mounts"] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const item = entry as Record<string, unknown>;
+      if (typeof item.source !== "string" || typeof item.target !== "string") {
+        return null;
+      }
+      return {
+        source: item.source,
+        target: item.target,
+      };
+    })
+    .filter((entry): entry is AppConfig["custom_mounts"][number] =>
+      Boolean(entry),
+    );
 }
 
 function normalizePathsMap(value: unknown): Record<string, string> {

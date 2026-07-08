@@ -138,6 +138,16 @@ default_mode = "magic"
 "system/bin/problematic_binary" = "ignore"
 ```
 
+### 自定义 Bind 挂载
+
+```toml
+[[custom_mounts]]
+source = "/data/local/tmp/replacement.conf"
+target = "/system/etc/replacement.conf"
+```
+
+自定义 Bind 挂载会在模块 OverlayFS/Magic Mount 执行后运行。来源和目标必须都已存在，并且必须同为文件或同为目录。
+
 ---
 
 ## 挂载方式

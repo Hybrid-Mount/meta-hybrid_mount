@@ -21,6 +21,11 @@ export interface ModuleRules {
 
 export type OverlayMode = "tmpfs" | "ext4";
 
+export interface CustomBindMount {
+  source: string;
+  target: string;
+}
+
 export interface AppConfig {
   moduledir: string;
   mountsource: string;
@@ -28,6 +33,7 @@ export interface AppConfig {
   disable_umount: boolean;
   default_mode: MountMode;
   daemon_startup_mode: "on-demand" | "persistent";
+  custom_mounts: CustomBindMount[];
   kasumi: KasumiConfig;
   rules: Record<string, ModuleRules>;
 }

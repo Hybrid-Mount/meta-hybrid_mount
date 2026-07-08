@@ -32,7 +32,8 @@ import "@material/web/icon/icon.js";
 import "@material/web/ripple/ripple.js";
 import "@material/web/dialog/dialog.js";
 import "@material/web/button/text-button.js";
-import type { OverlayMode, AppConfig } from "../lib/types";
+import "@material/web/button/filled-button.js";
+import type { OverlayMode, AppConfig, CustomBindMount } from "../lib/types";
 
 const KASUMI_WARNING_COOKIE = "mhm_kasumi_warning_ack";
 
@@ -41,9 +42,12 @@ export default function ConfigTab() {
     createSignal<Partial<AppConfig> | null>(null);
   const [showKasumiWarning, setShowKasumiWarning] = createSignal(false);
   const [kasumiPending, setKasumiPending] = createSignal(false);
+  const [customSourceDraft, setCustomSourceDraft] = createSignal("");
+  const [customTargetDraft, setCustomTargetDraft] = createSignal("");
   let mountSourceInputRef: HTMLElement | undefined;
 
   const isValidPath = (p: string) => !p || (p.startsWith("/") && p.length > 1);
+  const isValidRequiredPath = (p: string) => p.startsWith("/") && p.length > 1;
   const invalidModuleDir = createMemo(
     () => !isValidPath(configStore.config.moduledir),
   );
@@ -58,7 +62,10 @@ export default function ConfigTab() {
   });
 
   function recordSavedConfig() {
-    setLastSavedConfig({ ...configStore.config });
+    setLastSavedConfig({
+      ...configStore.config,
+      custom_mounts: cloneCustomMounts(configStore.config.custom_mounts),
+    });
   }
 
   function updateConfig<K extends keyof AppConfig>(
@@ -77,7 +84,7 @@ export default function ConfigTab() {
   }
 
   function shouldApplyRuntime(key: keyof AppConfig) {
-    return key !== "daemon_startup_mode";
+    return key !== "daemon_startup_mode" && key !== "custom_mounts";
   }
 
   async function saveConfigField<K extends keyof AppConfig>(
@@ -137,6 +144,82 @@ export default function ConfigTab() {
 
     updateConfig("overlay_mode", next);
     await saveConfigField("overlay_mode", next, prev);
+  }
+
+  function cloneCustomMounts(
+    mounts: CustomBindMount[] | undefined,
+  ): CustomBindMount[] {
+    return (mounts ?? []).map((mount) => ({
+      source: mount.source,
+      target: mount.target,
+    }));
+  }
+
+  const customMounts = createMemo(() =>
+    cloneCustomMounts(configStore.config.custom_mounts),
+  );
+
+  function hasInvalidCustomMount(mounts: CustomBindMount[]) {
+    return mounts.some(
+      (mount) =>
+        !isValidRequiredPath(mount.source) ||
+        !isValidRequiredPath(mount.target),
+    );
+  }
+
+  async function saveCustomMounts(
+    nextMounts: CustomBindMount[],
+    previousMounts: CustomBindMount[],
+  ) {
+    if (hasInvalidCustomMount(nextMounts)) {
+      uiStore.showToast(
+        uiStore.L.config?.invalidCustomMount || "Invalid custom mount path",
+        "error",
+      );
+      updateConfig("custom_mounts", previousMounts);
+      return false;
+    }
+
+    return saveConfigField("custom_mounts", nextMounts, previousMounts);
+  }
+
+  function updateCustomMount(
+    index: number,
+    key: keyof CustomBindMount,
+    value: string,
+  ) {
+    const next = customMounts();
+    if (!next[index]) return;
+    next[index] = { ...next[index], [key]: value };
+    updateConfig("custom_mounts", next);
+  }
+
+  async function commitCustomMounts() {
+    const previous = cloneCustomMounts(lastSavedConfig()?.custom_mounts);
+    const next = customMounts();
+    if (JSON.stringify(previous) === JSON.stringify(next)) return;
+    await saveCustomMounts(next, previous);
+  }
+
+  async function addCustomMount() {
+    const source = customSourceDraft().trim();
+    const target = customTargetDraft().trim();
+    const previous = customMounts();
+    const next = [...previous, { source, target }];
+
+    updateConfig("custom_mounts", next);
+    const saved = await saveCustomMounts(next, previous);
+    if (saved) {
+      setCustomSourceDraft("");
+      setCustomTargetDraft("");
+    }
+  }
+
+  async function removeCustomMount(index: number) {
+    const previous = customMounts();
+    const next = previous.filter((_, i) => i !== index);
+    updateConfig("custom_mounts", next);
+    await saveCustomMounts(next, previous);
   }
 
   async function handleKasumiToggle() {
@@ -425,6 +508,162 @@ export default function ConfigTab() {
                 </span>
               </div>
             </button>
+          </div>
+        </section>
+
+        <section class="config-group">
+          <div class="config-card">
+            <div class="card-header">
+              <div class="card-icon">
+                <md-icon>
+                  <svg viewBox="0 0 24 24">
+                    <path d={ICONS.mount_path} />
+                  </svg>
+                </md-icon>
+              </div>
+              <div class="card-text">
+                <span class="card-title">
+                  {uiStore.L.config?.customMounts || "Custom Bind Mounts"}
+                </span>
+                <span class="card-desc">
+                  {uiStore.L.config?.customMountsDesc ||
+                    "Bind explicit source paths onto existing targets"}
+                </span>
+              </div>
+            </div>
+
+            <div class="custom-mount-list">
+              <Show
+                when={customMounts().length > 0}
+                fallback={
+                  <div class="custom-mount-empty">
+                    {uiStore.L.config?.customMountsEmpty ||
+                      "No custom bind mounts configured."}
+                  </div>
+                }
+              >
+                <For each={customMounts()}>
+                  {(mount, index) => (
+                    <div class="custom-mount-row">
+                      <div class="custom-mount-fields">
+                        <md-outlined-text-field
+                          label={
+                            uiStore.L.config?.customMountSource || "Source"
+                          }
+                          value={mount.source}
+                          onInput={(e: Event) =>
+                            updateCustomMount(
+                              index(),
+                              "source",
+                              (e.currentTarget as HTMLInputElement).value,
+                            )
+                          }
+                          onChange={commitCustomMounts}
+                          error={!isValidRequiredPath(mount.source)}
+                          supporting-text={
+                            !isValidRequiredPath(mount.source)
+                              ? uiStore.L.config?.invalidPath || "Invalid path"
+                              : ""
+                          }
+                          class="custom-mount-field"
+                        />
+                        <md-outlined-text-field
+                          label={
+                            uiStore.L.config?.customMountTarget || "Target"
+                          }
+                          value={mount.target}
+                          onInput={(e: Event) =>
+                            updateCustomMount(
+                              index(),
+                              "target",
+                              (e.currentTarget as HTMLInputElement).value,
+                            )
+                          }
+                          onChange={commitCustomMounts}
+                          error={!isValidRequiredPath(mount.target)}
+                          supporting-text={
+                            !isValidRequiredPath(mount.target)
+                              ? uiStore.L.config?.invalidPath || "Invalid path"
+                              : ""
+                          }
+                          class="custom-mount-field"
+                        />
+                      </div>
+                      <button
+                        class="custom-mount-icon-button"
+                        type="button"
+                        title={uiStore.L.config?.removeCustomMount || "Remove"}
+                        aria-label={
+                          uiStore.L.config?.removeCustomMount || "Remove"
+                        }
+                        onClick={() => removeCustomMount(index())}
+                      >
+                        <md-icon>
+                          <svg viewBox="0 0 24 24">
+                            <path d={ICONS.delete} />
+                          </svg>
+                        </md-icon>
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </Show>
+
+              <div class="custom-mount-add-row">
+                <md-outlined-text-field
+                  label={uiStore.L.config?.customMountSource || "Source"}
+                  value={customSourceDraft()}
+                  onInput={(e: Event) =>
+                    setCustomSourceDraft(
+                      (e.currentTarget as HTMLInputElement).value,
+                    )
+                  }
+                  error={
+                    customSourceDraft().length > 0 &&
+                    !isValidRequiredPath(customSourceDraft())
+                  }
+                  supporting-text={
+                    customSourceDraft().length > 0 &&
+                    !isValidRequiredPath(customSourceDraft())
+                      ? uiStore.L.config?.invalidPath || "Invalid path"
+                      : ""
+                  }
+                  class="custom-mount-field"
+                />
+                <md-outlined-text-field
+                  label={uiStore.L.config?.customMountTarget || "Target"}
+                  value={customTargetDraft()}
+                  onInput={(e: Event) =>
+                    setCustomTargetDraft(
+                      (e.currentTarget as HTMLInputElement).value,
+                    )
+                  }
+                  onKeyDown={(e: KeyboardEvent) => {
+                    if (e.key === "Enter") void addCustomMount();
+                  }}
+                  error={
+                    customTargetDraft().length > 0 &&
+                    !isValidRequiredPath(customTargetDraft())
+                  }
+                  supporting-text={
+                    customTargetDraft().length > 0 &&
+                    !isValidRequiredPath(customTargetDraft())
+                      ? uiStore.L.config?.invalidPath || "Invalid path"
+                      : ""
+                  }
+                  class="custom-mount-field"
+                />
+                <md-filled-button
+                  onClick={addCustomMount}
+                  disabled={
+                    !isValidRequiredPath(customSourceDraft().trim()) ||
+                    !isValidRequiredPath(customTargetDraft().trim())
+                  }
+                >
+                  {uiStore.L.config?.addCustomMount || "Add"}
+                </md-filled-button>
+              </div>
+            </div>
           </div>
         </section>
 

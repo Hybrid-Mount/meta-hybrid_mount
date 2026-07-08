@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
+mod custom_bind;
 mod magic;
 mod overlay;
 
@@ -28,6 +29,7 @@ pub struct ExecutionResult {
     pub overlay_module_ids: Vec<String>,
     pub overlay_partitions: Vec<String>,
     pub magic_module_ids: Vec<String>,
+    pub custom_mount_targets: Vec<String>,
     #[cfg(feature = "kasumi")]
     pub kasumi_module_ids: Vec<String>,
     pub kasumi_runtime_enabled: bool,
@@ -220,6 +222,9 @@ impl Executor {
             );
         }
 
+        let (custom_mount_targets, custom_stats) = custom_bind::mount_custom_binds(config);
+        mount_stats.merge(&custom_stats);
+
         #[cfg(feature = "kasumi")]
         let kasumi_runtime_enabled = if config.kasumi.enabled {
             kasumi.apply_runtime(plan, modules).map_err(|err| {
@@ -255,9 +260,10 @@ impl Executor {
         crate::scoped_log!(
             info,
             "executor",
-            "complete: overlay_modules={}, magic_modules={}, kasumi_modules={}",
+            "complete: overlay_modules={}, magic_modules={}, custom_mounts={}, kasumi_modules={}",
             result_overlay.len(),
             result_magic.len(),
+            custom_mount_targets.len(),
             kasumi_count
         );
 
@@ -265,6 +271,7 @@ impl Executor {
             overlay_module_ids: result_overlay,
             overlay_partitions: final_overlay_partitions.into_iter().collect(),
             magic_module_ids: result_magic,
+            custom_mount_targets,
             #[cfg(feature = "kasumi")]
             kasumi_module_ids: final_kasumi_ids,
             kasumi_runtime_enabled,

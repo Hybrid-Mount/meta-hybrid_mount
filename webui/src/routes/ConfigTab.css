@@ -343,3 +343,81 @@ md-icon svg {
   height: 18px;
   color: var(--md-sys-color-on-surface-variant);
 }
+
+.custom-mount-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.custom-mount-empty {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.custom-mount-row,
+.custom-mount-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.custom-mount-add-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  padding-top: 4px;
+}
+
+.custom-mount-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.custom-mount-field {
+  width: 100%;
+  min-width: 0;
+  --md-outlined-text-field-container-shape: var(--radius-lg);
+}
+
+.custom-mount-icon-button {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+
+.custom-mount-icon-button:hover {
+  background-color: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-error);
+}
+
+.custom-mount-add-row md-filled-button {
+  height: 48px;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .custom-mount-row,
+  .custom-mount-add-row,
+  .custom-mount-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-mount-icon-button {
+    justify-self: end;
+  }
+
+  .custom-mount-add-row md-filled-button {
+    justify-self: stretch;
+    width: 100%;
+  }
+}

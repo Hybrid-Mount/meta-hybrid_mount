@@ -142,6 +142,8 @@ pub struct RuntimeState {
     #[serde(default)]
     pub kasumi_modules: Vec<String>,
     #[serde(default)]
+    pub custom_mounts: Vec<String>,
+    #[serde(default)]
     pub mount_error_modules: Vec<String>,
     #[serde(default)]
     pub mount_error_reasons: BTreeMap<String, String>,
@@ -191,6 +193,7 @@ impl RuntimeState {
         overlay_modules: Vec<String>,
         magic_modules: Vec<String>,
         kasumi_modules: Vec<String>,
+        custom_mounts: Vec<String>,
         active_mounts: Vec<String>,
         mount_stats: MountStatistics,
         mode_stats: ModuleModeStats,
@@ -216,6 +219,7 @@ impl RuntimeState {
             overlay_modules,
             magic_modules,
             kasumi_modules,
+            custom_mounts,
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
             skip_mount_modules: Vec::new(),
@@ -358,6 +362,7 @@ impl RuntimeState {
                     Vec::new()
                 }
             },
+            result.custom_mount_targets.clone(),
             collect_active_mounts(result),
             result.mount_stats.clone(),
             collect_mode_stats(result),
@@ -446,6 +451,10 @@ fn collect_mode_stats(result: &ExecutionResult) -> ModuleModeStats {
 fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     let mut active_mounts = result.overlay_partitions.clone();
 
+    if !result.custom_mount_targets.is_empty() {
+        active_mounts.push("custom-bind".to_string());
+    }
+
     if result.kasumi_runtime_enabled {
         active_mounts.push("kasumi".to_string());
     }
@@ -456,8 +465,9 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     crate::scoped_log!(
         debug,
         "runtime_state:active_mounts",
-        "complete: overlay_partitions={}, kasumi_runtime_enabled={}, active_mounts={}",
+        "complete: overlay_partitions={}, custom_mounts={}, kasumi_runtime_enabled={}, active_mounts={}",
         result.overlay_partitions.len(),
+        result.custom_mount_targets.len(),
         result.kasumi_runtime_enabled,
         active_mounts.len()
     );
