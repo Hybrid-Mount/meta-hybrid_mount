@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::{
+    collections::HashMap,
     fs,
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
@@ -106,6 +107,73 @@ pub(super) const MAX_WEBUI_HTTP_HEADERS: usize = 64;
 const SSE_SCHEMA_VERSION: u32 = 1;
 static SSE_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct SseClientId(u64);
+
+pub(super) type SharedSseClients = Arc<SseClientRegistry>;
+
+pub(super) struct SseClientRegistry {
+    next_id: AtomicU64,
+    clients: Mutex<HashMap<SseClientId, TcpStream>>,
+}
+
+impl SseClientRegistry {
+    pub(super) fn shared() -> SharedSseClients {
+        Arc::new(Self {
+            next_id: AtomicU64::new(0),
+            clients: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn insert(&self, stream: TcpStream) -> SseClientId {
+        let id = SseClientId(self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
+        lock_or_recover(&self.clients).insert(id, stream);
+        id
+    }
+
+    fn remove(&self, id: SseClientId) -> bool {
+        lock_or_recover(&self.clients).remove(&id).is_some()
+    }
+
+    fn snapshot(&self) -> Vec<(SseClientId, TcpStream)> {
+        let mut failed_ids = Vec::new();
+        let snapshot = {
+            let clients = lock_or_recover(&self.clients);
+            clients
+                .iter()
+                .filter_map(|(id, stream)| match stream.try_clone() {
+                    Ok(stream) => Some((*id, stream)),
+                    Err(err) => {
+                        failed_ids.push(*id);
+                        crate::scoped_log!(
+                            debug,
+                            "daemon:sse",
+                            "client clone failed: id={}, error={:#}",
+                            id.0,
+                            err
+                        );
+                        None
+                    }
+                })
+                .collect()
+        };
+
+        if !failed_ids.is_empty() {
+            let mut clients = lock_or_recover(&self.clients);
+            for id in failed_ids {
+                clients.remove(&id);
+            }
+        }
+
+        snapshot
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        lock_or_recover(&self.clients).len()
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WebuiHttpRequestReadError {
     InvalidRequest,
@@ -186,7 +254,7 @@ pub(super) fn handle_http_connection(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
-    sse_clients: Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: SharedSseClients,
     mut stream: TcpStream,
 ) -> Result<()> {
     stream
@@ -386,7 +454,7 @@ fn handle_http_request(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &SharedSseClients,
     stream: &mut TcpStream,
     request: WebuiHttpRequest,
 ) -> Result<ConnectionAction> {
@@ -537,7 +605,7 @@ fn handle_sse_endpoint(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &SharedSseClients,
     stream: &mut TcpStream,
     request_line: &str,
 ) -> Result<ConnectionAction> {
@@ -576,11 +644,8 @@ fn handle_sse_endpoint(
     let sse_stream = stream
         .try_clone()
         .context("Failed to clone stream for SSE broadcast")?;
-    let client_key = tcp_stream_key(&sse_stream);
-    {
-        let mut clients = lock_or_recover(sse_clients);
-        clients.push(sse_stream);
-    }
+    let client_id = sse_clients.insert(sse_stream);
+    crate::scoped_log!(debug, "daemon:sse", "client registered: id={}", client_id.0);
 
     // Block until shutdown or client disconnect. Read with 5 s timeout so we
     // can periodically send an SSE comment keepalive.
@@ -610,24 +675,9 @@ fn handle_sse_endpoint(
     }
 
     crate::scoped_log!(info, "daemon:sse", "client disconnected");
-    if let Some((local_addr, peer_addr)) = client_key {
-        remove_sse_client(sse_clients, local_addr, peer_addr);
-    }
+    sse_clients.remove(client_id);
 
     Ok(ConnectionAction::Close)
-}
-
-fn tcp_stream_key(stream: &TcpStream) -> Option<(SocketAddr, SocketAddr)> {
-    Some((stream.local_addr().ok()?, stream.peer_addr().ok()?))
-}
-
-fn remove_sse_client(
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
-    local_addr: SocketAddr,
-    peer_addr: SocketAddr,
-) {
-    let mut clients = lock_or_recover(sse_clients);
-    clients.retain(|client| tcp_stream_key(client) != Some((local_addr, peer_addr)));
 }
 
 fn format_sse_event(state: &Arc<Mutex<RuntimeState>>, event: &str, kind: &str) -> Result<String> {
@@ -651,7 +701,7 @@ fn format_sse_event(state: &Arc<Mutex<RuntimeState>>, event: &str, kind: &str) -
 
 pub(super) fn broadcast_sse_event(
     state: &Arc<Mutex<RuntimeState>>,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &SharedSseClients,
     kind: &str,
 ) {
     let body = match format_sse_event(state, "state_update", kind) {
@@ -662,36 +712,14 @@ pub(super) fn broadcast_sse_event(
         }
     };
 
-    // Swap out the client list so writes happen outside the lock
-    let clients: Vec<TcpStream> = {
-        let mut guard = match sse_clients.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                crate::scoped_log!(
-                    error,
-                    "daemon:sse",
-                    "failed to acquire sse_clients lock: {:#}",
-                    e
-                );
-                return;
-            }
-        };
-        std::mem::take(&mut *guard)
-    };
-
-    let alive: Vec<TcpStream> = clients
-        .into_iter()
-        .filter(|mut client| {
-            client
-                .write_all(body.as_bytes())
-                .and_then(|_| client.flush())
-                .is_ok()
-        })
-        .collect();
-
-    // Merge back any clients added while we were writing
-    if let Ok(mut guard) = sse_clients.lock() {
-        guard.extend(alive);
+    for (id, mut client) in sse_clients.snapshot() {
+        if client
+            .write_all(body.as_bytes())
+            .and_then(|_| client.flush())
+            .is_err()
+        {
+            sse_clients.remove(id);
+        }
     }
 }
 
@@ -802,7 +830,7 @@ mod tests {
         let state = Arc::new(Mutex::new(
             crate::core::runtime_state::RuntimeState::default(),
         ));
-        let sse_clients = Arc::new(Mutex::new(Vec::new()));
+        let sse_clients = SseClientRegistry::shared();
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -815,7 +843,7 @@ mod tests {
             .set_write_timeout(Some(Duration::from_secs(1)))
             .unwrap();
 
-        sse_clients.lock().unwrap().push(server);
+        sse_clients.insert(server);
         broadcast_sse_event(&state, &sse_clients, "runtime_changed");
 
         let mut buf = [0u8; 4096];
@@ -839,7 +867,7 @@ mod tests {
         let state = Arc::new(Mutex::new(
             crate::core::runtime_state::RuntimeState::default(),
         ));
-        let sse_clients = Arc::new(Mutex::new(Vec::new()));
+        let sse_clients = SseClientRegistry::shared();
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -849,30 +877,46 @@ mod tests {
             .shutdown(std::net::Shutdown::Write)
             .expect("shutdown write on server socket");
 
-        sse_clients.lock().unwrap().push(server);
+        sse_clients.insert(server);
         broadcast_sse_event(&state, &sse_clients, "runtime_changed");
 
-        assert!(
-            sse_clients.lock().unwrap().is_empty(),
-            "dead client should be removed"
-        );
+        assert!(sse_clients.len() == 0, "dead client should be removed");
     }
 
     #[test]
-    fn remove_sse_client_removes_matching_stream() {
-        let sse_clients = Arc::new(Mutex::new(Vec::new()));
+    fn sse_registry_removes_client_by_id() {
+        let sse_clients = SseClientRegistry::shared();
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         let _client = std::net::TcpStream::connect(addr).unwrap();
         let (server, _peer) = listener.accept().unwrap();
-        let key = tcp_stream_key(&server).unwrap();
 
-        sse_clients
-            .lock()
-            .unwrap()
-            .push(server.try_clone().unwrap());
-        remove_sse_client(&sse_clients, key.0, key.1);
+        let id = sse_clients.insert(server.try_clone().unwrap());
+        assert_eq!(sse_clients.len(), 1);
+        assert!(sse_clients.remove(id));
 
-        assert!(sse_clients.lock().unwrap().is_empty());
+        assert_eq!(sse_clients.len(), 0);
+    }
+
+    #[test]
+    fn sse_registry_disconnect_during_snapshot_does_not_reinsert_client() {
+        let sse_clients = SseClientRegistry::shared();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _client = std::net::TcpStream::connect(addr).unwrap();
+        let (server, _peer) = listener.accept().unwrap();
+
+        let id = sse_clients.insert(server.try_clone().unwrap());
+        let snapshot = sse_clients.snapshot();
+        assert_eq!(snapshot.len(), 1);
+
+        assert!(sse_clients.remove(id));
+
+        for (snapshot_id, mut client) in snapshot {
+            assert_eq!(snapshot_id, id);
+            let _ = client.write_all(b": keepalive\n\n");
+        }
+
+        assert_eq!(sse_clients.len(), 0);
     }
 }

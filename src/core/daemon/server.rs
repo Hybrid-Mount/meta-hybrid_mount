@@ -66,7 +66,7 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
     let config_cache = Arc::new(commands::RuntimeConfigCache::new());
 
     let active_webui_connections = Arc::new(AtomicUsize::new(0));
-    let sse_clients: Arc<Mutex<Vec<std::net::TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
+    let sse_clients = http::SseClientRegistry::shared();
 
     crate::scoped_log!(
         info,
@@ -199,7 +199,7 @@ fn handle_stream(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &http::WebuiHttpSession,
-    sse_clients: &Arc<Mutex<Vec<std::net::TcpStream>>>,
+    sse_clients: &http::SharedSseClients,
     stream: &mut UnixStream,
 ) -> Result<()> {
     let mut reader = BufReader::new(
