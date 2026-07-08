@@ -1,0 +1,65 @@
+/*
+ * Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const webuiRoot = path.resolve(scriptDir, "..");
+const repoRoot = path.resolve(scriptDir, "../..");
+const outputFile = path.join(webuiRoot, "src/lib/constants_gen.ts");
+
+async function readCargoVersion() {
+  const cargoToml = await readFile(path.join(repoRoot, "Cargo.toml"), "utf8");
+  const version = cargoToml.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+  if (!version) {
+    throw new Error("failed to read package version from Cargo.toml");
+  }
+  return version;
+}
+
+function parseBooleanEnv(name, fallback) {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (!value) return fallback;
+  if (["1", "true", "yes", "on"].includes(value)) return true;
+  if (["0", "false", "no", "off"].includes(value)) return false;
+  throw new Error(`invalid boolean value for ${name}: ${process.env[name]}`);
+}
+
+function renderConstants({ version, isRelease, enableKasumi }) {
+  return `export const APP_VERSION = "${version}";
+export const IS_RELEASE = ${isRelease};
+export const ENABLE_KASUMI = ${enableKasumi};
+export const RUST_PATHS = {
+  CONFIG: "/data/adb/hybrid-mount/config.toml",
+  DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",
+  BINARY: "/data/adb/modules/hybrid_mount/hybrid-mount",
+} as const;
+`;
+}
+
+const version =
+  process.env.HYBRID_MOUNT_WEBUI_VERSION || (await readCargoVersion());
+const isRelease = parseBooleanEnv("HYBRID_MOUNT_WEBUI_RELEASE", false);
+const enableKasumi = parseBooleanEnv("HYBRID_MOUNT_WEBUI_ENABLE_KASUMI", true);
+await mkdir(path.dirname(outputFile), { recursive: true });
+await writeFile(
+  outputFile,
+  renderConstants({ version, isRelease, enableKasumi }),
+  "utf8",
+);
+console.log(`Generated ${path.relative(webuiRoot, outputFile)}.`);

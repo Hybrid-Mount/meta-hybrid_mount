@@ -48,6 +48,16 @@ require_cmd() {
 	fi
 }
 
+require_option_value() {
+	local option="$1"
+	local value="${2:-}"
+	if [[ -z "$value" || "$value" == -* ]]; then
+		echo "error: $option requires a value" >&2
+		usage
+		exit 1
+	fi
+}
+
 detect_ndk_home() {
 	local candidates=(
 		"${ANDROID_NDK_HOME:-}"
@@ -80,6 +90,7 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	-a | --arch)
+		require_option_value "$1" "${2:-}"
 		ARCH="$2"
 		shift 2
 		;;
@@ -96,6 +107,7 @@ while [[ $# -gt 0 ]]; do
 		shift
 		;;
 	--kasumi-lkm-dir)
+		require_option_value "$1" "${2:-}"
 		KASUMI_LKM_DIR="$2"
 		shift 2
 		;;

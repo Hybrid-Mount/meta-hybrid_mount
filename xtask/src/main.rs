@@ -218,16 +218,20 @@ fn main() -> Result<()> {
             notify_output_dir(&output, label, topic_id)?;
         }
         Commands::Lint => {
-            run_clippy()?;
+            run_lint()?;
         }
     }
     Ok(())
 }
 
-fn run_clippy() -> Result<()> {
+fn run_lint() -> Result<()> {
     let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-    let status = Command::new(cargo)
-        .args([
+    run_checked(
+        Command::new(&cargo).args(["fmt", "--all", "--", "--check"]),
+        "cargo fmt --all -- --check",
+    )?;
+    run_checked(
+        Command::new(&cargo).args([
             "clippy",
             "--workspace",
             "--all-targets",
@@ -235,12 +239,60 @@ fn run_clippy() -> Result<()> {
             "--",
             "-D",
             "warnings",
-        ])
-        .status()
-        .context("Failed to run cargo clippy")?;
+        ]),
+        "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+    )?;
+    run_checked(
+        Command::new(&cargo).args(["test", "--workspace", "--all-features"]),
+        "cargo test --workspace --all-features",
+    )?;
+    run_checked(
+        Command::new(&cargo).args([
+            "test",
+            "-p",
+            "hybrid-mount",
+            "--no-default-features",
+            "--features",
+            "control-plane",
+            "--lib",
+        ]),
+        "cargo test -p hybrid-mount --no-default-features --features control-plane --lib",
+    )?;
+    run_checked(
+        Command::new(&cargo).args([
+            "test",
+            "-p",
+            "hybrid-mount",
+            "--no-default-features",
+            "--lib",
+        ]),
+        "cargo test -p hybrid-mount --no-default-features --lib",
+    )?;
 
+    let pnpm = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
+    let webui_dir = Path::new("webui");
+    run_checked(
+        Command::new(pnpm)
+            .current_dir(webui_dir)
+            .args(["run", "lint"]),
+        "pnpm run lint",
+    )?;
+    run_checked(
+        Command::new(pnpm)
+            .current_dir(webui_dir)
+            .args(["run", "test"]),
+        "pnpm run test",
+    )?;
+
+    Ok(())
+}
+
+fn run_checked(command: &mut Command, label: &str) -> Result<()> {
+    let status = command
+        .status()
+        .with_context(|| format!("Failed to run {label}"))?;
     if !status.success() {
-        anyhow::bail!("Clippy found issues! Please fix them before committing.");
+        bail!("{label} failed");
     }
     Ok(())
 }
@@ -581,6 +633,12 @@ fn build_webui(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<(
     }
     let status = Command::new(pnpm)
         .current_dir(webui_dir)
+        .env("HYBRID_MOUNT_WEBUI_VERSION", version)
+        .env("HYBRID_MOUNT_WEBUI_RELEASE", is_release.to_string())
+        .env(
+            "HYBRID_MOUNT_WEBUI_ENABLE_KASUMI",
+            flavor.enable_kasumi().to_string(),
+        )
         .args(["run", "build"])
         .status()?;
     if !status.success() {

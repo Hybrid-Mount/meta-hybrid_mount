@@ -6,6 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const outputFile = path.join(rootDir, "src/lib/infoTabData.gen.ts");
+const preferExisting = process.argv.includes("--prefer-existing");
 
 const DETAIL_FETCH_LIMIT = 12;
 const REPOSITORIES = [
@@ -16,6 +17,14 @@ const REPOSITORIES = [
     label: "Hybrid Mount",
   },
 ];
+
+const FALLBACK_SECTIONS = REPOSITORIES.map((repo) => ({
+  id: repo.id,
+  label: repo.label,
+  repoDisplayName: `${repo.owner}/${repo.name}`,
+  repoUrl: `https://github.com/${repo.owner}/${repo.name}`,
+  contributors: [],
+}));
 
 const apiHeaders = {
   Accept: "application/vnd.github+json",
@@ -113,6 +122,11 @@ async function hasExistingOutput() {
 }
 
 async function main() {
+  if (preferExisting && (await hasExistingOutput())) {
+    console.log(`Using existing ${path.relative(rootDir, outputFile)}.`);
+    return;
+  }
+
   try {
     const sections = await Promise.all(
       REPOSITORIES.map((repo) => fetchRepositorySection(repo)),
@@ -132,7 +146,12 @@ async function main() {
       return;
     }
 
-    throw error;
+    console.warn(
+      "Failed to fetch InfoTab data, writing fallback generated file.",
+    );
+    console.warn(error instanceof Error ? error.message : String(error));
+    await mkdir(path.dirname(outputFile), { recursive: true });
+    await writeFile(outputFile, buildOutput(FALLBACK_SECTIONS), "utf8");
   }
 }
 

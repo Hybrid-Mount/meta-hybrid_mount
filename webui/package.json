@@ -5,17 +5,19 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
+    "generate:constants": "node ./scripts/generate-constants.mjs",
     "generate:daemon-protocol": "node ./scripts/generate-daemon-protocol.mjs",
     "generate:info-tab-data": "node ./scripts/generate-info-tab-data.mjs",
-    "prebuild": "pnpm generate:daemon-protocol && pnpm generate:info-tab-data",
-    "dev": "vite",
+    "generate": "pnpm generate:constants && pnpm generate:daemon-protocol && pnpm generate:info-tab-data",
+    "prebuild": "pnpm generate",
+    "dev": "pnpm generate:constants && pnpm generate:info-tab-data -- --prefer-existing && vite",
     "build": "vite build --emptyOutDir",
     "preview": "vite preview",
-    "lint": "pnpm generate:daemon-protocol -- --check && eslint . && tsc --noEmit",
+    "lint": "pnpm generate:constants && pnpm generate:info-tab-data -- --prefer-existing && pnpm generate:daemon-protocol -- --check && eslint . && tsc --noEmit",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "test": "vitest run --environment node",
-    "test:watch": "vitest --environment node"
+    "test": "pnpm generate:constants && pnpm generate:info-tab-data -- --prefer-existing && vitest run --environment node",
+    "test:watch": "pnpm generate:constants && pnpm generate:info-tab-data -- --prefer-existing && vitest --environment node"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
