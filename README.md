@@ -506,18 +506,17 @@ cargo run -p xtask -- build --release --skip-webui
 # WebUI dev server (hot reload)
 cd webui && pnpm install && pnpm dev
 
-# Lint everything
+# Full local verification (Rust fmt/clippy/tests + WebUI lint/test)
 cargo run -p xtask -- lint
-cd webui && pnpm lint
 
-# Run tests
+# Focused test runs
 cargo +nightly test
 cd webui && pnpm test
 ```
 
 ### Release profile
 
-The release profile uses `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `strip = true`, and `panic = "abort"` to reduce binary size.
+The release profile uses `opt-level = "z"`, `lto = "fat"`, `codegen-units = 1`, `strip = true`, and `panic = "abort"` to reduce binary size.
 
 ### CI gates and feature flag linting
 
@@ -526,10 +525,12 @@ Every change must pass the following CI checks (defined in `.github/workflows/`)
 - `cargo fmt --all -- --check`
 - `cargo clippy --all-targets -- -D warnings` (warnings are errors)
 - `cargo test --all-targets --workspace`
+- `cargo test -p hybrid-mount --no-default-features --features control-plane --lib`
+- `cargo test -p hybrid-mount --no-default-features --lib`
 - WebUI: `pnpm lint` + `pnpm test`
 - License header check on all source files
 
-`cargo clippy --all-features` (what `xtask lint` runs) only checks the `full` flavor. When making changes, also verify that the **lite** (`--no-default-features --features control-plane`) and **nano** (`--no-default-features`) flavor combinations compile. Code touching Kasumi must be behind `#[cfg(feature = "kasumi")]`; code touching the daemon/CLI/WebUI API must be behind `#[cfg(feature = "control-plane")]`.
+`xtask lint` mirrors the local CI gate: Rust fmt, all-feature clippy/tests, **lite** (`--no-default-features --features control-plane`) tests, **nano** (`--no-default-features`) tests, and WebUI lint/tests. Code touching Kasumi must be behind `#[cfg(feature = "kasumi")]`; code touching the daemon/CLI/WebUI API must be behind `#[cfg(feature = "control-plane")]`.
 
 ---
 

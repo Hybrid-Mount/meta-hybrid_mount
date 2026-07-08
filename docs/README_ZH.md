@@ -506,18 +506,17 @@ cargo run -p xtask -- build --release --skip-webui
 # WebUI 开发服务器（热重载）
 cd webui && pnpm install && pnpm dev
 
-# 代码检查
+# 完整本地验证（Rust fmt/clippy/tests + WebUI lint/test）
 cargo run -p xtask -- lint
-cd webui && pnpm lint
 
-# 运行测试
+# 单独运行测试
 cargo +nightly test
 cd webui && pnpm test
 ```
 
 ### Release 编译配置
 
-Release 使用 `opt-level = 3`、`lto = "fat"`、`codegen-units = 1`、`strip = true`、`panic = "abort"` 以减小二进制体积。
+Release 使用 `opt-level = "z"`、`lto = "fat"`、`codegen-units = 1`、`strip = true`、`panic = "abort"` 以减小二进制体积。
 
 ### CI 门禁与 feature flag 检查
 
@@ -526,10 +525,12 @@ Release 使用 `opt-level = 3`、`lto = "fat"`、`codegen-units = 1`、`strip = 
 - `cargo fmt --all -- --check`
 - `cargo clippy --all-targets -- -D warnings`（警告即错误）
 - `cargo test --all-targets --workspace`
+- `cargo test -p hybrid-mount --no-default-features --features control-plane --lib`
+- `cargo test -p hybrid-mount --no-default-features --lib`
 - WebUI: `pnpm lint` + `pnpm test`
 - 所有源文件的许可证头检查
 
-`cargo clippy --all-features`（即 `xtask lint` 运行的命令）仅检查 `full` 风味。修改代码时，也应确保 **lite**（`--no-default-features --features control-plane`）和 **nano**（`--no-default-features`）风味组合能通过编译。涉及 Kasumi 的代码必须放在 `#[cfg(feature = "kasumi")]` 之后；涉及 daemon/CLI/WebUI API 的代码必须放在 `#[cfg(feature = "control-plane")]` 之后。
+`xtask lint` 会执行接近本地 CI 门禁的检查：Rust fmt、全 feature clippy/tests、**lite**（`--no-default-features --features control-plane`）测试、**nano**（`--no-default-features`）测试，以及 WebUI lint/tests。涉及 Kasumi 的代码必须放在 `#[cfg(feature = "kasumi")]` 之后；涉及 daemon/CLI/WebUI API 的代码必须放在 `#[cfg(feature = "control-plane")]` 之后。
 
 ---
 

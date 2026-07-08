@@ -506,18 +506,17 @@ cargo run -p xtask -- build --release --skip-webui
 # WebUI開発サーバー（ホットリロード）
 cd webui && pnpm install && pnpm dev
 
-# リント
+# 完全なローカル検証（Rust fmt/clippy/tests + WebUI lint/test）
 cargo run -p xtask -- lint
-cd webui && pnpm lint
 
-# テスト実行
+# 個別テスト実行
 cargo +nightly test
 cd webui && pnpm test
 ```
 
 ### リリースプロファイル
 
-リリースプロファイルは、バイナリサイズを抑えるために `opt-level = 3`、`lto = "fat"`、`codegen-units = 1`、`strip = true`、`panic = "abort"` を使用します。
+リリースプロファイルは、バイナリサイズを抑えるために `opt-level = "z"`、`lto = "fat"`、`codegen-units = 1`、`strip = true`、`panic = "abort"` を使用します。
 
 ### CIゲートとフィーチャーフラグのリント
 
@@ -526,10 +525,12 @@ cd webui && pnpm test
 - `cargo fmt --all -- --check`
 - `cargo clippy --all-targets -- -D warnings`（警告はエラーとして扱われます）
 - `cargo test --all-targets --workspace`
+- `cargo test -p hybrid-mount --no-default-features --features control-plane --lib`
+- `cargo test -p hybrid-mount --no-default-features --lib`
 - WebUI: `pnpm lint` + `pnpm test`
 - 全ソースファイルのライセンスヘッダーチェック
 
-`cargo clippy --all-features`（`xtask lint` が実行する内容）は `full` フレーバーのみをチェックします。変更を加える際は、**lite**（`--no-default-features --features control-plane`）と **nano**（`--no-default-features`）のフレーバー組み合わせもコンパイルできることを確認してください。Kasumi に関するコードは `#[cfg(feature = "kasumi")]` の背後に、daemon/CLI/WebUI API に関するコードは `#[cfg(feature = "control-plane")]` の背後に配置する必要があります。
+`xtask lint` はローカル CI ゲートに近い検証を実行します: Rust fmt、全 feature clippy/tests、**lite**（`--no-default-features --features control-plane`）テスト、**nano**（`--no-default-features`）テスト、WebUI lint/tests。Kasumi に関するコードは `#[cfg(feature = "kasumi")]` の背後に、daemon/CLI/WebUI API に関するコードは `#[cfg(feature = "control-plane")]` の背後に配置する必要があります。
 
 ---
 

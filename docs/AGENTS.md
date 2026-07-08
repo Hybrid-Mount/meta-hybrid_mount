@@ -37,7 +37,7 @@ Consequences when editing Rust:
 - Code touching the daemon / CLI / WebUI API must be behind `#[cfg(feature = "control-plane")]`.
 - `main.rs` branches: with `control-plane` it parses CLI (`core::entry::run`); without it, it runs `core::startup::run_default()` (mount once and exit).
 - When you add a `#[cfg(feature = ...)]` block, make sure the **non-feature path still compiles** (provide the `#[cfg(not(...))]` counterpart where a value is needed — see `core/ops/executor/mod.rs` for the pattern).
-- `cargo clippy --all-features` (what `xtask lint` runs) won't catch a flavor that *removes* features. Mentally check the `nano` (no-default-features) build too.
+- `xtask lint` covers the all-features, lite, and nano Rust test combinations; when debugging locally, keep the non-feature path compiling as a first-class target.
 
 ## Architecture / mental model
 
@@ -75,9 +75,8 @@ cargo run -p xtask -- build --release --skip-webui    # binary only
 ./scripts/build-local.sh --lite     # lite
 ./scripts/build-local.sh --nano     # nano
 
-# Lint (this is also a build gate)
-cargo run -p xtask -- lint          # = cargo clippy --workspace --all-targets --all-features -- -D warnings
-cd webui && pnpm lint
+# Full local verification (Rust fmt/clippy/tests + WebUI lint/test)
+cargo run -p xtask -- lint
 
 # Tests
 cargo +nightly test --all-targets --workspace
@@ -91,6 +90,8 @@ cd webui && pnpm install && pnpm dev
 - `cargo fmt --all -- --check`
 - `cargo clippy --all-targets -- -D warnings` (warnings are errors)
 - `cargo test --all-targets --workspace`
+- `cargo test -p hybrid-mount --no-default-features --features control-plane --lib`
+- `cargo test -p hybrid-mount --no-default-features --lib`
 - WebUI: `pnpm lint` + `pnpm test`
 - **License header check** on source files.
 
