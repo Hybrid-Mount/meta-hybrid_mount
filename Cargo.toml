@@ -51,8 +51,8 @@ env_logger = { version = "0.11.10", default-features = false }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 procfs = "0.18"
-ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.2.0" }
-loopdev = { git = "https://github.com/Hybrid-Mount/loopdev.git", version = "0.5.0" }
+ksu = { git = "https://github.com/Tools-cx-app/ksu.git", rev = "0fcde904475466eb6433cca59727bac886b59e60", version = "0.2.0" }
+loopdev = { git = "https://github.com/Hybrid-Mount/loopdev.git", rev = "cc19868eabc46d5900c7c3fe5410856449d60cb6", version = "0.5.0" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
