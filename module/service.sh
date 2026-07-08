@@ -5,7 +5,7 @@
 
 CONFIG_FILE="/data/adb/hybrid-mount/config.toml"
 if [ -f "$CONFIG_FILE" ]; then
-  MODE=$(grep -E '^\s*daemon_startup_mode\s*=' "$CONFIG_FILE" | sed 's/.*=\s*"\(.*\)".*/\1/')
+  MODE=$(grep -E '^[[:space:]]*daemon_startup_mode[[:space:]]*=' "$CONFIG_FILE" | sed 's/.*=[[:space:]]*"\(.*\)".*/\1/')
   if [ "$MODE" = "persistent" ]; then
     /data/adb/modules/hybrid_mount/hybrid-mount daemon serve &
   fi

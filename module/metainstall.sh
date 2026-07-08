@@ -5,7 +5,7 @@
 export KSU_HAS_METAMODULE="true"
 export KSU_METAMODULE="hybrid-mount"
 BASE_DIR="/data/adb/hybrid-mount"
-MANAGED_PARTITIONS="odm product system_ext vendor apex mi_ext my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_reserve my_stock oem optics prism"
+MANAGED_PARTITIONS="system odm product system_ext vendor apex mi_ext my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_reserve my_stock oem optics prism"
 MODE_MARKERS="overlay magic"
 SELF_MOUNTING_MODULE_BLOCKLIST="scene_swap_controller AAaTempSpoof"
 NANO_MODE=false
@@ -28,7 +28,7 @@ read_default_mount_mode() {
   local default_mode="magic"
   if [ -f "$BASE_DIR/config.toml" ]; then
     local config_default_mode
-    config_default_mode=$(grep -E '^[[:space:]]*default_mode[[:space:]]*=' "$BASE_DIR/config.toml" | head -n 1 | sed 's/.*=\s*"\([^"]*\)".*/\1/')
+    config_default_mode=$(grep -E '^[[:space:]]*default_mode[[:space:]]*=' "$BASE_DIR/config.toml" | head -n 1 | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')
     case "$config_default_mode" in
     overlay | magic)
       default_mode="$config_default_mode"
