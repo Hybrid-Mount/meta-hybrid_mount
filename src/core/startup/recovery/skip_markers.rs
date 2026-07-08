@@ -54,7 +54,13 @@ pub(super) fn list_module_dirs(base: &Path) -> Result<HashMap<String, PathBuf>> 
         return Ok(modules);
     }
 
-    for entry in std::fs::read_dir(base)?.flatten() {
+    for entry in std::fs::read_dir(base)? {
+        let entry = entry.with_context(|| {
+            format!(
+                "Failed to read module directory entry in {}",
+                base.display()
+            )
+        })?;
         let path = entry.path();
         if !path.is_dir() {
             continue;

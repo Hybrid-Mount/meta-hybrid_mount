@@ -136,7 +136,20 @@ fn scan_module_info(module_path: &Path, module_id: &str) -> CachedModuleScanInfo
     let mut shell_paths = Vec::new();
 
     if let Ok(entries) = fs::read_dir(module_path) {
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    crate::scoped_log!(
+                        warn,
+                        "api:modules:scan",
+                        "skip unreadable module entry: path={}, error={:#}",
+                        module_path.display(),
+                        err
+                    );
+                    continue;
+                }
+            };
             let file_name = entry.file_name();
             if os_str_eq_ignore_ascii_case(&file_name, defs::MOUNT_ERROR_FILE_NAME) {
                 markers.blocked = true;

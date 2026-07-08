@@ -170,9 +170,32 @@ fn collect_mount_error_marker_modules(moduledir: &Path) -> Vec<String> {
     };
 
     let mut ids = Vec::new();
-    for entry in entries.flatten() {
-        let Ok(file_type) = entry.file_type() else {
-            continue;
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                crate::scoped_log!(
+                    warn,
+                    "api:modules",
+                    "skip unreadable module entry: path={}, error={:#}",
+                    moduledir.display(),
+                    err
+                );
+                continue;
+            }
+        };
+        let file_type = match entry.file_type() {
+            Ok(file_type) => file_type,
+            Err(err) => {
+                crate::scoped_log!(
+                    warn,
+                    "api:modules",
+                    "skip module with unreadable type: path={}, error={:#}",
+                    entry.path().display(),
+                    err
+                );
+                continue;
+            }
         };
         if !file_type.is_dir() {
             continue;

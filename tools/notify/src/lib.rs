@@ -176,16 +176,19 @@ impl NotificationContext<'_> {
         artifacts: &[Artifact],
         caption: &str,
     ) -> Result<Vec<MediaGroupItem>> {
+        let Some((last_artifact, leading_artifacts)) = artifacts.split_last() else {
+            bail!("cannot build Telegram media group without artifacts");
+        };
         let mut items = Vec::with_capacity(artifacts.len());
 
-        for artifact in &artifacts[..artifacts.len() - 1] {
+        for artifact in leading_artifacts {
             let file = InputFile::path(artifact.path.clone()).await?;
             let info = InputMediaDocument::default().with_disable_content_type_detection(true);
             items.push(MediaGroupItem::for_document(file, info));
         }
 
         items.push(MediaGroupItem::for_document(
-            InputFile::path(artifacts.last().unwrap().path.clone()).await?,
+            InputFile::path(last_artifact.path.clone()).await?,
             InputMediaDocument::default()
                 .with_disable_content_type_detection(true)
                 .with_caption_parse_mode(ParseMode::Html)
@@ -227,7 +230,9 @@ fn find_zip_files(output_dir: &Path) -> Result<Vec<Artifact>> {
         .with_context(|| format!("failed to read output directory {}", output_dir.display()))?;
     let mut artifacts = Vec::new();
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry =
+            entry.with_context(|| format!("failed to read entry in {}", output_dir.display()))?;
         let path = entry.path();
         if is_zip_path(&path) {
             let file_name = path

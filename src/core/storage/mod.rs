@@ -106,15 +106,27 @@ pub fn setup_with_sources(
 
 fn reset_image_files(img_path: &Path) -> Result<()> {
     let pattern = format!("{}*", img_path.display());
-    for path in glob::glob(&pattern)?.flatten() {
-        if let Err(e) = fs::remove_file(&path) {
-            crate::scoped_log!(
-                warn,
-                "storage",
-                "failed to remove stale image file {}: {:#}",
-                path.display(),
-                e
-            );
+    for path in glob::glob(&pattern)? {
+        match path {
+            Ok(path) => {
+                if let Err(e) = fs::remove_file(&path) {
+                    crate::scoped_log!(
+                        warn,
+                        "storage",
+                        "failed to remove stale image file {}: {:#}",
+                        path.display(),
+                        e
+                    );
+                }
+            }
+            Err(err) => {
+                crate::scoped_log!(
+                    warn,
+                    "storage",
+                    "failed to read stale image path: {:#}",
+                    err
+                );
+            }
         }
     }
     Ok(())

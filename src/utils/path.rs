@@ -50,7 +50,17 @@ pub fn path_file_name_eq_ignore_ascii_case(path: &Path, expected: &str) -> bool 
 
 pub fn find_dir_entry_case_insensitive(dir: &Path, expected: &str) -> Option<PathBuf> {
     let entries = fs::read_dir(dir).ok()?;
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                log::warn!(
+                    "[utils:path] skip unreadable directory entry: dir={}, error={err:#}",
+                    dir.display()
+                );
+                continue;
+            }
+        };
         if os_str_eq_ignore_ascii_case(&entry.file_name(), expected) {
             return Some(entry.path());
         }

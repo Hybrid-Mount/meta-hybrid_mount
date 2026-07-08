@@ -477,7 +477,20 @@ fn collect_skip_mount_modules(config: &Config) -> Vec<String> {
         return modules;
     };
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                crate::scoped_log!(
+                    warn,
+                    "runtime_state:skip_modules",
+                    "skip unreadable moduledir entry: path={}, error={:#}",
+                    config.moduledir.display(),
+                    err
+                );
+                continue;
+            }
+        };
         let module_dir = entry.path();
         if !module_dir.is_dir() {
             continue;

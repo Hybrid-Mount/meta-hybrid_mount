@@ -430,7 +430,9 @@ impl MagicMount {
 
 impl MagicMount {
     fn mount_path(&mut self, has_tmpfs: bool, context: &mut MountContext) -> Result<()> {
-        for entry in self.path.read_dir()?.flatten() {
+        for entry in self.path.read_dir()? {
+            let entry = entry
+                .with_context(|| format!("read magic mount entry in {}", self.path.display()))?;
             let name = entry.file_name().to_string_lossy().into_owned();
             let mut failed_module_ids: Option<Vec<String>> = None;
             let result = {

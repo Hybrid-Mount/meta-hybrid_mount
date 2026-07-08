@@ -98,8 +98,19 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
         } else if file_type.is_dir() {
             match current.read_dir() {
                 Ok(entries) => {
-                    for entry in entries.flatten() {
-                        stack.push(entry.path());
+                    for entry in entries {
+                        match entry {
+                            Ok(entry) => stack.push(entry.path()),
+                            Err(err) => {
+                                crate::scoped_log!(
+                                    warn,
+                                    "storage:ext4",
+                                    "skip unreadable dir entry: path={}, error={:#}",
+                                    current.display(),
+                                    err
+                                );
+                            }
+                        }
                     }
                 }
                 Err(_) => {
