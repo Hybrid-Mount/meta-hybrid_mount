@@ -6,6 +6,7 @@ use std::{
     fs,
     io::{self, BufRead, BufReader},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use anyhow::Result;
@@ -20,6 +21,7 @@ pub struct Module {
 }
 
 pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
+    let started = Instant::now();
     if !source_dir.exists() {
         return Ok(Vec::new());
     }
@@ -30,8 +32,11 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
     let mut skipped_blacklisted = 0usize;
     let mut skipped_invalid = 0usize;
     let mut skipped_missing_prop = 0usize;
+    let mut root_entries_scanned = 0usize;
+    let mut marker_directory_scans = 0usize;
 
     for entry in fs::read_dir(source_dir)? {
+        root_entries_scanned += 1;
         let entry = entry?;
         let file_type = entry.file_type()?;
         if !file_type.is_dir() {
@@ -86,6 +91,10 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
             continue;
         }
 
+        // mount_block_markers currently enumerates the module directory once
+        // per known marker. Keep this visible until inventory snapshotting
+        // consolidates those reads into a single pass.
+        marker_directory_scans += 4;
         let block_markers = inventory::mount_block_markers(&path);
         if !block_markers.is_empty() {
             skipped_blocked += 1;
@@ -109,7 +118,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
     crate::scoped_log!(
         info,
         "scanner",
-        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, skipped_invalid={}, skipped_missing_prop={}",
+        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, skipped_invalid={}, skipped_missing_prop={}, root_entries_scanned={}, marker_directory_scans={}, elapsed_ms={}",
         modules.len()
             + skipped_reserved
             + skipped_blocked
@@ -121,7 +130,10 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         skipped_blocked,
         skipped_blacklisted,
         skipped_invalid,
-        skipped_missing_prop
+        skipped_missing_prop,
+        root_entries_scanned,
+        marker_directory_scans,
+        started.elapsed().as_millis()
     );
 
     modules.sort_by(|a, b| a.id.cmp(&b.id));

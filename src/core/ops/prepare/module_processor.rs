@@ -31,6 +31,7 @@ pub(super) fn prepare_module(
     }
 
     ensure_dir_like(&module.source_path, tmp_dst)?;
+    context.metrics.directories_scanned += 1;
 
     let mut outcome = ModulePrepareOutcome::default();
     let mut queue = VecDeque::new();
@@ -40,6 +41,7 @@ pub(super) fn prepare_module(
     for entry_result in fs::read_dir(&module.source_path)
         .with_context(|| format!("failed to read {}", module.source_path.display()))?
     {
+        context.metrics.entries_scanned += 1;
         let entry = entry_result
             .with_context(|| format!("failed to enumerate {}", module.source_path.display()))?;
         let file_name = entry.file_name();
@@ -82,7 +84,8 @@ pub(super) fn prepare_module(
             if top_level_partition {
                 outcome.has_mount_content = true;
             }
-            copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
+            let copied_bytes = copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
+            context.record_copy(copied_bytes);
         }
     }
 

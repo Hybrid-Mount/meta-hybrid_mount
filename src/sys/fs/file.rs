@@ -296,25 +296,27 @@ pub fn copy_non_dir_entry(
     dst: &Path,
     metadata: &fs::Metadata,
     file_type: &fs::FileType,
-) -> Result<()> {
+) -> Result<u64> {
     remove_path(dst)?;
     if file_type.is_symlink() {
         let link_target = fs::read_link(src)?;
         symlink(&link_target, dst)?;
         clone_ownership_from_metadata(src, dst, metadata);
         clone_selinux_context(src, dst);
+        Ok(0)
     } else if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
         let mode = metadata.permissions().mode();
         let rdev = metadata.rdev();
         make_device_node(dst, mode, rdev)?;
         clone_ownership_from_metadata(src, dst, metadata);
         clone_selinux_context(src, dst);
+        Ok(0)
     } else {
-        reflink_or_copy(src, dst)?;
+        let copied_bytes = reflink_or_copy(src, dst)?;
         clone_ownership_from_metadata(src, dst, metadata);
         clone_selinux_context(src, dst);
+        Ok(copied_bytes)
     }
-    Ok(())
 }
 
 pub fn finalize_copied_tree(id: &str, root: &Path, opaque_dirs: &[PathBuf]) {
@@ -505,7 +507,7 @@ fn native_cp_r(
                 stats,
             )?;
         } else {
-            copy_non_dir_entry(&src_path, &dst_path, &metadata, &ft)?;
+            let _ = copy_non_dir_entry(&src_path, &dst_path, &metadata, &ft)?;
         }
     }
     Ok(())

@@ -7,7 +7,10 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{core::backend_capabilities::BackendCapabilities, domain::MountMode};
+use crate::{
+    core::{backend_capabilities::BackendCapabilities, ops::plan::PrepareMetrics},
+    domain::MountMode,
+};
 
 pub(super) const SHALLOW_OVERLAY_DIR: &str = ".hybrid_overlay";
 
@@ -60,6 +63,7 @@ pub(super) struct PrepareContext {
     pub(super) use_kasumi: bool,
     pub(super) managed_partitions: HashSet<String>,
     pub(super) target_cache: HashMap<PathBuf, PathBuf>,
+    pub(super) metrics: PrepareMetrics,
 }
 
 impl PrepareContext {
@@ -71,6 +75,12 @@ impl PrepareContext {
             use_kasumi: capabilities.can_use_kasumi(),
             managed_partitions,
             target_cache: HashMap::new(),
+            metrics: PrepareMetrics::default(),
         }
+    }
+
+    pub(super) fn record_copy(&mut self, bytes: u64) {
+        self.metrics.copied_entries += 1;
+        self.metrics.copied_bytes = self.metrics.copied_bytes.saturating_add(bytes);
     }
 }

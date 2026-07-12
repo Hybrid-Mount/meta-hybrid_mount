@@ -6,6 +6,7 @@ use std::{
     fs,
     io::ErrorKind,
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use anyhow::Result;
@@ -71,6 +72,7 @@ impl MountController<Init> {
     }
 
     pub fn init_storage(self, mnt_base: &Path) -> Result<MountController<StorageReady>> {
+        let started = Instant::now();
         crate::scoped_log!(
             info,
             "controller:init_storage",
@@ -95,9 +97,10 @@ impl MountController<Init> {
         crate::scoped_log!(
             info,
             "controller:init_storage",
-            "complete: mode={}, mount_point={}",
+            "complete: mode={}, mount_point={}, elapsed_ms={}",
             handle.mode().as_str(),
-            handle.mount_point().display()
+            handle.mount_point().display(),
+            started.elapsed().as_millis()
         );
 
         Ok(MountController {
@@ -111,6 +114,7 @@ impl MountController<Init> {
 
 impl MountController<StorageReady> {
     pub fn scan_and_prepare_plan(self) -> Result<MountController<Planned>> {
+        let scan_started = Instant::now();
         crate::scoped_log!(
             info,
             "controller:scan_and_prepare_plan",
@@ -118,26 +122,30 @@ impl MountController<StorageReady> {
             self.config.moduledir.display()
         );
         let modules = inventory::scan(&self.config.moduledir, &self.config)?;
+        let scan_elapsed_ms = scan_started.elapsed().as_millis();
 
         crate::scoped_log!(
             info,
             "controller:scan_and_prepare_plan",
-            "scan complete: modules={}",
-            modules.len()
+            "scan complete: modules={}, elapsed_ms={}",
+            modules.len(),
+            scan_elapsed_ms
         );
 
         crate::scoped_log!(info, "controller:scan_and_prepare_plan", "prepare start");
+        let prepare_started = Instant::now();
         let plan = prepare::prepare_mount_plan(
             &self.config,
             &modules,
             self.state.handle.mount_point(),
             &self.backend_capabilities,
         )?;
+        let prepare_elapsed_ms = prepare_started.elapsed().as_millis();
 
         crate::scoped_log!(
             info,
             "controller:scan_and_prepare_plan",
-            "prepare complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
+            "prepare complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, elapsed_ms={}, copied_entries={}, copied_bytes={}, kasumi_rule_compile=deferred",
             plan.overlay_ops.len(),
             plan.overlay_module_ids.len(),
             plan.magic_module_ids.len(),
@@ -150,7 +158,10 @@ impl MountController<StorageReady> {
                 {
                     0usize
                 }
-            }
+            },
+            prepare_elapsed_ms,
+            plan.prepare_metrics.copied_entries,
+            plan.prepare_metrics.copied_bytes,
         );
 
         #[cfg(feature = "kasumi")]
@@ -186,6 +197,7 @@ impl MountController<StorageReady> {
 
 impl MountController<Planned> {
     pub fn execute(mut self) -> Result<MountController<Executed>> {
+        let started = Instant::now();
         crate::scoped_log!(info, "controller:execute", "start");
         let result = executor::Executor::execute(
             &mut self.state.plan,
@@ -197,10 +209,11 @@ impl MountController<Planned> {
         crate::scoped_log!(
             info,
             "controller:execute",
-            "complete: overlay_mounted={}, magic_mounted={}, kasumi_mounted={}",
+            "complete: overlay_mounted={}, magic_mounted={}, kasumi_mounted={}, elapsed_ms={}",
             result.overlay_module_ids.len(),
             result.magic_module_ids.len(),
-            result.kasumi_count()
+            result.kasumi_count(),
+            started.elapsed().as_millis()
         );
 
         Ok(MountController {
@@ -217,6 +230,7 @@ impl MountController<Planned> {
 
 impl MountController<Executed> {
     pub fn finalize(self) -> Result<()> {
+        let started = Instant::now();
         crate::scoped_log!(info, "controller:finalize", "start");
         runtime_finalization::finalize(
             &self.config,
@@ -232,7 +246,12 @@ impl MountController<Executed> {
             self.config.disable_umount,
         )?;
 
-        crate::scoped_log!(info, "controller:finalize", "complete");
+        crate::scoped_log!(
+            info,
+            "controller:finalize",
+            "complete: elapsed_ms={}",
+            started.elapsed().as_millis()
+        );
 
         Ok(())
     }

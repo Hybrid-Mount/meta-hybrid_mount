@@ -4,6 +4,15 @@
 
 use std::path::PathBuf;
 
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PrepareMetrics {
+    pub elapsed_ms: u64,
+    pub directories_scanned: usize,
+    pub entries_scanned: usize,
+    pub copied_entries: usize,
+    pub copied_bytes: u64,
+}
+
 #[derive(Debug, Clone)]
 pub struct OverlayOperation {
     pub partition_name: String,
@@ -28,6 +37,7 @@ pub struct KasumiMergeRule {
 
 #[derive(Debug, Default)]
 pub struct MountPlan {
+    pub prepare_metrics: PrepareMetrics,
     pub overlay_ops: Vec<OverlayOperation>,
     #[cfg(feature = "kasumi")]
     pub kasumi_add_rules: Vec<KasumiAddRule>,

@@ -6,6 +6,7 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use anyhow::{Context, Result};
@@ -50,6 +51,7 @@ pub(crate) fn prepare_mount_plan_with_root(
     capabilities: &BackendCapabilities,
     managed_partitions: Vec<String>,
 ) -> Result<MountPlan> {
+    let prepare_started = Instant::now();
     crate::scoped_log!(
         info,
         "prepare",
@@ -209,7 +211,10 @@ pub(crate) fn prepare_mount_plan_with_root(
         });
     }
 
+    context.metrics.elapsed_ms =
+        u64::try_from(prepare_started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let plan = MountPlan {
+        prepare_metrics: context.metrics,
         overlay_ops,
         #[cfg(feature = "kasumi")]
         kasumi_add_rules: Vec::new(),
@@ -226,7 +231,7 @@ pub(crate) fn prepare_mount_plan_with_root(
     crate::scoped_log!(
         info,
         "prepare",
-        "complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
+        "complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, elapsed_ms={}, directories_scanned={}, entries_scanned={}, copied_entries={}, copied_bytes={}, kasumi_rule_compile=deferred",
         plan.overlay_ops.len(),
         plan.overlay_module_ids.len(),
         plan.magic_module_ids.len(),
@@ -239,7 +244,12 @@ pub(crate) fn prepare_mount_plan_with_root(
             {
                 0usize
             }
-        }
+        },
+        plan.prepare_metrics.elapsed_ms,
+        plan.prepare_metrics.directories_scanned,
+        plan.prepare_metrics.entries_scanned,
+        plan.prepare_metrics.copied_entries,
+        plan.prepare_metrics.copied_bytes,
     );
 
     Ok(plan)

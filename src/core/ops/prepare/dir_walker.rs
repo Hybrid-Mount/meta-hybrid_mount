@@ -61,6 +61,7 @@ impl PrepareContext {
         if !visited_dirs.insert((metadata.dev(), metadata.ino())) {
             return Ok(());
         }
+        self.metrics.directories_scanned += 1;
 
         ensure_dir_like(&item.source_dir, &item.copy_dir)?;
         let relative_key = item.relative_path.to_string_lossy();
@@ -105,6 +106,7 @@ impl PrepareContext {
         for entry_result in fs::read_dir(&item.source_dir)
             .with_context(|| format!("failed to read {}", item.source_dir.display()))?
         {
+            self.metrics.entries_scanned += 1;
             let entry = entry_result
                 .with_context(|| format!("failed to enumerate {}", item.source_dir.display()))?;
             let file_name = entry.file_name();
@@ -153,10 +155,18 @@ impl PrepareContext {
                 if item.count_mount_content {
                     outcome.has_mount_content = true;
                 }
-                copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
+                let copied_bytes =
+                    copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
+                self.record_copy(copied_bytes);
                 if needs_shallow_overlay {
                     ensure_dir_like(&item.source_dir, &item.shallow_copy_dir)?;
-                    copy_non_dir_entry(&source_path, &shallow_copy_path, &metadata, &file_type)?;
+                    let copied_bytes = copy_non_dir_entry(
+                        &source_path,
+                        &shallow_copy_path,
+                        &metadata,
+                        &file_type,
+                    )?;
+                    self.record_copy(copied_bytes);
                 }
             }
         }
