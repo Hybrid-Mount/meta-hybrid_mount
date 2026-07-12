@@ -7,6 +7,7 @@ use std::{
     fs,
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
+    os::fd::AsRawFd,
     path::PathBuf,
     sync::{
         Arc, Mutex,
@@ -105,6 +106,7 @@ pub(super) const MAX_WEBUI_HTTP_HEADER_LINE_BYTES: usize = 8 * 1024;
 pub(super) const MAX_WEBUI_HTTP_HEADER_BYTES: usize = 64 * 1024;
 pub(super) const MAX_WEBUI_HTTP_HEADERS: usize = 64;
 const SSE_SCHEMA_VERSION: u32 = 1;
+const SSE_WRITE_TIMEOUT: Duration = Duration::from_millis(250);
 static SSE_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -644,6 +646,9 @@ fn handle_sse_endpoint(
     let sse_stream = stream
         .try_clone()
         .context("Failed to clone stream for SSE broadcast")?;
+    sse_stream
+        .set_write_timeout(Some(SSE_WRITE_TIMEOUT))
+        .context("Failed to set SSE write timeout")?;
     let client_id = sse_clients.insert(sse_stream);
     crate::scoped_log!(debug, "daemon:sse", "client registered: id={}", client_id.0);
 
@@ -713,14 +718,27 @@ pub(super) fn broadcast_sse_event(
     };
 
     for (id, mut client) in sse_clients.snapshot() {
-        if client
-            .write_all(body.as_bytes())
-            .and_then(|_| client.flush())
-            .is_err()
+        if !stream_is_writable(&client)
+            || client
+                .write_all(body.as_bytes())
+                .and_then(|_| client.flush())
+                .is_err()
         {
             sse_clients.remove(id);
         }
     }
+}
+
+fn stream_is_writable(stream: &TcpStream) -> bool {
+    let mut fd = libc::pollfd {
+        fd: stream.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    let ready = unsafe { libc::poll(&mut fd, 1, 0) };
+    ready > 0
+        && fd.revents & libc::POLLOUT != 0
+        && fd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0
 }
 
 #[cfg(test)]

@@ -17,6 +17,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use anyhow::{Context, Result, bail};
@@ -31,6 +32,9 @@ use crate::{core::runtime_state::RuntimeState, defs, sys::fs::atomic_write};
 
 mod commands;
 mod http;
+
+const MAX_DAEMON_REQUEST_BYTES: usize = 1024 * 1024;
+const DAEMON_STREAM_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn serve(config: crate::conf::config::Config) -> Result<()> {
     if config.daemon_startup_mode == crate::conf::schema::DaemonStartupMode::Persistent {
@@ -202,21 +206,26 @@ fn handle_stream(
     sse_clients: &http::SharedSseClients,
     stream: &mut UnixStream,
 ) -> Result<()> {
+    stream
+        .set_read_timeout(Some(DAEMON_STREAM_TIMEOUT))
+        .context("Failed to set daemon request read timeout")?;
+    stream
+        .set_write_timeout(Some(DAEMON_STREAM_TIMEOUT))
+        .context("Failed to set daemon response write timeout")?;
     let mut reader = BufReader::new(
         stream
             .try_clone()
             .context("Failed to clone daemon stream")?,
     );
-    let mut line = String::new();
-    let bytes = reader
-        .read_line(&mut line)
-        .context("Failed to read daemon request")?;
-    if bytes == 0 {
+    let Some(mut line) = read_limited_request_line(&mut reader)? else {
         bail!("daemon request was empty");
+    };
+    while matches!(line.last(), Some(b'\r' | b'\n')) {
+        line.pop();
     }
 
     let request: DaemonRequest =
-        serde_json::from_str(line.trim_end()).context("Failed to parse daemon request")?;
+        serde_json::from_slice(&line).context("Failed to parse daemon request")?;
     let config_path = request
         .config_path
         .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
@@ -232,6 +241,35 @@ fn handle_stream(
     );
     let payload = commands::dispatch_command(&ctx, request.command)?;
     write_response(stream, &DaemonResponse::success(payload))
+}
+
+fn read_limited_request_line<R: BufRead>(reader: &mut R) -> Result<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+    loop {
+        let available = reader.fill_buf().context("Failed to read daemon request")?;
+        if available.is_empty() {
+            return if line.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(line))
+            };
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let take_len = newline.map_or(available.len(), |index| index + 1);
+        if line.len() + take_len > MAX_DAEMON_REQUEST_BYTES {
+            bail!(
+                "daemon request exceeds maximum size of {} bytes",
+                MAX_DAEMON_REQUEST_BYTES
+            );
+        }
+
+        line.extend_from_slice(&available[..take_len]);
+        reader.consume(take_len);
+        if newline.is_some() {
+            return Ok(Some(line));
+        }
+    }
 }
 
 fn write_response(stream: &mut UnixStream, response: &DaemonResponse) -> Result<()> {
@@ -353,5 +391,24 @@ impl Drop for DaemonRuntimeGuard {
         }
         let _ = fs::remove_file(defs::PID_FILE);
         let _ = fs::remove_file(defs::SOCKET_FILE);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn limited_daemon_request_reader_accepts_one_line() {
+        let mut reader = std::io::BufReader::new(std::io::Cursor::new(b"{\"type\":\"ping\"}\n"));
+        let line = read_limited_request_line(&mut reader).unwrap().unwrap();
+        assert_eq!(line, b"{\"type\":\"ping\"}\n");
+    }
+
+    #[test]
+    fn limited_daemon_request_reader_rejects_oversized_input() {
+        let input = vec![b'x'; MAX_DAEMON_REQUEST_BYTES + 1];
+        let mut reader = std::io::BufReader::new(std::io::Cursor::new(input));
+        assert!(read_limited_request_line(&mut reader).is_err());
     }
 }

@@ -174,3 +174,41 @@ fn apply_modules_payload_rules_only_preserves_disable_marker() {
     assert_eq!(saved.rules["alpha"].default_mode, MountMode::Magic);
     assert!(module_dir.join(defs::DISABLE_FILE_NAME).exists());
 }
+
+#[test]
+fn apply_modules_payload_validates_entire_batch_before_side_effects() {
+    let temp = tempfile::tempdir().unwrap();
+    let config_path = temp.path().join("config.toml");
+    let modules_dir = temp.path().join("modules");
+    let first_dir = modules_dir.join("first");
+    fs::create_dir_all(&first_dir).unwrap();
+
+    let config = Config {
+        moduledir: modules_dir.clone(),
+        ..Default::default()
+    };
+    config.save_to_file(&config_path).unwrap();
+
+    let result = apply_modules_payload(
+        &config_path,
+        &[
+            ModuleApplyEntry {
+                id: "first".to_string(),
+                enabled: Some(false),
+                source_path: Some(first_dir.clone()),
+                rules: ModuleRules::default(),
+            },
+            ModuleApplyEntry {
+                id: "missing".to_string(),
+                enabled: Some(false),
+                source_path: Some(modules_dir.join("missing")),
+                rules: ModuleRules::default(),
+            },
+        ],
+    );
+
+    assert!(result.is_err());
+    assert!(!first_dir.join(defs::DISABLE_FILE_NAME).exists());
+    let saved = Config::load_optional_from_file(&config_path).unwrap();
+    assert!(saved.rules.is_empty());
+}

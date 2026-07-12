@@ -61,13 +61,19 @@ struct CachedRuntimeConfig {
 
 pub(super) struct RuntimeConfigCache {
     entries: Mutex<HashMap<PathBuf, CachedRuntimeConfig>>,
+    write_lock: Mutex<()>,
 }
 
 impl RuntimeConfigCache {
     pub(super) fn new() -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            write_lock: Mutex::new(()),
         }
+    }
+
+    fn lock_writes(&self) -> std::sync::MutexGuard<'_, ()> {
+        lock_or_recover(&self.write_lock)
     }
 
     pub(super) fn load(&self, config_path: &Path) -> Result<Arc<Config>> {
@@ -214,6 +220,11 @@ fn cached_status_and_snapshot(state: &Arc<Mutex<RuntimeState>>) -> Result<(Value
 // ── Top-level dispatch ──────────────────────────────────────────────────
 
 pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand) -> Result<Value> {
+    let _write_guard = command_writes_config(&command).then(|| ctx.config_cache.lock_writes());
+    dispatch_command_unlocked(ctx, command)
+}
+
+fn dispatch_command_unlocked(ctx: &CommandContext<'_>, command: DaemonCommand) -> Result<Value> {
     match command {
         DaemonCommand::System(cmd) => dispatch_system(ctx, cmd),
         DaemonCommand::Config(cmd) => dispatch_config(ctx, cmd),
@@ -221,6 +232,21 @@ pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand)
         #[cfg(feature = "kasumi")]
         DaemonCommand::Kasumi(cmd) => dispatch_kasumi(ctx, cmd),
         DaemonCommand::Batch(BatchCommand::Batch { commands }) => dispatch_batch(ctx, commands),
+    }
+}
+
+fn command_writes_config(command: &DaemonCommand) -> bool {
+    match command {
+        DaemonCommand::Config(ConfigCommand::Get) => false,
+        DaemonCommand::Config(_) | DaemonCommand::Modules(ModulesCommand::Apply { .. }) => true,
+        DaemonCommand::Modules(ModulesCommand::List { .. }) | DaemonCommand::System(_) => false,
+        #[cfg(feature = "kasumi")]
+        DaemonCommand::Kasumi(KasumiCommand::MapsAdd { .. } | KasumiCommand::MapsClear) => true,
+        #[cfg(feature = "kasumi")]
+        DaemonCommand::Kasumi(_) => false,
+        DaemonCommand::Batch(BatchCommand::Batch { commands }) => {
+            commands.iter().any(command_writes_config)
+        }
     }
 }
 
@@ -609,24 +635,30 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
 
 fn dispatch_batch(ctx: &CommandContext<'_>, commands: Vec<DaemonCommand>) -> Result<Value> {
     let noop_clients = http::SseClientRegistry::shared();
-    let batch_ctx = CommandContext::new(
-        ctx.config,
-        ctx.config_path,
-        ctx.config_cache,
-        ctx.state,
-        ctx.shutdown,
-        ctx.webui,
-        &noop_clients,
-    );
     let mut results: Vec<Value> = Vec::with_capacity(commands.len());
     for cmd in commands {
-        let result = match dispatch_command(&batch_ctx, cmd) {
+        // Reload between commands so a read following a write in the same
+        // batch observes the configuration that was just persisted.
+        let effective_config = load_runtime_config(ctx.config_cache, ctx.config_path)?;
+        let batch_ctx = CommandContext::new(
+            &effective_config,
+            ctx.config_path,
+            ctx.config_cache,
+            ctx.state,
+            ctx.shutdown,
+            ctx.webui,
+            &noop_clients,
+        );
+        // The outer batch holds the config write lock when any nested command
+        // writes configuration, so recursive dispatch must not acquire it again.
+        let result = match dispatch_command_unlocked(&batch_ctx, cmd) {
             Ok(value) => json!({ "ok": true, "data": value }),
             Err(err) => json!({ "ok": false, "error": format!("{err}") }),
         };
         results.push(result);
     }
-    ctx.refresh_runtime_snapshot(ctx.config)?;
+    let effective_config = load_runtime_config(ctx.config_cache, ctx.config_path)?;
+    ctx.refresh_runtime_snapshot(&effective_config)?;
     Ok(json!({ "results": results }))
 }
 
@@ -904,6 +936,8 @@ fn to_value<T: Serialize>(payload: &T) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Barrier;
+
     use super::*;
 
     #[test]
@@ -942,5 +976,44 @@ mod tests {
         assert_eq!(clear_mount_error_markers(&config).unwrap(), 1);
         assert!(!marker.exists());
         assert_eq!(clear_mount_error_markers(&config).unwrap(), 0);
+    }
+
+    #[test]
+    fn concurrent_config_patches_preserve_both_updates() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.toml");
+        Config::default().save_to_file(&config_path).unwrap();
+
+        let cache = Arc::new(RuntimeConfigCache::new());
+        let barrier = Arc::new(Barrier::new(2));
+
+        let patches = [
+            json!({ "disable_umount": true }),
+            json!({ "default_mode": "magic" }),
+        ];
+        let mut threads = Vec::new();
+        for patch in patches {
+            let cache = cache.clone();
+            let barrier = barrier.clone();
+            let config_path = config_path.clone();
+            threads.push(std::thread::spawn(move || {
+                barrier.wait();
+                let _guard = cache.lock_writes();
+                patch_config_file(&config_path, patch).unwrap();
+            }));
+        }
+        for thread in threads {
+            thread.join().unwrap();
+        }
+
+        let saved = Config::load_optional_from_file(&config_path).unwrap();
+        assert!(saved.disable_umount);
+        assert_eq!(saved.default_mode, crate::domain::DefaultMode::Magic);
+        assert!(command_writes_config(&DaemonCommand::Config(
+            ConfigCommand::Patch {
+                patch: json!({}),
+                apply_runtime: false,
+            }
+        )));
     }
 }
