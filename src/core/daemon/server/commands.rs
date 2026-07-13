@@ -842,18 +842,26 @@ fn refresh_runtime_snapshot(
 ) -> Result<()> {
     let mut guard = lock_or_recover(state);
     #[cfg(feature = "kasumi")]
-    {
-        guard.kasumi = kasumi_mount::collect_runtime_info(config);
-    }
+    let runtime_changed = {
+        kasumi_mount::invalidate_runtime_info_cache();
+        let next = kasumi_mount::collect_runtime_info(config);
+        let changed = guard.kasumi != next;
+        guard.kasumi = next;
+        changed
+    };
     #[cfg(not(feature = "kasumi"))]
-    {
+    let runtime_changed = {
         let _ = config;
-    }
+        false
+    };
+    let daemon_changed = !guard.daemon.alive || guard.daemon.socket_path != defs::SOCKET_FILE;
     guard.set_daemon_state(true, defs::SOCKET_FILE);
     guard
         .status_value()
         .map_err(|e| anyhow::anyhow!("Failed to cache status value: {e}"))?;
-    guard.save()?;
+    if runtime_changed || daemon_changed {
+        guard.save()?;
+    }
     drop(guard);
     http::broadcast_sse_event(state, sse_clients, "runtime_changed");
     Ok(())

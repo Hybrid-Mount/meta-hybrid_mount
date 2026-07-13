@@ -106,7 +106,7 @@ pub struct ModuleModeStats {
     pub blacklisted: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(default)]
 pub struct KasumiRuntimeInfo {
     pub status: String,
