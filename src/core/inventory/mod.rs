@@ -5,11 +5,13 @@
 pub mod discovery;
 pub mod listing;
 
+use std::fs;
+
 pub use discovery::*;
 
 #[cfg(not(feature = "control-plane"))]
 use crate::domain::MountMode;
-use crate::{conf::config::Config, defs, domain::ModuleRules, utils};
+use crate::{conf::config::Config, defs, domain::ModuleRules};
 
 pub fn load_module_rules(config: &Config, module_id: &str) -> ModuleRules {
     let mut rules = ModuleRules {
@@ -32,9 +34,14 @@ pub fn load_module_rules(config: &Config, module_id: &str) -> ModuleRules {
 
 #[cfg(not(feature = "control-plane"))]
 pub fn module_mount_mode_marker(module_path: &std::path::Path) -> Option<MountMode> {
-    [MountMode::Overlay, MountMode::Magic]
-        .into_iter()
-        .find(|mode| utils::dir_contains_entry_case_insensitive(module_path, mode.as_strategy()))
+    let markers = scan_known_markers(module_path);
+    if markers.overlay {
+        Some(MountMode::Overlay)
+    } else if markers.magic {
+        Some(MountMode::Magic)
+    } else {
+        None
+    }
 }
 
 pub fn is_reserved_module_dir(id: &str) -> bool {
@@ -55,20 +62,51 @@ pub fn is_reserved_module_dir(id: &str) -> bool {
 }
 
 pub fn mount_block_markers(module_path: &std::path::Path) -> Vec<&'static str> {
+    let found = scan_known_markers(module_path);
     let mut markers = Vec::new();
-    if utils::dir_contains_entry_case_insensitive(module_path, defs::DISABLE_FILE_NAME) {
+    if found.disable {
         markers.push(defs::DISABLE_FILE_NAME);
     }
-    if utils::dir_contains_entry_case_insensitive(module_path, defs::REMOVE_FILE_NAME) {
+    if found.remove {
         markers.push(defs::REMOVE_FILE_NAME);
     }
-    if utils::dir_contains_entry_case_insensitive(module_path, defs::MOUNT_ERROR_FILE_NAME) {
+    if found.mount_error {
         markers.push(defs::MOUNT_ERROR_FILE_NAME);
     }
-    if utils::dir_contains_entry_case_insensitive(module_path, defs::SKIP_MOUNT_FILE_NAME) {
+    if found.skip_mount {
         markers.push(defs::SKIP_MOUNT_FILE_NAME);
     }
     markers
+}
+
+#[derive(Default)]
+struct KnownMarkers {
+    disable: bool,
+    remove: bool,
+    mount_error: bool,
+    skip_mount: bool,
+    overlay: bool,
+    magic: bool,
+}
+
+fn scan_known_markers(module_path: &std::path::Path) -> KnownMarkers {
+    let mut found = KnownMarkers::default();
+    let Ok(entries) = fs::read_dir(module_path) else {
+        return found;
+    };
+
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let bytes = name.as_encoded_bytes();
+        found.disable |= bytes.eq_ignore_ascii_case(defs::DISABLE_FILE_NAME.as_bytes());
+        found.remove |= bytes.eq_ignore_ascii_case(defs::REMOVE_FILE_NAME.as_bytes());
+        found.mount_error |= bytes.eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME.as_bytes());
+        found.skip_mount |= bytes.eq_ignore_ascii_case(defs::SKIP_MOUNT_FILE_NAME.as_bytes());
+        found.overlay |= bytes.eq_ignore_ascii_case(b"overlay");
+        found.magic |= bytes.eq_ignore_ascii_case(b"magic");
+    }
+
+    found
 }
 
 pub fn has_mount_block_marker(module_path: &std::path::Path) -> bool {

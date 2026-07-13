@@ -91,10 +91,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
             continue;
         }
 
-        // mount_block_markers currently enumerates the module directory once
-        // per known marker. Keep this visible until inventory snapshotting
-        // consolidates those reads into a single pass.
-        marker_directory_scans += 4;
+        marker_directory_scans += 1;
         let block_markers = inventory::mount_block_markers(&path);
         if !block_markers.is_empty() {
             skipped_blocked += 1;
