@@ -9,5 +9,5 @@ mod status;
 
 pub use runtime::{apply, apply_runtime_config, reset_runtime};
 pub use status::{
-    can_operate, collect_runtime_info, hook_lines, invalidate_runtime_info_cache, require_live,
+    can_operate, collect_runtime_info, hook_lines, invalidate_runtime_caches, require_live,
 };

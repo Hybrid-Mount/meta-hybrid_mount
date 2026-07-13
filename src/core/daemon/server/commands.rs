@@ -196,7 +196,7 @@ impl<'a> CommandContext<'a> {
 
     #[cfg(feature = "kasumi")]
     fn invalidate_and_refresh_message(&self, message: &'static str) -> Result<Value> {
-        kasumi::invalidate_status_cache();
+        kasumi_mount::invalidate_runtime_caches();
         self.refresh_message(message)
     }
 
@@ -309,11 +309,16 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
             let removed_markers = clear_mount_error_markers(config)?;
             let mut guard = lock_or_recover(state);
             let cleared = guard.mount_error_modules.len();
+            let state_changed = cleared > 0 || !guard.mount_error_reasons.is_empty();
             guard.mount_error_modules.clear();
             guard.mount_error_reasons.clear();
-            guard.save()?;
+            if state_changed {
+                guard.save()?;
+            }
             drop(guard);
-            http::broadcast_sse_event(state, sse_clients, "mount_errors_cleared");
+            if state_changed || removed_markers > 0 {
+                http::broadcast_sse_event(state, sse_clients, "mount_errors_cleared");
+            }
             Ok(json!({ "cleared": cleared, "removed_markers": removed_markers }))
         }
     }
@@ -480,7 +485,7 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
             ctx.refresh_message("Released cached Kasumi client connection.")
         }
         KasumiCommand::InvalidateCache => {
-            kasumi::invalidate_status_cache();
+            kasumi_mount::invalidate_runtime_caches();
             ctx.refresh_message("Invalidated cached Kasumi status.")
         }
         KasumiCommand::FixMounts => {
@@ -826,7 +831,7 @@ fn save_and_apply_runtime_config(config: &Config, config_path: &Path) -> Result<
 #[cfg(feature = "kasumi")]
 fn apply_runtime_config(config: &Config) -> Result<bool> {
     let applied = kasumi_mount::apply_runtime_config(config)?;
-    kasumi::invalidate_status_cache();
+    kasumi_mount::invalidate_runtime_caches();
     Ok(applied)
 }
 
@@ -843,7 +848,7 @@ fn refresh_runtime_snapshot(
     let mut guard = lock_or_recover(state);
     #[cfg(feature = "kasumi")]
     let runtime_changed = {
-        kasumi_mount::invalidate_runtime_info_cache();
+        kasumi_mount::invalidate_runtime_caches();
         let next = kasumi_mount::collect_runtime_info(config);
         let changed = guard.kasumi != next;
         guard.kasumi = next;

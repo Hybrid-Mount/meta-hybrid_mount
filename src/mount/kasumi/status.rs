@@ -60,7 +60,8 @@ fn runtime_probe() -> RuntimeProbe {
     probe
 }
 
-pub fn invalidate_runtime_info_cache() {
+pub fn invalidate_runtime_caches() {
+    kasumi::invalidate_status_cache();
     if let Some(cache) = RUNTIME_PROBE_CACHE.get() {
         *crate::utils::lock_or_recover(cache) = None;
     }
