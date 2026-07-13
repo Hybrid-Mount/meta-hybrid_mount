@@ -30,7 +30,6 @@ pub(super) fn prepare_module(
         return Ok(ModulePrepareOutcome::default());
     }
 
-    ensure_dir_like(&module.source_path, tmp_dst)?;
     context.metrics.directories_scanned += 1;
 
     let mut outcome = ModulePrepareOutcome::default();
@@ -46,7 +45,6 @@ pub(super) fn prepare_module(
             .with_context(|| format!("failed to enumerate {}", module.source_path.display()))?;
         let file_name = entry.file_name();
         if utils::path_file_name_eq_ignore_ascii_case(&entry.path(), defs::REPLACE_DIR_FILE_NAME) {
-            outcome.opaque_dirs.push(tmp_dst.to_path_buf());
             continue;
         }
 
@@ -63,7 +61,6 @@ pub(super) fn prepare_module(
             .is_some_and(|name| context.managed_partitions.contains(name));
 
         if file_type.is_dir() {
-            ensure_dir_like(&source_path, &copy_path)?;
             queue.push_back(ProcessingItem {
                 source_dir: source_path,
                 copy_dir: copy_path,
@@ -78,14 +75,13 @@ pub(super) fn prepare_module(
                 relative_path,
                 partition_label: file_name.to_string_lossy().into_owned(),
                 plan_active: top_level_partition,
+                materialize_tree: false,
                 count_mount_content: top_level_partition,
             });
         } else {
             if top_level_partition {
                 outcome.has_mount_content = true;
             }
-            let copied_bytes = copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
-            context.record_copy(copied_bytes);
         }
     }
 
@@ -110,6 +106,22 @@ pub(super) fn module_requests_kasumi(module: &Module) -> bool {
             .paths
             .values()
             .any(|mode| matches!(mode, MountMode::Kasumi))
+}
+
+pub(super) fn materialize_module_identity(
+    module: &Module,
+    tmp_dst: &Path,
+    context: &mut PrepareContext,
+) -> Result<()> {
+    let source = module.source_path.join("module.prop");
+    let metadata = fs::symlink_metadata(&source)
+        .with_context(|| format!("failed to inspect {}", source.display()))?;
+    let file_type = metadata.file_type();
+    ensure_dir_like(&module.source_path, tmp_dst)?;
+    let copied_bytes =
+        copy_non_dir_entry(&source, &tmp_dst.join("module.prop"), &metadata, &file_type)?;
+    context.record_copy(copied_bytes);
+    Ok(())
 }
 
 pub(super) fn module_sync_error(module: &Module, err: anyhow::Error) -> anyhow::Error {

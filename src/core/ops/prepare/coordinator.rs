@@ -12,7 +12,9 @@ use std::{
 use anyhow::{Context, Result};
 
 use super::{
-    module_processor::{module_requests_kasumi, module_sync_error, prepare_module},
+    module_processor::{
+        materialize_module_identity, module_requests_kasumi, module_sync_error, prepare_module,
+    },
     plan_builder::{merge_overlay_groups, sorted_ids},
     types::PrepareContext,
 };
@@ -149,10 +151,24 @@ pub(crate) fn prepare_mount_plan_with_root(
             continue;
         }
 
-        finalize_copied_tree(&module.id, prepared.tmp_path(), &outcome.opaque_dirs);
-        prepared
-            .commit()
-            .map_err(|err| module_sync_error(module, err))?;
+        let has_overlay = !outcome.plan.overlay_groups.is_empty();
+        if has_overlay {
+            materialize_module_identity(module, prepared.tmp_path(), &mut context)
+                .map_err(|err| module_sync_error(module, err))?;
+            finalize_copied_tree(&module.id, prepared.tmp_path(), &outcome.opaque_dirs);
+            prepared
+                .commit()
+                .map_err(|err| module_sync_error(module, err))?;
+        } else if let Err(err) = remove_path(prepared.final_path()) {
+            crate::scoped_log!(
+                warn,
+                "prepare",
+                "cleanup non-overlay storage failed: id={}, path={}, error={:#}",
+                module.id,
+                prepared.final_path().display(),
+                err
+            );
+        }
 
         crate::scoped_log!(
             debug,

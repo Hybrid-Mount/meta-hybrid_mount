@@ -63,7 +63,6 @@ impl PrepareContext {
         }
         self.metrics.directories_scanned += 1;
 
-        ensure_dir_like(&item.source_dir, &item.copy_dir)?;
         let relative_key = item.relative_path.to_string_lossy();
         let requested_mode = module.rules.get_mode(relative_key.as_ref());
         let effective_mode = if matches!(requested_mode, MountMode::Kasumi) && !self.use_kasumi {
@@ -78,7 +77,17 @@ impl PrepareContext {
         };
         let needs_shallow_overlay = matches!(mode_decision.effective_mode, MountMode::Overlay)
             && mode_decision.has_descendant_rules;
+        let materialize_full_overlay = item.materialize_tree
+            || (item.plan_active
+                && matches!(mode_decision.effective_mode, MountMode::Overlay)
+                && !mode_decision.has_descendant_rules);
+        let materialize_shallow_overlay =
+            item.plan_active && !item.materialize_tree && needs_shallow_overlay;
         drop(relative_key);
+
+        if materialize_full_overlay {
+            ensure_dir_like(&item.source_dir, &item.copy_dir)?;
+        }
 
         let current_target = if item.plan_active {
             if item.system_target.exists() {
@@ -117,8 +126,10 @@ impl PrepareContext {
                 if item.count_mount_content {
                     outcome.has_mount_content = true;
                 }
-                outcome.opaque_dirs.push(item.copy_dir.clone());
-                if needs_shallow_overlay {
+                if materialize_full_overlay {
+                    outcome.opaque_dirs.push(item.copy_dir.clone());
+                }
+                if materialize_shallow_overlay {
                     ensure_dir_like(&item.source_dir, &item.shallow_copy_dir)?;
                     outcome.opaque_dirs.push(item.shallow_copy_dir.clone());
                 }
@@ -137,7 +148,6 @@ impl PrepareContext {
             let file_type = metadata.file_type();
 
             if file_type.is_dir() {
-                ensure_dir_like(&source_path, &copy_path)?;
                 child_dirs.push(ProcessingItem {
                     source_dir: source_path,
                     copy_dir: copy_path,
@@ -148,6 +158,7 @@ impl PrepareContext {
                     relative_path: next_relative,
                     partition_label: next_partition_label.clone(),
                     plan_active: false,
+                    materialize_tree: materialize_full_overlay,
                     count_mount_content: item.count_mount_content,
                 });
             } else {
@@ -155,10 +166,12 @@ impl PrepareContext {
                 if item.count_mount_content {
                     outcome.has_mount_content = true;
                 }
-                let copied_bytes =
-                    copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
-                self.record_copy(copied_bytes);
-                if needs_shallow_overlay {
+                if materialize_full_overlay {
+                    let copied_bytes =
+                        copy_non_dir_entry(&source_path, &copy_path, &metadata, &file_type)?;
+                    self.record_copy(copied_bytes);
+                }
+                if materialize_shallow_overlay {
                     ensure_dir_like(&item.source_dir, &item.shallow_copy_dir)?;
                     let copied_bytes = copy_non_dir_entry(
                         &source_path,

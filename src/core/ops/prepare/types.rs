@@ -44,6 +44,7 @@ pub(super) struct ProcessingItem {
     pub(super) relative_path: PathBuf,
     pub(super) partition_label: String,
     pub(super) plan_active: bool,
+    pub(super) materialize_tree: bool,
     pub(super) count_mount_content: bool,
 }
 

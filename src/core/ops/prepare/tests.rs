@@ -26,6 +26,7 @@ fn make_module(
     default_mode: MountMode,
     rules: &[(&str, MountMode)],
 ) -> Module {
+    write_file(&source_path.join("module.prop"), &format!("id={id}\n"));
     Module {
         id: id.to_string(),
         source_path: source_path.to_path_buf(),
@@ -89,6 +90,8 @@ fn prepare_mount_plan_builds_overlay_op_from_prepared_storage() {
     #[cfg(feature = "kasumi")]
     assert_eq!(plan.kasumi_module_ids, Vec::<String>::new());
     assert!(storage.join("foo/system/bin/sh").exists());
+    assert!(plan.prepare_metrics.copied_entries > 0);
+    assert!(plan.prepare_metrics.copied_bytes > 0);
     assert_eq!(
         plan.overlay_ops[0].target,
         system_root.join("system/bin").display().to_string()
@@ -128,7 +131,42 @@ fn prepare_mount_plan_marks_magic_modules_without_overlay() {
     assert_eq!(plan.magic_module_ids, vec!["foo".to_string()]);
     #[cfg(feature = "kasumi")]
     assert_eq!(plan.kasumi_module_ids, Vec::<String>::new());
-    assert!(storage.join("foo/system/bin/sh").exists());
+    assert!(!storage.join("foo").exists());
+    assert_eq!(plan.prepare_metrics.copied_entries, 0);
+    assert_eq!(plan.prepare_metrics.copied_bytes, 0);
+}
+
+#[test]
+fn prepare_mount_plan_materializes_only_overlay_descendant_of_magic_tree() {
+    let temp = TempDir::new().unwrap();
+    let source = temp.path().join("module");
+    write_file(&source.join("system/etc/magic.conf"), "magic");
+    write_file(&source.join("system/etc/init/overlay.rc"), "overlay");
+
+    let system_root = temp.path().join("sysroot");
+    fs::create_dir_all(system_root.join("system/etc/init")).unwrap();
+
+    let storage = temp.path().join("storage");
+    let module = make_module(
+        "foo",
+        &source,
+        MountMode::Magic,
+        &[("system/etc/init", MountMode::Overlay)],
+    );
+
+    let plan = prepare_with_root(
+        &test_config(),
+        &[module],
+        &storage,
+        &system_root,
+        &BackendCapabilities::default(),
+    );
+
+    assert_eq!(plan.overlay_ops.len(), 1);
+    assert_eq!(plan.overlay_module_ids, vec!["foo".to_string()]);
+    assert_eq!(plan.magic_module_ids, vec!["foo".to_string()]);
+    assert!(storage.join("foo/system/etc/init/overlay.rc").exists());
+    assert!(!storage.join("foo/system/etc/magic.conf").exists());
 }
 
 #[test]
@@ -226,7 +264,7 @@ fn prepare_mount_plan_preserves_overlay_direct_files_when_subtree_is_split() {
         system_root.join("system/etc").display().to_string()
     );
     assert_eq!(plan.overlay_ops[0].lowerdirs, vec![shallow_etc.clone()]);
-    assert!(storage.join("foo/system/etc/permissions.xml").exists());
+    assert!(!storage.join("foo/system/etc/permissions.xml").exists());
     assert!(shallow_etc.join("permissions.xml").exists());
     assert!(!shallow_etc.join("init").exists());
 }
@@ -351,6 +389,6 @@ fn prepare_mount_plan_marks_magic_for_replace_only_dir() {
 
     assert!(plan.overlay_ops.is_empty());
     assert_eq!(plan.magic_module_ids, vec!["foo".to_string()]);
-    assert!(storage.join("foo/system").is_dir());
-    assert!(!storage.join("foo/system/.rEpLaCe").exists());
+    assert!(!storage.join("foo").exists());
+    assert_eq!(plan.prepare_metrics.copied_entries, 0);
 }
