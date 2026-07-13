@@ -329,11 +329,6 @@ export const MockAPI: AppAPI = {
     return { ...DEFAULT_CONFIG };
   },
 
-  async saveConfig(config: AppConfig): Promise<void> {
-    await delay(500);
-    console.log("[Mock] Config saved:", config);
-  },
-
   async patchConfig(patch: Record<string, unknown>): Promise<AppConfig> {
     await delay(180);
     return { ...DEFAULT_CONFIG, ...(patch as Partial<AppConfig>) };

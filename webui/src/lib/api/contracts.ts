@@ -37,7 +37,6 @@ export interface AppAPI {
   wakeDaemon: () => Promise<void>;
   init: () => Promise<InitPayload>;
   loadConfig: () => Promise<AppConfig>;
-  saveConfig: (config: AppConfig) => Promise<void>;
   patchConfig: (
     patch: Record<string, unknown>,
     options?: { applyRuntime?: boolean },

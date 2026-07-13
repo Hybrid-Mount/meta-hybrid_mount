@@ -15,7 +15,6 @@
  */
 
 import { PATHS } from "../../constants";
-import { ENABLE_KASUMI } from "../../constants_gen";
 import type { AppConfig } from "../../types";
 import { runDaemonCommand } from "../core/bridge";
 import { normalizeConfig } from "../codec/configCodec";
@@ -41,22 +40,6 @@ export async function loadConfigFromFile(): Promise<AppConfig> {
     PATHS.BINARY,
   );
   return normalizeConfig(payload);
-}
-
-export async function saveConfigToFile(config: AppConfig): Promise<void> {
-  const normalized = normalizeConfig(config);
-  const patch = {
-    moduledir: normalized.moduledir,
-    mountsource: normalized.mountsource,
-    overlay_mode: normalized.overlay_mode,
-    disable_umount: normalized.disable_umount,
-    default_mode: normalized.default_mode,
-    daemon_startup_mode: normalized.daemon_startup_mode,
-    custom_mounts: normalized.custom_mounts,
-    rules: normalized.rules,
-    ...(ENABLE_KASUMI ? { kasumi: normalized.kasumi } : {}),
-  };
-  await patchConfigFile(patch);
 }
 
 export async function patchConfigFile(

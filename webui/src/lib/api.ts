@@ -36,7 +36,6 @@ import {
   loadConfigFromFile,
   patchConfigFile,
   resetConfigFile,
-  saveConfigToFile,
 } from "./api/repos/configRepo";
 import { scanModules, saveModuleRules } from "./api/services/moduleService";
 import type { AppAPI } from "./api/contracts";
@@ -116,7 +115,6 @@ const RealAPI = {
   wakeDaemon: () => ensureDaemonAwake(PATHS.BINARY),
   init,
   loadConfig: loadConfigFromFile,
-  saveConfig: saveConfigToFile,
   patchConfig: patchConfigFile,
   resetConfig: async () => {
     await resetConfigFile();

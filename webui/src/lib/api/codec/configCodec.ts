@@ -17,15 +17,8 @@
 import { DEFAULT_CONFIG } from "../../constants";
 import { ENABLE_KASUMI } from "../../constants_gen";
 import type { AppConfig, ModuleRules, OverlayMode } from "../../types";
-import { normalizeMountMode as normalizeMountModeBase } from "../core/guards";
+import { normalizeMountMode } from "../core/guards";
 import { kasumiConfigSchema } from "../schemas";
-
-export function normalizeMountMode(
-  value: unknown,
-  fallback: Parameters<typeof normalizeMountModeBase>[1] = "overlay",
-): ReturnType<typeof normalizeMountModeBase> {
-  return normalizeMountModeBase(value, fallback);
-}
 
 export function normalizeOverlayMode(value: unknown): OverlayMode {
   return value === "tmpfs" ? "tmpfs" : "ext4";

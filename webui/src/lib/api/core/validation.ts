@@ -33,14 +33,6 @@ export const daemonSuccessEnvelopeSchema = z.object({
   data: z.unknown().optional(),
 });
 
-// A daemon command response may be either the error envelope or the success envelope,
-// or a raw payload. We validate the common patterns.
-export const daemonResponseSchema = z.union([
-  daemonErrorEnvelopeSchema,
-  daemonFailureEnvelopeSchema,
-  daemonSuccessEnvelopeSchema,
-]);
-
 // --- WebUI session (daemon webui-start response) ---
 
 export const webuiSessionSchema = z.object({
