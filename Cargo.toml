@@ -27,7 +27,7 @@ nano_update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/
 [features]
 default = ["kasumi", "control-plane"]
 kasumi = ["control-plane"]
-control-plane = ["dep:clap"]
+control-plane = ["dep:clap", "dep:signal-hook"]
 
 [dependencies]
 anyhow = "1"
@@ -42,9 +42,8 @@ walkdir = "2.5"
 log = "0.4"
 flate2 = "1.1"
 fastrand = "2.4"
-glob = "0.3"
 tempfile = "3.27"
-signal-hook = "0.4"
+signal-hook = { version = "0.4", optional = true }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 env_logger = { version = "0.11.10", default-features = false }

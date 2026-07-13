@@ -105,20 +105,20 @@ pub fn setup_with_sources(
 }
 
 fn reset_image_files(img_path: &Path) -> Result<()> {
-    let pattern = format!("{}*", img_path.display());
-    for path in glob::glob(&pattern)? {
-        match path {
-            Ok(path) => {
-                if let Err(e) = fs::remove_file(&path) {
-                    crate::scoped_log!(
-                        warn,
-                        "storage",
-                        "failed to remove stale image file {}: {:#}",
-                        path.display(),
-                        e
-                    );
-                }
-            }
+    let parent = img_path.parent().unwrap_or_else(|| Path::new("."));
+    let Some(prefix) = img_path.file_name() else {
+        return Ok(());
+    };
+    let prefix = prefix.to_string_lossy();
+    let entries = match fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err.into()),
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
             Err(err) => {
                 crate::scoped_log!(
                     warn,
@@ -126,7 +126,20 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
                     "failed to read stale image path: {:#}",
                     err
                 );
+                continue;
             }
+        };
+        let file_name = entry.file_name();
+        if file_name.to_string_lossy().starts_with(prefix.as_ref())
+            && let Err(err) = fs::remove_file(entry.path())
+        {
+            crate::scoped_log!(
+                warn,
+                "storage",
+                "failed to remove stale image file {}: {:#}",
+                entry.path().display(),
+                err
+            );
         }
     }
     Ok(())

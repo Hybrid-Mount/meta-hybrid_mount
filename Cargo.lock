@@ -853,7 +853,6 @@ dependencies = [
  "extattr",
  "fastrand",
  "flate2",
- "glob",
  "ksu",
  "libc",
  "log",
