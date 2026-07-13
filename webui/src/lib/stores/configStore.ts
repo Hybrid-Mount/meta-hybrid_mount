@@ -88,6 +88,10 @@ const createConfigStore = () => {
     hasLoaded = false;
   }
 
+  function setField<K extends keyof AppConfig>(key: K, value: AppConfig[K]) {
+    setConfigStore(key, value);
+  }
+
   async function saveConfig(
     nextConfig: AppConfig = config,
     options: SaveConfigOptions = {},
@@ -202,6 +206,7 @@ const createConfigStore = () => {
     invalidate,
     loadConfig,
     loadFromInit,
+    setField,
     saveConfig,
     patchConfig,
     resetConfig,

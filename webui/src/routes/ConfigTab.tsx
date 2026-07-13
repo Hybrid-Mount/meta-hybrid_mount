@@ -72,7 +72,7 @@ export default function ConfigTab() {
     key: K,
     value: AppConfig[K],
   ) {
-    configStore.config = { ...configStore.config, [key]: value };
+    configStore.setField(key, value);
   }
 
   async function refreshModulesForConfigChange() {
