@@ -42,13 +42,14 @@ pub struct StorageReady {
 
 pub struct Planned {
     pub handle: StorageHandle,
-    pub modules: Vec<inventory::Module>,
+    pub inventory: inventory::InventorySnapshot,
     pub plan: MountPlan,
 }
 
 pub struct Executed {
     pub handle: StorageHandle,
     pub result: executor::ExecutionResult,
+    pub inventory_summary: inventory::InventorySummary,
 }
 
 pub struct MountController<S> {
@@ -121,7 +122,8 @@ impl MountController<StorageReady> {
             "scan start: moduledir={}",
             self.config.moduledir.display()
         );
-        let modules = inventory::scan(&self.config.moduledir, &self.config)?;
+        let inventory = inventory::scan_snapshot(&self.config.moduledir, &self.config)?;
+        let modules = &inventory.modules;
         let scan_elapsed_ms = scan_started.elapsed().as_millis();
 
         crate::scoped_log!(
@@ -136,7 +138,7 @@ impl MountController<StorageReady> {
         let prepare_started = Instant::now();
         let plan = prepare::prepare_mount_plan(
             &self.config,
-            &modules,
+            modules,
             self.state.handle.mount_point(),
             &self.backend_capabilities,
         )?;
@@ -170,7 +172,7 @@ impl MountController<StorageReady> {
             kasumi
                 .prepare_mirror_storage(
                     &self.backend_capabilities,
-                    &modules,
+                    modules,
                     &plan,
                     self.state.handle.mount_point(),
                 )
@@ -187,7 +189,7 @@ impl MountController<StorageReady> {
             backend_capabilities: self.backend_capabilities,
             state: Planned {
                 handle: self.state.handle,
-                modules,
+                inventory,
                 plan,
             },
             tempdir: self.tempdir,
@@ -201,7 +203,7 @@ impl MountController<Planned> {
         crate::scoped_log!(info, "controller:execute", "start");
         let result = executor::Executor::execute(
             &mut self.state.plan,
-            &self.state.modules,
+            &self.state.inventory.modules,
             &self.config,
             self.tempdir.clone(),
         )?;
@@ -222,6 +224,7 @@ impl MountController<Planned> {
             state: Executed {
                 handle: self.state.handle,
                 result,
+                inventory_summary: self.state.inventory.summary,
             },
             tempdir: self.tempdir,
         })
@@ -237,6 +240,7 @@ impl MountController<Executed> {
             self.state.handle.mode(),
             self.state.handle.mount_point(),
             &self.state.result,
+            &self.state.inventory_summary,
         )?;
 
         clean_up(

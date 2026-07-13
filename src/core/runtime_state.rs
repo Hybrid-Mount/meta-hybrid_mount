@@ -17,7 +17,10 @@ use crate::mount::kasumi;
 #[cfg(feature = "control-plane")]
 use crate::sys::fs::xattr;
 use crate::{
-    conf::config::Config, core::ops::executor::ExecutionResult, defs, sys::fs::atomic_write, utils,
+    conf::config::Config,
+    core::{inventory::InventorySummary, ops::executor::ExecutionResult},
+    defs,
+    sys::fs::atomic_write,
 };
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -315,6 +318,7 @@ impl RuntimeState {
         storage_mode: crate::core::storage::StorageMode,
         mount_point: &Path,
         result: &ExecutionResult,
+        inventory: &InventorySummary,
     ) -> Self {
         crate::scoped_log!(
             debug,
@@ -371,8 +375,8 @@ impl RuntimeState {
         state.mount_error_modules = previous_state.mount_error_modules;
         state.mount_error_reasons = previous_state.mount_error_reasons;
         clear_recovered_mount_errors(&mut state);
-        state.skip_mount_modules = collect_skip_mount_modules(config);
-        state.blacklisted_modules = collect_blacklisted_modules(config);
+        state.skip_mount_modules = inventory.skip_mount_modules.clone();
+        state.blacklisted_modules = inventory.blacklisted_modules.clone();
         state.mode_stats.blacklisted = state.blacklisted_modules.len();
         state.daemon = previous_state.daemon;
         state.invalidate_cache();
@@ -473,81 +477,6 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     );
 
     active_mounts
-}
-
-fn collect_skip_mount_modules(config: &Config) -> Vec<String> {
-    let mut modules = Vec::new();
-    let Ok(entries) = fs::read_dir(&config.moduledir) else {
-        crate::scoped_log!(
-            debug,
-            "runtime_state:skip_modules",
-            "skip: reason=moduledir_unreadable, path={}",
-            config.moduledir.display()
-        );
-        return modules;
-    };
-
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "runtime_state:skip_modules",
-                    "skip unreadable moduledir entry: path={}, error={:#}",
-                    config.moduledir.display(),
-                    err
-                );
-                continue;
-            }
-        };
-        let module_dir = entry.path();
-        if !module_dir.is_dir() {
-            continue;
-        }
-        let id = entry.file_name().to_string_lossy().into_owned();
-        if crate::core::inventory::is_reserved_module_dir(&id) {
-            continue;
-        }
-        if utils::dir_contains_entry_case_insensitive(&module_dir, defs::SKIP_MOUNT_FILE_NAME) {
-            modules.push(id);
-        }
-    }
-
-    modules.sort();
-
-    crate::scoped_log!(
-        debug,
-        "runtime_state:skip_modules",
-        "complete: moduledir={}, modules={}",
-        config.moduledir.display(),
-        modules.len()
-    );
-
-    modules
-}
-
-fn collect_blacklisted_modules(config: &Config) -> Vec<String> {
-    let mut modules: Vec<String> = config
-        .module_blacklist
-        .iter()
-        .filter(|id| {
-            let module_dir = config.moduledir.join(id);
-            module_dir.is_dir()
-        })
-        .cloned()
-        .collect();
-    modules.sort();
-
-    crate::scoped_log!(
-        debug,
-        "runtime_state:blacklisted",
-        "complete: moduledir={}, modules={}",
-        config.moduledir.display(),
-        modules.len()
-    );
-
-    modules
 }
 
 fn clear_recovered_mount_errors(state: &mut RuntimeState) {

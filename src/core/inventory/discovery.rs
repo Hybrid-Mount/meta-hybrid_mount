@@ -20,13 +20,39 @@ pub struct Module {
     pub rules: ModuleRules,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct InventorySummary {
+    pub skip_mount_modules: Vec<String>,
+    pub blacklisted_modules: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct InventorySnapshot {
+    pub modules: Vec<Module>,
+    pub summary: InventorySummary,
+}
+
 pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
+    Ok(scan_snapshot(source_dir, cfg)?.modules)
+}
+
+pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<InventorySnapshot> {
     let started = Instant::now();
     if !source_dir.exists() {
-        return Ok(Vec::new());
+        return Ok(InventorySnapshot::default());
     }
 
     let mut modules = Vec::new();
+    let mut summary = InventorySummary {
+        blacklisted_modules: cfg
+            .module_blacklist
+            .iter()
+            .filter(|id| source_dir.join(id).is_dir())
+            .cloned()
+            .collect(),
+        ..Default::default()
+    };
+    summary.blacklisted_modules.sort();
     let mut skipped_reserved = 0usize;
     let mut skipped_blocked = 0usize;
     let mut skipped_blacklisted = 0usize;
@@ -50,6 +76,12 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
             skipped_reserved += 1;
             crate::scoped_log!(debug, "scanner", "skip: module={}, reason=reserved_dir", id);
             continue;
+        }
+
+        marker_directory_scans += 1;
+        let block_markers = inventory::mount_block_markers(&path);
+        if block_markers.contains(&crate::defs::SKIP_MOUNT_FILE_NAME) {
+            summary.skip_mount_modules.push(id.clone());
         }
 
         if validate_module_id(&id).is_err() {
@@ -91,8 +123,6 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
             continue;
         }
 
-        marker_directory_scans += 1;
-        let block_markers = inventory::mount_block_markers(&path);
         if !block_markers.is_empty() {
             skipped_blocked += 1;
             crate::scoped_log!(
@@ -134,8 +164,10 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
     );
 
     modules.sort_by(|a, b| a.id.cmp(&b.id));
+    summary.skip_mount_modules.sort();
+    summary.skip_mount_modules.dedup();
 
-    Ok(modules)
+    Ok(InventorySnapshot { modules, summary })
 }
 
 pub fn module_prop_id_matches_dir(prop: &Path, dir_id: &str) -> Result<bool> {
@@ -272,5 +304,27 @@ mod tests {
 
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].id, "alpha");
+    }
+
+    #[test]
+    fn snapshot_keeps_skip_and_blacklist_summary_without_rescanning() {
+        let temp = TempDir::new().unwrap();
+        let skipped = temp.path().join("skipped");
+        let blacklisted = temp.path().join("blacklisted");
+        fs::create_dir(&skipped).unwrap();
+        fs::create_dir(&blacklisted).unwrap();
+        write_prop(&skipped, "skipped");
+        write_prop(&blacklisted, "blacklisted");
+        fs::write(skipped.join("SKIP_MOUNT"), b"").unwrap();
+
+        let config = config::Config {
+            module_blacklist: vec!["blacklisted".to_string()],
+            ..Default::default()
+        };
+        let snapshot = scan_snapshot(temp.path(), &config).unwrap();
+
+        assert!(snapshot.modules.is_empty());
+        assert_eq!(snapshot.summary.skip_mount_modules, vec!["skipped"]);
+        assert_eq!(snapshot.summary.blacklisted_modules, vec!["blacklisted"]);
     }
 }
