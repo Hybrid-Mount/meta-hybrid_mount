@@ -149,6 +149,7 @@ pub(super) struct CommandContext<'a> {
     shutdown: &'a Arc<AtomicBool>,
     webui: &'a WebuiHttpSession,
     sse_clients: &'a http::SharedSseClients,
+    defer_refresh: bool,
 }
 
 impl<'a> CommandContext<'a> {
@@ -169,7 +170,13 @@ impl<'a> CommandContext<'a> {
             shutdown,
             webui,
             sse_clients,
+            defer_refresh: false,
         }
+    }
+
+    fn with_deferred_refresh(mut self) -> Self {
+        self.defer_refresh = true;
+        self
     }
 
     fn refresh<T: Serialize>(&self, config: &Config, payload: T) -> Result<Value> {
@@ -194,6 +201,9 @@ impl<'a> CommandContext<'a> {
     }
 
     fn refresh_runtime_snapshot(&self, config: &Config) -> Result<()> {
+        if self.defer_refresh {
+            return Ok(());
+        }
         refresh_runtime_snapshot(config, self.state, self.sse_clients)
     }
 
@@ -648,7 +658,8 @@ fn dispatch_batch(ctx: &CommandContext<'_>, commands: Vec<DaemonCommand>) -> Res
             ctx.shutdown,
             ctx.webui,
             &noop_clients,
-        );
+        )
+        .with_deferred_refresh();
         // The outer batch holds the config write lock when any nested command
         // writes configuration, so recursive dispatch must not acquire it again.
         let result = match dispatch_command_unlocked(&batch_ctx, cmd) {
