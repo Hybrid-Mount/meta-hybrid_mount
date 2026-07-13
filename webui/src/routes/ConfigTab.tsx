@@ -106,7 +106,7 @@ export default function ConfigTab() {
     );
     if (saved) {
       recordSavedConfig();
-    } else {
+    } else if (Object.is(configStore.config[key], value)) {
       updateConfig(key, previousValue);
     }
     return saved;

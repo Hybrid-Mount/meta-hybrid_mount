@@ -39,6 +39,24 @@ const createConfigStore = () => {
   const [saving, setSaving] = createSignal(false);
   let pendingLoad: Promise<boolean> | null = null;
   let hasLoaded = false;
+  let activeSaves = 0;
+  let patchRevision = 0;
+  const fieldRevisions = new Map<keyof AppConfig, number>();
+
+  function beginSave() {
+    activeSaves += 1;
+    setSaving(true);
+  }
+
+  function endSave() {
+    activeSaves -= 1;
+    setSaving(activeSaves > 0);
+  }
+
+  function invalidatePatchResponses() {
+    patchRevision += 1;
+    fieldRevisions.clear();
+  }
 
   async function loadConfig(force = false) {
     if (pendingLoad) return pendingLoad;
@@ -48,6 +66,7 @@ const createConfigStore = () => {
     pendingLoad = (async () => {
       try {
         const data = await API.loadConfig();
+        invalidatePatchResponses();
         setConfigStore(reconcile(normalizeConfig(data)));
         hasLoaded = true;
         return true;
@@ -72,6 +91,7 @@ const createConfigStore = () => {
   function loadFromInit(payload: InitPayload) {
     if (payload.config != null) {
       const normalized = normalizeConfig(payload.config);
+      invalidatePatchResponses();
       setConfigStore(reconcile(normalized));
       hasLoaded = true;
     } else {
@@ -92,36 +112,6 @@ const createConfigStore = () => {
     setConfigStore(key, value);
   }
 
-  async function saveConfig(
-    nextConfig: AppConfig = config,
-    options: SaveConfigOptions = {},
-  ) {
-    const { showSuccess = true, showError = true } = options;
-    const normalizedConfig = normalizeConfig(nextConfig);
-
-    setSaving(true);
-    try {
-      await API.saveConfig(normalizedConfig);
-      if (showSuccess) {
-        uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
-      }
-      return true;
-    } catch (e: unknown) {
-      if (showError) {
-        uiStore.showToast(
-          getErrorMessage(
-            e,
-            uiStore.L.config?.saveFailed ?? "Failed to save config",
-          ),
-          "error",
-        );
-      }
-      return false;
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function patchConfig(
     patch: Partial<AppConfig>,
     options: PatchConfigOptions = {},
@@ -131,13 +121,21 @@ const createConfigStore = () => {
       showError = true,
       applyRuntime = true,
     } = options;
+    const revision = ++patchRevision;
+    const fields = Object.keys(patch) as (keyof AppConfig)[];
+    fields.forEach((field) => fieldRevisions.set(field, revision));
 
-    setSaving(true);
+    beginSave();
     try {
       const updated = await API.patchConfig(patch as Record<string, unknown>, {
         applyRuntime,
       });
-      setConfigStore(reconcile(normalizeConfig(updated)));
+      const normalized = normalizeConfig(updated);
+      fields.forEach((field) => {
+        if (fieldRevisions.get(field) === revision) {
+          setField(field, normalized[field]);
+        }
+      });
       if (showSuccess) {
         uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
       }
@@ -154,12 +152,13 @@ const createConfigStore = () => {
       }
       return false;
     } finally {
-      setSaving(false);
+      endSave();
     }
   }
 
   async function resetConfig() {
-    setSaving(true);
+    invalidatePatchResponses();
+    beginSave();
     try {
       await API.resetConfig();
       invalidate();
@@ -182,7 +181,7 @@ const createConfigStore = () => {
       );
       return false;
     } finally {
-      setSaving(false);
+      endSave();
     }
   }
 
@@ -207,7 +206,6 @@ const createConfigStore = () => {
     loadConfig,
     loadFromInit,
     setField,
-    saveConfig,
     patchConfig,
     resetConfig,
   };
