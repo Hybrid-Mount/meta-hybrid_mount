@@ -295,7 +295,7 @@ impl MagicMount {
                     _ => {
                         if let Ok(metadata) = real_path.symlink_metadata() {
                             let file_type = NodeFileType::from(metadata.file_type());
-                            file_type != self.node.file_type || file_type == NodeFileType::Symlink
+                            file_type != node.file_type || file_type == NodeFileType::Symlink
                         } else {
                             true
                         }
