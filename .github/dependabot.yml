@@ -19,6 +19,11 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: "dev"
+    ignore:
+      # typescript-eslint 8.x supports TypeScript versions below 6.1 only.
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
     groups:
       webui-deps:
         patterns:

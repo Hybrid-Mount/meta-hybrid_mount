@@ -51,6 +51,16 @@ struct MountPropagationFlags;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 impl MountPropagationFlags {
     const PRIVATE: Self = Self;
+    const REC: Self = Self;
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+impl BitOr for MountPropagationFlags {
+    type Output = Self;
+
+    fn bitor(self, _rhs: Self) -> Self::Output {
+        Self
+    }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
