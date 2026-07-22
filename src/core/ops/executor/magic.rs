@@ -43,7 +43,7 @@ pub(super) fn mount_magic(
 
     let (mounted_ids, stats) = magic_mount::magic_mount(
         &magic_ws_path,
-        tempdir,
+        &config.moduledir,
         MagicMountOptions {
             mount_source: &config.mountsource,
             managed_partitions: &managed_partitions,
