@@ -120,7 +120,7 @@ impl Node {
             match extattr::lgetxattr(path.as_ref(), crate::defs::REPLACE_DIR_XATTR) {
                 Ok(value) if value == b"y" => return Ok(true),
                 Ok(_) => {}
-                Err(err) if err.raw_os_error() == Some(libc::ENODATA) => {}
+                Err(err) if err.0 == libc::ENODATA => {}
                 Err(err) => return Err(err.into()),
             }
         }

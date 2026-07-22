@@ -10,7 +10,9 @@ use std::{
     sync::OnceLock,
 };
 
-use anyhow::{Context, Result, bail};
+#[cfg(not(target_os = "android"))]
+use anyhow::Context;
+use anyhow::{Result, bail};
 
 pub use self::{path::*, validation::*};
 #[macro_export]

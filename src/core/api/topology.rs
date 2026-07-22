@@ -10,7 +10,9 @@ use std::{
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use anyhow::Context;
-use anyhow::{Result, bail};
+use anyhow::Result;
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+use anyhow::bail;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::process::{MountInfo, MountOptFields, Process};
 use serde::Serialize;
