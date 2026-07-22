@@ -15,8 +15,13 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use extattr::{Flags as XattrFlags, lsetxattr};
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    not(all(test, target_os = "linux"))
+))]
 const SELINUX_XATTR: &str = "security.selinux";
+#[cfg(all(test, target_os = "linux"))]
+const SELINUX_XATTR: &str = "user.hybrid_mount.selinux";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const OVERLAY_OPAQUE_XATTR: &str = "trusted.overlay.opaque";
 #[cfg(all(

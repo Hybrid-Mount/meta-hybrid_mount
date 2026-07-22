@@ -5,6 +5,8 @@
 use std::{fs, path::Path};
 
 use tempfile::TempDir;
+#[cfg(target_os = "linux")]
+use walkdir::WalkDir;
 
 use super::{coordinator::prepare_mount_plan_with_root, types::SHALLOW_OVERLAY_DIR};
 use crate::{
@@ -27,6 +29,10 @@ fn make_module(
     rules: &[(&str, MountMode)],
 ) -> Module {
     write_file(&source_path.join("module.prop"), &format!("id={id}\n"));
+    #[cfg(target_os = "linux")]
+    for entry in WalkDir::new(source_path) {
+        crate::sys::fs::lsetfilecon(entry.unwrap().path(), "u:object_r:system_file:s0").unwrap();
+    }
     Module {
         id: id.to_string(),
         source_path: source_path.to_path_buf(),
