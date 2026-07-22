@@ -28,6 +28,8 @@ updates:
       webui-deps:
         patterns:
           - "*"
+        exclude-patterns:
+          - "typescript"
 
   - package-ecosystem: "github-actions"
     directory: "/"
