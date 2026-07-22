@@ -11,7 +11,7 @@ Hybrid Mount là metamodule điều phối mount cho **KernelSU** và **APatch**
 Nó hợp nhất tệp của module vào các phân vùng Android thông qua một engine chính sách thống nhất với ba backend mount:
 
 - **OverlayFS**: mount dạng lớp để ưu tiên khả năng tương thích rộng.
-- **Magic Mount**: bind mount cho thay thế đường dẫn trực tiếp hoặc fallback.
+- **Magic Mount**: bind mount cho thay thế đường dẫn trực tiếp.
 - **Kasumi**: định tuyến dựa trên LKM với các tính năng runtime hide, spoof và stealth.
 
 **SolidJS WebUI** tích hợp sẵn cung cấp quản lý đồ họa, theo dõi trạng thái trực tiếp và chỉnh sửa cấu hình.
@@ -36,7 +36,6 @@ Gói phát hành có ba biến thể. Trừ khi được ghi rõ, README này m�
 - [CLI](#cli)
 - [Kiến trúc](#kiến-trúc)
 - [Build](#build)
-- [Ghi chú vận hành](#ghi-chú-vận-hành)
 - [Giấy phép](#giấy-phép)
 
 ---
@@ -61,7 +60,7 @@ Biến thể `lite` (`--no-default-features --features control-plane`) loại b�
 
 Biến thể `nano` (`--no-default-features`, không có Cargo features) chỉ dựa trên tệp cấu hình. Nó loại bỏ WebUI, daemon, CLI và hạ tầng control plane; chỉ còn một binary nhỏ đọc `config.toml`, tạo kế hoạch mount, thực thi rồi thoát.
 
-Nano dùng `magic` làm chế độ mặc định. Khi cài đặt, lựa chọn bằng phím âm lượng sẽ ghi marker rỗng `overlay` hoặc `magic` vào thư mục gốc của từng module được quản lý. Tên marker được so khớp không phân biệt chữ hoa chữ thường.
+Nano dùng `magic` làm chế độ mặc định. Khi cài đặt, lựa chọn bằng phím âm lượng sẽ ghi marker rỗng `overlay` hoặc `magic` vào thư mục gốc của từng module được quản lý. Tên marker phải khớp chính xác với dạng chữ thường này.
 
 ### Ma trận tính năng
 
@@ -73,7 +72,7 @@ Nano dùng `magic` làm chế độ mặc định. Khi cài đặt, lựa chọn
 | WebUI | Có | Có | Không |
 | CLI | Có | Có | Không |
 | Daemon | Có | Có | Không |
-| Cache cấu hình và áp dụng runtime | Có | Có | Không |
+| Áp dụng cấu hình runtime | Có | Có | Không |
 | Kasumi hide/spoof/stealth | Có | Không | Không |
 | Tự động nạp LKM | Có | Không | Không |
 | Cargo features | `kasumi` (bao gồm `control-plane`) | chỉ `control-plane` | không có |
@@ -85,8 +84,8 @@ Nano dùng `magic` làm chế độ mặc định. Khi cài đặt, lựa chọn
 - **Lập kế hoạch xác định**: xung đột được phát hiện trong giai đoạn lập kế hoạch.
 - **WebUI tích hợp**: quản lý module, chỉnh sửa cấu hình và theo dõi trạng thái runtime.
 - **Tích hợp Kasumi runtime**: tự nạp LKM, mirror routing, mount hide, maps/statfs spoof, UID hiding, uname spoof và kstat rules.
-- **Cache cấu hình**: patch tăng dần và áp dụng ngay.
-- **Thân thiện với khôi phục**: tự dọn tệp runtime cũ và reset bằng `api config-reset`.
+- **Cập nhật cấu hình runtime**: patch đã kiểm tra có thể được lưu và áp dụng ngay.
+- **Báo lỗi rõ ràng**: trạng thái hoặc cấu hình không hợp lệ sẽ thất bại ngay; `api config-reset` chỉ chạy khi được gọi rõ ràng.
 - **Dễ tự động hóa**: daemon protocol JSON-over-Unix-socket và HTTP API.
 
 ---
@@ -96,7 +95,8 @@ Nano dùng `magic` làm chế độ mặc định. Khi cài đặt, lựa chọn
 1. Cài [KernelSU](https://kernelsu.org/) hoặc [APatch](https://apatch.dev/) trên thiết bị.
 2. Tải ZIP `full`, `lite` hoặc `nano` từ [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Flash ZIP qua trình cài module của root manager.
-4. Khởi động lại. Hybrid Mount sẽ tự phát hiện môi trường và áp dụng chính sách overlay mặc định.
+4. Ở lần cài Full/Lite đầu tiên, chọn chế độ mặc định: Tăng âm lượng chọn OverlayFS, Giảm âm lượng chọn Magic Mount, và sau 10 giây không nhập sẽ chọn OverlayFS. Đây là tương tác duy nhất của trình cài; Nano bỏ qua bước này.
+5. Khởi động lại. Hybrid Mount sẽ tự phát hiện môi trường và áp dụng chính sách đã chọn.
 
 ```bash
 # Kiểm tra trạng thái runtime
@@ -173,7 +173,6 @@ Tài liệu README có sẵn bằng [English](https://github.com/Hybrid-Mount/me
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Lưu trữ upper/work của OverlayFS. |
 | `disable_umount` | bool | `false` | Bỏ qua umount, chỉ dùng để debug. |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Chính sách toàn cục mặc định. |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | Chế độ khởi động daemon. |
 | `rules` | map | `{}` | Chính sách theo module và theo đường dẫn. |
 
 ---
@@ -201,7 +200,7 @@ Thứ tự ưu tiên:
 2. Mặc định theo module: `rules.<module>.default_mode`
 3. Mặc định toàn cục: `default_mode`
 
-Các marker module được nhận diện gồm `disable`, `remove`, `skip_mount`, `mount_error`, `overlay`, `magic` và `.replace`. Tên marker được so khớp không phân biệt chữ hoa chữ thường.
+Các marker module được nhận diện gồm `disable`, `remove`, `skip_mount`, `overlay`, `magic` và `.replace`. Tên marker phân biệt chữ hoa chữ thường và phải khớp chính xác.
 
 ---
 
@@ -260,16 +259,6 @@ cargo +nightly test
 ### CI gate và kiểm tra feature flag
 
 Mọi thay đổi phải vượt qua: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --workspace`, WebUI `pnpm lint` + `pnpm test`, và kiểm tra tiêu đề giấy phép. `cargo clippy --all-features` chỉ kiểm tra biến thể `full`; cũng đảm bảo các tổ hợp **lite** (`--no-default-features --features control-plane`) và **nano** (`--no-default-features`) biên dịch được. Mã Kasumi phải nằm sau `#[cfg(feature = "kasumi")]`; mã daemon/CLI/WebUI phải nằm sau `#[cfg(feature = "control-plane")]`.
-
----
-
-## Ghi chú vận hành
-
-- Cài đặt mới tự phát hiện `mountsource`.
-- Nếu cấu hình hỏng, dùng `hybrid-mount api config-reset`, rồi áp dụng lại quy tắc từng bước.
-- `api config-patch --apply-runtime` áp dụng thay đổi một phần ngay lập tức.
-- Với Full, Kasumi LKM phải khớp kernel đang chạy; dùng `lkm_kmi_override` nếu KMI phát hiện sai.
-- `kasumi clear` dọn trạng thái runtime và giải phóng kết nối kernel; một số kernel-side rules có thể tồn tại đến khi nạp lại LKM.
 
 ---
 

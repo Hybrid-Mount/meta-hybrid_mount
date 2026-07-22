@@ -78,8 +78,7 @@ export default function NavBar(props: Props) {
               </md-icon>
             </div>
             <span class="label">
-              {uiStore.L.tabs?.[tab.id as keyof typeof uiStore.L.tabs] ||
-                tab.id}
+              {uiStore.L.tabs[tab.id as keyof typeof uiStore.L.tabs]}
             </span>
           </button>
         )}

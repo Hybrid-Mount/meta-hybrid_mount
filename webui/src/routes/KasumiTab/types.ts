@@ -38,7 +38,7 @@ export interface LkmSectionProps {
   pending: boolean;
   kmi: string;
   setKmi: (v: string) => void;
-  lkm: KasumiStatus["lkm"] | undefined;
+  lkm: KasumiStatus["lkm"];
   isExpanded: boolean;
   onToggle: () => void;
   runAction: RunAction;
@@ -48,9 +48,9 @@ export interface LkmSectionProps {
 
 export interface RuntimeSectionProps {
   pending: boolean;
-  config: KasumiStatus["config"] | undefined;
-  status: KasumiStatus | null;
-  lkm: KasumiStatus["lkm"] | undefined;
+  config: KasumiStatus["config"];
+  status: KasumiStatus;
+  lkm: KasumiStatus["lkm"];
   isExpanded: boolean;
   onToggle: () => void;
   runAction: RunAction;
@@ -97,7 +97,7 @@ export interface MapsSectionProps {
   setMapsSpoofedDev: (v: string) => void;
   mapsPath: string;
   setMapsPath: (v: string) => void;
-  config: KasumiStatus["config"] | undefined;
+  config: KasumiStatus["config"];
   isExpanded: boolean;
   onToggle: () => void;
   runAction: RunAction;
@@ -105,8 +105,8 @@ export interface MapsSectionProps {
 
 export interface FeaturesSectionProps {
   loading: boolean;
-  status: KasumiStatus | null;
-  config: KasumiStatus["config"] | undefined;
+  status: KasumiStatus;
+  config: KasumiStatus["config"];
   activeModules: string[];
   isExpanded: boolean;
   onToggle: () => void;

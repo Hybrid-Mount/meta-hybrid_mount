@@ -27,7 +27,7 @@ pub fn handle_api_features() -> Result<()> {
 
     #[cfg(feature = "kasumi")]
     {
-        let payload = api::build_features_payload();
+        let payload = api::build_features_payload()?;
         print_json(&payload, "features payload")
     }
 }

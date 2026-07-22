@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -24,7 +24,6 @@ use crate::{
 };
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
-#[serde(default)]
 pub struct MountStatistics {
     pub total_mounts: usize,
     pub successful_mounts: usize,
@@ -98,7 +97,6 @@ impl MountStatistics {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
-#[serde(default)]
 pub struct ModuleModeStats {
     pub overlayfs: usize,
     pub magicmount: usize,
@@ -107,7 +105,6 @@ pub struct ModuleModeStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-#[serde(default)]
 pub struct KasumiRuntimeInfo {
     pub status: String,
     pub available: bool,
@@ -127,7 +124,6 @@ pub struct KasumiRuntimeInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(default)]
 pub struct DaemonRuntimeInfo {
     pub alive: bool,
     pub socket_path: String,
@@ -142,30 +138,16 @@ pub struct RuntimeState {
     pub mount_point: PathBuf,
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
-    #[serde(default)]
     pub kasumi_modules: Vec<String>,
-    #[serde(default)]
     pub custom_mounts: Vec<String>,
-    #[serde(default)]
-    pub mount_error_modules: Vec<String>,
-    #[serde(default)]
-    pub mount_error_reasons: BTreeMap<String, String>,
-    #[serde(default)]
     pub skip_mount_modules: Vec<String>,
-    #[serde(default)]
     pub blacklisted_modules: Vec<String>,
-    #[serde(default)]
     pub active_mounts: Vec<String>,
     #[cfg(feature = "control-plane")]
-    #[serde(default)]
     pub tmpfs_xattr_supported: bool,
-    #[serde(default)]
     pub mount_stats: MountStatistics,
-    #[serde(default)]
     pub mode_stats: ModuleModeStats,
-    #[serde(default)]
     pub kasumi: KasumiRuntimeInfo,
-    #[serde(default)]
     pub daemon: DaemonRuntimeInfo,
     #[serde(skip)]
     cached_status_value: Option<serde_json::Value>,
@@ -201,18 +183,18 @@ impl RuntimeState {
         mount_stats: MountStatistics,
         mode_stats: ModuleModeStats,
         kasumi: KasumiRuntimeInfo,
-    ) -> Self {
+    ) -> Result<Self> {
         let start = SystemTime::now();
 
         let timestamp = start
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
+            .map_err(|err| anyhow::anyhow!("system clock is before the Unix epoch: {err}"))?
             .as_secs();
 
         let pid = std::process::id();
 
         #[cfg(feature = "control-plane")]
-        let tmpfs_xattr_supported = xattr::is_overlay_xattr_supported().unwrap_or(false);
+        let tmpfs_xattr_supported = xattr::is_overlay_xattr_supported()?;
 
         let state = Self {
             timestamp,
@@ -223,8 +205,6 @@ impl RuntimeState {
             magic_modules,
             kasumi_modules,
             custom_mounts,
-            mount_error_modules: Vec::new(),
-            mount_error_reasons: BTreeMap::new(),
             skip_mount_modules: Vec::new(),
             blacklisted_modules: Vec::new(),
             active_mounts,
@@ -263,15 +243,16 @@ impl RuntimeState {
             state.active_mounts.len()
         );
 
-        state
+        Ok(state)
     }
 
     pub fn save(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
-        if let Ok(existing) = std::fs::read_to_string(defs::STATE_FILE)
-            && existing == json
-        {
-            return Ok(());
+        match std::fs::read_to_string(defs::STATE_FILE) {
+            Ok(existing) if existing == json => return Ok(()),
+            Ok(_) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
         }
         crate::scoped_log!(
             debug,
@@ -287,29 +268,15 @@ impl RuntimeState {
             defs::STATE_FILE,
             json.len()
         );
-        if self.mount_error_modules.is_empty() {
-            crate::scoped_log!(
-                info,
-                "runtime_state:summary",
-                "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, mount_errors=0, daemon_alive={}",
-                self.storage_mode,
-                self.active_mounts.join(","),
-                self.kasumi_modules.join(","),
-                self.daemon.alive
-            );
-        } else {
-            crate::scoped_log!(
-                warn,
-                "runtime_state:summary",
-                "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, mount_errors={}, reasons={:?}, daemon_alive={}",
-                self.storage_mode,
-                self.active_mounts.join(","),
-                self.kasumi_modules.join(","),
-                self.mount_error_modules.join(","),
-                self.mount_error_reasons,
-                self.daemon.alive
-            );
-        }
+        crate::scoped_log!(
+            info,
+            "runtime_state:summary",
+            "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, daemon_alive={}",
+            self.storage_mode,
+            self.active_mounts.join(","),
+            self.kasumi_modules.join(","),
+            self.daemon.alive
+        );
         Ok(())
     }
 
@@ -319,7 +286,7 @@ impl RuntimeState {
         mount_point: &Path,
         result: &ExecutionResult,
         inventory: &InventorySummary,
-    ) -> Self {
+    ) -> Result<Self> {
         crate::scoped_log!(
             debug,
             "runtime_state:build",
@@ -331,21 +298,8 @@ impl RuntimeState {
             result.kasumi_count()
         );
 
-        let previous_state = match Self::load() {
-            Ok(state) => state,
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "runtime_state:build",
-                    "fallback: reason=load_previous_failed, error={:#}",
-                    err
-                );
-                Self::default()
-            }
-        };
-
         #[cfg(feature = "kasumi")]
-        let kasumi = kasumi::collect_runtime_info(config);
+        let kasumi = kasumi::collect_runtime_info(config)?;
         #[cfg(not(feature = "kasumi"))]
         let kasumi = {
             let _ = config;
@@ -371,26 +325,21 @@ impl RuntimeState {
             result.mount_stats.clone(),
             collect_mode_stats(result),
             kasumi,
-        );
-        state.mount_error_modules = previous_state.mount_error_modules;
-        state.mount_error_reasons = previous_state.mount_error_reasons;
-        clear_recovered_mount_errors(&mut state);
+        )?;
         state.skip_mount_modules = inventory.skip_mount_modules.clone();
         state.blacklisted_modules = inventory.blacklisted_modules.clone();
         state.mode_stats.blacklisted = state.blacklisted_modules.len();
-        state.daemon = previous_state.daemon;
         state.invalidate_cache();
 
         crate::scoped_log!(
             debug,
             "runtime_state:build",
-            "complete: mount_errors={}, skip_mount_modules={}, active_mounts={}",
-            state.mount_error_modules.len(),
+            "complete: skip_mount_modules={}, active_mounts={}",
             state.skip_mount_modules.len(),
             state.active_mounts.len()
         );
 
-        state
+        Ok(state)
     }
 
     pub fn mounted_module_ids(&self) -> HashSet<&str> {
@@ -403,15 +352,16 @@ impl RuntimeState {
     }
 
     #[cfg(feature = "control-plane")]
-    pub fn set_daemon_state(&mut self, alive: bool, socket_path: impl Into<String>) {
+    pub fn set_daemon_state(&mut self, alive: bool, socket_path: impl Into<String>) -> Result<()> {
         let refreshed_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
+            .map_err(|err| anyhow::anyhow!("system clock is before the Unix epoch: {err}"))?
             .as_secs();
         self.daemon.alive = alive;
         self.daemon.socket_path = socket_path.into();
         self.daemon.last_refresh_ts = refreshed_at;
         self.invalidate_cache();
+        Ok(())
     }
 
     pub fn load() -> Result<Self> {
@@ -421,15 +371,6 @@ impl RuntimeState {
             "start: path={}",
             defs::STATE_FILE
         );
-        if !std::path::Path::new(defs::STATE_FILE).exists() {
-            crate::scoped_log!(
-                debug,
-                "runtime_state:load",
-                "fallback: reason=state_file_missing, path={}",
-                defs::STATE_FILE
-            );
-            return Ok(Self::default());
-        }
         let content = fs::read_to_string(defs::STATE_FILE)?;
         let state = serde_json::from_str(&content)?;
         crate::scoped_log!(
@@ -477,18 +418,4 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     );
 
     active_mounts
-}
-
-fn clear_recovered_mount_errors(state: &mut RuntimeState) {
-    let mounted: HashSet<String> = state
-        .mounted_module_ids()
-        .into_iter()
-        .map(|s| s.to_owned())
-        .collect();
-    state
-        .mount_error_modules
-        .retain(|module_id| !mounted.contains(module_id));
-    state
-        .mount_error_reasons
-        .retain(|module_id, _| !mounted.contains(module_id));
 }

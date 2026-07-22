@@ -30,4 +30,3 @@ build
 /lib/constants_gen.js
 .claude/settings.local.json
 .claude/
-src/lib/infoTabData.gen.ts

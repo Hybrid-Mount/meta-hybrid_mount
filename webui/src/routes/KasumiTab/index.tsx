@@ -103,7 +103,7 @@ export default function KasumiTab() {
     };
 
     setForms({
-      kmi: nextStatus.lkm?.kmi_override || config.lkm_kmi_override || "",
+      kmi: nextStatus.lkm.kmi_override,
       unameMode: config.uname_mode === "global" ? "global" : "scoped",
       release: uname.release || "",
       version: uname.version || "",
@@ -119,14 +119,11 @@ export default function KasumiTab() {
 
   async function refreshStatusOnly(force = false) {
     if (force) {
-      await kasumiStore.refreshStatus(true, true);
+      await kasumiStore.refreshStatus(true);
     } else {
       await kasumiStore.ensureStatusLoaded();
     }
-    const nextStatus = kasumiStore.status;
-    if (nextStatus) {
-      syncForms(nextStatus);
-    }
+    syncForms(kasumiStore.status);
   }
 
   async function loadUserHideRules(force = false) {
@@ -157,10 +154,7 @@ export default function KasumiTab() {
       }
     } catch (e: unknown) {
       uiStore.showToast(
-        getErrorMessage(
-          e,
-          uiStore.L.kasumi?.loadError ?? "Failed to load Kasumi",
-        ),
+        getErrorMessage(e, uiStore.L.kasumi.loadError),
         "error",
       );
     } finally {
@@ -174,10 +168,7 @@ export default function KasumiTab() {
       await refreshStatusOnly(false);
     } catch (e: unknown) {
       uiStore.showToast(
-        getErrorMessage(
-          e,
-          uiStore.L.kasumi?.loadError ?? "Failed to load Kasumi",
-        ),
+        getErrorMessage(e, uiStore.L.kasumi.loadError),
         "error",
       );
     } finally {
@@ -208,18 +199,10 @@ export default function KasumiTab() {
       const original = await API.getOriginalKernelUname();
       setForms("release", original.release || "");
       setForms("version", original.version || "");
-      uiStore.showToast(
-        uiStore.L.kasumi?.originalKernelLoaded ??
-          "Loaded original kernel values",
-        "success",
-      );
+      uiStore.showToast(uiStore.L.kasumi.originalKernelLoaded, "success");
     } catch (e: unknown) {
       uiStore.showToast(
-        getErrorMessage(
-          e,
-          uiStore.L.kasumi?.originalKernelLoadFailed ??
-            "Failed to read original kernel values",
-        ),
+        getErrorMessage(e, uiStore.L.kasumi.originalKernelLoadFailed),
         "error",
       );
     } finally {
@@ -251,13 +234,11 @@ export default function KasumiTab() {
   });
 
   const status = createMemo(() => kasumiStore.status);
-  const config = createMemo(() => status()?.config);
-  const lkm = createMemo(() => status()?.lkm);
-  const activeModules = createMemo(
-    () => status()?.runtime?.kasumi_modules || [],
-  );
+  const config = createMemo(() => status().config);
+  const lkm = createMemo(() => status().lkm);
+  const activeModules = createMemo(() => status().runtime.kasumi_modules);
   const mapsSpoofSupported = createMemo(() =>
-    (status()?.feature_names || []).includes("maps_spoof"),
+    status().feature_names.includes("maps_spoof"),
   );
   const kmiOptions = createMemo(() => {
     const options = ["", ...KNOWN_KMI_OPTIONS];
@@ -268,34 +249,27 @@ export default function KasumiTab() {
   });
   const heroStatusText = createMemo(() => {
     if (loading()) {
-      return uiStore.L.kasumi?.statusLoading ?? "Loading";
+      return uiStore.L.kasumi.statusLoading;
     }
-    if (status()?.status === "disabled_runtime_present") {
-      return (
-        uiStore.L.kasumi?.statusConfigOffRuntimeOn ??
-        "Config Off / Runtime Still Loaded"
-      );
+    if (status().status === "disabled_runtime_present") {
+      return uiStore.L.kasumi.statusConfigOffRuntimeOn;
     }
-    if (status()?.status === "disabled") {
-      return uiStore.L.kasumi?.statusDisabled ?? "Disabled";
+    if (status().status === "disabled") {
+      return uiStore.L.kasumi.statusDisabled;
     }
-    return status()?.available
-      ? (uiStore.L.kasumi?.statusWorking ?? "Working")
-      : (uiStore.L.kasumi?.statusUnavailable ?? "Unavailable");
+    return status().available
+      ? uiStore.L.kasumi.statusWorking
+      : uiStore.L.kasumi.statusUnavailable;
   });
   const heroSubtitleText = createMemo(
     () =>
-      `API ${status()?.protocol_version ?? "-"} · ${uiStore.L.kasumi?.rulesBadge ?? "Rules"} ${status()?.rule_count ?? 0}`,
+      `API ${status().protocol_version ?? "-"} · ${uiStore.L.kasumi.rulesBadge} ${status().rule_count}`,
   );
-  const statusChipText = createMemo(
-    () => status()?.mirror_path || config()?.mirror_path || "-",
-  );
+  const statusChipText = createMemo(() => status().mirror_path);
   const unameModeDescription = createMemo(() =>
     forms.unameMode === "global"
-      ? (uiStore.L.kasumi?.unameModeGlobalDesc ??
-        "System-wide: rewrites init_uts_ns, every task sees fake values.")
-      : (uiStore.L.kasumi?.unameModeScopedDesc ??
-        "Per-process: only Kasumi-hidden UIDs see fake values."),
+      ? uiStore.L.kasumi.unameModeGlobalDesc
+      : uiStore.L.kasumi.unameModeScopedDesc,
   );
 
   function isSectionExpanded(id: string) {
@@ -312,10 +286,7 @@ export default function KasumiTab() {
       await loadUserHideRules();
     } catch (e: unknown) {
       uiStore.showToast(
-        getErrorMessage(
-          e,
-          uiStore.L.kasumi?.loadError ?? "Failed to load Kasumi",
-        ),
+        getErrorMessage(e, uiStore.L.kasumi.loadError),
         "error",
       );
     }
@@ -329,16 +300,12 @@ export default function KasumiTab() {
           onclose={() => setShowKmiDialog(false)}
           class="transparent-scrim"
         >
-          <div slot="headline">
-            {uiStore.L.kasumi?.kmiOverride ?? "KMI Override"}
-          </div>
+          <div slot="headline">{uiStore.L.kasumi.kmiOverride}</div>
           <div slot="content" class="kasumi-kmi-dialog">
             <md-list>
               <For each={kmiOptions()}>
                 {(option) => {
-                  const label = option
-                    ? option
-                    : (uiStore.L.kasumi?.autoKmi ?? "Auto Detect");
+                  const label = option ? option : uiStore.L.kasumi.autoKmi;
 
                   return (
                     <md-list-item
@@ -365,7 +332,7 @@ export default function KasumiTab() {
           </div>
           <div slot="actions">
             <md-text-button onClick={() => setShowKmiDialog(false)}>
-              {uiStore.L.common?.cancel ?? "Cancel"}
+              {uiStore.L.common.cancel}
             </md-text-button>
           </div>
         </md-dialog>
@@ -377,27 +344,22 @@ export default function KasumiTab() {
           onclose={() => setShowUnloadLkmWarning(false)}
           class="transparent-scrim"
         >
-          <div slot="headline">
-            {uiStore.L.kasumi?.unloadLkmWarningTitle ?? "注意！"}
-          </div>
-          <div slot="content">
-            {uiStore.L.kasumi?.unloadLkmWarningBody ??
-              "Kasumi 使用 TSR 模式时可能无法卸载，如 5 秒内未成功卸载，Kasumi 将会在 3 秒后自动安全重启，你确定要卸载吗？"}
-          </div>
+          <div slot="headline">{uiStore.L.kasumi.unloadLkmWarningTitle}</div>
+          <div slot="content">{uiStore.L.kasumi.unloadLkmWarningBody}</div>
           <div slot="actions">
             <md-text-button onClick={() => setShowUnloadLkmWarning(false)}>
-              {uiStore.L.kasumi?.unloadLkmWarningCancel ?? "取消"}
+              {uiStore.L.kasumi.unloadLkmWarningCancel}
             </md-text-button>
             <md-text-button
               onClick={() => {
                 setShowUnloadLkmWarning(false);
                 void runAction(
                   () => API.unloadKasumiLkm(),
-                  uiStore.L.kasumi?.unloadLkm ?? "LKM unloaded",
+                  uiStore.L.kasumi.unloadLkm,
                 );
               }}
             >
-              {uiStore.L.kasumi?.unloadLkmWarningConfirm ?? "确定"}
+              {uiStore.L.kasumi.unloadLkmWarningConfirm}
             </md-text-button>
           </div>
         </md-dialog>
@@ -465,7 +427,7 @@ export default function KasumiTab() {
             runAction={runAction}
           />
 
-          <Show when={status()?.available && mapsSpoofSupported()}>
+          <Show when={status().available && mapsSpoofSupported()}>
             <MapsSection
               pending={pending()}
               mapsTargetIno={forms.mapsTargetIno}
@@ -500,7 +462,7 @@ export default function KasumiTab() {
         <md-filled-tonal-icon-button
           disabled={pending()}
           onClick={() => load("full")}
-          title={uiStore.L.kasumi?.refresh ?? "Refresh"}
+          title={uiStore.L.kasumi.refresh}
         >
           <md-icon>
             <svg viewBox="0 0 24 24">
@@ -512,10 +474,7 @@ export default function KasumiTab() {
         <md-filled-button
           disabled={pending()}
           onClick={() =>
-            runAction(
-              () => API.clearKasumiRules(),
-              uiStore.L.kasumi?.clearRules ?? "Rules cleared",
-            )
+            runAction(() => API.clearKasumiRules(), uiStore.L.kasumi.clearRules)
           }
         >
           <md-icon slot="icon">
@@ -523,7 +482,7 @@ export default function KasumiTab() {
               <path d={ICONS.delete} />
             </svg>
           </md-icon>
-          {uiStore.L.kasumi?.clearRules ?? "Clear Rules"}
+          {uiStore.L.kasumi.clearRules}
         </md-filled-button>
       </BottomActions>
     </>

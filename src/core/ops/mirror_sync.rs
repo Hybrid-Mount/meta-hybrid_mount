@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::{
-    core::{inventory::Module, recovery::ModuleStageFailure},
+    core::{failure::ModuleStageFailure, inventory::Module},
     partitions,
     sys::fs::{PreparedDir, finalize_copied_tree, prune_orphaned_children, sync_dir},
 };
@@ -72,7 +72,7 @@ pub fn sync_modules(modules: &[Module], target_base: &Path) -> Result<()> {
             continue;
         }
 
-        finalize_copied_tree(&module.id, prepared.tmp_path(), &sync_stats.opaque_dirs);
+        finalize_copied_tree(&module.id, prepared.tmp_path(), &sync_stats.opaque_dirs)?;
         prepared
             .commit()
             .map_err(|err| {

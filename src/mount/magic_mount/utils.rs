@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use rustix::fs::{Gid, Mode, Uid, chmod, chown};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(super) use rustix::mount::mount_bind;
@@ -103,19 +103,8 @@ where
         create_dir(&work_dir_path)?;
         copy_metadata(&path, &work_dir_path, &entry.metadata()?)?;
         for entry_result in path.read_dir()? {
-            let entry = match entry_result {
-                Ok(entry) => entry,
-                Err(err) => {
-                    crate::scoped_log!(
-                        warn,
-                        "magic:collect",
-                        "enumerate mirror failed: path={}, error={}",
-                        path.display(),
-                        err
-                    );
-                    continue;
-                }
-            };
+            let entry = entry_result
+                .with_context(|| format!("failed to enumerate mirror path {}", path.display()))?;
             mount_mirror(&path, &work_dir_path, &entry)?;
         }
     } else if file_type.is_symlink() {
@@ -131,44 +120,32 @@ fn collect_magic_subtree(
     relative_path: &Path,
     rules: &ModuleRules,
     descendant_rule_prefixes: &HashSet<String>,
-    use_kasumi: bool,
 ) -> Result<bool> {
     let mut has_file = false;
 
     for entry_result in module_dir.read_dir()? {
-        let entry = match entry_result {
-            Ok(entry) => entry,
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "magic:collect",
-                    "enumerate subtree failed: path={}, error={}",
-                    module_dir.display(),
-                    err
-                );
-                continue;
-            }
-        };
+        let entry = entry_result?;
 
         let file_name = entry.file_name();
-        let name = file_name.to_string_lossy().into_owned();
+        let name = file_name
+            .to_str()
+            .with_context(|| format!("non-UTF-8 entry under {}", module_dir.display()))?
+            .to_owned();
         let entry_path = entry.path();
         let next_relative = relative_path.join(&file_name);
         let next_relative_key = next_relative.to_string_lossy();
-        let effective_mode = rules.effective_mode(&next_relative, use_kasumi);
+        let effective_mode = rules.effective_mode(&next_relative);
 
         match entry.file_type() {
             Ok(file_type) if file_type.is_dir() => {
                 let has_descendant_rules =
                     descendant_rule_prefixes.contains(next_relative_key.as_ref());
                 if matches!(effective_mode, MountMode::Magic) && !has_descendant_rules {
-                    if let Some(mut node) = Node::new_module(&name, &entry) {
-                        let subtree_has_file =
-                            node.collect_module_files(&entry_path)? || node.replace;
-                        if subtree_has_file {
-                            target.children.insert(name, node);
-                            has_file = true;
-                        }
+                    let mut node = Node::new_module(&name, &entry)?;
+                    let subtree_has_file = node.collect_module_files(&entry_path)? || node.replace;
+                    if subtree_has_file {
+                        target.children.insert(name, node);
+                        has_file = true;
                     }
                     continue;
                 }
@@ -177,16 +154,13 @@ fn collect_magic_subtree(
                     continue;
                 }
 
-                let Some(mut node) = Node::new_module(&name, &entry) else {
-                    continue;
-                };
+                let mut node = Node::new_module(&name, &entry)?;
                 let subtree_has_file = collect_magic_subtree(
                     &mut node,
                     &entry_path,
                     &next_relative,
                     rules,
                     descendant_rule_prefixes,
-                    use_kasumi,
                 )? || node.replace;
                 if subtree_has_file {
                     target.children.insert(name, node);
@@ -194,9 +168,8 @@ fn collect_magic_subtree(
                 }
             }
             Ok(_) => {
-                if matches!(effective_mode, MountMode::Magic)
-                    && let Some(node) = Node::new_module(&name, &entry)
-                {
+                if matches!(effective_mode, MountMode::Magic) {
+                    let node = Node::new_module(&name, &entry)?;
                     if target.children.get(&name).is_some_and(|existing| {
                         existing.file_type != crate::mount::node::NodeFileType::Symlink
                     }) {
@@ -206,15 +179,7 @@ fn collect_magic_subtree(
                     has_file = true;
                 }
             }
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "magic:collect",
-                    "file type failed: path={}, error={}",
-                    entry_path.display(),
-                    err
-                );
-            }
+            Err(err) => return Err(err.into()),
         }
     }
 
@@ -225,7 +190,6 @@ pub fn collect_module_files(
     module_dir: &Path,
     managed_partitions: &[String],
     magic_modules: &[Module],
-    use_kasumi: bool,
 ) -> Result<Option<Node>> {
     let mut root = Node::new_root("");
     let mut system = Node::new_root("system");
@@ -245,33 +209,19 @@ pub fn collect_module_files(
     );
 
     for entry_result in module_root.read_dir()? {
-        let entry = match entry_result {
-            Ok(entry) => entry,
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "magic:collect",
-                    "enumerate root failed: path={}, error={}",
-                    module_root.display(),
-                    err
-                );
-                continue;
-            }
-        };
+        let entry = entry_result?;
         if !entry.file_type()?.is_dir() {
-            continue;
+            bail!(
+                "module directory contains a non-directory entry: {}",
+                entry.path().display()
+            );
         }
 
         let file_name = entry.file_name();
-        let Some(id) = file_name.to_str().map(str::to_owned) else {
-            crate::scoped_log!(
-                warn,
-                "magic:collect",
-                "skip: reason=non_utf8_module_dir, name={:?}",
-                file_name
-            );
-            continue;
-        };
+        let id = file_name
+            .to_str()
+            .with_context(|| format!("non-UTF-8 module directory under {}", module_root.display()))?
+            .to_owned();
         crate::scoped_log!(debug, "magic:collect", "module inspect: id={}", id);
 
         let Some(rules) = selected_rules.get(id.as_str()).copied() else {
@@ -286,26 +236,10 @@ pub fn collect_module_files(
 
         let module_path = entry.path();
         let prop = module_path.join("module.prop");
-        if !prop.is_file() {
-            crate::scoped_log!(
-                debug,
-                "magic:collect",
-                "module skip: id={}, reason=missing_module_prop",
-                id
-            );
-            continue;
-        }
-        if !inventory::module_prop_id_matches_dir(&prop, &id)? {
-            crate::scoped_log!(
-                debug,
-                "magic:collect",
-                "module skip: id={}, reason=module_prop_id_mismatch",
-                id
-            );
-            continue;
-        }
+        inventory::validate_module_prop_id(&prop, &id)?;
 
-        if inventory::is_reserved_module_dir(&id) || inventory::has_mount_block_marker(&module_path)
+        if inventory::is_reserved_module_dir(&id)
+            || inventory::has_mount_block_marker(&module_path)?
         {
             crate::scoped_log!(
                 debug,
@@ -351,7 +285,6 @@ pub fn collect_module_files(
                     Path::new(&p),
                     rules,
                     &descendant_rule_prefixes,
-                    use_kasumi,
                 )?);
                 continue;
             }
@@ -372,7 +305,6 @@ pub fn collect_module_files(
                 Path::new(&p),
                 rules,
                 &descendant_rule_prefixes,
-                use_kasumi,
             )?);
         }
     }
@@ -411,14 +343,11 @@ where
 {
     let src_symlink = read_link(src.as_ref())?;
     symlink(&src_symlink, dst.as_ref())?;
-    if let Err(e) = lsetfilecon(dst.as_ref(), lgetfilecon(src.as_ref())?.as_str()) {
-        crate::scoped_log!(
-            debug,
-            "magic_mount",
-            "clone symlink selinux context failed: dst={}, error={:#}",
-            dst.as_ref().display(),
-            e
-        );
-    }
+    lsetfilecon(dst.as_ref(), lgetfilecon(src.as_ref())?.as_str()).with_context(|| {
+        format!(
+            "failed to clone symlink SELinux context to {}",
+            dst.as_ref().display()
+        )
+    })?;
     Ok(())
 }

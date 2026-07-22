@@ -31,7 +31,7 @@ It provides a stable UI contract for configuration, module policy editing, runti
 
 1. **Operational clarity** for mount strategy and module policy status.
 2. **Stable integration boundary** via a single `AppAPI` interface.
-3. **Safe defaults** with controlled fallbacks between real and mock environments.
+3. **Strict contracts** shared by real and mock environments.
 4. **Adaptation-friendly structure** for alternative backend implementations.
 
 ## Architecture
@@ -130,9 +130,9 @@ pnpm lint
 ## Adapter Notes
 
 - Keep **error semantics structured** (code + message), avoid UI parsing of raw stderr text.
-- Keep JSON payloads **backward compatible** when extending `AppConfig`, `Module`, or `SystemInfo`.
+- Version JSON payload changes explicitly and update both endpoints together.
 - Ensure command inputs are **escaped/sanitized** before shell execution.
-- Prefer **idempotent save operations** for scripting and recovery flows.
+- Prefer **idempotent save operations** for scripting and repeatable flows.
 - Keep daemon state/log paths readable for robust troubleshooting.
 
 ## License

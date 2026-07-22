@@ -37,8 +37,8 @@ fn mount_mapping_requested(plan: &MountPlan) -> bool {
     !plan.kasumi_module_ids.is_empty()
 }
 
-fn auxiliary_features_requested(config: &config::Config) -> bool {
-    config.kasumi.enable_kernel_debug
+fn auxiliary_features_requested(config: &config::Config) -> Result<bool> {
+    Ok(config.kasumi.enable_kernel_debug
         || effective_stealth_enabled(config)
         || effective_mount_hide_enabled(config)
         || effective_maps_spoof_enabled(config)
@@ -48,83 +48,56 @@ fn auxiliary_features_requested(config: &config::Config) -> bool {
         || !config.kasumi.cmdline_value.is_empty()
         || !config.kasumi.hide_uids.is_empty()
         || !config.kasumi.kstat_rules.is_empty()
-        || user_hide_rules::user_hide_rule_count() > 0
+        || user_hide_rules::user_hide_rule_count()? > 0)
 }
 
-fn kasumi_runtime_requested(plan: &MountPlan, config: &config::Config) -> bool {
-    config.kasumi.enabled && (mount_mapping_requested(plan) || auxiliary_features_requested(config))
+fn kasumi_runtime_requested(plan: &MountPlan, config: &config::Config) -> Result<bool> {
+    Ok(config.kasumi.enabled
+        && (mount_mapping_requested(plan) || auxiliary_features_requested(config)?))
 }
 
 fn apply_feature_toggle<F>(
     feature_name: &str,
     enabled: bool,
-    features: Option<i32>,
+    features: i32,
     required_feature: i32,
     operation: F,
-) where
+) -> Result<()>
+where
     F: FnOnce(bool) -> Result<()>,
 {
     let supported = feature_supported(features, required_feature);
 
     if !supported {
-        crate::scoped_log!(
-            warn,
-            "mount:kasumi",
-            "feature skip: name={}, enabled={}, reason=unsupported",
-            feature_name,
-            enabled
-        );
-        return;
+        bail!("Kasumi feature {feature_name} is not supported by the kernel module");
     }
 
-    if let Err(err) = operation(enabled) {
-        crate::scoped_log!(
-            warn,
-            "mount:kasumi",
-            "feature apply failed: name={}, enabled={}, error={:#}",
-            feature_name,
-            enabled,
-            err
-        );
-    }
+    operation(enabled).with_context(|| format!("failed to apply Kasumi feature {feature_name}"))
 }
 
-fn get_features() -> Option<i32> {
-    match kasumi::get_features() {
-        Ok(bits) => Some(bits),
-        Err(err) => {
-            crate::scoped_log!(
-                debug,
-                "mount:kasumi",
-                "feature query failed: error={:#}",
-                err
-            );
-            None
+fn get_features() -> Result<i32> {
+    kasumi::get_features().context("failed to query Kasumi features")
+}
+
+fn log_feature_summary(features: i32) {
+    let names = kasumi::feature_names(features);
+    crate::scoped_log!(
+        info,
+        "mount:kasumi",
+        "features: bits={}, names={}",
+        features,
+        if names.is_empty() {
+            "none".to_string()
+        } else {
+            names.join(",")
         }
-    }
-}
-
-fn log_feature_summary(features: Option<i32>) {
-    if let Some(bits) = features {
-        let names = kasumi::feature_names(bits);
-        crate::scoped_log!(
-            info,
-            "mount:kasumi",
-            "features: bits={}, names={}",
-            bits,
-            if names.is_empty() {
-                "none".to_string()
-            } else {
-                names.join(",")
-            }
-        );
-    }
+    );
 }
 
 fn apply_runtime_switches(
     config: &config::Config,
     runtime_requested: bool,
-    features: Option<i32>,
+    features: i32,
 ) -> Result<()> {
     if !runtime_requested {
         return Ok(());
@@ -140,22 +113,10 @@ fn apply_runtime_switches(
 
     let mount_hide_enabled = effective_mount_hide_enabled(config);
     if mount_hide_enabled {
-        if feature_supported(features, KSM_FEATURE_MOUNT_HIDE) {
-            if let Err(err) = apply_mount_hide_from_config(config) {
-                crate::scoped_log!(
-                    warn,
-                    "mount:kasumi",
-                    "feature apply failed: name=mount_hide, enabled=true, error={:#}",
-                    err
-                );
-            }
-        } else {
-            crate::scoped_log!(
-                warn,
-                "mount:kasumi",
-                "feature skip: name=mount_hide, enabled=true, reason=unsupported"
-            );
+        if !feature_supported(features, KSM_FEATURE_MOUNT_HIDE) {
+            bail!("Kasumi mount_hide is not supported by the kernel module");
         }
+        apply_mount_hide_from_config(config)?;
     }
 
     let maps_spoof_enabled = effective_maps_spoof_enabled(config);
@@ -166,46 +127,23 @@ fn apply_runtime_switches(
             features,
             KSM_FEATURE_MAPS_SPOOF,
             kasumi::set_maps_spoof,
-        );
+        )?;
     }
 
     let statfs_spoof_enabled = effective_statfs_spoof_enabled(config);
     if statfs_spoof_enabled {
-        if feature_supported(features, KSM_FEATURE_STATFS_SPOOF) {
-            if let Err(err) = apply_statfs_spoof_from_config(config) {
-                crate::scoped_log!(
-                    warn,
-                    "mount:kasumi",
-                    "feature apply failed: name=statfs_spoof, enabled=true, error={:#}",
-                    err
-                );
-            }
-        } else {
-            crate::scoped_log!(
-                warn,
-                "mount:kasumi",
-                "feature skip: name=statfs_spoof, enabled=true, reason=unsupported"
-            );
+        if !feature_supported(features, KSM_FEATURE_STATFS_SPOOF) {
+            bail!("Kasumi statfs_spoof is not supported by the kernel module");
         }
+        apply_statfs_spoof_from_config(config)?;
     }
 
     let selinux_fix_enabled = effective_selinux_fix_enabled(config);
+    if selinux_fix_enabled && !feature_supported(features, KSM_FEATURE_SELINUX_FIX) {
+        bail!("Kasumi selinux_fix is not supported by the kernel module");
+    }
     if feature_supported(features, KSM_FEATURE_SELINUX_FIX) {
-        if let Err(err) = kasumi::set_selinux_fix(selinux_fix_enabled) {
-            crate::scoped_log!(
-                warn,
-                "mount:kasumi",
-                "feature apply failed: name=selinux_fix, enabled={}, error={:#}",
-                selinux_fix_enabled,
-                err
-            );
-        }
-    } else if selinux_fix_enabled {
-        crate::scoped_log!(
-            warn,
-            "mount:kasumi",
-            "feature skip: name=selinux_fix, enabled=true, reason=unsupported"
-        );
+        kasumi::set_selinux_fix(selinux_fix_enabled)?;
     }
 
     Ok(())
@@ -289,98 +227,58 @@ pub fn apply_kstat_rule(rule: &schema::KasumiKstatRuleConfig) -> Result<()> {
     native_rule.spoofed_blocks = rule.spoofed_blocks;
     native_rule.is_static = if rule.is_static { 1 } else { 0 };
 
-    match kasumi::update_spoof_kstat(&native_rule) {
-        Ok(()) => Ok(()),
-        Err(update_err) => {
-            crate::scoped_log!(
-                debug,
-                "mount:kasumi",
-                "kstat update fallback to add: target={}, error={:#}",
-                rule.target_pathname.display(),
-                update_err
-            );
-            kasumi::add_spoof_kstat(&native_rule).with_context(|| {
-                format!(
-                    "failed to apply kstat rule for {}",
-                    rule.target_pathname.display()
-                )
-            })
-        }
-    }
+    kasumi::add_spoof_kstat(&native_rule).with_context(|| {
+        format!(
+            "failed to apply kstat rule for {}",
+            rule.target_pathname.display()
+        )
+    })
 }
 
-fn apply_spoof_settings(config: &config::Config, features: Option<i32>) -> Result<()> {
+fn apply_spoof_settings(config: &config::Config, features: i32) -> Result<()> {
     let has_uname_config = has_uname_spoof_config(config);
     let should_apply_uname =
         has_uname_config || matches!(config.kasumi.uname_mode, KasumiUnameMode::Global);
-    if feature_supported(features, KSM_FEATURE_UNAME_SPOOF) && should_apply_uname {
+    if should_apply_uname {
+        if !feature_supported(features, KSM_FEATURE_UNAME_SPOOF) {
+            bail!("Kasumi uname_spoof is not supported by the kernel module");
+        }
         apply_uname_from_config(config)?;
-    } else if should_apply_uname {
-        crate::scoped_log!(
-            warn,
-            "mount:kasumi",
-            "feature skip: name=uname_spoof, reason=unsupported"
-        );
     }
 
-    if feature_supported(features, KSM_FEATURE_CMDLINE_SPOOF)
-        && !config.kasumi.cmdline_value.is_empty()
-    {
+    if !config.kasumi.cmdline_value.is_empty() {
+        if !feature_supported(features, KSM_FEATURE_CMDLINE_SPOOF) {
+            bail!("Kasumi cmdline_spoof is not supported by the kernel module");
+        }
         kasumi::set_cmdline_str(&config.kasumi.cmdline_value)?;
-    } else if !config.kasumi.cmdline_value.is_empty() {
-        crate::scoped_log!(
-            warn,
-            "mount:kasumi",
-            "feature skip: name=cmdline_spoof, reason=unsupported"
-        );
     }
 
-    if !config.kasumi.hide_uids.is_empty()
-        && let Err(err) = kasumi::set_hide_uids(&config.kasumi.hide_uids)
-    {
-        crate::scoped_log!(
-            warn,
-            "mount:kasumi",
-            "hide_uids apply failed: count={}, error={:#}",
-            config.kasumi.hide_uids.len(),
-            err
-        );
+    if !config.kasumi.hide_uids.is_empty() {
+        kasumi::set_hide_uids(&config.kasumi.hide_uids)?;
     }
 
     if !config.kasumi.kstat_rules.is_empty() {
         if !feature_supported(features, KSM_FEATURE_KSTAT_SPOOF) {
-            crate::scoped_log!(
-                warn,
-                "mount:kasumi",
-                "feature skip: name=kstat_rules, count={}, reason=unsupported",
-                config.kasumi.kstat_rules.len()
-            );
-        } else {
-            for rule in &config.kasumi.kstat_rules {
-                apply_kstat_rule(rule)?;
-            }
+            bail!("Kasumi kstat rules are not supported by the kernel module");
+        }
+        for rule in &config.kasumi.kstat_rules {
+            apply_kstat_rule(rule)?;
         }
     }
 
     if !config.kasumi.maps_rules.is_empty() {
         if !feature_supported(features, KSM_FEATURE_MAPS_SPOOF) {
-            crate::scoped_log!(
-                warn,
-                "mount:kasumi",
-                "feature skip: name=maps_rules, count={}, reason=unsupported",
-                config.kasumi.maps_rules.len()
-            );
-        } else {
-            for rule in &config.kasumi.maps_rules {
-                let native_rule = KasumiMapsRule::new(
-                    to_c_ulong(rule.target_ino, "target_ino")?,
-                    to_c_ulong(rule.target_dev, "target_dev")?,
-                    to_c_ulong(rule.spoofed_ino, "spoofed_ino")?,
-                    to_c_ulong(rule.spoofed_dev, "spoofed_dev")?,
-                    &rule.spoofed_pathname,
-                )?;
-                kasumi::add_maps_rule(&native_rule)?;
-            }
+            bail!("Kasumi maps rules are not supported by the kernel module");
+        }
+        for rule in &config.kasumi.maps_rules {
+            let native_rule = KasumiMapsRule::new(
+                to_c_ulong(rule.target_ino, "target_ino")?,
+                to_c_ulong(rule.target_dev, "target_dev")?,
+                to_c_ulong(rule.spoofed_ino, "spoofed_ino")?,
+                to_c_ulong(rule.spoofed_dev, "spoofed_dev")?,
+                &rule.spoofed_pathname,
+            )?;
+            kasumi::add_maps_rule(&native_rule)?;
         }
     }
 
@@ -392,9 +290,9 @@ pub fn reset_runtime(config: &config::Config) -> Result<bool> {
         return Ok(false);
     }
 
-    let available = can_operate(config);
+    let available = can_operate(config)?;
     if !available {
-        return Ok(false);
+        bail!("Kasumi is enabled but unavailable during runtime reset");
     }
 
     crate::scoped_log!(
@@ -407,16 +305,9 @@ pub fn reset_runtime(config: &config::Config) -> Result<bool> {
     kasumi::set_mirror_path(&config.kasumi.mirror_path)?;
     kasumi::set_enabled(false)?;
     kasumi::clear_rules()?;
-    if let Err(err) = kasumi::clear_maps_rules() {
-        crate::scoped_log!(
-            debug,
-            "mount:kasumi",
-            "maps rule clear skipped: error={:#}",
-            err
-        );
-    }
+    kasumi::clear_maps_rules()?;
 
-    let features = get_features();
+    let features = get_features()?;
     log_feature_summary(features);
 
     if config.kasumi.mirror_path != Path::new(defs::KASUMI_MIRROR_DIR) {
@@ -432,20 +323,20 @@ pub fn reset_runtime(config: &config::Config) -> Result<bool> {
 }
 
 pub fn apply_runtime_config(config: &config::Config) -> Result<bool> {
-    // When the user enables Kasumi but the LKM hasn't been loaded yet, attempt
-    // autoload so the deadlock ("switch hidden because LKM not loaded, LKM not
-    // loaded because switch hidden") is broken.
-    if config.kasumi.enabled && !can_operate(config) {
-        let _ = lkm::autoload_if_needed(&config.kasumi);
+    if config.kasumi.enabled && !can_operate(config)? {
+        lkm::autoload_if_needed(&config.kasumi)?;
     }
 
-    if !can_operate(config) {
+    if !can_operate(config)? {
+        if config.kasumi.enabled {
+            bail!("Kasumi is enabled but unavailable");
+        }
         return Ok(false);
     }
 
-    let runtime_requested = config.kasumi.enabled && auxiliary_features_requested(config);
+    let runtime_requested = config.kasumi.enabled && auxiliary_features_requested(config)?;
     let reset = reset_runtime(config)?;
-    let features = get_features();
+    let features = get_features()?;
     log_feature_summary(features);
 
     if !runtime_requested {
@@ -456,9 +347,7 @@ pub fn apply_runtime_config(config: &config::Config) -> Result<bool> {
     apply_runtime_switches(config, true, features)?;
     apply_spoof_settings(config, features)?;
     kasumi::set_enabled(true)?;
-    if let Err(err) = kasumi::fix_mounts() {
-        crate::scoped_log!(warn, "mount:kasumi", "fix_mounts failed: error={:#}", err);
-    }
+    kasumi::fix_mounts()?;
     Ok(true)
 }
 
@@ -467,13 +356,10 @@ pub fn apply(plan: &mut MountPlan, modules: &[Module], config: &config::Config) 
         return Ok(false);
     }
 
-    let runtime_requested = kasumi_runtime_requested(plan, config);
-    let available = can_operate(config);
+    let runtime_requested = kasumi_runtime_requested(plan, config)?;
+    let available = can_operate(config)?;
     if !available {
-        if mount_mapping_requested(plan) {
-            bail!("Kasumi became unavailable before rule application");
-        }
-        return Ok(false);
+        bail!("Kasumi became unavailable before rule application");
     }
 
     crate::scoped_log!(
@@ -499,16 +385,9 @@ pub fn apply(plan: &mut MountPlan, modules: &[Module], config: &config::Config) 
 
     kasumi::set_mirror_path(&config.kasumi.mirror_path)?;
     kasumi::clear_rules()?;
-    if let Err(err) = kasumi::clear_maps_rules() {
-        crate::scoped_log!(
-            debug,
-            "mount:kasumi",
-            "maps rule clear skipped: error={:#}",
-            err
-        );
-    }
+    kasumi::clear_maps_rules()?;
 
-    let features = get_features();
+    let features = get_features()?;
     log_feature_summary(features);
     if !runtime_requested {
         kasumi::set_enabled(false)?;
@@ -533,12 +412,11 @@ pub fn apply(plan: &mut MountPlan, modules: &[Module], config: &config::Config) 
         kasumi::hide_path(Path::new(path))?;
     }
 
-    let (user_hide_applied, user_hide_failed) =
-        user_hide_rules::apply_user_hide_rules_from_paths(&user_hide_paths)?;
+    let user_hide_applied = user_hide_rules::apply_user_hide_rules_from_paths(&user_hide_paths)?;
 
     kasumi::set_enabled(runtime_requested)?;
-    if runtime_requested && let Err(err) = kasumi::fix_mounts() {
-        crate::scoped_log!(warn, "mount:kasumi", "fix_mounts failed: error={:#}", err);
+    if runtime_requested {
+        kasumi::fix_mounts()?;
     }
 
     crate::scoped_log!(
@@ -553,23 +431,18 @@ pub fn apply(plan: &mut MountPlan, modules: &[Module], config: &config::Config) 
         config.kasumi.kstat_rules.len()
     );
 
-    if user_hide_applied > 0 || user_hide_failed > 0 {
+    if user_hide_applied > 0 {
         crate::scoped_log!(
             info,
             "mount:kasumi",
-            "user hide rules: applied={}, failed={}",
-            user_hide_applied,
-            user_hide_failed
+            "user hide rules: applied={}",
+            user_hide_applied
         );
     }
 
     if runtime_requested {
-        match hook_lines() {
-            Ok(hooks) => crate::scoped_log!(debug, "mount:kasumi", "hooks: {}", hooks.join(",")),
-            Err(err) => {
-                crate::scoped_log!(debug, "mount:kasumi", "hook query skipped: error={:#}", err)
-            }
-        }
+        let hooks = hook_lines()?;
+        crate::scoped_log!(debug, "mount:kasumi", "hooks: {}", hooks.join(","));
     }
 
     Ok(runtime_requested)

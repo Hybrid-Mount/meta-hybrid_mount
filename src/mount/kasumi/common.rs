@@ -13,25 +13,21 @@ pub(super) fn build_managed_partitions(
 }
 
 pub(super) fn effective_stealth_enabled(config: &config::Config) -> bool {
-    config.kasumi.enable_stealth || config.kasumi.enable_hidexattr
+    config.kasumi.enable_stealth
 }
 
 pub(super) fn effective_mount_hide_enabled(config: &config::Config) -> bool {
     config.kasumi.enable_mount_hide
-        || config.kasumi.enable_hidexattr
         || config.kasumi.mount_hide.enabled
         || !config.kasumi.mount_hide.path_pattern.as_os_str().is_empty()
 }
 
 pub(super) fn effective_maps_spoof_enabled(config: &config::Config) -> bool {
-    config.kasumi.enable_maps_spoof
-        || config.kasumi.enable_hidexattr
-        || !config.kasumi.maps_rules.is_empty()
+    config.kasumi.enable_maps_spoof || !config.kasumi.maps_rules.is_empty()
 }
 
 pub(super) fn effective_statfs_spoof_enabled(config: &config::Config) -> bool {
     config.kasumi.enable_statfs_spoof
-        || config.kasumi.enable_hidexattr
         || config.kasumi.statfs_spoof.enabled
         || !config.kasumi.statfs_spoof.path.as_os_str().is_empty()
         || config.kasumi.statfs_spoof.spoof_f_type != 0
@@ -50,10 +46,8 @@ pub(super) fn has_uname_spoof_config(config: &config::Config) -> bool {
         || !config.kasumi.uname.domainname.is_empty()
 }
 
-pub(super) fn feature_supported(features: Option<i32>, required_feature: i32) -> bool {
-    features
-        .map(|bits| bits & required_feature != 0)
-        .unwrap_or(false)
+pub(super) fn feature_supported(features: i32, required_feature: i32) -> bool {
+    features & required_feature != 0
 }
 
 pub(super) fn to_c_ulong(value: u64, field_name: &str) -> Result<libc::c_ulong> {
@@ -74,11 +68,11 @@ mod tests {
     fn selinux_fix_requires_the_explicit_toggle() {
         let mut config = config::Config::default();
 
-        config.kasumi.enable_hidexattr = true;
-        assert!(effective_stealth_enabled(&config));
-        assert!(effective_mount_hide_enabled(&config));
-        assert!(effective_maps_spoof_enabled(&config));
-        assert!(effective_statfs_spoof_enabled(&config));
+        config.kasumi.enable_overlay_xattr_hide = true;
+        assert!(!effective_stealth_enabled(&config));
+        assert!(!effective_mount_hide_enabled(&config));
+        assert!(!effective_maps_spoof_enabled(&config));
+        assert!(!effective_statfs_spoof_enabled(&config));
         assert!(!effective_selinux_fix_enabled(&config));
 
         config.kasumi.enable_selinux_fix = true;

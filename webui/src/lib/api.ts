@@ -57,8 +57,8 @@ const kasumiApi: Partial<AppAPI> = ENABLE_KASUMI
         (await loadKasumiService()).setKasumiEnabled(enabled),
       setKasumiStealth: async (enabled: boolean) =>
         (await loadKasumiService()).setKasumiStealth(enabled),
-      setKasumiHidexattr: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiHidexattr(enabled),
+      setKasumiOverlayXattrHide: async (enabled: boolean) =>
+        (await loadKasumiService()).setKasumiOverlayXattrHide(enabled),
       setKasumiSelinuxFix: async (enabled: boolean) =>
         (await loadKasumiService()).setKasumiSelinuxFix(enabled),
       setKasumiDebug: async (enabled: boolean) =>
@@ -124,11 +124,6 @@ const RealAPI = {
   getStorageUsage,
   getSystemInfo,
   getVersion,
-  clearMountErrors: () =>
-    runDaemonCommand(
-      { type: "clear-mount-errors" },
-      PATHS.BINARY,
-    ) as Promise<void>,
   ...kasumiApi,
   openLink,
   reboot,

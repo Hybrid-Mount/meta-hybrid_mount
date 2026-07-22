@@ -18,6 +18,7 @@ import { createSignal, Show, For, onMount } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { sysStore } from "../lib/stores/sysStore";
 import { openLink } from "../lib/api/services/systemService";
+import { getErrorMessage } from "../lib/api/core/error";
 import { ICONS } from "../lib/constants";
 import { IS_RELEASE } from "../lib/constants_gen";
 import { INFO_TAB_SECTIONS } from "../lib/infoTabData.gen";
@@ -54,8 +55,8 @@ export default function InfoTab() {
   function handleLink(e: MouseEvent, url: string) {
     e.preventDefault();
 
-    void openLink(url).catch(() => {
-      window.open(url, "_blank", "noopener,noreferrer");
+    void openLink(url).catch((error: unknown) => {
+      uiStore.showToast(getErrorMessage(error, "Failed to open link"), "error");
     });
   }
 
@@ -171,7 +172,7 @@ export default function InfoTab() {
               <path d={ICONS.telegram} />
             </svg>
           </md-icon>
-          {uiStore.L.info?.telegram ?? "Telegram"}
+          {uiStore.L.info.telegram}
         </md-filled-tonal-button>
 
         <md-filled-tonal-button
@@ -225,10 +226,8 @@ export default function InfoTab() {
                             class="c-avatar"
                             loading="lazy"
                           />
-                          <div slot="headline">{user.name || user.login}</div>
-                          <div slot="supporting-text">
-                            {user.bio || uiStore.L.info.noBio}
-                          </div>
+                          <div slot="headline">{user.name}</div>
+                          <div slot="supporting-text">{user.bio}</div>
                         </md-list-item>
                       )}
                     </For>
@@ -241,12 +240,10 @@ export default function InfoTab() {
       </div>
 
       <md-dialog ref={donateDialogRef} class="donate-dialog">
-        <div slot="headline">{uiStore.L.info?.supportUs ?? "Support Us"}</div>
+        <div slot="headline">{uiStore.L.info.supportUs}</div>
         <div slot="content" class="donate-content">
           <div class="donate-section">
-            <div class="author-label">
-              {uiStore.L.info?.authorYuzaki ?? "YuzakiKokuban"}
-            </div>
+            <div class="author-label">{uiStore.L.info.authorYuzaki}</div>
             <div class="donate-grid">
               <md-filled-tonal-button
                 onClick={() => openQr("/assets/donate/yuzaki_alipay.jpg")}
@@ -291,7 +288,7 @@ export default function InfoTab() {
         </div>
         <div slot="actions">
           <md-text-button onClick={closeDonate}>
-            {uiStore.L.common?.close ?? "Close"}
+            {uiStore.L.common.close}
           </md-text-button>
         </div>
       </md-dialog>

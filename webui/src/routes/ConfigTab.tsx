@@ -38,8 +38,9 @@ import type { OverlayMode, AppConfig, CustomBindMount } from "../lib/types";
 const KASUMI_WARNING_COOKIE = "mhm_kasumi_warning_ack";
 
 export default function ConfigTab() {
-  const [lastSavedConfig, setLastSavedConfig] =
-    createSignal<Partial<AppConfig> | null>(null);
+  const [lastSavedConfig, setLastSavedConfig] = createSignal<AppConfig | null>(
+    null,
+  );
   const [showKasumiWarning, setShowKasumiWarning] = createSignal(false);
   const [kasumiPending, setKasumiPending] = createSignal(false);
   const [customSourceDraft, setCustomSourceDraft] = createSignal("");
@@ -52,7 +53,7 @@ export default function ConfigTab() {
     () => !isValidPath(configStore.config.moduledir),
   );
   const tmpfsXattrUnsupported = createMemo(
-    () => sysStore.systemInfo?.tmpfs_xattr_supported === false,
+    () => !sysStore.systemInfo.tmpfs_xattr_supported,
   );
 
   createEffect(() => {
@@ -84,7 +85,7 @@ export default function ConfigTab() {
   }
 
   function shouldApplyRuntime(key: keyof AppConfig) {
-    return key !== "daemon_startup_mode" && key !== "custom_mounts";
+    return key !== "custom_mounts";
   }
 
   async function saveConfigField<K extends keyof AppConfig>(
@@ -130,13 +131,6 @@ export default function ConfigTab() {
     await saveConfigField(key, nextValue, currentVal as AppConfig[K]);
   }
 
-  async function toggleDaemonMode() {
-    const current = configStore.config.daemon_startup_mode;
-    const next = current === "persistent" ? "on-demand" : "persistent";
-    updateConfig("daemon_startup_mode", next);
-    await saveConfigField("daemon_startup_mode", next, current);
-  }
-
   async function setOverlayMode(mode: string) {
     const prev = configStore.config.overlay_mode;
     const next = mode as OverlayMode;
@@ -146,10 +140,8 @@ export default function ConfigTab() {
     await saveConfigField("overlay_mode", next, prev);
   }
 
-  function cloneCustomMounts(
-    mounts: CustomBindMount[] | undefined,
-  ): CustomBindMount[] {
-    return (mounts ?? []).map((mount) => ({
+  function cloneCustomMounts(mounts: CustomBindMount[]): CustomBindMount[] {
+    return mounts.map((mount) => ({
       source: mount.source,
       target: mount.target,
     }));
@@ -172,10 +164,7 @@ export default function ConfigTab() {
     previousMounts: CustomBindMount[],
   ) {
     if (hasInvalidCustomMount(nextMounts)) {
-      uiStore.showToast(
-        uiStore.L.config?.invalidCustomMount || "Invalid custom mount path",
-        "error",
-      );
+      uiStore.showToast(uiStore.L.config.invalidCustomMount, "error");
       updateConfig("custom_mounts", previousMounts);
       return false;
     }
@@ -195,7 +184,11 @@ export default function ConfigTab() {
   }
 
   async function commitCustomMounts() {
-    const previous = cloneCustomMounts(lastSavedConfig()?.custom_mounts);
+    const savedConfig = lastSavedConfig();
+    if (!savedConfig) {
+      throw new Error("Config must be loaded before custom mounts are saved");
+    }
+    const previous = cloneCustomMounts(savedConfig.custom_mounts);
     const next = customMounts();
     if (JSON.stringify(previous) === JSON.stringify(next)) return;
     await saveCustomMounts(next, previous);
@@ -239,22 +232,19 @@ export default function ConfigTab() {
     try {
       await API.setKasumiEnabled(enabled);
       kasumiStore.setEnabledOptimistic(enabled);
-      await kasumiStore.refreshStatus(false);
+      await kasumiStore.refreshStatus(true);
       features.setKasumiStatus(
         kasumiStore.enabled,
-        Boolean(kasumiStore.status?.available),
-        Boolean(kasumiStore.status?.kernel_supported),
+        kasumiStore.status.available,
+        kasumiStore.status.kernel_supported,
       );
       if (enabled) {
         setCookie(KASUMI_WARNING_COOKIE, "1");
       }
-      uiStore.showToast(
-        uiStore.L.config?.kasumiConfigSaved || "Kasumi config saved.",
-        "success",
-      );
+      uiStore.showToast(uiStore.L.config.kasumiConfigSaved, "success");
     } catch (e: unknown) {
       uiStore.showToast(
-        getErrorMessage(e, uiStore.L.config?.saveFailed ?? "Failed to save"),
+        getErrorMessage(e, uiStore.L.config.saveFailed),
         "error",
       );
     } finally {
@@ -263,28 +253,14 @@ export default function ConfigTab() {
   }
 
   const availableModes = createMemo(() => {
-    const storageModes = (sysStore.storage as any)?.supported_modes;
-    let modes: OverlayMode[];
+    let modes = sysStore.systemInfo.supported_overlay_modes;
 
-    if (storageModes && Array.isArray(storageModes)) {
-      modes = storageModes as OverlayMode[];
-    } else {
-      modes =
-        sysStore.systemInfo?.supported_overlay_modes ??
-        (["tmpfs", "ext4"] as OverlayMode[]);
-    }
-
-    if (sysStore.systemInfo?.tmpfs_xattr_supported === false) {
+    if (!sysStore.systemInfo.tmpfs_xattr_supported) {
       modes = modes.filter((m) => m !== "tmpfs");
     }
 
     return modes;
   });
-
-  const MODE_DESCS: Record<OverlayMode, string> = {
-    tmpfs: "RAM-based. Fastest I/O, reset on reboot.",
-    ext4: "Loopback image. Persistent, saves RAM.",
-  };
 
   return (
     <>
@@ -295,20 +271,14 @@ export default function ConfigTab() {
             onclose={() => setShowKasumiWarning(false)}
             class="transparent-scrim"
           >
-            <div slot="headline">
-              {uiStore.L.config?.kasumiWarningTitle ??
-                "Enable Experimental Kasumi?"}
-            </div>
-            <div slot="content">
-              {uiStore.L.config?.kasumiWarningBody ??
-                "Kasumi is experimental. Enabling it will expose the Kasumi tab, allow Kasumi-backed module routing, and permit LKM autoload. Continue only if you know what you are testing."}
-            </div>
+            <div slot="headline">{uiStore.L.config.kasumiWarningTitle}</div>
+            <div slot="content">{uiStore.L.config.kasumiWarningBody}</div>
             <div slot="actions">
               <md-text-button onClick={() => setShowKasumiWarning(false)}>
-                {uiStore.L.common?.cancel ?? "Cancel"}
+                {uiStore.L.common.cancel}
               </md-text-button>
               <md-text-button onClick={() => applyKasumiToggle(true)}>
-                {uiStore.L.config?.kasumiEnableConfirm ?? "Enable Kasumi"}
+                {uiStore.L.config.kasumiEnableConfirm}
               </md-text-button>
             </div>
           </md-dialog>
@@ -328,10 +298,7 @@ export default function ConfigTab() {
               </div>
               <div class="card-text">
                 <span class="card-title">{uiStore.L.config.moduleDir}</span>
-                <span class="card-desc">
-                  {uiStore.L.config?.moduleDirDesc ??
-                    "Set the directory where modules are stored"}
-                </span>
+                <span class="card-desc">{uiStore.L.config.moduleDirDesc}</span>
               </div>
             </div>
 
@@ -348,9 +315,7 @@ export default function ConfigTab() {
                 onChange={() => handleTextFieldCommit("moduledir")}
                 error={invalidModuleDir()}
                 supporting-text={
-                  invalidModuleDir()
-                    ? uiStore.L.config?.invalidModuleDir || "Invalid Path"
-                    : ""
+                  invalidModuleDir() ? uiStore.L.config.invalidModuleDir : ""
                 }
                 class="full-width-field"
               >
@@ -375,8 +340,7 @@ export default function ConfigTab() {
               <div class="card-text">
                 <span class="card-title">{uiStore.L.config.mountSource}</span>
                 <span class="card-desc">
-                  {uiStore.L.config?.mountSourceDesc ??
-                    "Global mount source namespace (e.g. KSU)"}
+                  {uiStore.L.config.mountSourceDesc}
                 </span>
               </div>
             </div>
@@ -424,12 +388,9 @@ export default function ConfigTab() {
                 </md-icon>
               </div>
               <div class="card-text">
-                <span class="card-title">
-                  {uiStore.L.config?.overlayMode || "Overlay Mode"}
-                </span>
+                <span class="card-title">{uiStore.L.config.overlayMode}</span>
                 <span class="card-desc">
-                  {uiStore.L.config?.overlayModeDesc ||
-                    "Select backing storage strategy"}
+                  {uiStore.L.config.overlayModeDesc}
                 </span>
               </div>
             </div>
@@ -444,11 +405,10 @@ export default function ConfigTab() {
                     <md-ripple></md-ripple>
                     <div class="mode-info">
                       <span class="mode-title">
-                        {uiStore.L.config?.[`mode_${mode}`] || mode}
+                        {uiStore.L.config[`mode_${mode}`]}
                       </span>
                       <span class="mode-desc">
-                        {uiStore.L.config?.[`mode_${mode}Desc`] ||
-                          MODE_DESCS[mode]}
+                        {uiStore.L.config[`mode_${mode}Desc`]}
                       </span>
                     </div>
                     <div class="mode-check">
@@ -486,28 +446,6 @@ export default function ConfigTab() {
                 <span class="tile-label">{uiStore.L.config.disableUmount}</span>
               </div>
             </button>
-
-            <button
-              class={`option-tile clickable tertiary ${configStore.config.daemon_startup_mode === "persistent" ? "active" : ""}`}
-              onClick={toggleDaemonMode}
-              type="button"
-            >
-              <md-ripple></md-ripple>
-              <div class="tile-top">
-                <div class="tile-icon">
-                  <md-icon>
-                    <svg viewBox="0 0 24 24">
-                      <path d={ICONS.power} />
-                    </svg>
-                  </md-icon>
-                </div>
-              </div>
-              <div class="tile-bottom">
-                <span class="tile-label">
-                  {uiStore.L.config?.daemonStartupMode || "Persistent Daemon"}
-                </span>
-              </div>
-            </button>
           </div>
         </section>
 
@@ -522,12 +460,9 @@ export default function ConfigTab() {
                 </md-icon>
               </div>
               <div class="card-text">
-                <span class="card-title">
-                  {uiStore.L.config?.customMounts || "Custom Bind Mounts"}
-                </span>
+                <span class="card-title">{uiStore.L.config.customMounts}</span>
                 <span class="card-desc">
-                  {uiStore.L.config?.customMountsDesc ||
-                    "Bind explicit source paths onto existing targets"}
+                  {uiStore.L.config.customMountsDesc}
                 </span>
               </div>
             </div>
@@ -537,8 +472,7 @@ export default function ConfigTab() {
                 when={customMounts().length > 0}
                 fallback={
                   <div class="custom-mount-empty">
-                    {uiStore.L.config?.customMountsEmpty ||
-                      "No custom bind mounts configured."}
+                    {uiStore.L.config.customMountsEmpty}
                   </div>
                 }
               >
@@ -547,9 +481,7 @@ export default function ConfigTab() {
                     <div class="custom-mount-row">
                       <div class="custom-mount-fields">
                         <md-outlined-text-field
-                          label={
-                            uiStore.L.config?.customMountSource || "Source"
-                          }
+                          label={uiStore.L.config.customMountSource}
                           value={mount.source}
                           onInput={(e: Event) =>
                             updateCustomMount(
@@ -562,15 +494,13 @@ export default function ConfigTab() {
                           error={!isValidRequiredPath(mount.source)}
                           supporting-text={
                             !isValidRequiredPath(mount.source)
-                              ? uiStore.L.config?.invalidPath || "Invalid path"
+                              ? uiStore.L.config.invalidPath
                               : ""
                           }
                           class="custom-mount-field"
                         />
                         <md-outlined-text-field
-                          label={
-                            uiStore.L.config?.customMountTarget || "Target"
-                          }
+                          label={uiStore.L.config.customMountTarget}
                           value={mount.target}
                           onInput={(e: Event) =>
                             updateCustomMount(
@@ -583,7 +513,7 @@ export default function ConfigTab() {
                           error={!isValidRequiredPath(mount.target)}
                           supporting-text={
                             !isValidRequiredPath(mount.target)
-                              ? uiStore.L.config?.invalidPath || "Invalid path"
+                              ? uiStore.L.config.invalidPath
                               : ""
                           }
                           class="custom-mount-field"
@@ -592,10 +522,8 @@ export default function ConfigTab() {
                       <button
                         class="custom-mount-icon-button"
                         type="button"
-                        title={uiStore.L.config?.removeCustomMount || "Remove"}
-                        aria-label={
-                          uiStore.L.config?.removeCustomMount || "Remove"
-                        }
+                        title={uiStore.L.config.removeCustomMount}
+                        aria-label={uiStore.L.config.removeCustomMount}
                         onClick={() => removeCustomMount(index())}
                       >
                         <md-icon>
@@ -611,7 +539,7 @@ export default function ConfigTab() {
 
               <div class="custom-mount-add-row">
                 <md-outlined-text-field
-                  label={uiStore.L.config?.customMountSource || "Source"}
+                  label={uiStore.L.config.customMountSource}
                   value={customSourceDraft()}
                   onInput={(e: Event) =>
                     setCustomSourceDraft(
@@ -625,13 +553,13 @@ export default function ConfigTab() {
                   supporting-text={
                     customSourceDraft().length > 0 &&
                     !isValidRequiredPath(customSourceDraft())
-                      ? uiStore.L.config?.invalidPath || "Invalid path"
+                      ? uiStore.L.config.invalidPath
                       : ""
                   }
                   class="custom-mount-field"
                 />
                 <md-outlined-text-field
-                  label={uiStore.L.config?.customMountTarget || "Target"}
+                  label={uiStore.L.config.customMountTarget}
                   value={customTargetDraft()}
                   onInput={(e: Event) =>
                     setCustomTargetDraft(
@@ -648,7 +576,7 @@ export default function ConfigTab() {
                   supporting-text={
                     customTargetDraft().length > 0 &&
                     !isValidRequiredPath(customTargetDraft())
-                      ? uiStore.L.config?.invalidPath || "Invalid path"
+                      ? uiStore.L.config.invalidPath
                       : ""
                   }
                   class="custom-mount-field"
@@ -660,7 +588,7 @@ export default function ConfigTab() {
                     !isValidRequiredPath(customTargetDraft().trim())
                   }
                 >
-                  {uiStore.L.config?.addCustomMount || "Add"}
+                  {uiStore.L.config.addCustomMount}
                 </md-filled-button>
               </div>
             </div>
@@ -670,8 +598,7 @@ export default function ConfigTab() {
         <Show when={ENABLE_KASUMI && features.kasumiKernelSupported}>
           <section class="config-group">
             <div class="webui-label">
-              {uiStore.L.config?.experimentalFeatures ||
-                "Experimental Features"}
+              {uiStore.L.config.experimentalFeatures}
             </div>
             <div class="options-grid">
               <button
@@ -680,9 +607,7 @@ export default function ConfigTab() {
                 disabled={kasumiPending()}
                 type="button"
                 aria-pressed={features.kasumiEnabled}
-                aria-label={
-                  uiStore.L.config?.kasumiMasterSwitch || "Enable Kasumi"
-                }
+                aria-label={uiStore.L.config.kasumiMasterSwitch}
               >
                 <md-ripple></md-ripple>
                 <div class="tile-top">
@@ -702,8 +627,7 @@ export default function ConfigTab() {
                 </div>
                 <div class="tile-bottom">
                   <span class="tile-label">
-                    {uiStore.L.config?.kasumiMasterTitle ??
-                      "Experimental Kasumi"}
+                    {uiStore.L.config.kasumiMasterTitle}
                   </span>
                 </div>
               </button>
@@ -715,10 +639,7 @@ export default function ConfigTab() {
                     <path d={ICONS.info} />
                   </svg>
                 </md-icon>
-                <span>
-                  {uiStore.L.config?.kasumiTmpfsRestriction ??
-                    "Per-module Kasumi mount is unavailable because tmpfs xattr is not supported on this kernel."}
-                </span>
+                <span>{uiStore.L.config.kasumiTmpfsRestriction}</span>
               </div>
             </Show>
           </section>

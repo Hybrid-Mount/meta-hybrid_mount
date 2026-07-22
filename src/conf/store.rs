@@ -62,7 +62,7 @@ fn rotate_config_backups(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn load_merged_config(main_path: &Path) -> Result<Config> {
+fn load_config(main_path: &Path) -> Result<Config> {
     crate::scoped_log!(
         debug,
         "conf:store:load_merged",
@@ -70,20 +70,10 @@ fn load_merged_config(main_path: &Path) -> Result<Config> {
         main_path.display()
     );
 
-    let config = if main_path.exists() {
-        let content = fs::read_to_string(main_path)
-            .with_context(|| format!("failed to read config file {}", main_path.display()))?;
-        toml::from_str::<Config>(&content)
-            .with_context(|| format!("failed to parse config file {}", main_path.display()))?
-    } else {
-        crate::scoped_log!(
-            debug,
-            "conf:store:load_merged",
-            "fallback: reason=config_missing, path={}",
-            main_path.display()
-        );
-        Config::default()
-    };
+    let content = fs::read_to_string(main_path)
+        .with_context(|| format!("failed to read config file {}", main_path.display()))?;
+    let config = toml::from_str::<Config>(&content)
+        .with_context(|| format!("failed to parse config file {}", main_path.display()))?;
 
     crate::scoped_log!(
         debug,
@@ -96,8 +86,8 @@ fn load_merged_config(main_path: &Path) -> Result<Config> {
 }
 
 impl Config {
-    pub fn load_optional_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        load_merged_config(path.as_ref())
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        load_config(path.as_ref())
     }
 
     #[cfg(feature = "control-plane")]
@@ -125,6 +115,12 @@ impl Config {
 #[cfg(all(test, feature = "control-plane"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packaged_config_matches_the_current_schema() {
+        Config::load_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("module/config.toml"))
+            .unwrap();
+    }
 
     #[test]
     fn save_to_file_replaces_existing_config_and_keeps_backup() {

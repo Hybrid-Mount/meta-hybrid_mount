@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-mod error;
 #[cfg(feature = "kasumi")]
 mod kasumi;
 mod modules;
@@ -15,7 +14,6 @@ pub use self::kasumi::{
     parse_kasumi_rule_listing,
 };
 pub use self::{
-    error::print_json_error,
     modules::{
         ModuleApplyEntry, apply_modules_payload, build_modules_payload, build_version_payload,
     },

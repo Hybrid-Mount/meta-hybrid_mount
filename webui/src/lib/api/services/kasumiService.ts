@@ -15,7 +15,7 @@
  */
 
 import { runDaemonCommand } from "../core/bridge";
-import { DEFAULT_CONFIG, PATHS } from "../../constants";
+import { PATHS } from "../../constants";
 import type {
   KernelUnameValues,
   KasumiStatus,
@@ -44,13 +44,7 @@ export async function getKasumiStatus(): Promise<KasumiStatus> {
   const payload = kasumiStatusSchema.parse(
     await runDaemonCommand({ type: "kasumi-status" }, PATHS.BINARY),
   );
-  const status = buildKasumiStatusFromPayload(
-    payload,
-    DEFAULT_CONFIG.kasumi,
-    {},
-  );
-  if (status) return status;
-  throw new AppError("kasumi status returned invalid payload");
+  return buildKasumiStatusFromPayload(payload);
 }
 
 export async function setKasumiEnabled(enabled: boolean): Promise<void> {
@@ -61,8 +55,10 @@ export async function setKasumiStealth(enabled: boolean): Promise<void> {
   await updateKasumiConfig({ enable_stealth: enabled });
 }
 
-export async function setKasumiHidexattr(enabled: boolean): Promise<void> {
-  await updateKasumiConfig({ enable_hidexattr: enabled });
+export async function setKasumiOverlayXattrHide(
+  enabled: boolean,
+): Promise<void> {
+  await updateKasumiConfig({ enable_overlay_xattr_hide: enabled });
 }
 
 export async function setKasumiSelinuxFix(enabled: boolean): Promise<void> {

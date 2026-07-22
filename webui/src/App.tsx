@@ -56,7 +56,6 @@ const routes = [
 ];
 
 async function loadKasumiStore() {
-  if (!ENABLE_KASUMI) return null;
   const module = await import("./lib/stores/kasumiStore");
   return module.kasumiStore;
 }
@@ -66,6 +65,9 @@ export default function App() {
   const [dragOffset, setDragOffset] = createSignal(0);
   const [isDragging, setIsDragging] = createSignal(false);
   const [initialDataReady, setInitialDataReady] = createSignal(false);
+  const [initializationError, setInitializationError] = createSignal<
+    string | null
+  >(null);
   const [visitedTabs, setVisitedTabs] = createSignal(
     new Set<string>([activeTab()]),
   );
@@ -248,52 +250,44 @@ export default function App() {
 
   async function initializeApp() {
     try {
-      const [payload] = await Promise.all([API.init(), uiStore.init()]);
+      const payload = await API.init();
       if (disposed) return;
       sysStore.loadFromInit(payload);
-      onSseStateUpdate((event) => sysStore.handleSseUpdate(event.payload));
       configStore.loadFromInit(payload);
+      if (ENABLE_KASUMI) {
+        await initializeKasumi(payload);
+      }
+      if (disposed) return;
+      onSseStateUpdate((event) => sysStore.handleSseUpdate(event.payload));
       setInitialDataReady(true);
       scheduleAdjacentRoutePreload(activeTab(), 4000);
-      if (ENABLE_KASUMI) {
-        void initializeKasumi(payload);
-      }
     } catch (e: unknown) {
       console.error("App initialization failed", e);
-      uiStore.showToast(
-        getErrorMessage(e, "App initialization failed"),
-        "error",
-      );
-      setInitialDataReady(true);
-      return;
+      const message = getErrorMessage(e, "App initialization failed");
+      setInitializationError(message);
+      uiStore.showToast(message, "error");
     }
   }
 
   async function initializeKasumi(
     payload: Awaited<ReturnType<typeof API.init>>,
   ) {
-    try {
-      const kasumiStore = await loadKasumiStore();
-      if (disposed || !kasumiStore) return;
-      kasumiStore.loadFromInit(payload);
+    const kasumiStore = await loadKasumiStore();
+    if (disposed) return;
+    kasumiStore.loadFromInit(payload);
+    features.setKasumiStatus(
+      kasumiStore.enabled,
+      kasumiStore.status.available,
+      kasumiStore.status.kernel_supported,
+    );
+    onSseStateUpdate((event) => {
+      kasumiStore.handleSseUpdate(event.payload);
       features.setKasumiStatus(
         kasumiStore.enabled,
-        Boolean(kasumiStore.status?.available),
-        Boolean(kasumiStore.status?.kernel_supported),
+        kasumiStore.status.available,
+        kasumiStore.status.kernel_supported,
       );
-      onSseStateUpdate((event) => {
-        kasumiStore.handleSseUpdate(event.payload);
-        features.setKasumiStatus(
-          kasumiStore.enabled,
-          Boolean(kasumiStore.status?.available),
-          Boolean(kasumiStore.status?.kernel_supported),
-        );
-      });
-    } catch (e: unknown) {
-      if (!disposed) {
-        console.error("Kasumi initialization failed", e);
-      }
-    }
+    });
   }
 
   return (
@@ -308,30 +302,44 @@ export default function App() {
         onTouchCancel={handleTouchEnd}
       >
         <Show
-          when={isAppReady()}
+          when={!initializationError()}
           fallback={
             <div class="loading-container" style={{ height: "100%" }}>
-              <div class="spinner"></div>
-              <span class="loading-text">Loading...</span>
+              <span class="loading-text">{initializationError()}</span>
             </div>
           }
         >
-          <div class="swipe-track" classList={{ "is-dragging": isDragging() }}>
-            <For each={visibleRoutes()}>
-              {(route) => (
-                <div class="swipe-page">
-                  <Show
-                    when={visitedTabs().has(route.id)}
-                    fallback={<div class="page-scroller" aria-hidden="true" />}
-                  >
-                    <div class="page-scroller">
-                      <route.component />
-                    </div>
-                  </Show>
-                </div>
-              )}
-            </For>
-          </div>
+          <Show
+            when={isAppReady()}
+            fallback={
+              <div class="loading-container" style={{ height: "100%" }}>
+                <div class="spinner"></div>
+                <span class="loading-text">Loading...</span>
+              </div>
+            }
+          >
+            <div
+              class="swipe-track"
+              classList={{ "is-dragging": isDragging() }}
+            >
+              <For each={visibleRoutes()}>
+                {(route) => (
+                  <div class="swipe-page">
+                    <Show
+                      when={visitedTabs().has(route.id)}
+                      fallback={
+                        <div class="page-scroller" aria-hidden="true" />
+                      }
+                    >
+                      <div class="page-scroller">
+                        <route.component />
+                      </div>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
         </Show>
       </main>
       <NavBar

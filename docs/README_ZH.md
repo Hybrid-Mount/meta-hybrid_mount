@@ -10,8 +10,8 @@
 Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 通过统一的策略引擎，将模块文件合并到 Android 分区，并支持三种挂载后端：
 
-- **OverlayFS** — 分层挂载，兼容性优先。
-- **Magic Mount** — bind mount，适合直接路径替换或回退场景。
+- **OverlayFS** — 使用分层挂载合并模块内容。
+- **Magic Mount** — 使用 bind mount 直接替换目标路径。
 - **Kasumi** — LKM 内核驱动，提供运行时 hide/spoof/stealth 能力。
 
 内置 **SolidJS WebUI**，支持图形化管理、实时状态监控和配置编辑。
@@ -36,7 +36,6 @@ Hybrid Mount 是面向 **KernelSU** 与 **APatch** 的挂载编排元模块。
 - [CLI 命令](#cli-命令)
 - [架构说明](#架构说明)
 - [构建方式](#构建方式)
-- [运维建议](#运维建议)
 - [开源协议](#开源协议)
 
 ---
@@ -70,10 +69,10 @@ Lite 构建使用 `control-plane` 特性集（`--no-default-features --features 
 `nano` 版本是**纯配置文件驱动**的构建（`--no-default-features`，不启用任何 Cargo features）。它移除了 WebUI、守护进程、CLI 以及所有控制面基础设施，仅保留一个精简二进制文件，该文件读取 `config.toml`、生成挂载计划、执行挂载，然后退出。核心特征：
 
 - **无运行时守护进程** — 无后台进程、无 socket、无 WebUI、无 CLI 子命令。
-- **无 WebUI** — 包中移除了 `webroot/`、`launcher.png` 和 `service.sh` 资源。
+- **无 WebUI** — 包中移除了 `webroot/` 和 `launcher.png` 资源。
 - **纯挂载操作** — 二进制在启动时运行，按照配置完成所有挂载后终止。
 - **默认模式为 `magic`** — Nano 的预置配置中 `default_mode = "magic"`，在没有守护进程管理 ext4 镜像时优先使用 bind mount。
-- **模块模式标记** — 安装时通过音量键选择后，会在每个受管理模块根目录写入空的 `overlay` 或 `magic` 标记文件，Nano 运行时直接读取它们，而不再依赖白名单。标记文件名不区分大小写。
+- **模块模式标记** — 安装时通过音量键选择后，会在每个受管理模块根目录写入空的 `overlay` 或 `magic` 标记文件，Nano 运行时直接读取它们，而不再依赖白名单。标记文件名必须使用完全一致的小写拼写。
 - **无常驻 Hybrid Mount 进程** — 启动阶段挂载完成后，Nano 二进制会退出。
 
 选择 Nano，如果你想要可预测、无守护进程的挂载编排，并希望减少运行时常驻组件。
@@ -88,7 +87,7 @@ Lite 构建使用 `control-plane` 特性集（`--no-default-features --features 
 | WebUI | 是 | 是 | 否 |
 | CLI（`hybrid-mount` 子命令） | 是 | 是 | 否 |
 | 守护进程（Unix + TCP/SSE） | 是 | 是 | 否 |
-| 配置缓存与运行时生效 | 是 | 是 | 否 |
+| 运行时配置生效 | 是 | 是 | 否 |
 | Kasumi hide/spoof/stealth | 是 | 否 | 否 |
 | LKM 自动加载 | 是 | 否 | 否 |
 | Cargo features | `kasumi`（含 `control-plane`） | 仅 `control-plane` | 无 |
@@ -100,8 +99,8 @@ Lite 构建使用 `control-plane` 特性集（`--no-default-features --features 
 - **确定性规划** — 冲突在计划阶段检出，而非启动时随机出现。
 - **内置 WebUI** — 通过浏览器或 WebView 管理模块、编辑配置、监控运行时状态、在 full 版本中控制 Kasumi 特性。
 - **Kasumi 运行时集成** — LKM 自动加载、mirror 路由、mount 隐藏、maps/statfs 伪装、UID 隐藏、uname 伪装、kstat 规则。
-- **配置缓存** — 运行时配置缓存，支持增量补丁和即时生效。
-- **恢复友好** — 残留运行时文件自动清理；配置错误时可通过 `api config-reset` 重置。
+- **运行时配置更新** — 配置补丁通过严格校验后可持久化并立即生效。
+- **显式失败报告** — 无效状态和配置会立即报错；配置重置必须显式调用 `api config-reset`。
 - **自动化友好** — 基于 Unix socket 的 JSON 守护进程协议 + HTTP API，便于脚本和外部控制器调用。
 
 ---
@@ -113,7 +112,8 @@ Lite 构建使用 `control-plane` 特性集（`--no-default-features --features 
 1. 在设备上安装 [KernelSU](https://kernelsu.org/) 或 [APatch](https://apatch.dev/)。
 2. 从 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载对应的 Hybrid Mount `full`、`lite` 或 `nano` 版本 ZIP。
 3. 通过 Root 管理器的模块安装器刷入 ZIP。
-4. 重启设备。Hybrid Mount 将自动检测运行环境并应用默认 overlay 策略。
+4. 首次安装 Full/Lite 时直接选择默认挂载模式：音量加选择 OverlayFS，音量减选择 Magic Mount，10 秒无操作则选择 OverlayFS。这是安装器唯一的交互步骤；Nano 会跳过此步骤。
+5. 重启设备。Hybrid Mount 将自动检测运行环境并应用所选的默认策略。
 
 ### 安装后
 
@@ -220,7 +220,6 @@ WebUI 运行在 `http://127.0.0.1:<随机端口>`，使用加密访问令牌。�
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work 存储模式。 |
 | `disable_umount` | bool | `false` | 跳过 umount（仅调试使用）。 |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | 全局默认挂载策略。 |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | 守护进程启动模式。 |
 | `rules` | map | `{}` | 按模块和路径的细粒度挂载策略。 |
 
 ### 示例
@@ -229,7 +228,6 @@ WebUI 运行在 `http://127.0.0.1:<随机端口>`，使用加密访问令牌。�
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4"
 default_mode = "overlay"
-daemon_startup_mode = "on-demand"
 
 [rules.viper4android]
 default_mode = "magic"
@@ -256,7 +254,7 @@ Kasumi 是 **LKM 内核驱动**后端。除挂载路由外，还提供一系列�
 `kasumi.enabled = true` 仅使后端可用。Hybrid Mount 在满足以下条件之一时才会实际启用 Kasumi 运行时：
 
 - 生成的挂载计划中包含 Kasumi 管理的模块或路径。
-- 配置了任一辅助特性（hidexattr、mount hide、maps spoof、statfs spoof、UID 隐藏、uname 伪装、cmdline 替换、kstat 规则或用户 hide 规则）。
+- 配置了任一辅助特性（OverlayFS xattr 隐藏、mount hide、maps spoof、statfs spoof、UID 隐藏、uname 伪装、cmdline 替换、kstat 规则或用户 hide 规则）。
 
 ### 关键配置项
 
@@ -269,7 +267,7 @@ Kasumi 是 **LKM 内核驱动**后端。除挂载路由外，还提供一系列�
 | `kasumi.mirror_path` | Kasumi 规则使用的 mirror 根目录（默认 `/dev/kasumi_mirror`）。 |
 | `kasumi.enable_kernel_debug` | 开启内核侧调试日志。 |
 | `kasumi.enable_stealth` | 显式启用 stealth 模式。 |
-| `kasumi.enable_hidexattr` | 兼容模式总开关，联动启用 stealth、mount hide、maps spoof、statfs spoof。 |
+| `kasumi.enable_overlay_xattr_hide` | 隐藏 OverlayFS 元数据 xattr，仅控制这一项功能。 |
 | `kasumi.enable_mount_hide` | 全局或按路径模式隐藏挂载点。 |
 | `kasumi.mount_hide.path_pattern` | 挂载隐藏的路径匹配模式。 |
 | `kasumi.enable_maps_spoof` | 启用 `/proc/<pid>/maps` 伪装。 |
@@ -339,18 +337,15 @@ hybrid-mount kasumi rule remove-dir --target-base /system/lib64 --source-dir /da
 
 ### 模块标记文件
 
-Hybrid Mount 还会识别模块目录中的标记文件。这些标记应为普通文件；运行时只使用文件名判断。标记文件名按 ASCII 字母大小写不敏感匹配，因此 `DISABLE`、`Disable` 与 `disable` 会被视为同一种标记。
+Hybrid Mount 还会识别模块目录中的标记文件。这些标记应为普通文件；运行时只使用文件名判断。标记文件名严格区分大小写，必须使用下表列出的准确名称。
 
 | 标记 | 位置 | 作用 |
 | --- | --- | --- |
 | `disable` | 模块根目录 | 将模块排除在挂载计划之外，并在模块列表中显示为禁用。 |
 | `remove` | 模块根目录 | 将模块排除在挂载计划之外；通常由 Root 管理器在移除模块时创建。 |
 | `skip_mount` | 模块根目录 | 跳过该模块的挂载处理，并记录到运行时 skip 列表。 |
-| `mount_error` | 模块根目录 | 标记曾因挂载失败而被跳过的模块。恢复逻辑和守护进程命令可能创建或清除此标记。 |
 | `overlay` / `magic` | 模块根目录，Nano 构建 | 为 Nano 构建选择模块默认挂载后端。Full 和 Lite 构建使用配置规则。 |
 | `.replace` | 模块目录内部 | 对其所在目录应用替换语义。该标记本身不会作为普通模块内容复制；准备出的 OverlayFS 层会保留该目录，并在支持时设置 overlay opaque 元数据。 |
-
-如果同一目录中存在同一种标记的多个大小写变体，清理操作会移除所有匹配变体。
 
 ### 实用场景
 
@@ -455,7 +450,7 @@ src/
 │   ├── ops/       挂载计划生成、各后端执行器
 │   ├── daemon/    Unix + TCP 双协议守护进程（CLI + WebUI/SSE）
 │   ├── api/       WebUI 端点负载构建
-│   ├── startup/   启动流程、恢复、重试逻辑
+│   ├── startup/   启动流程与守护进程交接
 │   ├── storage/   共享存储工具（ext4 镜像、tmpfs）
 │   └── runtime_state/ 守护进程状态持久化
 ├── mount/
@@ -541,17 +536,6 @@ Release 使用 `opt-level = "z"`、`lto = "fat"`、`codegen-units = 1`、`strip 
 - 所有源文件的许可证头检查
 
 `xtask lint` 会执行接近本地 CI 门禁的检查：Rust fmt、全 feature clippy/tests、**lite**（`--no-default-features --features control-plane`）测试、**nano**（`--no-default-features`）测试，以及 WebUI lint/tests。涉及 Kasumi 的代码必须放在 `#[cfg(feature = "kasumi")]` 之后；涉及 daemon/CLI/WebUI API 的代码必须放在 `#[cfg(feature = "control-plane")]` 之后。
-
----
-
-## 运维建议
-
-- **挂载来源自动检测**：新安装会默认自动检测运行环境。仅在自动检测失败时才需显式设置 `mountsource`。
-- **配置错误恢复**：执行 `hybrid-mount api config-reset` 重置为默认配置，然后逐步恢复规则。也可使用 `gen-config` 重新生成配置文件。
-- **配置缓存**：运行时维护配置缓存。使用 `api config-patch --apply-runtime` 使更改即时生效，或重启守护进程。
-- **Kasumi LKM（仅 full 版本）**：LKM 必须与当前内核匹配。如果自动检测的 KMI 不正确，请使用 `lkm_kmi_override` 覆盖。
-- **`kasumi clear`**：清除运行时状态并释放内核连接。已下发到内核的规则在 LKM 重载前可能仍然有效。
-- **减小体积**：建议优先从依赖特性裁剪和 release profile 调优入手，再考虑重构。
 
 ---
 

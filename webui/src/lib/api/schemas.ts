@@ -14,267 +14,282 @@
  * limitations under the License.
  */
 
-// Zod schemas for all daemon API response payloads.
-// Wire format stays unchanged; these provide runtime validation + compile-time type inference.
-//
-// Nested-object fields that may be missing from the wire payload use .optional().
-// Individual scalar fields use .default() for per-field fallbacks.
-// Complex normalisation (Kasumi config, module metadata, etc.) stays in the
-// codec layer (configCodec.ts / runtimeCodec.ts), which already handles
-// missing/null values with sensible defaults.
-
 import { z } from "zod/v4";
 
-// ── Primitives ───────────────────────────────────────────────────────────
-
 export const mountModeSchema = z.enum(["overlay", "magic", "kasumi", "ignore"]);
-
 export const overlayModeSchema = z.enum(["tmpfs", "ext4"]);
-
-export const daemonStartupModeSchema = z.enum(["on-demand", "persistent"]);
-
 export const kasumiUnameModeSchema = z.enum(["scoped", "global"]);
 
-// ── Module rules ─────────────────────────────────────────────────────────
-
-export const moduleRulesSchema = z.object({
-  default_mode: mountModeSchema.default("overlay"),
-  paths: z.record(z.string(), z.string()).default({}),
-});
+export const moduleRulesSchema = z
+  .object({
+    default_mode: mountModeSchema,
+    paths: z.record(z.string(), z.string()),
+  })
+  .strict();
 
 export type ModuleRulesPayload = z.infer<typeof moduleRulesSchema>;
 
-// ── Module runtime entry (api-modules-list response item) ───────────────
-
-export const moduleRuntimeEntrySchema = z.object({
-  id: z.string(),
-  name: z.string().optional(),
-  version: z.string().optional(),
-  author: z.string().optional(),
-  description: z.string().optional(),
-  mode: mountModeSchema.default("overlay"),
-  is_mounted: z.boolean().default(false),
-  enabled: z.boolean().default(true),
-  source_path: z.string().optional(),
-  rules: moduleRulesSchema.optional(),
-  mount_error: z.string().optional(),
-  suggest_ignore: z.boolean().optional(),
-});
+export const moduleRuntimeEntrySchema = z
+  .object({
+    id: z.string(),
+    name: z.string().min(1),
+    version: z.string().min(1),
+    author: z.string().min(1),
+    description: z.string().min(1),
+    mode: mountModeSchema,
+    is_mounted: z.boolean(),
+    enabled: z.boolean(),
+    rules: moduleRulesSchema,
+    is_blacklisted: z.boolean(),
+  })
+  .strict();
 
 export type ModuleRuntimeEntryRaw = z.infer<typeof moduleRuntimeEntrySchema>;
 
-// ── System info (api-system-info response) ──────────────────────────────
-
-export const systemInfoSchema = z.object({
-  kernel: z.string().default("Unknown"),
-  selinux: z.string().default("Unknown"),
-  mount_base: z.string().default("-"),
-  active_mounts: z.array(z.string()).default([]),
-  tmpfs_xattr_supported: z.boolean().optional(),
-  supported_overlay_modes: z.array(z.string()).default(["tmpfs", "ext4"]),
-});
+export const systemInfoSchema = z
+  .object({
+    kernel: z.string().min(1),
+    selinux: z.string().min(1),
+    mount_base: z.string().min(1),
+    active_mounts: z.array(z.string()),
+    tmpfs_xattr_supported: z.boolean(),
+    supported_overlay_modes: z.array(overlayModeSchema),
+  })
+  .strict();
 
 export type SystemInfoPayload = z.infer<typeof systemInfoSchema>;
 
-// ── Version (api-version response) ──────────────────────────────────────
+export const versionSchema = z.object({ version: z.string().min(1) }).strict();
 
-export const versionSchema = z.object({
-  version: z.string(),
-});
+export const kernelUnameSchema = z
+  .object({ release: z.string(), version: z.string() })
+  .strict();
 
-// ── Kernel uname (api-kernel-uname response) ────────────────────────────
-
-export const kernelUnameSchema = z.object({
-  release: z.string(),
-  version: z.string(),
-});
-
-// ── Init payload ─────────────────────────────────────────────────────────
-
-export const initPayloadSchema = z.object({
-  status: z.unknown(),
-  config: z.unknown(),
-  version: z.unknown(),
-  kasumi_status: z.unknown().optional(),
-  system_info: z.unknown(),
-});
-
-export type InitPayloadRaw = z.infer<typeof initPayloadSchema>;
-
-// ── LKM status ──────────────────────────────────────────────────────────
-
-export const kasumiLkmStatusSchema = z.object({
-  loaded: z.boolean().default(false),
-  module_name: z.string().optional(),
-  autoload: z.boolean().default(false),
-  kmi_override: z.string().default(""),
-  current_kmi: z.string().default(""),
-  search_dir: z.string().default(""),
-  module_file: z.string().optional(),
-  last_error: z.string().nullable().default(null),
-});
+export const kasumiLkmStatusSchema = z
+  .object({
+    loaded: z.boolean(),
+    module_name: z.string().nullable(),
+    autoload: z.boolean(),
+    kmi_override: z.string(),
+    current_kmi: z.string(),
+    search_dir: z.string(),
+    module_file: z.string().min(1),
+  })
+  .strict();
 
 export type KasumiLkmStatusPayload = z.infer<typeof kasumiLkmStatusSchema>;
 
-// ── Kasumi uname config ─────────────────────────────────────────────────
-
-export const kasumiUnameConfigSchema = z.object({
-  sysname: z.string().default(""),
-  nodename: z.string().default(""),
-  release: z.string().default(""),
-  version: z.string().default(""),
-  machine: z.string().default(""),
-  domainname: z.string().default(""),
-});
+export const kasumiUnameConfigSchema = z
+  .object({
+    sysname: z.string(),
+    nodename: z.string(),
+    release: z.string(),
+    version: z.string(),
+    machine: z.string(),
+    domainname: z.string(),
+  })
+  .strict();
 
 export type KasumiUnameConfigPayload = z.infer<typeof kasumiUnameConfigSchema>;
 
-// ── Kasumi sub-configs ──────────────────────────────────────────────────
+export const kasumiMountHideConfigSchema = z
+  .object({ enabled: z.boolean(), path_pattern: z.string() })
+  .strict();
 
-export const kasumiMountHideConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  path_pattern: z.string().default(""),
-});
+export const kasumiStatfsSpoofConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    path: z.string(),
+    spoof_f_type: z.number().int().nonnegative(),
+  })
+  .strict();
 
-export const kasumiStatfsSpoofConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  path: z.string().default(""),
-  spoof_f_type: z.number().int().nonnegative().default(0),
-});
+export const kasumiMapsRuleConfigSchema = z
+  .object({
+    target_ino: z.number().int().nonnegative(),
+    target_dev: z.number().int().nonnegative(),
+    spoofed_ino: z.number().int().nonnegative(),
+    spoofed_dev: z.number().int().nonnegative(),
+    spoofed_pathname: z.string(),
+  })
+  .strict();
 
-export const kasumiMapsRuleConfigSchema = z.object({
-  target_ino: z.number().int().nonnegative().default(0),
-  target_dev: z.number().int().nonnegative().default(0),
-  spoofed_ino: z.number().int().nonnegative().default(0),
-  spoofed_dev: z.number().int().nonnegative().default(0),
-  spoofed_pathname: z.string().default(""),
-});
+export const kasumiKstatRuleConfigSchema = z
+  .object({
+    target_ino: z.number().int().nonnegative(),
+    target_pathname: z.string(),
+    spoofed_ino: z.number().int().nonnegative(),
+    spoofed_dev: z.number().int().nonnegative(),
+    spoofed_nlink: z.number().int().nonnegative(),
+    spoofed_size: z.number(),
+    spoofed_atime_sec: z.number(),
+    spoofed_atime_nsec: z.number(),
+    spoofed_mtime_sec: z.number(),
+    spoofed_mtime_nsec: z.number(),
+    spoofed_ctime_sec: z.number(),
+    spoofed_ctime_nsec: z.number(),
+    spoofed_blksize: z.number().int().nonnegative(),
+    spoofed_blocks: z.number().int().nonnegative(),
+    is_static: z.boolean(),
+  })
+  .strict();
 
-export const kasumiKstatRuleConfigSchema = z.object({
-  target_ino: z.number().int().nonnegative().default(0),
-  target_pathname: z.string().default(""),
-  spoofed_ino: z.number().int().nonnegative().default(0),
-  spoofed_dev: z.number().int().nonnegative().default(0),
-  spoofed_nlink: z.number().int().nonnegative().default(0),
-  spoofed_size: z.number().default(0),
-  spoofed_atime_sec: z.number().default(0),
-  spoofed_atime_nsec: z.number().default(0),
-  spoofed_mtime_sec: z.number().default(0),
-  spoofed_mtime_nsec: z.number().default(0),
-  spoofed_ctime_sec: z.number().default(0),
-  spoofed_ctime_nsec: z.number().default(0),
-  spoofed_blksize: z.number().int().nonnegative().default(0),
-  spoofed_blocks: z.number().int().nonnegative().default(0),
-  is_static: z.boolean().default(false),
-});
-
-// ── Kasumi config ───────────────────────────────────────────────────────
-
-export const kasumiConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  lkm_autoload: z.boolean().default(false),
-  lkm_dir: z.string().default("/data/adb/kasumi/lkm"),
-  lkm_kmi_override: z.string().default(""),
-  mirror_path: z.string().default("/data/adb/kasumi/mirror"),
-  enable_kernel_debug: z.boolean().default(false),
-  enable_stealth: z.boolean().default(false),
-  enable_hidexattr: z.boolean().default(false),
-  enable_selinux_fix: z.boolean().default(false),
-  enable_mount_hide: z.boolean().default(false),
-  enable_maps_spoof: z.boolean().default(false),
-  enable_statfs_spoof: z.boolean().default(false),
-  mount_hide: kasumiMountHideConfigSchema.optional(),
-  statfs_spoof: kasumiStatfsSpoofConfigSchema.optional(),
-  hide_uids: z.array(z.number().int().nonnegative()).default([]),
-  uname_mode: kasumiUnameModeSchema.default("scoped"),
-  uname: kasumiUnameConfigSchema.optional(),
-  cmdline_value: z.string().default(""),
-  kstat_rules: z.array(kasumiKstatRuleConfigSchema).default([]),
-  maps_rules: z.array(kasumiMapsRuleConfigSchema).default([]),
-});
+export const kasumiConfigSchema = z
+  .object({
+    enabled: z.boolean(),
+    lkm_autoload: z.boolean(),
+    lkm_dir: z.string(),
+    lkm_kmi_override: z.string(),
+    mirror_path: z.string(),
+    enable_kernel_debug: z.boolean(),
+    enable_stealth: z.boolean(),
+    enable_overlay_xattr_hide: z.boolean(),
+    enable_selinux_fix: z.boolean(),
+    enable_mount_hide: z.boolean(),
+    enable_maps_spoof: z.boolean(),
+    enable_statfs_spoof: z.boolean(),
+    mount_hide: kasumiMountHideConfigSchema,
+    statfs_spoof: kasumiStatfsSpoofConfigSchema,
+    hide_uids: z.array(z.number().int().nonnegative()),
+    uname_mode: kasumiUnameModeSchema,
+    uname: kasumiUnameConfigSchema,
+    cmdline_value: z.string(),
+    kstat_rules: z.array(kasumiKstatRuleConfigSchema),
+    maps_rules: z.array(kasumiMapsRuleConfigSchema),
+  })
+  .strict();
 
 export type KasumiConfigPayload = z.infer<typeof kasumiConfigSchema>;
 
-// ── App config (api-config-get / api-config-patch response) ─────────────
+export const customBindMountSchema = z
+  .object({ source: z.string(), target: z.string() })
+  .strict();
 
-export const customBindMountSchema = z.object({
-  source: z.string(),
-  target: z.string(),
-});
-
-export const appConfigSchema = z.object({
-  moduledir: z.string().default("/data/adb/modules"),
-  mountsource: z.string().default("KSU"),
-  overlay_mode: overlayModeSchema.default("ext4"),
-  disable_umount: z.boolean().default(false),
-  default_mode: mountModeSchema.default("overlay"),
-  daemon_startup_mode: daemonStartupModeSchema.default("on-demand"),
-  custom_mounts: z.array(customBindMountSchema).default([]),
-  rules: z.record(z.string(), moduleRulesSchema).default({}),
-  kasumi: kasumiConfigSchema.optional(),
-});
+export const appConfigSchema = z
+  .object({
+    moduledir: z.string(),
+    mountsource: z.string(),
+    overlay_mode: overlayModeSchema,
+    disable_umount: z.boolean(),
+    default_mode: mountModeSchema,
+    custom_mounts: z.array(customBindMountSchema),
+    rules: z.record(z.string(), moduleRulesSchema),
+    kasumi: kasumiConfigSchema,
+  })
+  .strict();
 
 export type AppConfigPayload = z.infer<typeof appConfigSchema>;
 
-// ── Kasumi status (kasumi-status response) ──────────────────────────────
+export const runtimeModeStatsSchema = z
+  .object({
+    overlayfs: z.number().int().nonnegative(),
+    magicmount: z.number().int().nonnegative(),
+    kasumi: z.number().int().nonnegative(),
+    blacklisted: z.number().int().nonnegative(),
+  })
+  .strict();
 
-export const kasumiRuntimeInnerSchema = z.object({
-  snapshot: z.record(z.string(), z.unknown()).default({}),
-  kasumi_modules: z.array(z.string()).default([]),
-});
+export const runtimeMountStatsSchema = z
+  .object({
+    total_mounts: z.number().int().nonnegative(),
+    successful_mounts: z.number().int().nonnegative(),
+    failed_mounts: z.number().int().nonnegative(),
+    tmpfs_created: z.number().int().nonnegative(),
+    files_mounted: z.number().int().nonnegative(),
+    dirs_mounted: z.number().int().nonnegative(),
+    symlinks_created: z.number().int().nonnegative(),
+    overlayfs_mounts: z.number().int().nonnegative(),
+    ignored_entries: z.number().int().nonnegative(),
+  })
+  .strict();
 
-export const kasumiStatusSchema = z.object({
-  status: z.string().default("disabled"),
-  available: z.boolean().default(false),
-  kernel_supported: z.boolean().default(false),
-  protocol_version: z.number().int().nullable().default(null),
-  feature_bits: z.number().int().nullable().default(null),
-  feature_names: z.array(z.string()).default([]),
-  hooks: z.array(z.string()).default([]),
-  rule_count: z.number().int().nonnegative().default(0),
-  user_hide_rule_count: z.number().int().nonnegative().default(0),
-  mirror_path: z.string().default(""),
-  lkm: kasumiLkmStatusSchema.optional(),
-  config: kasumiConfigSchema.optional(),
-  runtime: kasumiRuntimeInnerSchema.optional(),
-});
+export const runtimeKasumiInfoSchema = z
+  .object({
+    status: z.string(),
+    available: z.boolean(),
+    kernel_supported: z.boolean(),
+    lkm_loaded: z.boolean(),
+    lkm_autoload: z.boolean(),
+    lkm_kmi_override: z.string(),
+    lkm_current_kmi: z.string(),
+    lkm_dir: z.string(),
+    protocol_version: z.number().int().nullable(),
+    feature_bits: z.number().int().nullable(),
+    feature_names: z.array(z.string()),
+    hooks: z.array(z.string()),
+    rule_count: z.number().int().nonnegative(),
+    user_hide_rule_count: z.number().int().nonnegative(),
+    mirror_path: z.string(),
+  })
+  .strict();
 
-export type KasumiStatusPayload = z.infer<typeof kasumiStatusSchema>;
-
-// ── Runtime state (status command response) ────────────────────────────
-
-export const runtimeModeStatsSchema = z.object({
-  overlayfs: z.number().optional(),
-  magicmount: z.number().optional(),
-  kasumi: z.number().optional(),
-  blacklisted: z.number().optional(),
-});
-
-export const runtimeDaemonSchema = z.object({
-  alive: z.boolean().optional(),
-  socket_path: z.string().optional(),
-  last_refresh_ts: z.number().optional(),
-});
+export const runtimeDaemonSchema = z
+  .object({
+    alive: z.boolean(),
+    socket_path: z.string(),
+    last_refresh_ts: z.number().int().nonnegative(),
+  })
+  .strict();
 
 export const runtimeStateSchema = z
   .object({
-    pid: z.number().optional(),
-    storage_mode: z.string().optional(),
-    mount_point: z.string().optional(),
-    overlay_modules: z.array(z.string()).optional(),
-    magic_modules: z.array(z.string()).optional(),
-    kasumi_modules: z.array(z.string()).optional(),
-    custom_mounts: z.array(z.string()).optional(),
-    mount_error_modules: z.array(z.string()).optional(),
-    mount_error_reasons: z.record(z.string(), z.string()).optional(),
-    skip_mount_modules: z.array(z.string()).optional(),
-    blacklisted_modules: z.array(z.string()).optional(),
-    active_mounts: z.array(z.string()).optional(),
-    tmpfs_xattr_supported: z.boolean().optional(),
-    mode_stats: runtimeModeStatsSchema.optional(),
-    daemon: runtimeDaemonSchema.optional(),
-    kasumi: z.record(z.string(), z.unknown()).optional(),
+    timestamp: z.number().int().nonnegative(),
+    pid: z.number().int().nonnegative(),
+    storage_mode: z.enum(["tmpfs", "ext4"]),
+    mount_point: z.string().min(1),
+    overlay_modules: z.array(z.string()),
+    magic_modules: z.array(z.string()),
+    kasumi_modules: z.array(z.string()),
+    custom_mounts: z.array(z.string()),
+    skip_mount_modules: z.array(z.string()),
+    blacklisted_modules: z.array(z.string()),
+    active_mounts: z.array(z.string()),
+    tmpfs_xattr_supported: z.boolean(),
+    mount_stats: runtimeMountStatsSchema,
+    mode_stats: runtimeModeStatsSchema,
+    kasumi: runtimeKasumiInfoSchema,
+    daemon: runtimeDaemonSchema,
   })
-  .passthrough();
+  .strict();
 
 export type RuntimeStatePayload = z.infer<typeof runtimeStateSchema>;
+
+export const kasumiRuntimeInnerSchema = z
+  .object({
+    snapshot: runtimeKasumiInfoSchema,
+    kasumi_modules: z.array(z.string()),
+    active_mounts: z.array(z.string()),
+  })
+  .strict();
+
+export const kasumiStatusSchema = z
+  .object({
+    status: z.string(),
+    available: z.boolean(),
+    kernel_supported: z.boolean(),
+    protocol_version: z.number().int().nullable(),
+    feature_bits: z.number().int().nullable(),
+    feature_names: z.array(z.string()),
+    hooks: z.array(z.string()),
+    rule_count: z.number().int().nonnegative(),
+    user_hide_rule_count: z.number().int().nonnegative(),
+    mirror_path: z.string(),
+    lkm: kasumiLkmStatusSchema,
+    config: kasumiConfigSchema,
+    runtime: kasumiRuntimeInnerSchema,
+  })
+  .strict();
+
+export type KasumiStatusPayload = z.infer<typeof kasumiStatusSchema>;
+
+export const initPayloadSchema = z
+  .object({
+    status: runtimeStateSchema,
+    config: appConfigSchema,
+    version: versionSchema,
+    kasumi_status: kasumiStatusSchema.optional(),
+    system_info: systemInfoSchema,
+  })
+  .strict();
+
+export type InitPayloadRaw = z.infer<typeof initPayloadSchema>;

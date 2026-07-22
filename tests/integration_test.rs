@@ -63,9 +63,11 @@ fn default_mode_and_config_integration() {
 #[test]
 fn backend_capabilities_detect_does_not_panic() {
     let config = Config::default();
-    let capabilities = BackendCapabilities::detect(&config);
-
-    // Kasumi availability varies by platform — just verify detect() doesn't panic
-    let _ = capabilities.can_use_kasumi();
-    let _ = capabilities.kasumi_status();
+    match BackendCapabilities::detect(&config) {
+        Ok(capabilities) => {
+            let _ = capabilities.can_use_kasumi();
+            assert!(!capabilities.kasumi_status().is_empty());
+        }
+        Err(error) => assert!(!error.to_string().is_empty()),
+    }
 }

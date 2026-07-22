@@ -12,8 +12,6 @@ pub(super) struct RuntimeModuleIndex<'a> {
     kasumi: HashSet<&'a str>,
     skipped: HashSet<&'a str>,
     blacklisted: HashSet<&'a str>,
-    mount_errors: HashSet<&'a str>,
-    mount_error_reasons: &'a std::collections::BTreeMap<String, String>,
 }
 
 impl<'a> RuntimeModuleIndex<'a> {
@@ -32,12 +30,6 @@ impl<'a> RuntimeModuleIndex<'a> {
                 .iter()
                 .map(String::as_str)
                 .collect(),
-            mount_errors: state
-                .mount_error_modules
-                .iter()
-                .map(String::as_str)
-                .collect(),
-            mount_error_reasons: &state.mount_error_reasons,
         }
     }
 
@@ -58,17 +50,5 @@ impl<'a> RuntimeModuleIndex<'a> {
 
     pub(super) fn is_blacklisted(&self, module_id: &str) -> bool {
         self.blacklisted.contains(module_id)
-    }
-
-    pub(super) fn mount_error_reason(&self, module_id: &str) -> Option<String> {
-        if !self.mount_errors.contains(module_id) {
-            return None;
-        }
-        Some(
-            self.mount_error_reasons
-                .get(module_id)
-                .cloned()
-                .unwrap_or_else(|| "mount error recorded".to_string()),
-        )
     }
 }

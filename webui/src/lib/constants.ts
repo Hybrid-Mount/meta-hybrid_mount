@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { ENABLE_KASUMI, RUST_PATHS } from "./constants_gen";
+import { RUST_PATHS } from "./constants_gen";
 import type { AppConfig } from "./types";
 
 const DEFAULT_KASUMI_CONFIG: AppConfig["kasumi"] = {
@@ -25,7 +25,7 @@ const DEFAULT_KASUMI_CONFIG: AppConfig["kasumi"] = {
   mirror_path: "/dev/kasumi_mirror",
   enable_kernel_debug: false,
   enable_stealth: false,
-  enable_hidexattr: false,
+  enable_overlay_xattr_hide: false,
   enable_selinux_fix: false,
   enable_mount_hide: false,
   enable_maps_spoof: false,
@@ -53,10 +53,9 @@ export const DEFAULT_CONFIG = {
   disable_umount: false,
   overlay_mode: "ext4",
   default_mode: "overlay",
-  daemon_startup_mode: "on-demand",
   custom_mounts: [],
   rules: {},
-  ...(ENABLE_KASUMI ? { kasumi: DEFAULT_KASUMI_CONFIG } : {}),
+  kasumi: DEFAULT_KASUMI_CONFIG,
 } as AppConfig;
 
 export const PATHS = {

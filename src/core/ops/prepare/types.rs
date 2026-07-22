@@ -7,10 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    core::{backend_capabilities::BackendCapabilities, ops::plan::PrepareMetrics},
-    domain::MountMode,
-};
+use crate::{core::ops::plan::PrepareMetrics, domain::MountMode};
 
 pub(super) const SHALLOW_OVERLAY_DIR: &str = ".hybrid_overlay";
 
@@ -61,19 +58,14 @@ pub(super) struct ModeDecision {
 }
 
 pub(super) struct PrepareContext {
-    pub(super) use_kasumi: bool,
     pub(super) managed_partitions: HashSet<String>,
     pub(super) target_cache: HashMap<PathBuf, PathBuf>,
     pub(super) metrics: PrepareMetrics,
 }
 
 impl PrepareContext {
-    pub(super) fn new(
-        capabilities: &BackendCapabilities,
-        managed_partitions: HashSet<String>,
-    ) -> Self {
+    pub(super) fn new(managed_partitions: HashSet<String>) -> Self {
         Self {
-            use_kasumi: capabilities.can_use_kasumi(),
             managed_partitions,
             target_cache: HashMap::new(),
             metrics: PrepareMetrics::default(),

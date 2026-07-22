@@ -26,56 +26,31 @@ pub struct AppliedCustomBind {
     pub kind: CustomBindKind,
 }
 
-#[derive(Debug, Clone)]
-pub struct FailedCustomBind {
-    pub source: PathBuf,
-    pub target: PathBuf,
-    pub error: String,
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct CustomBindReport {
-    pub mounted: Vec<AppliedCustomBind>,
-    pub failed: Vec<FailedCustomBind>,
-}
-
 pub fn apply_custom_bind_mounts(
     mounts: &[CustomBindMount],
     disable_umount: bool,
-) -> CustomBindReport {
-    let mut report = CustomBindReport::default();
+) -> Result<Vec<AppliedCustomBind>> {
+    let mut applied_mounts = Vec::with_capacity(mounts.len());
 
     for mount in mounts {
-        match apply_one(mount, disable_umount) {
-            Ok(applied) => {
-                crate::scoped_log!(
-                    info,
-                    "custom_bind",
-                    "mounted: source={}, target={}",
-                    applied.source.display(),
-                    applied.target.display()
-                );
-                report.mounted.push(applied);
-            }
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "custom_bind",
-                    "failed: source={}, target={}, error={:#}",
-                    mount.source.display(),
-                    mount.target.display(),
-                    err
-                );
-                report.failed.push(FailedCustomBind {
-                    source: mount.source.clone(),
-                    target: mount.target.clone(),
-                    error: format!("{err:#}"),
-                });
-            }
-        }
+        let applied = apply_one(mount, disable_umount).with_context(|| {
+            format!(
+                "failed to apply custom bind {} -> {}",
+                mount.source.display(),
+                mount.target.display()
+            )
+        })?;
+        crate::scoped_log!(
+            info,
+            "custom_bind",
+            "mounted: source={}, target={}",
+            applied.source.display(),
+            applied.target.display()
+        );
+        applied_mounts.push(applied);
     }
 
-    report
+    Ok(applied_mounts)
 }
 
 fn apply_one(mount: &CustomBindMount, disable_umount: bool) -> Result<AppliedCustomBind> {
@@ -123,15 +98,12 @@ fn bind_mount_checked(source: &Path, target: &Path, disable_umount: bool) -> Res
         )
     })?;
 
-    if let Err(err) = mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "") {
-        crate::scoped_log!(
-            warn,
-            "custom_bind",
-            "remount readonly failed: target={}, error={:#}",
-            target.display(),
-            err
-        );
-    }
+    mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "").with_context(|| {
+        format!(
+            "failed to remount custom bind readonly: {}",
+            target.display()
+        )
+    })?;
 
     if !disable_umount {
         crate::mount::umount_mgr::send_umountable(target).with_context(|| {

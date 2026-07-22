@@ -32,7 +32,6 @@ export interface AppConfig {
   overlay_mode: OverlayMode;
   disable_umount: boolean;
   default_mode: MountMode;
-  daemon_startup_mode: "on-demand" | "persistent";
   custom_mounts: CustomBindMount[];
   kasumi: KasumiConfig;
   rules: Record<string, ModuleRules>;
@@ -48,19 +47,15 @@ export interface Module {
   description: string;
   mode: MountMode;
   is_mounted: boolean;
-  enabled?: boolean;
-  source_path?: string;
+  enabled: boolean;
   rules: ModuleRules;
-  mount_error?: string;
-  suggest_ignore?: boolean;
+  is_blacklisted: boolean;
 }
 
 export interface StorageStatus {
-  type: "tmpfs" | "ext4" | "unknown" | null;
-  error?: string;
-  supported_modes?: OverlayMode[];
-  modeStats?: ModeStats;
-  mountedCount?: number;
+  type: OverlayMode;
+  modeStats: ModeStats;
+  mountedCount: number;
 }
 
 export interface SystemInfo {
@@ -68,19 +63,18 @@ export interface SystemInfo {
   selinux: string;
   mountBase: string;
   activeMounts: string[];
-  supported_overlay_modes?: OverlayMode[];
-  tmpfs_xattr_supported?: boolean;
+  supported_overlay_modes: OverlayMode[];
+  tmpfs_xattr_supported: boolean;
 }
 
 export interface KasumiLkmStatus {
   loaded: boolean;
-  module_name?: string;
+  module_name: string | null;
   autoload: boolean;
   kmi_override: string;
-  current_kmi?: string;
-  search_dir?: string;
-  module_file?: string;
-  last_error?: string | null;
+  current_kmi: string;
+  search_dir: string;
+  module_file: string;
 }
 
 export interface KasumiUnameConfig {
@@ -144,7 +138,7 @@ export interface KasumiConfig {
   mirror_path: string;
   enable_kernel_debug: boolean;
   enable_stealth: boolean;
-  enable_hidexattr: boolean;
+  enable_overlay_xattr_hide: boolean;
   enable_selinux_fix: boolean;
   enable_mount_hide: boolean;
   enable_maps_spoof: boolean;
@@ -160,8 +154,27 @@ export interface KasumiConfig {
 }
 
 export interface KasumiRuntimeInfo {
-  snapshot?: Record<string, unknown>;
+  snapshot: KasumiRuntimeSnapshot;
   kasumi_modules: string[];
+  active_mounts: string[];
+}
+
+export interface KasumiRuntimeSnapshot {
+  status: string;
+  available: boolean;
+  kernel_supported: boolean;
+  lkm_loaded: boolean;
+  lkm_autoload: boolean;
+  lkm_kmi_override: string;
+  lkm_current_kmi: string;
+  lkm_dir: string;
+  protocol_version: number | null;
+  feature_bits: number | null;
+  feature_names: string[];
+  hooks: string[];
+  rule_count: number;
+  user_hide_rule_count: number;
+  mirror_path: string;
 }
 
 export interface KasumiStatus {
@@ -169,7 +182,7 @@ export interface KasumiStatus {
   available: boolean;
   kernel_supported: boolean;
   protocol_version: number | null;
-  feature_bits?: number | null;
+  feature_bits: number | null;
   feature_names: string[];
   hooks: string[];
   rule_count: number;
@@ -177,7 +190,7 @@ export interface KasumiStatus {
   mirror_path: string;
   lkm: KasumiLkmStatus;
   config: KasumiConfig;
-  runtime?: KasumiRuntimeInfo;
+  runtime: KasumiRuntimeInfo;
 }
 
 export interface ToastMessage {

@@ -4,12 +4,12 @@
 
 use std::{
     fs,
-    io::{self, BufRead, BufReader},
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
     time::Instant,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 
 use crate::{conf::config, core::inventory, domain::ModuleRules, utils::validate_module_id};
 
@@ -32,14 +32,18 @@ pub struct InventorySnapshot {
     pub summary: InventorySummary,
 }
 
-pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
-    Ok(scan_snapshot(source_dir, cfg)?.modules)
+pub fn scan(cfg: &config::Config) -> Result<Vec<Module>> {
+    Ok(scan_snapshot(cfg)?.modules)
 }
 
-pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<InventorySnapshot> {
+pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
+    let source_dir = &cfg.moduledir;
     let started = Instant::now();
-    if !source_dir.exists() {
-        return Ok(InventorySnapshot::default());
+    if !source_dir.is_dir() {
+        bail!(
+            "module source directory is unavailable: {}",
+            source_dir.display()
+        );
     }
 
     let mut modules = Vec::new();
@@ -56,8 +60,6 @@ pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<Inventor
     let mut skipped_reserved = 0usize;
     let mut skipped_blocked = 0usize;
     let mut skipped_blacklisted = 0usize;
-    let mut skipped_invalid = 0usize;
-    let mut skipped_missing_prop = 0usize;
     let mut root_entries_scanned = 0usize;
     let mut marker_directory_scans = 0usize;
 
@@ -66,11 +68,17 @@ pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<Inventor
         let entry = entry?;
         let file_type = entry.file_type()?;
         if !file_type.is_dir() {
-            continue;
+            bail!(
+                "module directory contains a non-directory entry: {}",
+                entry.path().display()
+            );
         }
 
         let path = entry.path();
-        let id = entry.file_name().to_string_lossy().into_owned();
+        let id = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| anyhow::anyhow!("module directory name is not valid UTF-8"))?;
 
         if inventory::is_reserved_module_dir(&id) {
             skipped_reserved += 1;
@@ -79,43 +87,18 @@ pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<Inventor
         }
 
         marker_directory_scans += 1;
-        let block_markers = inventory::mount_block_markers(&path);
+        let block_markers = inventory::mount_block_markers(&path)?;
         if block_markers.contains(&crate::defs::SKIP_MOUNT_FILE_NAME) {
             summary.skip_mount_modules.push(id.clone());
         }
 
-        if validate_module_id(&id).is_err() {
-            skipped_invalid += 1;
-            crate::scoped_log!(
-                warn,
-                "scanner",
-                "skip: module={}, reason=invalid_dir_name",
-                id
-            );
-            continue;
-        }
+        validate_module_id(&id).with_context(|| format!("invalid module directory name: {id}"))?;
 
         let prop = path.join("module.prop");
         if !prop.is_file() {
-            skipped_missing_prop += 1;
-            crate::scoped_log!(
-                debug,
-                "scanner",
-                "skip: module={}, reason=missing_module_prop",
-                id
-            );
-            continue;
+            bail!("module {id} is missing a regular module.prop");
         }
-        if !module_prop_id_matches_dir(&prop, &id)? {
-            skipped_invalid += 1;
-            crate::scoped_log!(
-                warn,
-                "scanner",
-                "skip: module={}, reason=module_prop_id_mismatch",
-                id
-            );
-            continue;
-        }
+        validate_module_prop_id(&prop, &id)?;
 
         if cfg.module_blacklist.contains(&id) {
             skipped_blacklisted += 1;
@@ -138,26 +121,19 @@ pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<Inventor
         modules.push(Module {
             id: id.clone(),
             source_path: path,
-            rules: inventory::load_module_rules(cfg, &id),
+            rules: inventory::load_module_rules(cfg, &id)?,
         });
     }
 
     crate::scoped_log!(
         info,
         "scanner",
-        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, skipped_invalid={}, skipped_missing_prop={}, root_entries_scanned={}, marker_directory_scans={}, elapsed_ms={}",
-        modules.len()
-            + skipped_reserved
-            + skipped_blocked
-            + skipped_blacklisted
-            + skipped_invalid
-            + skipped_missing_prop,
+        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, root_entries_scanned={}, marker_directory_scans={}, elapsed_ms={}",
+        modules.len() + skipped_reserved + skipped_blocked + skipped_blacklisted,
         modules.len(),
         skipped_reserved,
         skipped_blocked,
         skipped_blacklisted,
-        skipped_invalid,
-        skipped_missing_prop,
         root_entries_scanned,
         marker_directory_scans,
         started.elapsed().as_millis()
@@ -170,28 +146,21 @@ pub fn scan_snapshot(source_dir: &Path, cfg: &config::Config) -> Result<Inventor
     Ok(InventorySnapshot { modules, summary })
 }
 
-pub fn module_prop_id_matches_dir(prop: &Path, dir_id: &str) -> Result<bool> {
-    Ok(read_module_prop_id(prop)?
-        .as_deref()
-        .is_some_and(|prop_id| validate_module_id(prop_id).is_ok() && prop_id == dir_id))
+pub(crate) fn validate_module_prop_id(prop: &Path, dir_id: &str) -> Result<()> {
+    let prop_id = read_module_prop_id(prop)?
+        .with_context(|| format!("module.prop has no id: {}", prop.display()))?;
+    validate_module_id(&prop_id)
+        .with_context(|| format!("module.prop contains invalid id {prop_id:?}"))?;
+    if prop_id != dir_id {
+        bail!("module.prop id {prop_id:?} does not match directory {dir_id:?}");
+    }
+    Ok(())
 }
 
 fn read_module_prop_id(prop: &Path) -> Result<Option<String>> {
     let file = fs::File::open(prop)?;
     for line_result in BufReader::new(file).lines() {
-        let line = match line_result {
-            Ok(line) => line,
-            Err(err) if err.kind() == io::ErrorKind::InvalidData => {
-                crate::scoped_log!(
-                    warn,
-                    "scanner",
-                    "module.prop read skipped: path={}, reason=invalid_utf8",
-                    prop.display()
-                );
-                return Ok(None);
-            }
-            Err(err) => return Err(err.into()),
-        };
+        let line = line_result?;
         let trimmed = line.trim_start();
         if trimmed.starts_with('#') {
             continue;
@@ -222,26 +191,29 @@ mod tests {
         fs::write(module_dir.join("module.prop"), content).unwrap();
     }
 
-    #[test]
-    fn scan_skips_missing_module_prop() {
-        let temp = TempDir::new().unwrap();
-        fs::create_dir(temp.path().join("alpha")).unwrap();
-
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
-
-        assert!(modules.is_empty());
+    fn test_config(module_dir: &Path) -> config::Config {
+        config::Config {
+            moduledir: module_dir.to_path_buf(),
+            ..Default::default()
+        }
     }
 
     #[test]
-    fn scan_skips_invalid_module_dir_name() {
+    fn scan_rejects_missing_module_prop() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir(temp.path().join("alpha")).unwrap();
+
+        assert!(scan(&test_config(temp.path())).is_err());
+    }
+
+    #[test]
+    fn scan_rejects_invalid_module_dir_name() {
         let temp = TempDir::new().unwrap();
         let module_dir = temp.path().join("bad:name");
         fs::create_dir(&module_dir).unwrap();
         write_prop(&module_dir, "bad:name");
 
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
-
-        assert!(modules.is_empty());
+        assert!(scan(&test_config(temp.path())).is_err());
     }
 
     #[test]
@@ -251,9 +223,7 @@ mod tests {
         fs::create_dir(&module_dir).unwrap();
         write_prop(&module_dir, "beta");
 
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
-
-        assert!(modules.is_empty());
+        assert!(scan(&test_config(temp.path())).is_err());
     }
 
     #[test]
@@ -263,9 +233,7 @@ mod tests {
         fs::create_dir(&module_dir).unwrap();
         write_prop_content(&module_dir, "name=Alpha\n");
 
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
-
-        assert!(modules.is_empty());
+        assert!(scan(&test_config(temp.path())).is_err());
     }
 
     #[test]
@@ -275,9 +243,7 @@ mod tests {
         fs::create_dir(&module_dir).unwrap();
         write_prop_content(&module_dir, "id=1alpha\n");
 
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
-
-        assert!(modules.is_empty());
+        assert!(scan(&test_config(temp.path())).is_err());
     }
 
     #[test]
@@ -287,7 +253,7 @@ mod tests {
         fs::create_dir(&module_dir).unwrap();
         write_prop(&module_dir, "alpha");
 
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
+        let modules = scan(&test_config(temp.path())).unwrap();
 
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].id, "alpha");
@@ -300,7 +266,7 @@ mod tests {
         fs::create_dir(&module_dir).unwrap();
         write_prop_content(&module_dir, "# id=wrong\n  id = alpha  \n");
 
-        let modules = scan(temp.path(), &config::Config::default()).unwrap();
+        let modules = scan(&test_config(temp.path())).unwrap();
 
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].id, "alpha");
@@ -315,13 +281,14 @@ mod tests {
         fs::create_dir(&blacklisted).unwrap();
         write_prop(&skipped, "skipped");
         write_prop(&blacklisted, "blacklisted");
-        fs::write(skipped.join("SKIP_MOUNT"), b"").unwrap();
+        fs::write(skipped.join("skip_mount"), b"").unwrap();
 
         let config = config::Config {
+            moduledir: temp.path().to_path_buf(),
             module_blacklist: vec!["blacklisted".to_string()],
             ..Default::default()
         };
-        let snapshot = scan_snapshot(temp.path(), &config).unwrap();
+        let snapshot = scan_snapshot(&config).unwrap();
 
         assert!(snapshot.modules.is_empty());
         assert_eq!(snapshot.summary.skip_mount_modules, vec!["skipped"]);

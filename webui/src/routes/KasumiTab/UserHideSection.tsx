@@ -24,14 +24,14 @@ export default function UserHideSection(props: UserHideSectionProps) {
   return (
     <SectionShell
       id="user-hide"
-      title={uiStore.L.kasumi?.userHideTitle ?? "User Hide Rules"}
+      title={uiStore.L.kasumi.userHideTitle}
       isExpanded={props.isExpanded}
       onToggle={props.onToggle}
     >
       <div class="field-stack">
         <md-outlined-text-field
           class="full-field kasumi-input-field"
-          label={uiStore.L.kasumi?.userHidePathLabel ?? "Persistent Hide Path"}
+          label={uiStore.L.kasumi.userHidePathLabel}
           value={props.userHidePath}
           onInput={(e: Event) =>
             props.setUserHidePath((e.currentTarget as HTMLInputElement).value)
@@ -46,31 +46,28 @@ export default function UserHideSection(props: UserHideSectionProps) {
                 () => {
                   const path = props.userHidePath.trim();
                   if (!path) {
-                    throw new Error(
-                      uiStore.L.kasumi?.userHidePathRequired ??
-                        "Hide path cannot be empty",
-                    );
+                    throw new Error(uiStore.L.kasumi.userHidePathRequired);
                   }
                   return API.addUserHideRule(path);
                 },
-                uiStore.L.kasumi?.hideRuleAdded ?? "Hide rule added",
+                uiStore.L.kasumi.hideRuleAdded,
                 "full",
               )
             }
           >
-            {uiStore.L.kasumi?.addHideRule ?? "Add Hide Rule"}
+            {uiStore.L.kasumi.addHideRule}
           </md-filled-button>
           <md-outlined-button
             disabled={props.pending}
             onClick={() =>
               props.runAction(
                 () => API.applyUserHideRules(),
-                uiStore.L.kasumi?.hideRulesApplied ?? "User hide rules applied",
+                uiStore.L.kasumi.hideRulesApplied,
                 "full",
               )
             }
           >
-            {uiStore.L.kasumi?.applyHideRules ?? "Apply Stored Hides"}
+            {uiStore.L.kasumi.applyHideRules}
           </md-outlined-button>
         </div>
         <div class="hide-rule-list">
@@ -85,20 +82,19 @@ export default function UserHideSection(props: UserHideSectionProps) {
                   onClick={() =>
                     props.runAction(
                       () => API.removeUserHideRule(path),
-                      uiStore.L.kasumi?.hideRuleRemoved ?? "Hide rule removed",
+                      uiStore.L.kasumi.hideRuleRemoved,
                       "full",
                     )
                   }
                 >
-                  {uiStore.L.kasumi?.removeHideRule ?? "Remove"}
+                  {uiStore.L.kasumi.removeHideRule}
                 </button>
               </div>
             )}
           </For>
           <Show when={props.userHideRules.length === 0}>
             <div class="empty-inline-note">
-              {uiStore.L.kasumi?.noUserHideRules ??
-                "No persistent user hide rules yet."}
+              {uiStore.L.kasumi.noUserHideRules}
             </div>
           </Show>
         </div>

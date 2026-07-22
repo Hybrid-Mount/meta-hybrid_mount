@@ -8,12 +8,6 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-fn os_str_eq_ignore_ascii_case(value: &OsStr, expected: &str) -> bool {
-    value
-        .as_encoded_bytes()
-        .eq_ignore_ascii_case(expected.as_bytes())
-}
-
 pub fn normalize_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     let mut saw_root = false;
@@ -26,9 +20,13 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             }
             Component::CurDir => {}
             Component::ParentDir => {
-                let _ = normalized.pop();
-                if saw_root && normalized.as_os_str().is_empty() {
-                    normalized.push(Path::new("/"));
+                if matches!(
+                    normalized.components().next_back(),
+                    Some(Component::Normal(_))
+                ) {
+                    normalized.pop();
+                } else if !saw_root {
+                    normalized.push("..");
                 }
             }
             Component::Normal(value) => normalized.push(value),
@@ -43,64 +41,27 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     }
 }
 
-pub fn path_file_name_eq_ignore_ascii_case(path: &Path, expected: &str) -> bool {
+pub fn path_file_name_eq(path: &Path, expected: &str) -> bool {
     path.file_name()
-        .is_some_and(|name| os_str_eq_ignore_ascii_case(name, expected))
+        .is_some_and(|name| name == OsStr::new(expected))
 }
 
-pub fn find_dir_entry_case_insensitive(dir: &Path, expected: &str) -> Option<PathBuf> {
-    let entries = fs::read_dir(dir).ok()?;
-    for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                log::warn!(
-                    "[utils:path] skip unreadable directory entry: dir={}, error={err:#}",
-                    dir.display()
-                );
-                continue;
-            }
-        };
-        if os_str_eq_ignore_ascii_case(&entry.file_name(), expected) {
-            return Some(entry.path());
-        }
-    }
-    None
-}
-
-pub fn dir_contains_entry_case_insensitive(dir: &Path, expected: &str) -> bool {
-    find_dir_entry_case_insensitive(dir, expected).is_some()
-}
-
-pub fn remove_dir_entries_case_insensitive(dir: &Path, expected: &str) -> io::Result<usize> {
-    let entries = match fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(0),
-        Err(err) => return Err(err),
-    };
-
-    let mut removed = 0usize;
-    for entry in entries {
-        let entry = entry?;
-        if os_str_eq_ignore_ascii_case(&entry.file_name(), expected) {
-            fs::remove_file(entry.path())?;
-            removed += 1;
-        }
-    }
-
-    Ok(removed)
-}
-
-pub fn resolve_link_path(path: &Path) -> PathBuf {
+pub fn resolve_link_path(path: &Path) -> io::Result<PathBuf> {
     match fs::read_link(path) {
-        Ok(target) if target.is_absolute() => normalize_path(&target),
-        Ok(target) => normalize_path(&path.parent().unwrap_or(Path::new("/")).join(target)),
-        Err(_) => normalize_path(path),
+        Ok(target) if target.is_absolute() => Ok(normalize_path(&target)),
+        Ok(target) => {
+            let parent = path.parent().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "symlink path has no parent")
+            })?;
+            Ok(normalize_path(&parent.join(target)))
+        }
+        Err(err) if err.kind() == io::ErrorKind::InvalidInput => Ok(normalize_path(path)),
+        Err(err) => Err(err),
     }
 }
 
 #[cfg(feature = "kasumi")]
-pub fn resolve_path_with_root(system_root: &Path, path: &Path) -> PathBuf {
+pub fn resolve_path_with_root(system_root: &Path, path: &Path) -> io::Result<PathBuf> {
     let virtual_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -110,17 +71,25 @@ pub fn resolve_path_with_root(system_root: &Path, path: &Path) -> PathBuf {
     let translated_path = if system_root == Path::new("/") {
         virtual_path.clone()
     } else {
-        let relative = virtual_path.strip_prefix("/").unwrap_or(&virtual_path);
+        let relative = virtual_path.strip_prefix("/").map_err(|error| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("virtual path must be absolute: {error}"),
+            )
+        })?;
         system_root.join(relative)
     };
 
-    let Some(parent) = translated_path.parent() else {
-        return virtual_path;
-    };
+    let parent = translated_path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "translated path has no parent")
+    })?;
 
-    let Some(filename) = translated_path.file_name() else {
-        return virtual_path;
-    };
+    let filename = translated_path.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "translated path has no filename",
+        )
+    })?;
 
     let mut current = parent.to_path_buf();
     let mut suffix = Vec::new();
@@ -134,11 +103,13 @@ pub fn resolve_path_with_root(system_root: &Path, path: &Path) -> PathBuf {
         }
     }
 
-    let mut resolved = if current.exists() {
-        current
-    } else {
-        parent.to_path_buf()
-    };
+    if !current.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("no existing ancestor for {}", translated_path.display()),
+        ));
+    }
+    let mut resolved = current;
 
     for item in suffix.iter().rev() {
         resolved.push(item);
@@ -146,12 +117,47 @@ pub fn resolve_path_with_root(system_root: &Path, path: &Path) -> PathBuf {
     resolved.push(filename);
 
     if system_root == Path::new("/") {
-        return resolved;
+        return Ok(resolved);
     }
 
-    if let Ok(relative) = resolved.strip_prefix(system_root) {
-        return Path::new("/").join(relative);
+    let relative = resolved.strip_prefix(system_root).map_err(|error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "resolved path {} escaped root {}: {error}",
+                resolved.display(),
+                system_root.display()
+            ),
+        )
+    })?;
+    Ok(Path::new("/").join(relative))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_path_preserves_leading_relative_parents() {
+        assert_eq!(
+            normalize_path(Path::new("../../system/bin")),
+            PathBuf::from("../../system/bin")
+        );
     }
 
-    virtual_path
+    #[test]
+    fn normalize_path_clamps_absolute_parents_at_root() {
+        assert_eq!(
+            normalize_path(Path::new("/../../system")),
+            PathBuf::from("/system")
+        );
+    }
+
+    #[test]
+    fn normalize_path_removes_resolved_parent_components() {
+        assert_eq!(
+            normalize_path(Path::new("system/../vendor")),
+            PathBuf::from("vendor")
+        );
+    }
 }

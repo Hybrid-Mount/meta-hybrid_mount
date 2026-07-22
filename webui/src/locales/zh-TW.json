@@ -10,6 +10,7 @@
     "rebootConfirm": "你確定你想重啟系統嗎？",
     "reboot": "重啟",
     "cancel": "取消",
+    "close": "關閉",
     "saved": "已儲存"
   },
   "tabs": {
@@ -64,8 +65,16 @@
     "mode_tmpfsDesc": "基於 RAM，I/O 最快，重啟後重置。",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback 映像。可持久保存，節省 RAM。",
-    "daemonStartupMode": "持久化守護行程",
-    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
+    "customMounts": "自訂 Bind 掛載",
+    "customMountsDesc": "將指定來源路徑綁定到既有目標路徑",
+    "customMountsEmpty": "尚未設定自訂 Bind 掛載。",
+    "customMountSource": "來源路徑",
+    "customMountTarget": "目標路徑",
+    "addCustomMount": "新增",
+    "removeCustomMount": "移除",
+    "invalidCustomMount": "自訂掛載路徑無效",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed.",
+    "kasumiTmpfsRestriction": "目前核心不支援 tmpfs xattr，因此無法使用個別模組的 Kasumi 掛載。"
   },
   "modules": {
     "reload": "重新整理",
@@ -83,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "未掛載",
+      "blacklisted": "黑名單",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -97,12 +107,7 @@
     "disableTag": "停用",
     "nativeTag": "隱身",
     "unavailableTag": "不可用",
-    "kasumiUnavailableHint": "Kasumi 已啟用，但目前不可用。",
-    "mountError": "掛載錯誤",
-    "clearMountErrors": "清除掛載錯誤",
-    "mountErrorsCleared": "掛載錯誤已清除",
-    "mountErrorsClearFailed": "清除掛載錯誤失敗",
-    "suggestIgnoreHint": "該模組的 .sh 檔案中包含掛載相關指令，建議將其模式設定為 \"Ignore\"（忽略）。"
+    "kasumiUnavailableHint": "Kasumi 已啟用，但目前不可用。"
   },
   "kasumi": {
     "title": "Kasumi 工作狀態",
@@ -160,7 +165,6 @@
     "stealthUpdated": "Stealth 已更新",
     "hidexattrUpdated": "HideXattr 已更新",
     "selinuxFixUpdated": "SELinux 守護已更新",
-    "ignoreProtocolUpdated": "協定不匹配策略已更新",
     "kernelDebugUpdated": "核心除錯已更新",
     "kmiOverride": "KMI 覆寫",
     "autoKmi": "自動偵測",
@@ -169,8 +173,6 @@
     "stealthTitle": "隱身",
     "hidexattrTitle": "隱藏 Xattr",
     "selinuxFixTitle": "SELinux 守護",
-    "ignoreProtocolTitle": "忽略協定不匹配",
-    "ignoreProtocolHint": "當 userspace API 與核心協定未完全匹配時，仍允許 Kasumi 繼續運作。",
     "lkmUnavailableHint": "Kasumi 已啟用，但核心模組尚未載入。",
     "kernelDebugTitle": "核心除錯",
     "featureBits": "功能位元",

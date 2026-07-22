@@ -21,7 +21,10 @@ import { dirname, resolve } from "node:path";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(scriptDir, "../..");
 const protocolPath = resolve(rootDir, "src/core/daemon/protocol.rs");
-const outputPath = resolve(rootDir, "webui/src/lib/api/core/protocol.generated.ts");
+const outputPath = resolve(
+  rootDir,
+  "webui/src/lib/api/core/protocol.generated.ts",
+);
 const checkMode = process.argv.includes("--check");
 
 function extractCommandTypes(source) {
@@ -68,9 +71,11 @@ const protocolSource = await readFile(protocolPath, "utf8");
 const generated = render(extractCommandTypes(protocolSource));
 
 if (checkMode) {
-  const current = await readFile(outputPath, "utf8").catch(() => "");
+  const current = await readFile(outputPath, "utf8");
   if (current !== generated) {
-    console.error("protocol.generated.ts is stale; run pnpm generate:daemon-protocol");
+    console.error(
+      "protocol.generated.ts is stale; run pnpm generate:daemon-protocol",
+    );
     process.exit(1);
   }
 } else {

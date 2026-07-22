@@ -2,17 +2,14 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
+use anyhow::{Context, Result, bail};
 use serde::Serialize;
 
 use crate::{
     conf::config::Config,
     core::runtime_state::RuntimeState,
-    defs,
     sys::{
         kasumi::{self, KasumiStatus},
         lkm::{self, LkmStatus},
@@ -49,8 +46,7 @@ pub struct LkmPayload {
     pub kmi_override: String,
     pub current_kmi: String,
     pub search_dir: PathBuf,
-    pub module_file: Option<PathBuf>,
-    pub last_error: Option<String>,
+    pub module_file: PathBuf,
 }
 
 impl From<LkmStatus> for LkmPayload {
@@ -63,7 +59,6 @@ impl From<LkmStatus> for LkmPayload {
             current_kmi: status.current_kmi,
             search_dir: status.search_dir,
             module_file: status.module_file,
-            last_error: lkm::last_error(),
         }
     }
 }
@@ -80,7 +75,7 @@ pub struct KasumiVersionPayload {
     pub mirror_path: PathBuf,
 }
 
-pub fn parse_kasumi_rule_listing(listing: &str) -> Vec<KasumiRuleEntry> {
+pub fn parse_kasumi_rule_listing(listing: &str) -> Result<Vec<KasumiRuleEntry>> {
     let mut rules = Vec::new();
 
     for raw_line in listing.lines() {
@@ -100,173 +95,123 @@ pub fn parse_kasumi_rule_listing(listing: &str) -> Vec<KasumiRuleEntry> {
 
         match rule_type.as_str() {
             "ADD" => {
-                let target = parts.next().map(ToString::to_string);
-                let source = parts.next().map(ToString::to_string);
-                let file_type = parts.next().and_then(|value| value.parse::<i32>().ok());
+                let target = parts.next().context("Kasumi ADD rule is missing target")?;
+                let source = parts.next().context("Kasumi ADD rule is missing source")?;
+                let file_type = parts
+                    .next()
+                    .context("Kasumi ADD rule is missing file type")?
+                    .parse::<i32>()
+                    .context("Kasumi ADD rule has invalid file type")?;
+                if parts.next().is_some() {
+                    bail!("Kasumi ADD rule has unexpected trailing fields: {line}");
+                }
                 rules.push(KasumiRuleEntry {
                     rule_type,
-                    target,
-                    source,
+                    target: Some(target.to_string()),
+                    source: Some(source.to_string()),
                     path: None,
                     args: None,
-                    file_type,
+                    file_type: Some(file_type),
                 });
             }
             "MERGE" => {
-                let target = parts.next().map(ToString::to_string);
-                let source = parts.next().map(ToString::to_string);
+                let target = parts
+                    .next()
+                    .context("Kasumi MERGE rule is missing target")?;
+                let source = parts
+                    .next()
+                    .context("Kasumi MERGE rule is missing source")?;
+                if parts.next().is_some() {
+                    bail!("Kasumi MERGE rule has unexpected trailing fields: {line}");
+                }
                 rules.push(KasumiRuleEntry {
                     rule_type,
-                    target,
-                    source,
+                    target: Some(target.to_string()),
+                    source: Some(source.to_string()),
                     path: None,
                     args: None,
                     file_type: None,
                 });
             }
             "HIDE" | "INJECT" => {
+                let path = parts.next().context("Kasumi path rule is missing path")?;
+                if parts.next().is_some() {
+                    bail!("Kasumi path rule has unexpected trailing fields: {line}");
+                }
                 rules.push(KasumiRuleEntry {
                     rule_type,
                     target: None,
                     source: None,
-                    path: parts.next().map(ToString::to_string),
+                    path: Some(path.to_string()),
                     args: None,
                     file_type: None,
                 });
             }
-            _ => {
-                let args = parts.collect::<Vec<_>>().join(" ");
-                rules.push(KasumiRuleEntry {
-                    rule_type,
-                    target: None,
-                    source: None,
-                    path: None,
-                    args: (!args.is_empty()).then_some(args),
-                    file_type: None,
-                });
-            }
+            _ => bail!("unknown Kasumi rule type in listing: {line}"),
         }
     }
 
-    rules
+    Ok(rules)
 }
 
-pub fn build_features_payload() -> FeatureInfo {
-    let bits = kasumi::get_features().unwrap_or_default();
-    FeatureInfo {
+pub fn build_features_payload() -> anyhow::Result<FeatureInfo> {
+    let bits = kasumi::get_features()?;
+    Ok(FeatureInfo {
         bitmask: bits,
         names: kasumi::feature_names(bits),
-    }
+    })
 }
 
-pub fn build_lkm_payload(config: &Config) -> LkmPayload {
-    let status = lkm::status(&config.kasumi);
-    LkmPayload::from(status)
+pub fn build_lkm_payload(config: &Config) -> Result<LkmPayload> {
+    Ok(LkmPayload::from(lkm::status(&config.kasumi)?))
 }
 
-pub fn build_kasumi_version_payload(config: &Config, state: &RuntimeState) -> KasumiVersionPayload {
+pub fn build_kasumi_version_payload(
+    config: &Config,
+    state: &RuntimeState,
+) -> anyhow::Result<KasumiVersionPayload> {
     if !config.kasumi.enabled {
-        return KasumiVersionPayload {
-            protocol_version: kasumi::KSM_PROTOCOL_VERSION,
-            kernel_version: 0,
-            kasumi_available: false,
-            protocol_mismatch: false,
-            mismatch_message: None,
-            active_modules: Vec::new(),
-            mount_base: state.mount_point.clone(),
-            mirror_path: config.kasumi.mirror_path.clone(),
-        };
+        anyhow::bail!("Kasumi is disabled");
     }
 
-    let status = kasumi::check_status();
-    let kernel_version = kasumi::get_protocol_version().ok();
-    let active_rules = kasumi::list_rules().unwrap_or_default();
-    let parsed_rules = parse_kasumi_rule_listing(&active_rules);
-    let active_modules = if !state.kasumi_modules.is_empty() {
-        let mut modules = state.kasumi_modules.clone();
-        modules.sort();
-        modules.dedup();
-        modules
-    } else {
-        extract_active_module_ids(&parsed_rules, &config.kasumi.mirror_path)
-    };
+    let status = kasumi::check_status()?;
+    let kernel_version = kasumi::get_protocol_version()?;
+    let mut active_modules = state.kasumi_modules.clone();
+    active_modules.sort();
+    active_modules.dedup();
 
-    let mismatch = kernel_version.is_some_and(|version| version != kasumi::KSM_PROTOCOL_VERSION);
+    let mismatch = kernel_version != kasumi::KSM_PROTOCOL_VERSION;
 
-    KasumiVersionPayload {
+    Ok(KasumiVersionPayload {
         protocol_version: kasumi::KSM_PROTOCOL_VERSION,
-        kernel_version: kernel_version.unwrap_or_default(),
+        kernel_version,
         kasumi_available: status == KasumiStatus::Available,
         protocol_mismatch: mismatch,
         mismatch_message: mismatch_message(status, kernel_version),
         active_modules,
         mount_base: state.mount_point.clone(),
         mirror_path: config.kasumi.mirror_path.clone(),
-    }
+    })
 }
 
-fn mismatch_message(status: KasumiStatus, kernel_version: Option<i32>) -> Option<String> {
+fn mismatch_message(status: KasumiStatus, kernel_version: i32) -> Option<String> {
     match status {
         KasumiStatus::KernelNotSupported => Some(format!(
             "kernel protocol {} is not compatible with userspace api{}",
-            kernel_version.unwrap_or_default(),
+            kernel_version,
             kasumi::KSM_PROTOCOL_VERSION
         )),
         KasumiStatus::ModuleTooOld => Some(format!(
             "kernel protocol {} is newer than userspace api{}",
-            kernel_version.unwrap_or_default(),
+            kernel_version,
             kasumi::KSM_PROTOCOL_VERSION
         )),
-        KasumiStatus::Available => kernel_version
-            .filter(|version| *version != kasumi::KSM_PROTOCOL_VERSION)
-            .map(|version| {
-                format!(
-                    "protocol mismatch: userspace api{}, kernel api{}",
-                    kasumi::KSM_PROTOCOL_VERSION,
-                    version
-                )
-            }),
+        KasumiStatus::Available if kernel_version != kasumi::KSM_PROTOCOL_VERSION => Some(format!(
+            "protocol mismatch: userspace api{}, kernel api{}",
+            kasumi::KSM_PROTOCOL_VERSION,
+            kernel_version
+        )),
+        KasumiStatus::Available => None,
         KasumiStatus::NotPresent => None,
     }
-}
-
-fn extract_active_module_ids(rules: &[KasumiRuleEntry], mirror_path: &Path) -> Vec<String> {
-    let mut modules = BTreeSet::new();
-
-    for rule in rules {
-        let Some(source) = rule.source.as_deref() else {
-            continue;
-        };
-
-        if let Some(module_id) = extract_module_id_from_source(source, mirror_path) {
-            modules.insert(module_id);
-        }
-    }
-
-    modules.into_iter().collect()
-}
-
-fn extract_module_id_from_source(source: &str, mirror_path: &Path) -> Option<String> {
-    let module_root = format!("{}/", defs::MODULES_DIR.trim_end_matches('/'));
-    if let Some(rest) = source.strip_prefix(&module_root) {
-        return rest
-            .split('/')
-            .next()
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string);
-    }
-
-    let mirror_prefix = format!(
-        "{}/",
-        mirror_path.display().to_string().trim_end_matches('/')
-    );
-    if let Some(rest) = source.strip_prefix(&mirror_prefix) {
-        return rest
-            .split('/')
-            .next()
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string);
-    }
-
-    None
 }

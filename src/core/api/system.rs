@@ -4,7 +4,7 @@
 
 use std::{fs, path::PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::process::Process;
 use rustix::fs::statvfs;
@@ -16,7 +16,7 @@ use crate::{conf::config::Config, core::runtime_state::RuntimeState, partitions}
 pub struct PartitionInfo {
     pub name: String,
     pub mount_point: String,
-    pub fs_type: String,
+    pub fs_type: Option<String>,
     pub is_read_only: bool,
     pub exists_as_symlink: bool,
 }
@@ -25,20 +25,11 @@ pub struct PartitionInfo {
 pub struct StorageInfo {
     pub path: String,
     pub pid: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub warning: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub used: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub avail: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub percent: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub size: String,
+    pub used: String,
+    pub avail: String,
+    pub percent: f64,
+    pub mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -88,14 +79,6 @@ struct MountEntry {
     is_read_only: bool,
 }
 
-fn storage_mode_label(storage_mode: &str) -> String {
-    if storage_mode.is_empty() {
-        "unknown".to_string()
-    } else {
-        storage_mode.to_string()
-    }
-}
-
 fn format_windows_size(bytes: u64) -> String {
     const UNITS: [&str; 7] = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
 
@@ -113,68 +96,48 @@ fn format_windows_size(bytes: u64) -> String {
     }
 }
 
-pub fn build_storage_payload(state: &RuntimeState) -> StorageInfo {
+pub fn build_storage_payload(state: &RuntimeState) -> Result<StorageInfo> {
     let mount_path = state.mount_point.clone();
     let path_str = mount_path.display().to_string();
 
     if mount_path.as_os_str().is_empty() || !mount_path.exists() {
-        return StorageInfo {
-            path: path_str,
-            pid: state.pid,
-            error: Some("Not mounted".to_string()),
-            warning: None,
-            size: None,
-            used: None,
-            avail: None,
-            percent: None,
-            mode: Some(storage_mode_label(&state.storage_mode)),
-        };
+        bail!("storage mount is unavailable: {}", mount_path.display());
     }
 
-    match statvfs_usage(&mount_path) {
-        Ok((total_bytes, used_bytes, free_bytes, percent)) => StorageInfo {
-            path: path_str,
-            pid: state.pid,
-            error: None,
-            warning: (total_bytes == 0).then_some("Zero size detected".to_string()),
-            size: Some(format_windows_size(total_bytes)),
-            used: Some(format_windows_size(used_bytes)),
-            avail: Some(format_windows_size(free_bytes)),
-            percent: Some(percent),
-            mode: Some(storage_mode_label(&state.storage_mode)),
-        },
-        Err(err) => StorageInfo {
-            path: path_str,
-            pid: state.pid,
-            error: Some(format!("statvfs failed: {err:#}")),
-            warning: None,
-            size: None,
-            used: None,
-            avail: None,
-            percent: None,
-            mode: Some(storage_mode_label(&state.storage_mode)),
-        },
+    let (total_bytes, used_bytes, free_bytes, percent) = statvfs_usage(&mount_path)?;
+    if total_bytes == 0 {
+        bail!("storage filesystem reports zero total bytes");
     }
+
+    Ok(StorageInfo {
+        path: path_str,
+        pid: state.pid,
+        size: format_windows_size(total_bytes),
+        used: format_windows_size(used_bytes),
+        avail: format_windows_size(free_bytes),
+        percent,
+        mode: state.storage_mode.clone(),
+    })
 }
 
 pub fn build_mount_stats_payload(state: &RuntimeState) -> MountStatsPayload {
     MountStatsPayload::from(&state.mount_stats)
 }
 
-pub fn build_partitions_payload(config: &Config) -> Vec<PartitionInfo> {
-    detect_partitions(config).unwrap_or_default()
+pub fn build_partitions_payload(config: &Config) -> Result<Vec<PartitionInfo>> {
+    detect_partitions(config)
 }
 
-pub fn build_system_info_payload(state: &RuntimeState) -> SystemInfoPayload {
-    SystemInfoPayload {
-        kernel: read_kernel_release().unwrap_or_else(|_| "Unknown".to_string()),
-        selinux: read_selinux_status().unwrap_or_else(|_| "Unknown".to_string()),
+pub fn build_system_info_payload(state: &RuntimeState) -> Result<SystemInfoPayload> {
+    Ok(SystemInfoPayload {
+        kernel: read_kernel_release()?,
+        selinux: read_selinux_status()?,
         mount_base: state.mount_point.display().to_string(),
         active_mounts: state.active_mounts.clone(),
         #[cfg(feature = "control-plane")]
         tmpfs_xattr_supported: state.tmpfs_xattr_supported,
         supported_overlay_modes: vec!["tmpfs".to_string(), "ext4".to_string()],
-    }
+    })
 }
 
 fn statvfs_usage(path: &std::path::Path) -> Result<(u64, u64, u64, f64)> {
@@ -204,20 +167,13 @@ fn detect_partitions(_config: &Config) -> Result<Vec<PartitionInfo>> {
         let mount_point = PathBuf::from("/").join(&name);
         let metadata = match fs::symlink_metadata(&mount_point) {
             Ok(metadata) => metadata,
-            Err(err) => {
-                crate::scoped_log!(
-                    debug,
-                    "system:api",
-                    "skipping partition {}: metadata read failed: {}",
-                    name,
-                    err
-                );
-                continue;
-            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err).with_context(|| format!("failed to inspect {name}")),
         };
         let exists_as_symlink = metadata.file_type().is_symlink();
         let resolved = if exists_as_symlink {
-            fs::canonicalize(&mount_point).unwrap_or_else(|_| mount_point.clone())
+            fs::canonicalize(&mount_point)
+                .with_context(|| format!("failed to resolve {}", mount_point.display()))?
         } else {
             mount_point.clone()
         };
@@ -229,9 +185,7 @@ fn detect_partitions(_config: &Config) -> Result<Vec<PartitionInfo>> {
         partitions.push(PartitionInfo {
             name,
             mount_point: mount_point.display().to_string(),
-            fs_type: match_entry
-                .map(|entry| entry.fs_type.clone())
-                .unwrap_or_default(),
+            fs_type: match_entry.map(|entry| entry.fs_type.clone()),
             is_read_only: match_entry.is_some_and(|entry| entry.is_read_only),
             exists_as_symlink,
         });
@@ -248,27 +202,17 @@ fn read_kernel_release() -> Result<String> {
         return Ok(trimmed.to_string());
     }
 
-    let proc_version =
-        fs::read_to_string("/proc/version").context("failed to read /proc/version")?;
-    let trimmed = proc_version.trim();
-    if let Some(rest) = trimmed.strip_prefix("Linux version ")
-        && let Some(version) = rest.split_whitespace().next()
-    {
-        return Ok(version.to_string());
-    }
-    Ok("Unknown".to_string())
+    anyhow::bail!("/proc/sys/kernel/osrelease is empty")
 }
 
 fn read_selinux_status() -> Result<String> {
-    if let Ok(enforce) = fs::read_to_string("/sys/fs/selinux/enforce") {
-        match enforce.trim() {
-            "1" => return Ok("Enforcing".to_string()),
-            "0" => return Ok("Permissive".to_string()),
-            _ => {}
-        }
+    let enforce = fs::read_to_string("/sys/fs/selinux/enforce")
+        .context("failed to read /sys/fs/selinux/enforce")?;
+    match enforce.trim() {
+        "1" => Ok("Enforcing".to_string()),
+        "0" => Ok("Permissive".to_string()),
+        value => anyhow::bail!("invalid SELinux enforcement value: {value}"),
     }
-
-    Ok("Unknown".to_string())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

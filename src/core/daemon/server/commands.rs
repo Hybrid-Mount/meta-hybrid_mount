@@ -2,13 +2,9 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-#[cfg(feature = "kasumi")]
-use std::os::unix::fs::FileTypeExt;
 use std::{
-    collections::HashMap,
     fs,
-    os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
+    path::Path,
     process::Command,
     sync::{
         Arc, Mutex,
@@ -23,14 +19,13 @@ use serde_json::{Value, json};
 #[cfg(feature = "kasumi")]
 use super::super::protocol::KasumiCommand;
 use super::{
-    super::protocol::{BatchCommand, ConfigCommand, DaemonCommand, ModulesCommand, SystemCommand},
+    super::protocol::{ConfigCommand, DaemonCommand, ModulesCommand, SystemCommand},
     http::{self, WebuiHttpSession},
 };
 use crate::{
     conf::config::Config,
-    core::{api, inventory, runtime_state::RuntimeState},
+    core::{api, runtime_state::RuntimeState},
     defs,
-    utils::{self, lock_or_recover},
 };
 #[cfg(feature = "kasumi")]
 use crate::{
@@ -40,123 +35,56 @@ use crate::{
     sys::{kasumi, lkm},
 };
 
-#[derive(Clone, PartialEq, Eq)]
-enum ConfigFileStamp {
-    Missing,
-    Present {
-        dev: u64,
-        ino: u64,
-        len: u64,
-        mtime_sec: i64,
-        mtime_nsec: i64,
-        ctime_sec: i64,
-        ctime_nsec: i64,
-    },
-}
-
-struct CachedRuntimeConfig {
-    stamp: ConfigFileStamp,
-    config: Arc<Config>,
-}
-
-pub(super) struct RuntimeConfigCache {
-    entries: Mutex<HashMap<PathBuf, CachedRuntimeConfig>>,
+pub(super) struct RuntimeConfigAccess {
     write_lock: Mutex<()>,
 }
 
-impl RuntimeConfigCache {
+impl RuntimeConfigAccess {
     pub(super) fn new() -> Self {
         Self {
-            entries: Mutex::new(HashMap::new()),
             write_lock: Mutex::new(()),
         }
     }
 
-    fn lock_writes(&self) -> std::sync::MutexGuard<'_, ()> {
-        lock_or_recover(&self.write_lock)
+    fn lock_writes(&self) -> Result<std::sync::MutexGuard<'_, ()>> {
+        self.write_lock
+            .lock()
+            .map_err(|_| anyhow::anyhow!("runtime config write lock is poisoned"))
     }
 
     pub(super) fn load(&self, config_path: &Path) -> Result<Arc<Config>> {
-        let stamp = config_file_stamp(config_path)?;
-        let key = config_path.to_path_buf();
-        let mut entries = lock_or_recover(&self.entries);
-
-        if let Some(entry) = entries.get(&key)
-            && entry.stamp == stamp
-        {
-            return Ok(entry.config.clone());
-        }
-
-        let config = Arc::new(load_runtime_config_uncached(config_path)?);
-        entries.insert(
-            key,
-            CachedRuntimeConfig {
-                stamp,
-                config: config.clone(),
-            },
-        );
-        Ok(config)
-    }
-
-    pub(super) fn store(&self, config_path: &Path, config: Config) -> Result<Arc<Config>> {
-        let stamp = config_file_stamp(config_path)?;
-        let config = Arc::new(config);
-        lock_or_recover(&self.entries).insert(
-            config_path.to_path_buf(),
-            CachedRuntimeConfig {
-                stamp,
-                config: config.clone(),
-            },
-        );
-        Ok(config)
-    }
-}
-
-fn config_file_stamp(config_path: &Path) -> Result<ConfigFileStamp> {
-    match fs::metadata(config_path) {
-        Ok(metadata) => Ok(ConfigFileStamp::Present {
-            dev: metadata.dev(),
-            ino: metadata.ino(),
-            len: metadata.len(),
-            mtime_sec: metadata.mtime(),
-            mtime_nsec: metadata.mtime_nsec(),
-            ctime_sec: metadata.ctime(),
-            ctime_nsec: metadata.ctime_nsec(),
-        }),
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(ConfigFileStamp::Missing),
-        Err(err) => Err(err)
-            .with_context(|| format!("Failed to inspect config file {}", config_path.display())),
+        Ok(Arc::new(load_runtime_config_uncached(config_path)?))
     }
 }
 
 pub(super) fn load_runtime_config(
-    config_cache: &RuntimeConfigCache,
+    config_access: &RuntimeConfigAccess,
     config_path: &Path,
 ) -> Result<Arc<Config>> {
-    config_cache.load(config_path)
+    config_access.load(config_path)
 }
 
 fn load_runtime_config_uncached(config_path: &Path) -> Result<Config> {
-    Config::load_optional_from_file(config_path)
-        .with_context(|| format!("Failed to load config from path: {}", config_path.display()))
+    let config = Config::load_from_file(config_path)
+        .with_context(|| format!("Failed to load config from path: {}", config_path.display()))?;
+    crate::conf::loader::load_module_blacklist(config)
 }
 
 pub(super) struct CommandContext<'a> {
     config: &'a Config,
     config_path: &'a Path,
-    config_cache: &'a RuntimeConfigCache,
+    config_access: &'a RuntimeConfigAccess,
     state: &'a Arc<Mutex<RuntimeState>>,
     shutdown: &'a Arc<AtomicBool>,
     webui: &'a WebuiHttpSession,
     sse_clients: &'a http::SharedSseClients,
-    defer_refresh: bool,
 }
 
 impl<'a> CommandContext<'a> {
     pub(super) fn new(
         config: &'a Config,
         config_path: &'a Path,
-        config_cache: &'a RuntimeConfigCache,
+        config_access: &'a RuntimeConfigAccess,
         state: &'a Arc<Mutex<RuntimeState>>,
         shutdown: &'a Arc<AtomicBool>,
         webui: &'a WebuiHttpSession,
@@ -165,18 +93,12 @@ impl<'a> CommandContext<'a> {
         Self {
             config,
             config_path,
-            config_cache,
+            config_access,
             state,
             shutdown,
             webui,
             sse_clients,
-            defer_refresh: false,
         }
-    }
-
-    fn with_deferred_refresh(mut self) -> Self {
-        self.defer_refresh = true;
-        self
     }
 
     fn refresh<T: Serialize>(&self, config: &Config, payload: T) -> Result<Value> {
@@ -196,33 +118,33 @@ impl<'a> CommandContext<'a> {
 
     #[cfg(feature = "kasumi")]
     fn invalidate_and_refresh_message(&self, message: &'static str) -> Result<Value> {
-        kasumi_mount::invalidate_runtime_caches();
+        kasumi_mount::invalidate_runtime_caches()?;
         self.refresh_message(message)
     }
 
     fn refresh_runtime_snapshot(&self, config: &Config) -> Result<()> {
-        if self.defer_refresh {
-            return Ok(());
-        }
         refresh_runtime_snapshot(config, self.state, self.sse_clients)
-    }
-
-    fn cache_config(&self, config: Config) -> Result<Arc<Config>> {
-        self.config_cache.store(self.config_path, config)
     }
 }
 
-fn runtime_snapshot(state: &Arc<Mutex<RuntimeState>>) -> RuntimeState {
-    lock_or_recover(state).clone()
+fn runtime_snapshot(state: &Arc<Mutex<RuntimeState>>) -> Result<RuntimeState> {
+    Ok(state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("runtime state lock is poisoned"))?
+        .clone())
 }
 
 fn cached_status_value(state: &Arc<Mutex<RuntimeState>>) -> Result<Value> {
-    let mut guard = lock_or_recover(state);
+    let mut guard = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("runtime state lock is poisoned"))?;
     Ok(guard.status_value()?.clone())
 }
 
 fn cached_status_and_snapshot(state: &Arc<Mutex<RuntimeState>>) -> Result<(Value, RuntimeState)> {
-    let mut guard = lock_or_recover(state);
+    let mut guard = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("runtime state lock is poisoned"))?;
     let status_value = guard.status_value()?.clone();
     Ok((status_value, guard.clone()))
 }
@@ -230,7 +152,11 @@ fn cached_status_and_snapshot(state: &Arc<Mutex<RuntimeState>>) -> Result<(Value
 // ── Top-level dispatch ──────────────────────────────────────────────────
 
 pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand) -> Result<Value> {
-    let _write_guard = command_writes_config(&command).then(|| ctx.config_cache.lock_writes());
+    let _write_guard = if command_writes_config(&command) {
+        Some(ctx.config_access.lock_writes()?)
+    } else {
+        None
+    };
     dispatch_command_unlocked(ctx, command)
 }
 
@@ -241,7 +167,6 @@ fn dispatch_command_unlocked(ctx: &CommandContext<'_>, command: DaemonCommand) -
         DaemonCommand::Modules(cmd) => dispatch_modules(ctx, cmd),
         #[cfg(feature = "kasumi")]
         DaemonCommand::Kasumi(cmd) => dispatch_kasumi(ctx, cmd),
-        DaemonCommand::Batch(BatchCommand::Batch { commands }) => dispatch_batch(ctx, commands),
     }
 }
 
@@ -249,14 +174,11 @@ fn command_writes_config(command: &DaemonCommand) -> bool {
     match command {
         DaemonCommand::Config(ConfigCommand::Get) => false,
         DaemonCommand::Config(_) | DaemonCommand::Modules(ModulesCommand::Apply { .. }) => true,
-        DaemonCommand::Modules(ModulesCommand::List { .. }) | DaemonCommand::System(_) => false,
+        DaemonCommand::Modules(ModulesCommand::List) | DaemonCommand::System(_) => false,
         #[cfg(feature = "kasumi")]
         DaemonCommand::Kasumi(KasumiCommand::MapsAdd { .. } | KasumiCommand::MapsClear) => true,
         #[cfg(feature = "kasumi")]
         DaemonCommand::Kasumi(_) => false,
-        DaemonCommand::Batch(BatchCommand::Batch { commands }) => {
-            commands.iter().any(command_writes_config)
-        }
     }
 }
 
@@ -267,7 +189,6 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
     let state = ctx.state;
     let shutdown = ctx.shutdown;
     let webui = ctx.webui;
-    let sse_clients = ctx.sse_clients;
 
     match cmd {
         SystemCommand::Ping => Ok(json!({ "status": "ok" })),
@@ -279,21 +200,21 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
         SystemCommand::Init => dispatch_init(ctx),
         SystemCommand::Status => cached_status_value(state),
         SystemCommand::ApiStorage => {
-            let snapshot = runtime_snapshot(state);
-            to_value(&api::build_storage_payload(&snapshot))
+            let snapshot = runtime_snapshot(state)?;
+            to_value(&api::build_storage_payload(&snapshot)?)
         }
         SystemCommand::ApiMountStats => {
-            let snapshot = runtime_snapshot(state);
+            let snapshot = runtime_snapshot(state)?;
             to_value(&api::build_mount_stats_payload(&snapshot))
         }
         SystemCommand::ApiMountTopology => {
-            let snapshot = runtime_snapshot(state);
-            to_value(&api::build_mount_topology_payload(config, &snapshot))
+            let snapshot = runtime_snapshot(state)?;
+            to_value(&api::build_mount_topology_payload(config, &snapshot)?)
         }
-        SystemCommand::ApiPartitions => to_value(&api::build_partitions_payload(config)),
+        SystemCommand::ApiPartitions => to_value(&api::build_partitions_payload(config)?),
         SystemCommand::ApiSystemInfo => {
-            let snapshot = runtime_snapshot(state);
-            to_value(&api::build_system_info_payload(&snapshot))
+            let snapshot = runtime_snapshot(state)?;
+            to_value(&api::build_system_info_payload(&snapshot)?)
         }
         SystemCommand::ApiVersion => to_value(&api::build_version_payload()),
         SystemCommand::ApiKernelUname => to_value(&read_kernel_uname_payload()?),
@@ -305,22 +226,6 @@ fn dispatch_system(ctx: &CommandContext<'_>, cmd: SystemCommand) -> Result<Value
             reboot_device()?;
             Ok(json!({ "reboot": true }))
         }
-        SystemCommand::ClearMountErrors => {
-            let removed_markers = clear_mount_error_markers(config)?;
-            let mut guard = lock_or_recover(state);
-            let cleared = guard.mount_error_modules.len();
-            let state_changed = cleared > 0 || !guard.mount_error_reasons.is_empty();
-            guard.mount_error_modules.clear();
-            guard.mount_error_reasons.clear();
-            if state_changed {
-                guard.save()?;
-            }
-            drop(guard);
-            if state_changed || removed_markers > 0 {
-                http::broadcast_sse_event(state, sse_clients, "mount_errors_cleared");
-            }
-            Ok(json!({ "cleared": cleared, "removed_markers": removed_markers }))
-        }
     }
 }
 
@@ -329,33 +234,9 @@ fn dispatch_init(ctx: &CommandContext<'_>) -> Result<Value> {
     let state = ctx.state;
 
     let (status_value, snapshot) = cached_status_and_snapshot(state)?;
-    let mut config_value = to_value(config)?;
-    // When Kasumi is not usable (kernel too old, LKM not present, or
-    // protocol mismatch) force kasumi.enabled = false.  When the Kasumi
-    // feature is not even compiled in (lite/nano builds), strip the
-    // entire [kasumi] section from the reported config.  Both paths
-    // ensure the WebUI never shows a non-existent Kasumi mode — even
-    // when switching from a full to lite build with a stale WebUI.
-    #[cfg(feature = "kasumi")]
-    {
-        if (!config.kasumi.enabled || !kasumi::can_operate())
-            && let Some(kasumi_val) = config_value.get_mut("kasumi")
-            && let Some(enabled) = kasumi_val.get_mut("enabled")
-        {
-            *enabled = json!(false);
-        }
-    }
-    #[cfg(not(feature = "kasumi"))]
-    {
-        // Strip the entire [kasumi] section from the reported config so
-        // the WebUI never sees any kasumi data after switching from a
-        // full to a lite build.  (Forcing just enabled=false leaves the
-        // rest of the section intact, which can confuse the WebUI when
-        // ENABLE_KASUMI is accidentally true in a stale WebUI bundle.)
-        config_value.as_object_mut().map(|obj| obj.remove("kasumi"));
-    }
+    let config_value = to_value(config)?;
     let version_value = to_value(&api::build_version_payload())?;
-    let system_info_value = to_value(&api::build_system_info_payload(&snapshot))?;
+    let system_info_value = to_value(&api::build_system_info_payload(&snapshot)?)?;
     #[cfg(feature = "kasumi")]
     {
         let kasumi_status_value = build_kasumi_runtime_json(config, &snapshot)?;
@@ -388,7 +269,6 @@ fn dispatch_config(ctx: &CommandContext<'_>, cmd: ConfigCommand) -> Result<Value
             let config: Config =
                 serde_json::from_value(payload).context("Failed to decode config payload")?;
             config.save_to_file(config_path)?;
-            ctx.cache_config(config.clone())?;
             ctx.refresh(&config, json!({ "saved": true, "config": &config }))
         }
         ConfigCommand::Patch {
@@ -396,11 +276,11 @@ fn dispatch_config(ctx: &CommandContext<'_>, cmd: ConfigCommand) -> Result<Value
             apply_runtime,
         } => {
             let config = patch_config_file(config_path, patch)?;
-            ctx.cache_config(config.clone())?;
-            let applied = apply_runtime
-                .then(|| apply_runtime_config(&config))
-                .transpose()?
-                .unwrap_or(false);
+            let applied = if apply_runtime {
+                apply_runtime_config(&config)?
+            } else {
+                false
+            };
             ctx.refresh(
                 &config,
                 json!({
@@ -413,7 +293,6 @@ fn dispatch_config(ctx: &CommandContext<'_>, cmd: ConfigCommand) -> Result<Value
         ConfigCommand::Reset => {
             let config = Config::default();
             save_and_apply_runtime_config(&config, config_path)?;
-            ctx.cache_config(config.clone())?;
             ctx.refresh(&config, json!({ "saved": true, "config": &config }))
         }
     }
@@ -427,18 +306,13 @@ fn dispatch_modules(ctx: &CommandContext<'_>, cmd: ModulesCommand) -> Result<Val
     let state = ctx.state;
 
     match cmd {
-        ModulesCommand::List { path } => {
-            let snapshot = runtime_snapshot(state);
-            to_value(&api::build_modules_payload(
-                config,
-                &snapshot,
-                path.as_deref(),
-            )?)
+        ModulesCommand::List => {
+            let snapshot = runtime_snapshot(state)?;
+            to_value(&api::build_modules_payload(config, &snapshot)?)
         }
         ModulesCommand::Apply { modules } => {
             let payload = api::apply_modules_payload(config_path, &modules)?;
             let config = load_runtime_config_uncached(config_path)?;
-            ctx.cache_config(config.clone())?;
             ctx.refresh(&config, payload)
         }
     }
@@ -450,27 +324,24 @@ fn dispatch_modules(ctx: &CommandContext<'_>, cmd: ModulesCommand) -> Result<Val
 fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value> {
     let config = ctx.config;
     let config_path = ctx.config_path;
-    let config_cache = ctx.config_cache;
+    let config_access = ctx.config_access;
     let state = ctx.state;
 
     match cmd {
         KasumiCommand::Status => {
-            let snapshot = runtime_snapshot(state);
+            let snapshot = runtime_snapshot(state)?;
             build_kasumi_runtime_json(config, &snapshot)
         }
         KasumiCommand::List => {
-            let payload = if kasumi_mount::can_operate(config) {
-                api::parse_kasumi_rule_listing(&kasumi::list_rules()?)
-            } else {
-                Vec::new()
-            };
+            kasumi_mount::require_live(config, "list rules")?;
+            let payload = api::parse_kasumi_rule_listing(&kasumi::list_rules()?)?;
             to_value(&payload)
         }
         KasumiCommand::Version => {
-            let snapshot = runtime_snapshot(state);
-            to_value(&api::build_kasumi_version_payload(config, &snapshot))
+            let snapshot = runtime_snapshot(state)?;
+            to_value(&api::build_kasumi_version_payload(config, &snapshot)?)
         }
-        KasumiCommand::Features => to_value(&api::build_features_payload()),
+        KasumiCommand::Features => to_value(&api::build_features_payload()?),
         KasumiCommand::Hooks => to_value(&kasumi_mount::hook_lines()?),
         KasumiCommand::ApplyConfigRuntime => {
             let applied = apply_runtime_config(config)?;
@@ -481,11 +352,11 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
             ctx.refresh_message("Kasumi rules cleared.")
         }
         KasumiCommand::ReleaseConnection => {
-            kasumi::release_connection();
+            kasumi::release_connection()?;
             ctx.refresh_message("Released cached Kasumi client connection.")
         }
         KasumiCommand::InvalidateCache => {
-            kasumi_mount::invalidate_runtime_caches();
+            kasumi_mount::invalidate_runtime_caches()?;
             ctx.refresh_message("Invalidated cached Kasumi status.")
         }
         KasumiCommand::FixMounts => {
@@ -528,7 +399,6 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
             source,
             file_type,
         } => {
-            let file_type = file_type.unwrap_or(detect_rule_file_type(&source)?);
             kasumi::add_rule(&target, &source, file_type)?;
             ctx.refresh_current(json!({
                 "message": "Kasumi ADD rule applied.",
@@ -584,7 +454,7 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
         KasumiCommand::HideList => to_value(&user_hide_rules::load_user_hide_rules()?),
         KasumiCommand::HideAdd { path } => {
             let added = user_hide_rules::add_user_hide_rule(&path)?;
-            if added && kasumi_mount::can_operate(config) {
+            if added && kasumi_mount::can_operate(config)? {
                 kasumi::hide_path(&path)?;
             }
             ctx.refresh_current(json!({ "added": added, "path": path }))
@@ -595,10 +465,10 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
         }
         KasumiCommand::HideApply => {
             kasumi_mount::require_live(config, "apply user hide rules")?;
-            let (applied, failed) = user_hide_rules::apply_user_hide_rules()?;
-            ctx.refresh_current(json!({ "applied": applied, "failed": failed }))
+            let applied = user_hide_rules::apply_user_hide_rules()?;
+            ctx.refresh_current(json!({ "applied": applied }))
         }
-        KasumiCommand::LkmStatus => to_value(&api::build_lkm_payload(config)),
+        KasumiCommand::LkmStatus => to_value(&api::build_lkm_payload(config)?),
         KasumiCommand::LkmLoad => {
             lkm::load(&config.kasumi)?;
             ctx.invalidate_and_refresh_message("Kasumi LKM loaded.")
@@ -607,14 +477,8 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
             lkm::unload(&config.kasumi)?;
             ctx.invalidate_and_refresh_message("Kasumi LKM unloaded.")
         }
-        KasumiCommand::ApiLkm => to_value(&api::build_lkm_payload(config)),
-        KasumiCommand::ApiHooks => {
-            kasumi_mount::require_live(config, "read Kasumi hooks")?;
-            to_value(&kasumi_mount::hook_lines()?)
-        }
         KasumiCommand::MapsAdd { rule } => {
             let updated = add_kasumi_maps_config_rule(config_path, rule)?;
-            ctx.cache_config(updated.clone())?;
             apply_runtime_config(&updated)?;
             let count = updated.kasumi.maps_rules.len();
             ctx.refresh(
@@ -627,12 +491,11 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
             )
         }
         KasumiCommand::MapsClear => {
-            let mut updated = load_runtime_config(config_cache, config_path)?
+            let mut updated = load_runtime_config(config_access, config_path)?
                 .as_ref()
                 .clone();
             updated.kasumi.maps_rules.clear();
             updated.save_to_file(config_path)?;
-            ctx.cache_config(updated.clone())?;
             apply_runtime_config(&updated)?;
             ctx.refresh(
                 &updated,
@@ -646,40 +509,9 @@ fn dispatch_kasumi(ctx: &CommandContext<'_>, cmd: KasumiCommand) -> Result<Value
     }
 }
 
-// ── Batch commands ──────────────────────────────────────────────────────
-
-fn dispatch_batch(ctx: &CommandContext<'_>, commands: Vec<DaemonCommand>) -> Result<Value> {
-    let noop_clients = http::SseClientRegistry::shared();
-    let mut results: Vec<Value> = Vec::with_capacity(commands.len());
-    for cmd in commands {
-        // Reload between commands so a read following a write in the same
-        // batch observes the configuration that was just persisted.
-        let effective_config = load_runtime_config(ctx.config_cache, ctx.config_path)?;
-        let batch_ctx = CommandContext::new(
-            &effective_config,
-            ctx.config_path,
-            ctx.config_cache,
-            ctx.state,
-            ctx.shutdown,
-            ctx.webui,
-            &noop_clients,
-        )
-        .with_deferred_refresh();
-        // The outer batch holds the config write lock when any nested command
-        // writes configuration, so recursive dispatch must not acquire it again.
-        let result = match dispatch_command_unlocked(&batch_ctx, cmd) {
-            Ok(value) => json!({ "ok": true, "data": value }),
-            Err(err) => json!({ "ok": false, "error": format!("{err}") }),
-        };
-        results.push(result);
-    }
-    let effective_config = load_runtime_config(ctx.config_cache, ctx.config_path)?;
-    ctx.refresh_runtime_snapshot(&effective_config)?;
-    Ok(json!({ "results": results }))
-}
-
 fn patch_config_file(config_path: &Path, patch: Value) -> Result<Config> {
-    let config = load_runtime_config_uncached(config_path)?;
+    let config = Config::load_from_file(config_path)
+        .with_context(|| format!("Failed to load config from path: {}", config_path.display()))?;
     let mut payload = serde_json::to_value(config).context("Failed to encode current config")?;
     merge_json(&mut payload, patch, 0)
         .context("Failed to merge config patch (nesting too deep)")?;
@@ -757,48 +589,6 @@ fn validate_url(url: &str) -> Result<()> {
     Ok(())
 }
 
-fn clear_mount_error_markers(config: &Config) -> Result<usize> {
-    let entries = match fs::read_dir(&config.moduledir) {
-        Ok(entries) => entries,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(0),
-        Err(err) => {
-            return Err(err)
-                .with_context(|| format!("failed to read {}", config.moduledir.display()));
-        }
-    };
-
-    let mut removed = 0usize;
-    for entry in entries {
-        let entry = entry.with_context(|| {
-            format!(
-                "failed to enumerate module directory {}",
-                config.moduledir.display()
-            )
-        })?;
-        if !entry
-            .file_type()
-            .with_context(|| format!("failed to inspect {}", entry.path().display()))?
-            .is_dir()
-        {
-            continue;
-        }
-
-        let id = entry.file_name().to_string_lossy().into_owned();
-        if inventory::is_reserved_module_dir(&id) {
-            continue;
-        }
-
-        let marker_dir = entry.path();
-        removed +=
-            utils::remove_dir_entries_case_insensitive(&marker_dir, defs::MOUNT_ERROR_FILE_NAME)
-                .with_context(|| {
-                    format!("failed to remove marker under {}", marker_dir.display())
-                })?;
-    }
-
-    Ok(removed)
-}
-
 fn reboot_device() -> Result<()> {
     let status = Command::new("reboot")
         .status()
@@ -831,7 +621,7 @@ fn save_and_apply_runtime_config(config: &Config, config_path: &Path) -> Result<
 #[cfg(feature = "kasumi")]
 fn apply_runtime_config(config: &Config) -> Result<bool> {
     let applied = kasumi_mount::apply_runtime_config(config)?;
-    kasumi_mount::invalidate_runtime_caches();
+    kasumi_mount::invalidate_runtime_caches()?;
     Ok(applied)
 }
 
@@ -845,11 +635,13 @@ fn refresh_runtime_snapshot(
     state: &Arc<Mutex<RuntimeState>>,
     sse_clients: &http::SharedSseClients,
 ) -> Result<()> {
-    let mut guard = lock_or_recover(state);
+    let mut guard = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("runtime state lock is poisoned"))?;
     #[cfg(feature = "kasumi")]
     let runtime_changed = {
-        kasumi_mount::invalidate_runtime_caches();
-        let next = kasumi_mount::collect_runtime_info(config);
+        kasumi_mount::invalidate_runtime_caches()?;
+        let next = kasumi_mount::collect_runtime_info(config)?;
         let changed = guard.kasumi != next;
         guard.kasumi = next;
         changed
@@ -860,7 +652,7 @@ fn refresh_runtime_snapshot(
         false
     };
     let daemon_changed = !guard.daemon.alive || guard.daemon.socket_path != defs::SOCKET_FILE;
-    guard.set_daemon_state(true, defs::SOCKET_FILE);
+    guard.set_daemon_state(true, defs::SOCKET_FILE)?;
     guard
         .status_value()
         .map_err(|e| anyhow::anyhow!("Failed to cache status value: {e}"))?;
@@ -868,7 +660,7 @@ fn refresh_runtime_snapshot(
         guard.save()?;
     }
     drop(guard);
-    http::broadcast_sse_event(state, sse_clients, "runtime_changed");
+    http::broadcast_sse_event(state, sse_clients, "runtime_changed")?;
     Ok(())
 }
 
@@ -906,33 +698,8 @@ fn display_uname_mode(mode: schema::KasumiUnameMode) -> &'static str {
 }
 
 #[cfg(feature = "kasumi")]
-fn detect_rule_file_type(path: &Path) -> Result<i32> {
-    let metadata = fs::symlink_metadata(path)
-        .with_context(|| format!("failed to read source metadata for {}", path.display()))?;
-    let file_type = metadata.file_type();
-
-    if file_type.is_char_device() && metadata.rdev() == 0 {
-        bail!(
-            "source {} is a whiteout node; use `kasumi rule hide` instead",
-            path.display()
-        );
-    }
-
-    if file_type.is_file() {
-        Ok(libc::DT_REG as i32)
-    } else if file_type.is_symlink() {
-        Ok(libc::DT_LNK as i32)
-    } else {
-        bail!(
-            "unsupported source type for rule add: {} (use `merge` or `add-dir` for directories)",
-            path.display()
-        )
-    }
-}
-
-#[cfg(feature = "kasumi")]
 fn build_kasumi_runtime_json(config: &Config, runtime_state: &RuntimeState) -> Result<Value> {
-    let kasumi_info = kasumi_mount::collect_runtime_info(config);
+    let kasumi_info = kasumi_mount::collect_runtime_info(config)?;
     Ok(json!({
         "status": kasumi_info.status,
         "available": kasumi_info.available,
@@ -944,7 +711,7 @@ fn build_kasumi_runtime_json(config: &Config, runtime_state: &RuntimeState) -> R
         "rule_count": kasumi_info.rule_count,
         "user_hide_rule_count": kasumi_info.user_hide_rule_count,
         "mirror_path": kasumi_info.mirror_path,
-        "lkm": api::build_lkm_payload(config),
+        "lkm": api::build_lkm_payload(config)?,
         "config": config.kasumi.clone(),
         "runtime": {
             "snapshot": &runtime_state.kasumi,
@@ -985,30 +752,12 @@ mod tests {
     }
 
     #[test]
-    fn clear_mount_error_markers_removes_marker_files() {
-        let temp = tempfile::tempdir().unwrap();
-        let module_dir = temp.path().join("broken");
-        fs::create_dir_all(&module_dir).unwrap();
-        let marker = module_dir.join("MOUNT_ERROR");
-        fs::write(&marker, b"").unwrap();
-
-        let config = Config {
-            moduledir: temp.path().to_path_buf(),
-            ..Default::default()
-        };
-
-        assert_eq!(clear_mount_error_markers(&config).unwrap(), 1);
-        assert!(!marker.exists());
-        assert_eq!(clear_mount_error_markers(&config).unwrap(), 0);
-    }
-
-    #[test]
     fn concurrent_config_patches_preserve_both_updates() {
         let temp = tempfile::tempdir().unwrap();
         let config_path = temp.path().join("config.toml");
         Config::default().save_to_file(&config_path).unwrap();
 
-        let cache = Arc::new(RuntimeConfigCache::new());
+        let access = Arc::new(RuntimeConfigAccess::new());
         let barrier = Arc::new(Barrier::new(2));
 
         let patches = [
@@ -1017,12 +766,12 @@ mod tests {
         ];
         let mut threads = Vec::new();
         for patch in patches {
-            let cache = cache.clone();
+            let access = access.clone();
             let barrier = barrier.clone();
             let config_path = config_path.clone();
             threads.push(std::thread::spawn(move || {
                 barrier.wait();
-                let _guard = cache.lock_writes();
+                let _guard = access.lock_writes();
                 patch_config_file(&config_path, patch).unwrap();
             }));
         }
@@ -1030,7 +779,7 @@ mod tests {
             thread.join().unwrap();
         }
 
-        let saved = Config::load_optional_from_file(&config_path).unwrap();
+        let saved = Config::load_from_file(&config_path).unwrap();
         assert!(saved.disable_umount);
         assert_eq!(saved.default_mode, crate::domain::DefaultMode::Magic);
         assert!(command_writes_config(&DaemonCommand::Config(

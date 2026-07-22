@@ -13,40 +13,24 @@ use crate::{
     defs,
 };
 
-fn load_module_blacklist(mut config: Config) -> Config {
+pub(crate) fn load_module_blacklist(mut config: Config) -> Result<Config> {
     let path = Path::new(defs::MODULE_BLACKLIST_FILE);
-    if !path.exists() {
-        return config;
-    }
-
-    match std::fs::read_to_string(path)
+    let blacklist = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read blacklist file {}", path.display()))
         .and_then(|content| {
             toml::from_str::<BlacklistConfig>(&content)
                 .with_context(|| format!("failed to parse blacklist file {}", path.display()))
-        }) {
-        Ok(bl) => {
-            crate::scoped_log!(
-                debug,
-                "conf:loader",
-                "blacklist loaded: path={}, entries={}",
-                path.display(),
-                bl.blacklist.len()
-            );
-            config.module_blacklist = bl.blacklist;
-        }
-        Err(err) => {
-            crate::scoped_log!(
-                warn,
-                "conf:loader",
-                "blacklist parse failed, ignoring: path={}, error={:#}",
-                path.display(),
-                err
-            );
-        }
-    }
+        })?;
+    crate::scoped_log!(
+        debug,
+        "conf:loader",
+        "blacklist loaded: path={}, entries={}",
+        path.display(),
+        blacklist.blacklist.len()
+    );
+    config.module_blacklist = blacklist.blacklist;
 
-    config
+    Ok(config)
 }
 
 pub fn load_default_config() -> Result<Config> {
@@ -57,24 +41,14 @@ pub fn load_default_config() -> Result<Config> {
         "start: mode=default, path={}",
         default_path.display()
     );
-    if !default_path.exists() {
-        crate::scoped_log!(
-            debug,
-            "conf:loader",
-            "fallback: mode=default, reason=config_missing, path={}",
-            default_path.display()
-        );
-        return Ok(load_module_blacklist(Config::default()));
-    }
-
-    let config = Config::load_optional_from_file(default_path).with_context(|| {
+    let config = Config::load_from_file(default_path).with_context(|| {
         format!(
             "Failed to load config from default path: {}",
             default_path.display()
         )
     })?;
 
-    let config = load_module_blacklist(config);
+    let config = load_module_blacklist(config)?;
 
     crate::scoped_log!(
         debug,
@@ -88,32 +62,24 @@ pub fn load_default_config() -> Result<Config> {
 
 #[cfg(feature = "control-plane")]
 pub fn load_config(cli: &Cli) -> Result<Config> {
-    if let Some(config_path) = &cli.config {
-        crate::scoped_log!(
-            debug,
-            "conf:loader",
-            "start: mode=custom, path={}",
-            config_path.display()
-        );
+    let config_path = &cli.config;
+    crate::scoped_log!(
+        debug,
+        "conf:loader",
+        "start: path={}",
+        config_path.display()
+    );
 
-        let config = Config::load_optional_from_file(config_path).with_context(|| {
-            format!(
-                "Failed to load config from custom path: {}",
-                config_path.display()
-            )
-        })?;
+    let config = Config::load_from_file(config_path)
+        .with_context(|| format!("Failed to load config from {}", config_path.display()))?;
+    let config = load_module_blacklist(config)?;
 
-        let config = load_module_blacklist(config);
+    crate::scoped_log!(
+        debug,
+        "conf:loader",
+        "complete: path={}",
+        config_path.display()
+    );
 
-        crate::scoped_log!(
-            debug,
-            "conf:loader",
-            "complete: mode=custom, path={}",
-            config_path.display()
-        );
-
-        return Ok(config);
-    }
-
-    load_default_config()
+    Ok(config)
 }

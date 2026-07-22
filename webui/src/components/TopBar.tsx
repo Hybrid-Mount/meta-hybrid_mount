@@ -16,6 +16,7 @@
 
 import { Show, For } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
+import { getErrorMessage } from "../lib/api/core/error";
 import { ICONS } from "../lib/constants";
 import "./TopBar.css";
 import "@material/web/icon/icon.js";
@@ -41,22 +42,24 @@ export default function TopBar() {
     langDialogRef?.close();
   }
 
-  function setLang(code: string) {
-    uiStore.setLang(code);
-    closeLangDialog();
+  async function setLang(code: string) {
+    try {
+      await uiStore.setLang(code);
+      closeLangDialog();
+    } catch (error: unknown) {
+      uiStore.showToast(getErrorMessage(error), "error");
+    }
   }
 
   return (
     <>
       <header class="top-bar">
         <div class="top-bar-content">
-          <h1 class="screen-title">
-            {uiStore.L?.common?.appName ?? "Hybrid Mount"}
-          </h1>
+          <h1 class="screen-title">{uiStore.L.common.appName}</h1>
           <div class="top-actions">
             <md-icon-button
               onClick={openLangDialog}
-              title={uiStore.L?.common?.language ?? "Language"}
+              title={uiStore.L.common.language}
             >
               <md-icon>
                 <svg viewBox="0 0 24 24">
@@ -70,7 +73,7 @@ export default function TopBar() {
 
       <div class="dialog-container">
         <md-dialog ref={langDialogRef} class="lang-dialog">
-          <div slot="headline">{uiStore.L?.common?.language || "Language"}</div>
+          <div slot="headline">{uiStore.L.common.language}</div>
 
           <div slot="content" class="lang-list-container">
             <md-list>
@@ -79,7 +82,7 @@ export default function TopBar() {
                   <md-list-item
                     class="lang-option"
                     type="button"
-                    onClick={() => setLang(l.code)}
+                    onClick={() => void setLang(l.code)}
                   >
                     <div slot="headline">{l.name}</div>
                     <Show when={uiStore.lang === l.code}>
@@ -97,7 +100,7 @@ export default function TopBar() {
 
           <div slot="actions">
             <md-text-button onClick={closeLangDialog}>
-              {uiStore.L?.common?.cancel || "Cancel"}
+              {uiStore.L.common.cancel}
             </md-text-button>
           </div>
         </md-dialog>

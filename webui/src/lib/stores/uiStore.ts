@@ -16,19 +16,67 @@
 
 import { createSignal, createMemo, createRoot } from "solid-js";
 import type { ToastMessage, LanguageOption } from "../types";
+import enUS from "../../locales/en-US.json";
 
-const localeModules = import.meta.glob("../../locales/*.json");
+type Locale = typeof enUS;
+
+const localeModules = import.meta.glob<{ default: unknown }>(
+  "../../locales/*.json",
+);
+
+function validateLocaleShape(
+  reference: unknown,
+  candidate: unknown,
+  path: string,
+): void {
+  if (typeof reference === "string") {
+    if (typeof candidate !== "string") {
+      throw new Error(`Locale value must be a string: ${path}`);
+    }
+    return;
+  }
+
+  if (
+    reference === null ||
+    typeof reference !== "object" ||
+    Array.isArray(reference) ||
+    candidate === null ||
+    typeof candidate !== "object" ||
+    Array.isArray(candidate)
+  ) {
+    throw new Error(`Locale object has an invalid shape: ${path}`);
+  }
+
+  const referenceRecord = reference as Record<string, unknown>;
+  const candidateRecord = candidate as Record<string, unknown>;
+  const referenceKeys = Object.keys(referenceRecord);
+  const candidateKeys = Object.keys(candidateRecord);
+
+  if (
+    referenceKeys.length !== candidateKeys.length ||
+    candidateKeys.some((key) => !(key in referenceRecord))
+  ) {
+    throw new Error(`Locale keys do not match en-US: ${path}`);
+  }
+
+  for (const key of referenceKeys) {
+    validateLocaleShape(
+      referenceRecord[key],
+      candidateRecord[key],
+      `${path}.${key}`,
+    );
+  }
+}
 
 const createUiStore = () => {
   const [lang, setLangSignal] = createSignal("en-US");
-  const [loadedLocale, setLoadedLocale] = createSignal<any>(null);
+  const [loadedLocale, setLoadedLocale] = createSignal<Locale>(enUS);
   const [toast, setToast] = createSignal<ToastMessage>({
     id: "init",
     text: "",
     type: "info",
     visible: false,
   });
-  const [isReady, setIsReady] = createSignal(false);
 
   const availableLanguages: LanguageOption[] = [
     { code: "en-US", name: "English" },
@@ -47,12 +95,7 @@ const createUiStore = () => {
     return a.name.localeCompare(b.name);
   });
 
-  const L = createMemo(
-    (): any =>
-      (loadedLocale() as { default: any })?.default ||
-      (loadedLocale() as any) ||
-      {},
-  );
+  const L = createMemo((): Locale => loadedLocale());
 
   function showToast(
     text: string,
@@ -65,35 +108,28 @@ const createUiStore = () => {
     }, 3000);
   }
 
-  async function loadLocale(code: string) {
-    const match = Object.entries(localeModules).find(([path]) =>
-      path.endsWith(`/${code}.json`),
-    );
-    if (match) {
-      const mod = (await match[1]()) as any;
-      setLoadedLocale(mod.default || mod);
-    } else {
-      const fallbackMatch = Object.entries(localeModules).find(([path]) =>
-        path.endsWith(`/en-US.json`),
-      );
-      if (fallbackMatch) {
-        const fallback = (await fallbackMatch[1]()) as any;
-        setLoadedLocale(fallback.default || fallback);
-      }
+  async function loadLocale(code: string): Promise<Locale> {
+    const loader = localeModules[`../../locales/${code}.json`];
+    if (!loader) {
+      throw new Error(`Unsupported locale: ${code}`);
     }
+    const locale = (await loader()).default;
+    validateLocaleShape(enUS, locale, code);
+    return locale as Locale;
   }
 
-  function setLang(code: string) {
+  async function setLang(code: string) {
+    const locale = await loadLocale(code);
+    setLoadedLocale(locale);
     setLangSignal(code);
     localStorage.setItem("lang", code);
-    loadLocale(code);
   }
 
   async function init() {
-    const savedLang = localStorage.getItem("lang") || "en-US";
+    const savedLang = localStorage.getItem("lang") ?? "en-US";
+    const locale = await loadLocale(savedLang);
+    setLoadedLocale(locale);
     setLangSignal(savedLang);
-    await loadLocale(savedLang);
-    setIsReady(true);
   }
 
   return {
@@ -111,9 +147,6 @@ const createUiStore = () => {
     },
     get toasts() {
       return toast().visible ? [toast()] : [];
-    },
-    get isReady() {
-      return isReady();
     },
     showToast,
     setLang,

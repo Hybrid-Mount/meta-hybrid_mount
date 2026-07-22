@@ -11,10 +11,9 @@ use crate::core::daemon::protocol::KasumiCommand;
 use crate::{
     conf::{
         cli::{ApiCommands, Cli, Commands, DaemonCommands},
-        cli_handlers, loader,
+        cli_handlers,
     },
     core::{
-        api,
         daemon::{
             self, dispatch,
             protocol::{ConfigCommand, DaemonCommand, ModulesCommand, SystemCommand},
@@ -23,36 +22,20 @@ use crate::{
     },
 };
 
-fn run_api_command<F>(f: F) -> Result<()>
-where
-    F: FnOnce() -> Result<()>,
-{
-    match f() {
-        Ok(()) => Ok(()),
-        Err(err) => {
-            api::print_json_error(&err);
-            Ok(())
-        }
-    }
-}
-
 pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
-    let _ = crate::utils::init_logging();
+    crate::utils::init_logging()?;
 
     match command {
         Commands::GenConfig { output, force } => cli_handlers::handle_gen_config(output, *force),
         Commands::Logs { lines } => cli_handlers::handle_logs(*lines),
-        Commands::Api { command } => run_api_command(|| match api_daemon_command(command)? {
+        Commands::Api { command } => match api_daemon_command(command)? {
             Some(command) => dispatch(cli, command),
             None => cli_handlers::handle_api_features(),
-        }),
+        },
         Commands::Daemon { command } => match command {
             DaemonCommands::Launch => startup::run_and_serve(cli),
-            DaemonCommands::Serve => {
-                let config = loader::load_config(cli)?;
-                daemon::serve(config)
-            }
-            _ => run_api_command(|| dispatch(cli, daemon_daemon_command(command))),
+            DaemonCommands::Serve => daemon::serve(),
+            _ => dispatch(cli, daemon_daemon_command(command)),
         },
         #[cfg(feature = "kasumi")]
         Commands::Lkm { command } => dispatch(cli, lkm_daemon_command(command)),
@@ -83,19 +66,11 @@ fn api_daemon_command(command: &ApiCommands) -> Result<Option<DaemonCommand>> {
             apply_runtime: *apply_runtime,
         }),
         ApiCommands::ConfigReset => DaemonCommand::Config(ConfigCommand::Reset),
-        ApiCommands::ModulesList { path } => {
-            DaemonCommand::Modules(ModulesCommand::List { path: path.clone() })
-        }
+        ApiCommands::ModulesList => DaemonCommand::Modules(ModulesCommand::List),
         ApiCommands::ModulesApply { modules } => DaemonCommand::Modules(ModulesCommand::Apply {
             modules: serde_json::from_str(modules)
                 .context("Failed to parse modules JSON payload")?,
         }),
-        #[cfg(feature = "kasumi")]
-        ApiCommands::Lkm => DaemonCommand::Kasumi(KasumiCommand::ApiLkm),
-        #[cfg(feature = "kasumi")]
-        ApiCommands::Features => return Ok(None),
-        #[cfg(feature = "kasumi")]
-        ApiCommands::Hooks => DaemonCommand::Kasumi(KasumiCommand::ApiHooks),
         ApiCommands::KernelUname => DaemonCommand::System(SystemCommand::ApiKernelUname),
         ApiCommands::OpenUrl { url } => {
             DaemonCommand::System(SystemCommand::ApiOpenUrl { url: url.clone() })

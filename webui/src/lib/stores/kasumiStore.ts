@@ -18,9 +18,8 @@ import { createSignal, createRoot } from "solid-js";
 import type { KasumiStatus } from "../types";
 import type { InitPayload } from "../api/contracts";
 import { API } from "../api";
-import { DEFAULT_CONFIG } from "../constants";
 import { buildKasumiStatusFromPayload } from "../api/codec/runtimeCodec";
-import { uiStore } from "./uiStore";
+import { runtimeStateSchema } from "../api/schemas";
 
 const STATUS_CACHE_TTL_MS = 3000;
 
@@ -36,25 +35,15 @@ const createKasumiStore = () => {
   }
 
   function loadFromInit(payload: InitPayload) {
-    if (payload.kasumi_status != null) {
-      const s = buildKasumiStatusFromPayload(
-        payload.kasumi_status,
-        DEFAULT_CONFIG.kasumi,
-        {},
-      );
-      if (s) {
-        setStatus(s);
-        hasLoaded = true;
-        lastLoadedAt = Date.now();
-      } else {
-        console.warn("kasumiStore: failed to parse init kasumi_status payload");
-      }
-    } else {
-      console.warn("kasumiStore: init payload missing kasumi_status");
+    if (!payload.kasumi_status) {
+      throw new Error("init payload is missing kasumi_status");
     }
+    setStatus(buildKasumiStatusFromPayload(payload.kasumi_status));
+    hasLoaded = true;
+    lastLoadedAt = Date.now();
   }
 
-  async function loadStatus(showError = true, force = false) {
+  async function loadStatus(force = false) {
     if (pendingLoad) return pendingLoad;
     if (!force && hasFreshStatus()) return Promise.resolve();
 
@@ -65,14 +54,6 @@ const createKasumiStore = () => {
         setStatus(nextStatus);
         hasLoaded = true;
         lastLoadedAt = Date.now();
-      } catch (_e) {
-        setStatus(null);
-        if (showError) {
-          uiStore.showToast(
-            uiStore.L.kasumi?.loadError || "Failed to load Kasumi status",
-            "error",
-          );
-        }
       } finally {
         setLoading(false);
         pendingLoad = null;
@@ -83,29 +64,13 @@ const createKasumiStore = () => {
   }
 
   function ensureStatusLoaded() {
-    return loadStatus(false, false);
+    return loadStatus(false);
   }
 
   function setEnabledOptimistic(enabled: boolean) {
     const current = status();
     if (!current) {
-      setStatus({
-        status: "unknown",
-        available: false,
-        kernel_supported: false,
-        protocol_version: null,
-        feature_names: [],
-        hooks: [],
-        rule_count: 0,
-        user_hide_rule_count: 0,
-        mirror_path: "/dev/kasumi_mirror",
-        lkm: { loaded: false, autoload: false, kmi_override: "" },
-        config: { ...DEFAULT_CONFIG.kasumi, enabled },
-        runtime: { snapshot: {}, kasumi_modules: [] },
-      });
-      hasLoaded = true;
-      lastLoadedAt = Date.now();
-      return;
+      throw new Error("Kasumi status must be loaded before it can be updated");
     }
     setStatus({
       ...current,
@@ -120,19 +85,16 @@ const createKasumiStore = () => {
 
   function handleSseUpdate(state: unknown) {
     const current = status();
-    if (!current) return;
-    const s = state as Record<string, unknown> | null;
-    if (!s || typeof s !== "object") return;
-    const kasumi = s.kasumi as Record<string, unknown> | null;
-    const kasumiModules = Array.isArray(s.kasumi_modules)
-      ? (s.kasumi_modules as string[])
-      : [];
+    if (!current) {
+      throw new Error("Kasumi status must be loaded before processing updates");
+    }
+    const next = runtimeStateSchema.parse(state);
     setStatus({
       ...current,
       runtime: {
-        ...current.runtime,
-        snapshot: kasumi ?? current.runtime?.snapshot ?? {},
-        kasumi_modules: kasumiModules,
+        snapshot: next.kasumi,
+        kasumi_modules: next.kasumi_modules,
+        active_mounts: next.active_mounts,
       },
     });
     hasLoaded = true;
@@ -141,18 +103,21 @@ const createKasumiStore = () => {
 
   return {
     get status() {
-      return status();
+      const value = status();
+      if (!value) throw new Error("Kasumi status has not been initialized");
+      return value;
     },
     get enabled() {
-      return Boolean(status()?.config?.enabled);
+      const value = status();
+      if (!value) throw new Error("Kasumi status has not been initialized");
+      return value.config.enabled;
     },
     get loading() {
       return loading();
     },
     ensureStatusLoaded,
     loadFromInit,
-    refreshStatus: (showError = true, force = true) =>
-      loadStatus(showError, force),
+    refreshStatus: (force = true) => loadStatus(force),
     setEnabledOptimistic,
     handleSseUpdate,
   };

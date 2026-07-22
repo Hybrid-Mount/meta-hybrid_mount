@@ -19,28 +19,30 @@ import { DEFAULT_CONFIG } from "../../constants";
 import { appConfigSchema } from "../schemas";
 import { normalizeConfig } from "./configCodec";
 
-describe("config codec defaults", () => {
-  it("matches the Rust default overlay storage mode", () => {
+describe("config codec", () => {
+  it("accepts the complete canonical config", () => {
     expect(DEFAULT_CONFIG.overlay_mode).toBe("ext4");
-    expect(normalizeConfig({}).overlay_mode).toBe("ext4");
-    expect(appConfigSchema.parse({}).overlay_mode).toBe("ext4");
+    expect(normalizeConfig(DEFAULT_CONFIG)).toEqual(DEFAULT_CONFIG);
   });
 
-  it("uses a valid mount source schema default", () => {
-    expect(appConfigSchema.parse({}).mountsource).toBe("KSU");
+  it("rejects missing config fields", () => {
+    expect(() => appConfigSchema.parse({})).toThrow();
   });
 
-  it("normalizes custom bind mounts from snake or camel case payloads", () => {
+  it("accepts snake-case custom mounts and rejects the old camel-case field", () => {
     expect(
       normalizeConfig({
+        ...DEFAULT_CONFIG,
         custom_mounts: [{ source: "/data/local/foo", target: "/system/foo" }],
       }).custom_mounts,
     ).toEqual([{ source: "/data/local/foo", target: "/system/foo" }]);
 
-    expect(
+    expect(() =>
       normalizeConfig({
+        ...DEFAULT_CONFIG,
+        custom_mounts: undefined,
         customMounts: [{ source: "/data/local/bar", target: "/system/bar" }],
-      }).custom_mounts,
-    ).toEqual([{ source: "/data/local/bar", target: "/system/bar" }]);
+      }),
+    ).toThrow();
   });
 });

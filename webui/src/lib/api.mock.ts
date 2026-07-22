@@ -17,6 +17,7 @@
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
 import type { AppAPI } from "./api/contracts";
+import type { RuntimeStatePayload } from "./api/schemas";
 import type {
   AppConfig,
   KasumiLkmStatus,
@@ -52,7 +53,6 @@ function emptyUname(): KasumiUnameConfig {
 function createMockState() {
   return {
     version: APP_VERSION,
-    mountErrorsCleared: false,
     kasumi: {
       enabled: true,
       lkmLoaded: true,
@@ -116,8 +116,7 @@ function buildMockLkmStatus(): KasumiLkmStatus {
     kmi_override: kasumi.kmiOverride,
     current_kmi: KASUMI_CURRENT_KMI,
     search_dir: KASUMI_LKM_DIR,
-    module_file: kasumi.lkmLoaded ? KASUMI_LKM_FILE : "",
-    last_error: null,
+    module_file: KASUMI_LKM_FILE,
   };
 }
 
@@ -131,7 +130,7 @@ function buildMockKasumiConfig(enabled: boolean): KasumiStatus["config"] {
     mirror_path: kasumi.mirrorPath,
     enable_kernel_debug: kasumi.kernelDebug,
     enable_stealth: kasumi.stealth,
-    enable_hidexattr: kasumi.hideXattr,
+    enable_overlay_xattr_hide: kasumi.hideXattr,
     enable_selinux_fix: kasumi.selinuxFix,
     enable_mount_hide: kasumi.mountHideEnabled,
     enable_maps_spoof: kasumi.mapsSpoof,
@@ -196,8 +195,23 @@ function buildMockKasumiStatus(): KasumiStatus {
             ? "enabled"
             : "unavailable"
           : "disabled",
+        available,
+        kernel_supported: kasumi.enabled,
+        lkm_loaded: kasumi.lkmLoaded,
+        lkm_autoload: kasumi.lkmAutoload,
+        lkm_kmi_override: kasumi.kmiOverride,
+        lkm_current_kmi: KASUMI_CURRENT_KMI,
+        lkm_dir: KASUMI_LKM_DIR,
+        protocol_version: available ? 16 : null,
+        feature_bits: available ? 0x7f7 : null,
+        feature_names: available ? ["kstat_spoof"] : [],
+        hooks: available ? ["d_path"] : [],
+        rule_count: available ? kasumi.ruleCount : 0,
+        user_hide_rule_count: kasumi.userHideRules.length,
+        mirror_path: kasumi.mirrorPath,
       },
       kasumi_modules: available ? ["playintegrityfix"] : [],
+      active_mounts: ["system", "product"],
     },
   };
 }
@@ -222,7 +236,7 @@ function mockModule(
     description: "This is a mock module for testing.",
     is_mounted: module.mode !== "ignore",
     enabled: true,
-    source_path: `/data/adb/modules/${module.id}`,
+    is_blacklisted: false,
     rules: {
       default_mode: module.mode,
       paths: {},
@@ -264,12 +278,8 @@ function buildMockModules(): Module[] {
       name: "Umount Module",
       version: "0.1",
       author: "Tester",
-      description: "This module has a mount error.",
+      description: "This module is not mounted.",
       mode: "ignore",
-      mount_error: mockState.mountErrorsCleared
-        ? undefined
-        : "stage=execute; error=mock mount failure",
-      suggest_ignore: mockState.mountErrorsCleared ? undefined : true,
     }),
     mockModule({
       id: "blacklisted_example",
@@ -279,6 +289,7 @@ function buildMockModules(): Module[] {
       description: "This module is blacklisted and skipped during mount.",
       mode: "ignore",
       enabled: false,
+      is_blacklisted: true,
     }),
   ];
 }
@@ -292,35 +303,65 @@ function buildModeStats(): ModeStats {
   };
 }
 
+function buildMockRuntimeState(): RuntimeStatePayload {
+  const kasumiStatus = buildMockKasumiStatus();
+  return {
+    timestamp: 1,
+    pid: 1234,
+    storage_mode: "tmpfs",
+    mount_point: "/data/adb/hybrid-mount/mnt",
+    overlay_modules: ["overlay_module_2"],
+    magic_modules: ["magisk_module_1"],
+    kasumi_modules: ["playintegrityfix"],
+    custom_mounts: [],
+    skip_mount_modules: [],
+    blacklisted_modules: ["blacklisted_example"],
+    active_mounts: ["system", "product"],
+    tmpfs_xattr_supported: false,
+    mount_stats: {
+      total_mounts: 3,
+      successful_mounts: 3,
+      failed_mounts: 0,
+      tmpfs_created: 0,
+      files_mounted: 0,
+      dirs_mounted: 0,
+      symlinks_created: 0,
+      overlayfs_mounts: 1,
+      ignored_entries: 0,
+    },
+    mode_stats: {
+      overlayfs: 1,
+      magicmount: 1,
+      kasumi: 1,
+      blacklisted: 1,
+    },
+    kasumi: kasumiStatus.runtime.snapshot as RuntimeStatePayload["kasumi"],
+    daemon: {
+      alive: true,
+      socket_path: "/data/adb/hybrid-mount/run/hybrid-mount.sock",
+      last_refresh_ts: 1,
+    },
+  };
+}
+
 export const MockAPI: AppAPI = {
   wakeDaemon: () => delay(20),
 
   async init() {
     await delay(200);
     return {
-      status: {
-        storage_mode: "tmpfs",
-        mount_point: "/data/adb/hybrid-mount/mnt",
-        overlay_modules: ["overlay_module_2"],
-        magic_modules: ["magisk_module_1"],
-        kasumi_modules: ["playintegrityfix"],
-        mount_error_modules: mockState.mountErrorsCleared
-          ? []
-          : ["disabled_module"],
-        blacklisted_modules: ["blacklisted_example"],
-        active_mounts: ["system", "product"],
-        tmpfs_xattr_supported: false,
-        mode_stats: {
-          overlayfs: 1,
-          magicmount: 1,
-          kasumi: 1,
-          blacklisted: 1,
-        },
-      },
+      status: buildMockRuntimeState(),
       config: { ...DEFAULT_CONFIG },
       version: mockState.version,
       kasumi_status: buildMockKasumiStatus(),
-      system_info: buildMockSystemInfo(),
+      system_info: {
+        kernel: buildMockSystemInfo().kernel,
+        selinux: buildMockSystemInfo().selinux,
+        mount_base: buildMockSystemInfo().mountBase,
+        active_mounts: buildMockSystemInfo().activeMounts,
+        tmpfs_xattr_supported: false,
+        supported_overlay_modes: ["ext4"],
+      },
     };
   },
 
@@ -339,7 +380,7 @@ export const MockAPI: AppAPI = {
     console.log("[Mock] Config reset to defaults");
   },
 
-  async scanModules(_dir?: string): Promise<Module[]> {
+  async scanModules(): Promise<Module[]> {
     await delay(600);
     return buildMockModules();
   },
@@ -358,7 +399,6 @@ export const MockAPI: AppAPI = {
     await delay(300);
     return {
       type: "ext4",
-      supported_modes: ["tmpfs", "ext4"],
       modeStats: buildModeStats(),
       mountedCount: 3,
     };
@@ -376,7 +416,8 @@ export const MockAPI: AppAPI = {
 
   setKasumiEnabled: (enabled: boolean) => setKasumi("enabled", enabled),
   setKasumiStealth: (enabled: boolean) => setKasumi("stealth", enabled),
-  setKasumiHidexattr: (enabled: boolean) => setKasumi("hideXattr", enabled),
+  setKasumiOverlayXattrHide: (enabled: boolean) =>
+    setKasumi("hideXattr", enabled),
   setKasumiSelinuxFix: (enabled: boolean) => setKasumi("selinuxFix", enabled),
   setKasumiDebug: (enabled: boolean) => setKasumi("kernelDebug", enabled),
 
@@ -438,11 +479,6 @@ export const MockAPI: AppAPI = {
         ),
     );
     mockState.kasumi.mapsRules.push(nextRule);
-  },
-
-  async clearMountErrors(): Promise<void> {
-    await delay(180);
-    mockState.mountErrorsCleared = true;
   },
 
   async clearKasumiMapsRules(): Promise<void> {

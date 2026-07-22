@@ -17,7 +17,6 @@
 import { createSignal, createMemo, createRoot } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { API } from "../api";
-import { normalizeMountMode } from "../api/core/guards";
 import { getErrorMessage } from "../api/core/error";
 import { uiStore } from "./uiStore";
 import type { Module, ModuleRules, ModeStats } from "../types";
@@ -28,16 +27,19 @@ const createModuleStore = () => {
   const [saving, setSaving] = createSignal(false);
   let pendingLoad: Promise<boolean> | null = null;
   let hasLoaded = false;
+  let activeSaves = 0;
+  let saveRevision = 0;
+  const latestSaveRevisions = new Map<string, number>();
+  const moduleSaveTails = new Map<string, Promise<void>>();
 
-  function normalizeModule(module: Module): Module {
-    return {
-      ...module,
-      mode: normalizeMountMode(module.mode),
-      rules: {
-        ...module.rules,
-        default_mode: normalizeMountMode(module.rules.default_mode),
-      },
-    };
+  function beginSave() {
+    activeSaves += 1;
+    setSaving(true);
+  }
+
+  function endSave() {
+    activeSaves -= 1;
+    setSaving(activeSaves > 0);
   }
 
   const modeStats = createMemo((): ModeStats => {
@@ -62,18 +64,13 @@ const createModuleStore = () => {
     setLoading(true);
     pendingLoad = (async () => {
       try {
-        const data = (await API.scanModules()).map((module) =>
-          normalizeModule(module as Module),
-        );
+        const data = await API.scanModules();
         setModulesStore(reconcile(data));
         hasLoaded = true;
         return true;
       } catch (e: unknown) {
         uiStore.showToast(
-          getErrorMessage(
-            e,
-            uiStore.L.modules?.scanError ?? "Failed to load modules",
-          ),
+          getErrorMessage(e, uiStore.L.modules.scanError),
           "error",
         );
         return false;
@@ -95,24 +92,43 @@ const createModuleStore = () => {
     hasLoaded = false;
   }
 
-  async function saveCurrentModuleRules(moduleId: string, rules: ModuleRules) {
-    setSaving(true);
-    try {
-      await API.saveModuleRules(moduleId, rules);
-      uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
-      return true;
-    } catch (e: unknown) {
-      uiStore.showToast(
-        getErrorMessage(
-          e,
-          uiStore.L.modules?.saveFailed ?? "Failed to save module modes",
-        ),
-        "error",
-      );
-      return false;
-    } finally {
-      setSaving(false);
-    }
+  function saveCurrentModuleRules(moduleId: string, rules: ModuleRules) {
+    const revision = ++saveRevision;
+    latestSaveRevisions.set(moduleId, revision);
+    beginSave();
+
+    // Preserve click order for each module. Otherwise two quick mode changes
+    // can reach the daemon out of order and leave the older choice persisted.
+    const previous = moduleSaveTails.get(moduleId) ?? Promise.resolve();
+    const operation = previous.then(async () => {
+      try {
+        await API.saveModuleRules(moduleId, rules);
+        if (latestSaveRevisions.get(moduleId) === revision) {
+          uiStore.showToast(uiStore.L.common.saved, "success");
+        }
+        return true;
+      } catch (e: unknown) {
+        const isLatest = latestSaveRevisions.get(moduleId) === revision;
+        if (isLatest) {
+          uiStore.showToast(
+            getErrorMessage(e, uiStore.L.modules.saveFailed),
+            "error",
+          );
+        }
+        // A newer queued choice owns the final UI state and any rollback.
+        return !isLatest;
+      } finally {
+        endSave();
+      }
+    });
+    const tail = operation.then(() => undefined);
+    moduleSaveTails.set(moduleId, tail);
+    void tail.finally(() => {
+      if (moduleSaveTails.get(moduleId) === tail) {
+        moduleSaveTails.delete(moduleId);
+      }
+    });
+    return operation;
   }
 
   return {
@@ -120,7 +136,7 @@ const createModuleStore = () => {
       return modules;
     },
     set modules(v) {
-      setModulesStore(reconcile(v.map(normalizeModule)));
+      setModulesStore(reconcile(v));
     },
     get loading() {
       return loading();

@@ -24,11 +24,6 @@ use crate::zip_ext::zip_create_from_directory_with_options;
 
 const KASUMI_LKM_STAGE_DIR: &str = "kasumi_lkm";
 const NANO_MARKER_FILE: &str = ".nano";
-const DEFAULT_LITE_UPDATE_JSON: &str =
-    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json";
-const DEFAULT_NANO_UPDATE_JSON: &str =
-    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-nano.json";
-
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq)]
 enum Arch {
     #[value(name = "arm64")]
@@ -65,32 +60,16 @@ impl BuildFlavor {
     fn module_name(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
         match self {
             Self::Full => meta.name.clone(),
-            Self::Lite => meta
-                .lite_name
-                .clone()
-                .filter(|name| !name.trim().is_empty())
-                .unwrap_or_else(|| format!("{} Lite", meta.name)),
-            Self::Nano => meta
-                .nano_name
-                .clone()
-                .filter(|name| !name.trim().is_empty())
-                .unwrap_or_else(|| format!("{} Nano", meta.name)),
+            Self::Lite => meta.lite_name.clone(),
+            Self::Nano => meta.nano_name.clone(),
         }
     }
 
     fn update_json(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
         match self {
             Self::Full => meta.update.clone(),
-            Self::Lite => meta
-                .lite_update
-                .clone()
-                .filter(|url| !url.trim().is_empty())
-                .unwrap_or_else(|| DEFAULT_LITE_UPDATE_JSON.to_string()),
-            Self::Nano => meta
-                .nano_update
-                .clone()
-                .filter(|url| !url.trim().is_empty())
-                .unwrap_or_else(|| DEFAULT_NANO_UPDATE_JSON.to_string()),
+            Self::Lite => meta.lite_update.clone(),
+            Self::Nano => meta.nano_update.clone(),
         }
     }
 
@@ -327,13 +306,14 @@ fn build_package(
             .join(bin_name);
         let stage_bin_dir = stage_dir.join("binaries");
         fs::create_dir_all(&stage_bin_dir)?;
-        if src_bin.exists() {
-            file::copy(
-                &src_bin,
-                stage_bin_dir.join(bin_name),
-                &file::CopyOptions::new().overwrite(true),
-            )?;
+        if !src_bin.is_file() {
+            bail!("compiled binary is missing: {}", src_bin.display());
         }
+        file::copy(
+            &src_bin,
+            stage_bin_dir.join(bin_name),
+            &file::CopyOptions::new().overwrite(true),
+        )?;
     }
 
     let module_src = Path::new("module");
@@ -373,7 +353,6 @@ fn prune_flavor_assets(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> {
 
     remove_path_if_exists(&stage_dir.join("webroot"))?;
     remove_path_if_exists(&stage_dir.join("launcher.png"))?;
-    remove_path_if_exists(&stage_dir.join("service.sh"))?;
     fs::write(stage_dir.join(NANO_MARKER_FILE), b"nano\n")?;
     Ok(())
 }
@@ -382,41 +361,20 @@ fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> 
     let config_path = stage_dir.join("config.toml");
     let content = fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read staged config {}", config_path.display()))?;
-    let mut table = strip_toml_preamble(&content)
+    let mut table = content
         .parse::<toml::Table>()
         .with_context(|| format!("failed to parse staged config {}", config_path.display()))?;
-
-    if !flavor.enable_kasumi() {
-        table.remove("kasumi");
-    }
 
     if matches!(flavor, BuildFlavor::Nano) {
         table.insert(
             "default_mode".to_string(),
             toml::Value::String("magic".to_string()),
         );
-        table.remove("daemon_startup_mode");
     }
 
     fs::write(&config_path, toml::to_string_pretty(&table)?)
         .with_context(|| format!("failed to write staged config {}", config_path.display()))?;
     Ok(())
-}
-
-fn strip_toml_preamble(content: &str) -> &str {
-    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
-    let mut offset = 0;
-
-    for line in content.split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            offset += line.len();
-            continue;
-        }
-        break;
-    }
-
-    &content[offset..]
 }
 
 fn remove_path_if_exists(path: &Path) -> Result<()> {
@@ -532,9 +490,9 @@ fn resolve_notify_plan(
 }
 
 fn stage_kasumi_lkm_assets(stage_dir: &Path) -> Result<()> {
-    let Some(source_dir) = env::var_os("HYBRID_MOUNT_KASUMI_LKM_DIR").map(PathBuf::from) else {
-        return Ok(());
-    };
+    let source_dir = env::var_os("HYBRID_MOUNT_KASUMI_LKM_DIR")
+        .map(PathBuf::from)
+        .context("HYBRID_MOUNT_KASUMI_LKM_DIR is required for full builds")?;
 
     if !source_dir.is_dir() {
         bail!(
@@ -555,9 +513,9 @@ fn stage_kasumi_lkm_assets(stage_dir: &Path) -> Result<()> {
     fs::create_dir_all(&lkm_stage_dir)?;
 
     for artifact in artifacts {
-        let Some(file_name) = artifact.file_name() else {
-            continue;
-        };
+        let file_name = artifact
+            .file_name()
+            .with_context(|| format!("LKM artifact has no file name: {}", artifact.display()))?;
         file::copy(
             &artifact,
             lkm_stage_dir.join(file_name),
@@ -760,7 +718,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{BuildFlavor, configure_flavor_config, strip_toml_preamble};
+    use super::{BuildFlavor, configure_flavor_config};
 
     struct TestDir(std::path::PathBuf);
 
@@ -787,31 +745,12 @@ mod tests {
     }
 
     #[test]
-    fn strips_leading_comment_block_before_toml() {
-        let input = r#"# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
-#
-
-key = "value"
-"#;
-
-        assert_eq!(strip_toml_preamble(input), "key = \"value\"\n");
-    }
-
-    #[test]
-    fn keeps_non_comment_toml_untouched() {
-        let input = "key = \"value\"\n";
-
-        assert_eq!(strip_toml_preamble(input), input);
-    }
-
-    #[test]
-    fn lite_config_removes_kasumi_but_keeps_daemon_settings() {
+    fn lite_config_keeps_the_canonical_config_shape() {
         let temp = TestDir::new("xtask-lite-config");
         fs::write(
             temp.path().join("config.toml"),
             r#"
 default_mode = "overlay"
-daemon_startup_mode = "persistent"
 
 [kasumi]
 enabled = false
@@ -825,27 +764,20 @@ enabled = false
             .parse::<toml::Table>()
             .unwrap();
 
-        assert!(!table.contains_key("kasumi"));
+        assert!(table.contains_key("kasumi"));
         assert_eq!(
             table.get("default_mode").and_then(toml::Value::as_str),
             Some("overlay")
         );
-        assert_eq!(
-            table
-                .get("daemon_startup_mode")
-                .and_then(toml::Value::as_str),
-            Some("persistent")
-        );
     }
 
     #[test]
-    fn nano_config_removes_control_plane_and_kasumi_settings() {
+    fn nano_config_only_selects_magic_as_the_default_mode() {
         let temp = TestDir::new("xtask-nano-config");
         fs::write(
             temp.path().join("config.toml"),
             r#"
 default_mode = "overlay"
-daemon_startup_mode = "persistent"
 
 [kasumi]
 enabled = false
@@ -859,8 +791,7 @@ enabled = false
             .parse::<toml::Table>()
             .unwrap();
 
-        assert!(!table.contains_key("kasumi"));
-        assert!(!table.contains_key("daemon_startup_mode"));
+        assert!(table.contains_key("kasumi"));
         assert_eq!(
             table.get("default_mode").and_then(toml::Value::as_str),
             Some("magic")

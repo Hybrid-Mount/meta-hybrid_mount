@@ -13,8 +13,6 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fs::ioctl_ficlone;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::fs::{CWD, FileType, Gid, Mode, Uid, chown, mknodat};
 use walkdir::WalkDir;
 
@@ -72,15 +70,17 @@ pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Resu
         .map(|_| ())
         .with_context(|| format!("failed to atomically replace {}", path.display()))?;
 
-    sync_parent_dir(parent);
+    sync_parent_dir(parent)?;
 
     Ok(())
 }
 
-fn sync_parent_dir(parent: &Path) {
-    if let Ok(dir) = File::open(parent) {
-        let _ = dir.sync_all();
-    }
+fn sync_parent_dir(parent: &Path) -> Result<()> {
+    let dir = File::open(parent)
+        .with_context(|| format!("failed to open parent directory {}", parent.display()))?;
+    dir.sync_all()
+        .with_context(|| format!("failed to sync parent directory {}", parent.display()))?;
+    Ok(())
 }
 
 pub fn ensure_dir_exists<T: AsRef<Path>>(dir: T) -> Result<()> {
@@ -101,19 +101,7 @@ pub fn ensure_dir_exists<T: AsRef<Path>>(dir: T) -> Result<()> {
     Ok(())
 }
 
-pub fn reflink_or_copy(src: &Path, dest: &Path) -> Result<u64> {
-    let src_file = File::open(src)?;
-    let dest_file = File::create(dest)?;
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if ioctl_ficlone(&dest_file, &src_file).is_ok() {
-        let metadata = src_file.metadata()?;
-        let len = metadata.len();
-        dest_file.set_permissions(metadata.permissions())?;
-        return Ok(len);
-    }
-    drop(dest_file);
-    drop(src_file);
+pub fn copy_file(src: &Path, dest: &Path) -> Result<u64> {
     Ok(fs::copy(src, dest)?)
 }
 
@@ -183,21 +171,20 @@ impl PreparedDir {
             )
         }) {
             if backup_created {
-                let _ = fs::rename(&backup_dst, &self.final_dst);
+                fs::rename(&backup_dst, &self.final_dst).with_context(|| {
+                    format!(
+                        "failed to restore prepared dir {} after commit error: {err:#}",
+                        self.id
+                    )
+                })?;
             }
             return Err(err);
         }
 
         self.cleanup_tmp = false;
-        if backup_created && let Err(err) = remove_path(&backup_dst) {
-            crate::scoped_log!(
-                warn,
-                "fs:copy",
-                "cleanup backup failed: id={}, path={}, error={:#}",
-                self.id,
-                backup_dst.display(),
-                err
-            );
+        if backup_created {
+            remove_path(&backup_dst)
+                .with_context(|| format!("failed to remove prepared backup for {}", self.id))?;
         }
 
         Ok(())
@@ -228,28 +215,25 @@ where
     let active_names: HashSet<&str> = active_names.into_iter().collect();
 
     for entry in target_base.read_dir()? {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                log::warn!("[{log_scope}] skip unreadable directory entry: error={err:#}");
-                continue;
-            }
-        };
+        let entry = entry.with_context(|| {
+            format!(
+                "[{log_scope}] failed to enumerate {}",
+                target_base.display()
+            )
+        })?;
         let path = entry.path();
         let name_os = entry.file_name();
-        let name = name_os.to_string_lossy();
+        let name = name_os
+            .to_str()
+            .with_context(|| format!("[{log_scope}] entry name is not valid UTF-8"))?;
 
-        if name.starts_with('.')
-            || active_names.contains(name.as_ref())
-            || preserved_names.iter().any(|preserved| *preserved == name)
-        {
+        if name.starts_with('.') || active_names.contains(name) || preserved_names.contains(&name) {
             continue;
         }
 
         log::info!("[{log_scope}] prune orphan: name={name}");
-        if let Err(err) = remove_path(&path) {
-            log::warn!("[{log_scope}] remove orphan failed: name={name}, error={err}");
-        }
+        remove_path(&path)
+            .with_context(|| format!("[{log_scope}] failed to remove orphan {name}"))?;
     }
 
     Ok(())
@@ -271,23 +255,12 @@ pub fn ensure_dir_like(src: &Path, dst: &Path) -> Result<()> {
 
     fs::create_dir_all(dst)
         .with_context(|| format!("failed to create directory {}", dst.display()))?;
-    match fs::symlink_metadata(src) {
-        Ok(src_meta) => {
-            let _ = fs::set_permissions(dst, src_meta.permissions());
-            clone_ownership_from_metadata(src, dst, &src_meta);
-        }
-        Err(err) => {
-            crate::scoped_log!(
-                warn,
-                "fs:copy",
-                "clone directory metadata skipped: src={}, dst={}, error={}",
-                src.display(),
-                dst.display(),
-                err
-            );
-        }
-    }
-    clone_selinux_context(src, dst);
+    let src_meta = fs::symlink_metadata(src)
+        .with_context(|| format!("failed to inspect source directory {}", src.display()))?;
+    fs::set_permissions(dst, src_meta.permissions())
+        .with_context(|| format!("failed to copy permissions to {}", dst.display()))?;
+    clone_ownership_from_metadata(src, dst, &src_meta)?;
+    clone_selinux_context(src, dst)?;
     Ok(())
 }
 
@@ -301,94 +274,57 @@ pub fn copy_non_dir_entry(
     if file_type.is_symlink() {
         let link_target = fs::read_link(src)?;
         symlink(&link_target, dst)?;
-        clone_ownership_from_metadata(src, dst, metadata);
-        clone_selinux_context(src, dst);
+        clone_ownership_from_metadata(src, dst, metadata)?;
+        clone_selinux_context(src, dst)?;
         Ok(0)
     } else if file_type.is_char_device() || file_type.is_block_device() || file_type.is_fifo() {
         let mode = metadata.permissions().mode();
         let rdev = metadata.rdev();
         make_device_node(dst, mode, rdev)?;
-        clone_ownership_from_metadata(src, dst, metadata);
-        clone_selinux_context(src, dst);
+        clone_ownership_from_metadata(src, dst, metadata)?;
+        clone_selinux_context(src, dst)?;
         Ok(0)
     } else {
-        let copied_bytes = reflink_or_copy(src, dst)?;
-        clone_ownership_from_metadata(src, dst, metadata);
-        clone_selinux_context(src, dst);
+        let copied_bytes = copy_file(src, dst)?;
+        clone_ownership_from_metadata(src, dst, metadata)?;
+        clone_selinux_context(src, dst)?;
         Ok(copied_bytes)
     }
 }
 
-pub fn finalize_copied_tree(id: &str, root: &Path, opaque_dirs: &[PathBuf]) {
-    if let Err(err) = prune_empty_dirs_preserving(root, opaque_dirs) {
-        crate::scoped_log!(
-            warn,
-            "fs:copy",
-            "prune empty dirs failed: id={}, error={}",
-            id,
-            err
-        );
-    }
+pub fn finalize_copied_tree(id: &str, root: &Path, opaque_dirs: &[PathBuf]) -> Result<()> {
+    prune_empty_dirs_preserving(root, opaque_dirs)
+        .with_context(|| format!("failed to prune copied tree for {id}"))?;
 
     for opaque_dir in opaque_dirs {
-        if let Err(err) = super::xattr::set_overlay_opaque(opaque_dir) {
-            crate::scoped_log!(
-                warn,
-                "fs:copy",
-                "apply overlay opaque failed: id={}, path={}, error={}",
-                id,
-                opaque_dir.display(),
-                err
-            );
-        } else {
-            crate::scoped_log!(
-                debug,
-                "fs:copy",
-                "set overlay opaque: id={}, path={}",
-                id,
+        super::xattr::set_overlay_opaque(opaque_dir).with_context(|| {
+            format!(
+                "failed to apply overlay opaque metadata for {id} at {}",
                 opaque_dir.display()
-            );
-        }
+            )
+        })?;
     }
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn clone_selinux_context(src: &Path, dst: &Path) {
-    match lgetfilecon(src).and_then(|con| lsetfilecon(dst, &con)) {
-        Ok(()) => {}
-        Err(err) => {
-            crate::scoped_log!(
-                warn,
-                "fs:copy",
-                "clone selinux context skipped: src={}, dst={}, error={:#}",
-                src.display(),
-                dst.display(),
-                err
-            );
-        }
-    }
+fn clone_selinux_context(src: &Path, dst: &Path) -> Result<()> {
+    let context = lgetfilecon(src)
+        .with_context(|| format!("failed to read SELinux context from {}", src.display()))?;
+    lsetfilecon(dst, &context)
+        .with_context(|| format!("failed to set SELinux context on {}", dst.display()))
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn clone_selinux_context(_src: &Path, _dst: &Path) {}
+fn clone_selinux_context(_src: &Path, _dst: &Path) -> Result<()> {
+    Ok(())
+}
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn clone_ownership_from_metadata(src: &Path, dst: &Path, metadata: &fs::Metadata) {
+fn clone_ownership_from_metadata(src: &Path, dst: &Path, metadata: &fs::Metadata) -> Result<()> {
     let result = if metadata.file_type().is_symlink() {
-        let c_path = match CString::new(dst.as_os_str().as_encoded_bytes()) {
-            Ok(path) => path,
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "fs:copy",
-                    "clone ownership skipped: src={}, dst={}, error={}",
-                    src.display(),
-                    dst.display(),
-                    err
-                );
-                return;
-            }
-        };
+        let c_path = CString::new(dst.as_os_str().as_encoded_bytes())
+            .with_context(|| format!("destination path contains NUL: {}", dst.display()))?;
 
         let rc = unsafe {
             libc::lchown(
@@ -412,22 +348,22 @@ fn clone_ownership_from_metadata(src: &Path, dst: &Path, metadata: &fs::Metadata
         .map_err(std::io::Error::from)
     };
 
-    if let Err(err) = result {
-        crate::scoped_log!(
-            warn,
-            "fs:copy",
-            "clone ownership skipped: src={}, dst={}, uid={}, gid={}, error={}",
+    result.with_context(|| {
+        format!(
+            "failed to clone ownership from {} to {} (uid={}, gid={})",
             src.display(),
             dst.display(),
             metadata.uid(),
-            metadata.gid(),
-            err
-        );
-    }
+            metadata.gid()
+        )
+    })?;
+    Ok(())
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn clone_ownership_from_metadata(_src: &Path, _dst: &Path, _metadata: &fs::Metadata) {}
+fn clone_ownership_from_metadata(_src: &Path, _dst: &Path, _metadata: &fs::Metadata) -> Result<()> {
+    Ok(())
+}
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
@@ -475,7 +411,7 @@ fn native_cp_r(
         let entry = entry?;
         let src_path = entry.path();
         let file_name = entry.file_name();
-        if utils::path_file_name_eq_ignore_ascii_case(&src_path, defs::REPLACE_DIR_FILE_NAME) {
+        if utils::path_file_name_eq(&src_path, defs::REPLACE_DIR_FILE_NAME) {
             if is_managed_partition_path(relative, managed_partitions) {
                 stats.has_mount_content = true;
             }
@@ -515,8 +451,8 @@ fn native_cp_r(
 
 #[cfg(feature = "kasumi")]
 pub fn sync_dir(src: &Path, dst: &Path, managed_partitions: &[String]) -> Result<SyncDirStats> {
-    if !src.exists() {
-        return Ok(SyncDirStats::default());
+    if !src.is_dir() {
+        bail!("sync source is not a directory: {}", src.display());
     }
     ensure_dir_exists(dst)?;
     let mut visited = HashSet::new();
@@ -555,19 +491,19 @@ fn prune_empty_dirs_preserving(root: &Path, preserved_dirs: &[PathBuf]) -> Resul
         .contents_first(true)
         .into_iter()
     {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                log::warn!("[fs:prune-empty] skip unreadable entry: error={err:#}");
-                continue;
-            }
-        };
+        let entry = entry.context("failed to enumerate copied tree")?;
         if entry.file_type().is_dir() {
             let path = entry.path();
             if preserved_dirs.contains(path) {
                 continue;
             }
-            if fs::remove_dir(path).is_ok() {}
+            if let Err(err) = fs::remove_dir(path)
+                && err.raw_os_error() != Some(libc::ENOTEMPTY)
+                && err.raw_os_error() != Some(libc::EEXIST)
+            {
+                return Err(err)
+                    .with_context(|| format!("failed to prune directory {}", path.display()));
+            }
         }
     }
     Ok(())

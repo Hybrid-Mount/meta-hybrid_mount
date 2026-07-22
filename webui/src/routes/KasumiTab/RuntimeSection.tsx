@@ -25,20 +25,19 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
   return (
     <SectionShell
       id="runtime"
-      title={uiStore.L.kasumi?.runtimeTitle ?? "Runtime"}
+      title={uiStore.L.kasumi.runtimeTitle}
       isExpanded={props.isExpanded}
       onToggle={props.onToggle}
     >
       <div class="kasumi-config-grid">
         <button
           type="button"
-          class={`kasumi-config-tile ${props.config?.enable_stealth ? "active" : ""}`}
+          class={`kasumi-config-tile ${props.config.enable_stealth ? "active" : ""}`}
           disabled={props.pending}
           onClick={() =>
             props.runAction(
-              () =>
-                API.setKasumiStealth(!Boolean(props.config?.enable_stealth)),
-              uiStore.L.kasumi?.stealthUpdated ?? "Stealth updated",
+              () => API.setKasumiStealth(!props.config.enable_stealth),
+              uiStore.L.kasumi.stealthUpdated,
             )
           }
         >
@@ -51,20 +50,20 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
             </md-icon>
           </div>
           <span class="kasumi-config-label">
-            {uiStore.L.kasumi?.stealthTitle ?? "Stealth"}
+            {uiStore.L.kasumi.stealthTitle}
           </span>
         </button>
         <button
           type="button"
-          class={`kasumi-config-tile ${props.config?.enable_hidexattr ? "active" : ""}`}
+          class={`kasumi-config-tile ${props.config.enable_overlay_xattr_hide ? "active" : ""}`}
           disabled={props.pending}
           onClick={() =>
             props.runAction(
               () =>
-                API.setKasumiHidexattr(
-                  !Boolean(props.config?.enable_hidexattr),
+                API.setKasumiOverlayXattrHide(
+                  !props.config.enable_overlay_xattr_hide,
                 ),
-              uiStore.L.kasumi?.hidexattrUpdated ?? "HideXattr updated",
+              uiStore.L.kasumi.hidexattrUpdated,
             )
           }
         >
@@ -77,18 +76,17 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
             </md-icon>
           </div>
           <span class="kasumi-config-label">
-            {uiStore.L.kasumi?.hidexattrTitle ?? "HideXattr"}
+            {uiStore.L.kasumi.hidexattrTitle}
           </span>
         </button>
         <button
           type="button"
-          class={`kasumi-config-tile ${props.config?.enable_kernel_debug ? "active" : ""}`}
+          class={`kasumi-config-tile ${props.config.enable_kernel_debug ? "active" : ""}`}
           disabled={props.pending}
           onClick={() =>
             props.runAction(
-              () =>
-                API.setKasumiDebug(!Boolean(props.config?.enable_kernel_debug)),
-              uiStore.L.kasumi?.kernelDebugUpdated ?? "Kernel debug updated",
+              () => API.setKasumiDebug(!props.config.enable_kernel_debug),
+              uiStore.L.kasumi.kernelDebugUpdated,
             )
           }
         >
@@ -101,20 +99,17 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
             </md-icon>
           </div>
           <span class="kasumi-config-label">
-            {uiStore.L.kasumi?.kernelDebugTitle ?? "Kernel Debug"}
+            {uiStore.L.kasumi.kernelDebugTitle}
           </span>
         </button>
         <button
           type="button"
-          class={`kasumi-config-tile ${props.config?.enable_selinux_fix ? "active" : ""}`}
+          class={`kasumi-config-tile ${props.config.enable_selinux_fix ? "active" : ""}`}
           disabled={props.pending}
           onClick={() =>
             props.runAction(
-              () =>
-                API.setKasumiSelinuxFix(
-                  !Boolean(props.config?.enable_selinux_fix),
-                ),
-              uiStore.L.kasumi?.selinuxFixUpdated ?? "SELinux guard updated",
+              () => API.setKasumiSelinuxFix(!props.config.enable_selinux_fix),
+              uiStore.L.kasumi.selinuxFixUpdated,
             )
           }
         >
@@ -127,20 +122,19 @@ export default function RuntimeSection(props: RuntimeSectionProps) {
             </md-icon>
           </div>
           <span class="kasumi-config-label">
-            {uiStore.L.kasumi?.selinuxFixTitle ?? "SELinux Guard"}
+            {uiStore.L.kasumi.selinuxFixTitle}
           </span>
         </button>
       </div>
       <Show
         when={
-          !props.status?.available &&
-          props.status?.status !== "disabled" &&
-          !props.lkm?.loaded
+          !props.status.available &&
+          props.status.status !== "disabled" &&
+          !props.lkm.loaded
         }
       >
         <div class="runtime-note warning">
-          {uiStore.L.kasumi?.lkmUnavailableHint ??
-            "Kasumi is enabled, but the kernel module is not loaded yet."}
+          {uiStore.L.kasumi.lkmUnavailableHint}
         </div>
       </Show>
     </SectionShell>

@@ -9,7 +9,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Result;
+#[cfg(feature = "control-plane")]
+use anyhow::bail;
+use anyhow::{Context, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount as umount};
 
@@ -87,28 +89,31 @@ pub fn setup_with_sources(
     img_path: &Path,
 ) -> Result<StorageHandle> {
     reset_image_files(img_path)?;
-    detach_existing_mount(mnt_base);
+    detach_existing_mount(mnt_base)?;
 
     #[cfg(feature = "control-plane")]
-    if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
+    if !force_ext4 {
+        setup_tmpfs(mnt_base, mount_source)?;
         crate::scoped_log!(trace, "storage", "backend select: mode=tmpfs");
-        finalize_mount_setup(mnt_base, disable_umount);
+        finalize_mount_setup(mnt_base, disable_umount)?;
         return Ok(StorageHandle::new(mnt_base, StorageMode::Tmpfs));
     }
     #[cfg(not(feature = "control-plane"))]
     let _ = (force_ext4, mount_source);
 
     let handle = ext4::setup_ext4_image(mnt_base, img_path, source_paths)?;
-    finalize_mount_setup(mnt_base, disable_umount);
+    finalize_mount_setup(mnt_base, disable_umount)?;
 
     Ok(handle)
 }
 
 fn reset_image_files(img_path: &Path) -> Result<()> {
-    let parent = img_path.parent().unwrap_or_else(|| Path::new("."));
-    let Some(prefix) = img_path.file_name() else {
-        return Ok(());
-    };
+    let parent = img_path
+        .parent()
+        .context("storage image path has no parent directory")?;
+    let prefix = img_path
+        .file_name()
+        .context("storage image path has no file name")?;
     let prefix = prefix.to_string_lossy();
     let entries = match fs::read_dir(parent) {
         Ok(entries) => entries,
@@ -117,29 +122,15 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
     };
 
     for entry in entries {
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "storage",
-                    "failed to read stale image path: {:#}",
-                    err
-                );
-                continue;
-            }
-        };
+        let entry = entry.context("failed to read stale storage image path")?;
         let file_name = entry.file_name();
-        if file_name.to_string_lossy().starts_with(prefix.as_ref())
-            && let Err(err) = fs::remove_file(entry.path())
-        {
-            crate::scoped_log!(
-                warn,
-                "storage",
-                "failed to remove stale image file {}: {:#}",
-                entry.path().display(),
-                err
-            );
+        if file_name.to_string_lossy().starts_with(prefix.as_ref()) {
+            fs::remove_file(entry.path()).with_context(|| {
+                format!(
+                    "failed to remove stale image file {}",
+                    entry.path().display()
+                )
+            })?;
         }
     }
     Ok(())
@@ -161,121 +152,66 @@ fn remove_image_file(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(_) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(err) if err.raw_os_error() == Some(libc::EBUSY) => {
-            crate::scoped_log!(
-                warn,
-                "storage",
-                "cleanup skipped: path={}, reason=resource_busy",
-                path.display()
-            );
-            Ok(())
-        }
         Err(err) => Err(err.into()),
     }
 }
 
-fn detach_existing_mount(mnt_base: &Path) {
+fn detach_existing_mount(mnt_base: &Path) -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         let _ = mnt_base;
+        Ok(())
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if is_mounted(mnt_base)
-        && let Err(e) = umount(mnt_base, UnmountFlags::DETACH)
     {
-        crate::scoped_log!(
-            warn,
-            "storage",
-            "failed to detach existing mount at {}: {:#}",
-            mnt_base.display(),
-            e
-        );
+        if is_mounted(mnt_base)? {
+            umount(mnt_base, UnmountFlags::DETACH).with_context(|| {
+                format!("failed to detach existing mount at {}", mnt_base.display())
+            })?;
+        }
+        Ok(())
     }
 }
 
-fn finalize_mount_setup(path: &Path, disable_umount: bool) {
+fn finalize_mount_setup(path: &Path, disable_umount: bool) -> Result<()> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if let Err(e) = mount_change(path, MountPropagationFlags::PRIVATE) {
-        crate::scoped_log!(
-            warn,
-            "storage",
-            "failed to set mount propagation to PRIVATE at {}: {:#}",
-            path.display(),
-            e
-        );
-    }
+    mount_change(path, MountPropagationFlags::PRIVATE).with_context(|| {
+        format!(
+            "failed to set mount propagation to PRIVATE at {}",
+            path.display()
+        )
+    })?;
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if !disable_umount && let Err(e) = send_umountable(path) {
-        crate::scoped_log!(
-            warn,
-            "storage",
-            "failed to register umountable at {}: {:#}",
-            path.display(),
-            e
-        );
+    if !disable_umount {
+        send_umountable(path)
+            .with_context(|| format!("failed to register umountable at {}", path.display()))?;
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let _ = (path, disable_umount);
+
+    Ok(())
 }
 
 #[cfg(feature = "control-plane")]
-fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
-    match crate::sys::mount::mount_tmpfs(target, mount_source) {
-        Ok(()) => match crate::sys::fs::is_overlay_xattr_supported() {
-            Ok(true) => return Ok(true),
-            Ok(false) => {
-                crate::scoped_log!(
-                    warn,
-                    "storage",
-                    "tmpfs fallback: path={}, reason=overlay_xattr_unsupported",
-                    target.display()
-                );
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                if let Err(e) = umount(target, UnmountFlags::DETACH) {
-                    crate::scoped_log!(
-                        warn,
-                        "storage",
-                        "failed to umount tmpfs at {} after xattr check: {:#}",
-                        target.display(),
-                        e
-                    );
-                }
-            }
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "storage",
-                    "tmpfs fallback: path={}, reason=overlay_xattr_probe_failed, error={:#}",
-                    target.display(),
-                    err
-                );
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                if let Err(e) = umount(target, UnmountFlags::DETACH) {
-                    crate::scoped_log!(
-                        warn,
-                        "storage",
-                        "failed to umount tmpfs at {} after xattr probe failure: {:#}",
-                        target.display(),
-                        e
-                    );
-                }
-            }
-        },
+fn setup_tmpfs(target: &Path, mount_source: &str) -> Result<()> {
+    crate::sys::mount::mount_tmpfs(target, mount_source)?;
+    match crate::sys::fs::is_overlay_xattr_supported() {
+        Ok(true) => Ok(()),
+        Ok(false) => {
+            detach_existing_mount(target)?;
+            bail!(
+                "tmpfs at {} does not support OverlayFS xattrs",
+                target.display()
+            )
+        }
         Err(err) => {
-            crate::scoped_log!(
-                warn,
-                "storage",
-                "tmpfs mount failed: path={}, source={}, fallback=ext4, error={:#}",
-                target.display(),
-                mount_source,
-                err
-            );
+            detach_existing_mount(target)?;
+            Err(err).context("failed to probe tmpfs OverlayFS xattr support")
         }
     }
-    Ok(false)
 }
 
 #[cfg(test)]

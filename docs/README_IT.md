@@ -10,8 +10,8 @@
 Hybrid Mount è un metamodulo di orchestrazione dei mount per **KernelSU** e **APatch**.
 Integra i file dei moduli nelle partizioni Android tramite un motore di policy unificato con tre backend di mount:
 
-- **OverlayFS**: mount a livelli per ampia compatibilità.
-- **Magic Mount**: bind mount per sostituzione diretta dei percorsi o fallback.
+- **OverlayFS**: mount a livelli con storage upper/work.
+- **Magic Mount**: bind mount per sostituzione diretta dei percorsi.
 - **Kasumi**: routing basato su LKM con funzionalità runtime di hide, spoof e stealth.
 
 Include una **WebUI SolidJS** per gestione grafica, monitoraggio in tempo reale e modifica della configurazione.
@@ -36,7 +36,6 @@ I pacchetti sono pubblicati in tre varianti. Salvo indicazioni diverse, questo R
 - [CLI](#cli)
 - [Architettura](#architettura)
 - [Build](#build)
-- [Note operative](#note-operative)
 - [Licenza](#licenza)
 
 ---
@@ -61,7 +60,7 @@ La variante `lite` (`--no-default-features --features control-plane`) rimuove Ka
 
 La variante `nano` (`--no-default-features`, nessun Cargo features) è guidata solo dal file di configurazione. Rimuove WebUI, daemon, CLI e infrastruttura di controllo; mantiene un binario ridotto che legge `config.toml`, genera un piano di mount, lo esegue e termina.
 
-Nano usa `magic` come modalità predefinita. Durante l'installazione, la scelta tramite tasti volume scrive marker vuoti `overlay` o `magic` nella radice di ciascun modulo gestito. I nomi dei marker sono confrontati senza distinzione tra maiuscole e minuscole.
+Nano usa `magic` come modalità predefinita. Durante l'installazione, la scelta tramite tasti volume scrive marker vuoti `overlay` o `magic` nella radice di ciascun modulo gestito. I nomi dei marker devono usare esattamente queste forme minuscole.
 
 ### Matrice funzionale
 
@@ -73,7 +72,7 @@ Nano usa `magic` come modalità predefinita. Durante l'installazione, la scelta 
 | WebUI | Sì | Sì | No |
 | CLI | Sì | Sì | No |
 | Daemon | Sì | Sì | No |
-| Cache configurazione e apply runtime | Sì | Sì | No |
+| Applicazione runtime della configurazione | Sì | Sì | No |
 | Kasumi hide/spoof/stealth | Sì | No | No |
 | Autoload LKM | Sì | No | No |
 | Cargo features | `kasumi` (implica `control-plane`) | solo `control-plane` | nessuno |
@@ -85,8 +84,8 @@ Nano usa `magic` come modalità predefinita. Durante l'installazione, la scelta 
 - **Pianificazione deterministica**: i conflitti sono rilevati in fase di piano.
 - **WebUI integrata**: gestione moduli, modifica configurazione e monitoraggio runtime.
 - **Integrazione Kasumi runtime**: autoload LKM, routing mirror, mount hide, spoof maps/statfs, UID hiding, uname spoof e regole kstat.
-- **Cache configurazione**: patch incrementali e applicazione immediata.
-- **Recupero pratico**: pulizia automatica dei file runtime obsoleti e reset con `api config-reset`.
+- **Aggiornamenti runtime della configurazione**: le patch validate possono essere salvate e applicate subito.
+- **Errori espliciti**: stati e configurazioni non validi falliscono immediatamente; `api config-reset` è un'azione esplicita.
 - **Automazione**: protocollo JSON su Unix socket e API HTTP.
 
 ---
@@ -96,7 +95,8 @@ Nano usa `magic` come modalità predefinita. Durante l'installazione, la scelta 
 1. Installa [KernelSU](https://kernelsu.org/) o [APatch](https://apatch.dev/) sul dispositivo.
 2. Scarica lo ZIP `full`, `lite` o `nano` da [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Installa lo ZIP tramite il gestore moduli del root manager.
-4. Riavvia. Hybrid Mount rileverà l'ambiente e applicherà la policy overlay predefinita.
+4. Alla prima installazione Full/Lite, scegli la modalità predefinita: Volume su seleziona OverlayFS, Volume giù seleziona Magic Mount e dopo 10 secondi senza input viene scelto OverlayFS. È l'unica interazione dell'installer; Nano salta questo passaggio.
+5. Riavvia. Hybrid Mount rileverà l'ambiente e applicherà la policy selezionata.
 
 ```bash
 # Controlla lo stato runtime
@@ -173,7 +173,6 @@ Percorso predefinito: `/data/adb/hybrid-mount/config.toml`.
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Storage upper/work di OverlayFS. |
 | `disable_umount` | bool | `false` | Salta le operazioni umount, solo per debug. |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Policy globale predefinita. |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | Modalità di avvio del daemon. |
 | `rules` | map | `{}` | Policy per modulo e per percorso. |
 
 ---
@@ -201,7 +200,7 @@ Ordine di precedenza:
 2. Default del modulo: `rules.<module>.default_mode`
 3. Default globale: `default_mode`
 
-I marker riconosciuti includono `disable`, `remove`, `skip_mount`, `mount_error`, `overlay`, `magic` e `.replace`. I nomi sono confrontati senza distinzione tra maiuscole e minuscole.
+I marker riconosciuti includono `disable`, `remove`, `skip_mount`, `overlay`, `magic` e `.replace`. I nomi distinguono maiuscole e minuscole e devono corrispondere esattamente.
 
 ---
 
@@ -260,16 +259,6 @@ cargo +nightly test
 ### CI gate e linting dei feature flag
 
 Ogni modifica deve superare: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --workspace`, WebUI `pnpm lint` + `pnpm test`, e controllo dell'intestazione di licenza. `cargo clippy --all-features` verifica solo la variante `full`; assicurati anche che le combinazioni **lite** (`--no-default-features --features control-plane`) e **nano** (`--no-default-features`) compilino. Il codice Kasumi va protetto con `#[cfg(feature = "kasumi")]`; il codice daemon/CLI/WebUI con `#[cfg(feature = "control-plane")]`.
-
----
-
-## Note operative
-
-- Le nuove installazioni rilevano `mountsource` automaticamente.
-- In caso di configurazione errata, usa `hybrid-mount api config-reset` e riapplica le regole gradualmente.
-- `api config-patch --apply-runtime` applica subito modifiche parziali.
-- In Full, Kasumi LKM deve corrispondere al kernel in esecuzione; usa `lkm_kmi_override` se il KMI rilevato non è corretto.
-- `kasumi clear` pulisce lo stato runtime e rilascia la connessione kernel; alcune regole lato kernel possono persistere fino al reload del LKM.
 
 ---
 

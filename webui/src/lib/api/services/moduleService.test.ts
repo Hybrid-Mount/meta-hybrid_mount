@@ -41,11 +41,11 @@ describe("scanModules", () => {
         mode: "overlay",
         is_mounted: true,
         enabled: true,
-        source_path: "/data/adb/modules/hybrid_mount",
         rules: {
           default_mode: "overlay",
           paths: {},
         },
+        is_blacklisted: false,
       },
     ]);
 
@@ -59,77 +59,66 @@ describe("scanModules", () => {
         mode: "overlay",
         is_mounted: true,
         enabled: true,
-        source_path: "/data/adb/modules/hybrid_mount",
         rules: {
           default_mode: "overlay",
           paths: {},
         },
+        is_blacklisted: false,
       },
     ]);
   });
 
-  it("falls back when metadata fields are missing or empty", async () => {
+  it("rejects empty metadata fields", async () => {
     mockRunDaemonCommand.mockResolvedValue([
       {
-        id: "fallback_mod",
+        id: "invalid_mod",
         name: "",
         version: "2.0.0",
         author: " ",
         mode: "overlay",
         is_mounted: true,
         enabled: true,
-        source_path: "/modules/fallback_mod",
         rules: {
           default_mode: "overlay",
           paths: {},
         },
+        is_blacklisted: false,
       },
     ]);
 
-    const modules = await scanModules();
-    expect(modules[0]).toMatchObject({
-      id: "fallback_mod",
-      name: "fallback_mod",
-      version: "2.0.0",
-      author: "unknown",
-      description: "No description",
-    });
+    await expect(scanModules()).rejects.toThrow();
   });
 
-  it("falls back when the daemon payload uses the old shape without metadata", async () => {
+  it("rejects the old payload shape without metadata", async () => {
     mockRunDaemonCommand.mockResolvedValue([
       {
         id: "broken_mod",
         mode: "overlay",
         is_mounted: true,
         enabled: true,
-        source_path: "/modules/broken_mod",
         rules: {
           default_mode: "overlay",
           paths: {},
         },
+        is_blacklisted: false,
       },
     ]);
 
-    const modules = await scanModules();
-    expect(modules[0]).toMatchObject({
-      id: "broken_mod",
-      name: "broken_mod",
-      version: "unknown",
-      author: "unknown",
-      description: "No description",
-    });
+    await expect(scanModules()).rejects.toThrow();
   });
 
-  it("keeps mount error details from the runtime payload", async () => {
+  it("keeps the explicit blacklist state from the runtime payload", async () => {
     mockRunDaemonCommand.mockResolvedValue([
       {
         id: "broken_mod",
+        name: "Broken Module",
+        version: "1.0.0",
+        author: "Developer",
+        description: "Broken module",
         mode: "overlay",
         is_mounted: false,
         enabled: false,
-        source_path: "/modules/broken_mod",
-        mount_error: "stage=execute; error=overlay failed",
+        is_blacklisted: true,
         rules: {
           default_mode: "overlay",
           paths: {},
@@ -142,7 +131,7 @@ describe("scanModules", () => {
       id: "broken_mod",
       is_mounted: false,
       enabled: false,
-      mount_error: "stage=execute; error=overlay failed",
+      is_blacklisted: true,
     });
   });
 });

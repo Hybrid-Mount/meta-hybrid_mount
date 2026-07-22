@@ -18,7 +18,10 @@ import { defineConfig, loadEnv } from "vite";
 import solid from "vite-plugin-solid";
 
 function envFlagEnabled(value: string | undefined): boolean {
-  return ["true", "1", "on"].includes(value?.trim().toLowerCase() ?? "");
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === "false") return false;
+  if (normalized === "true") return true;
+  throw new Error("VITE_USE_MOCK must be either true or false");
 }
 
 export default defineConfig(({ command, mode }) => {

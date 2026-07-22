@@ -12,7 +12,7 @@ use std::{
             net::{UnixListener, UnixStream},
         },
     },
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -36,21 +36,13 @@ mod http;
 const MAX_DAEMON_REQUEST_BYTES: usize = 1024 * 1024;
 const DAEMON_STREAM_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub fn serve(config: crate::conf::config::Config) -> Result<()> {
-    if config.daemon_startup_mode == crate::conf::schema::DaemonStartupMode::Persistent {
-        crate::scoped_log!(
-            warn,
-            "daemon",
-            "daemon_startup_mode=persistent is not supported under the KSU module lifecycle — \
-             the service exits once idle regardless of this setting"
-        );
-    }
+pub fn serve() -> Result<()> {
     crate::utils::check_ksu();
 
     fs::create_dir_all(defs::RUN_DIR)
         .with_context(|| format!("Failed to create daemon run directory {}", defs::RUN_DIR))?;
     cleanup_stale_runtime_files()?;
-    let mut runtime_state = RuntimeState::load().unwrap_or_default();
+    let mut runtime_state = RuntimeState::load()?;
     let listener = UnixListener::bind(defs::SOCKET_FILE)
         .with_context(|| format!("Failed to bind daemon socket {}", defs::SOCKET_FILE))?;
     fs::set_permissions(defs::SOCKET_FILE, fs::Permissions::from_mode(0o600))
@@ -62,12 +54,12 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
     let webui_session = webui.session();
 
     write_pid_file()?;
-    runtime_state.set_daemon_state(true, defs::SOCKET_FILE);
+    runtime_state.set_daemon_state(true, defs::SOCKET_FILE)?;
     runtime_state.save()?;
     let state = Arc::new(Mutex::new(runtime_state));
-    let _guard = DaemonRuntimeGuard::new(state.clone());
+    let mut runtime_guard = DaemonRuntimeGuard::new(state.clone());
     let shutdown = install_shutdown_flag()?;
-    let config_cache = Arc::new(commands::RuntimeConfigCache::new());
+    let config_access = Arc::new(commands::RuntimeConfigAccess::new());
 
     let active_webui_connections = Arc::new(AtomicUsize::new(0));
     let sse_clients = http::SseClientRegistry::shared();
@@ -114,7 +106,7 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
             match listener.accept() {
                 Ok((mut stream, _addr)) => {
                     if let Err(err) = handle_stream(
-                        &config_cache,
+                        &config_access,
                         &state,
                         &shutdown,
                         &webui_session,
@@ -134,9 +126,7 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
                     }
                 }
                 Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-                Err(err) => {
-                    crate::scoped_log!(warn, "daemon", "accept failed: error={:#}", err);
-                }
+                Err(err) => return Err(err).context("daemon socket accept failed"),
             }
         }
         if fds[1].revents & libc::POLLIN != 0 {
@@ -145,13 +135,13 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
                     let Some(connection_guard) =
                         ActiveWebuiConnectionGuard::try_acquire(&active_webui_connections)
                     else {
-                        let _ = http::write_http_json(
+                        http::write_http_json(
                             &mut stream,
                             503,
                             "Service Unavailable",
                             &DaemonResponse::error("too many active WebUI daemon connections"),
                             http::ConnectionAction::Close,
-                        );
+                        )?;
                         continue;
                     };
 
@@ -159,13 +149,13 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
                     let shutdown = shutdown.clone();
                     let session = webui_session.clone();
                     let thread_sse = sse_clients.clone();
-                    let thread_config_cache = config_cache.clone();
-                    let _ = std::thread::Builder::new()
+                    let thread_config_access = config_access.clone();
+                    std::thread::Builder::new()
                         .name("hybrid-mount-webui-rpc".to_string())
                         .spawn(move || {
                             let _connection_guard = connection_guard;
                             if let Err(err) = http::handle_http_connection(
-                                &thread_config_cache,
+                                &thread_config_access,
                                 &state,
                                 &shutdown,
                                 &session,
@@ -179,12 +169,11 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
                                     err
                                 );
                             }
-                        });
+                        })
+                        .context("Failed to spawn WebUI RPC worker")?;
                 }
                 Err(err) if err.kind() == ErrorKind::WouldBlock => {}
-                Err(err) => {
-                    crate::scoped_log!(warn, "daemon:http", "accept failed: error={:#}", err);
-                }
+                Err(err) => return Err(err).context("WebUI socket accept failed"),
             }
         }
     }
@@ -195,11 +184,12 @@ pub fn serve(config: crate::conf::config::Config) -> Result<()> {
         "shutdown requested: socket={}",
         defs::SOCKET_FILE
     );
+    runtime_guard.cleanup()?;
     Ok(())
 }
 
 fn handle_stream(
-    config_cache: &commands::RuntimeConfigCache,
+    config_access: &commands::RuntimeConfigAccess,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &http::WebuiHttpSession,
@@ -226,14 +216,12 @@ fn handle_stream(
 
     let request: DaemonRequest =
         serde_json::from_slice(&line).context("Failed to parse daemon request")?;
-    let config_path = request
-        .config_path
-        .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
-    let effective_config = commands::load_runtime_config(config_cache, &config_path)?;
+    let config_path = request.config_path;
+    let effective_config = commands::load_runtime_config(config_access, &config_path)?;
     let ctx = commands::CommandContext::new(
         &effective_config,
         &config_path,
-        config_cache,
+        config_access,
         state,
         shutdown,
         webui,
@@ -296,7 +284,7 @@ fn cleanup_stale_socket(path: &Path) -> Result<()> {
     }
     match UnixStream::connect(path) {
         Ok(_) => bail!("daemon socket already active at {}", path.display()),
-        Err(_) => {
+        Err(err) if err.raw_os_error() == Some(libc::ECONNREFUSED) => {
             crate::scoped_log!(
                 debug,
                 "daemon:server",
@@ -307,19 +295,24 @@ fn cleanup_stale_socket(path: &Path) -> Result<()> {
                 .with_context(|| format!("Failed to remove stale socket {}", path.display()))?;
             Ok(())
         }
+        Err(err) => {
+            Err(err).with_context(|| format!("Failed to inspect daemon socket {}", path.display()))
+        }
     }
 }
 
 fn cleanup_stale_pid_file() -> Result<()> {
-    let Ok(raw) = fs::read_to_string(defs::PID_FILE) else {
-        return Ok(());
+    let raw = match fs::read_to_string(defs::PID_FILE) {
+        Ok(raw) => raw,
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(err).with_context(|| format!("Failed to read pid file {}", defs::PID_FILE));
+        }
     };
-    let pid = raw.trim().parse::<i32>().ok();
-    let Some(pid) = pid else {
-        fs::remove_file(defs::PID_FILE)
-            .with_context(|| format!("Failed to remove invalid pid file {}", defs::PID_FILE))?;
-        return Ok(());
-    };
+    let pid = raw
+        .trim()
+        .parse::<i32>()
+        .with_context(|| format!("Invalid pid file {}", defs::PID_FILE))?;
 
     if !is_pid_process_alive(pid) {
         match fs::remove_file(defs::PID_FILE) {
@@ -375,22 +368,48 @@ fn install_shutdown_flag() -> Result<Arc<AtomicBool>> {
 
 struct DaemonRuntimeGuard {
     state: Arc<Mutex<RuntimeState>>,
+    active: bool,
 }
 
 impl DaemonRuntimeGuard {
     fn new(state: Arc<Mutex<RuntimeState>>) -> Self {
-        Self { state }
+        Self {
+            state,
+            active: true,
+        }
+    }
+
+    fn cleanup(&mut self) -> Result<()> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("runtime state lock is poisoned during daemon cleanup"))?;
+        state.set_daemon_state(false, "")?;
+        state.save()?;
+        drop(state);
+        remove_runtime_file(defs::PID_FILE)?;
+        remove_runtime_file(defs::SOCKET_FILE)?;
+        self.active = false;
+        Ok(())
+    }
+}
+
+fn remove_runtime_file(path: &str) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| format!("Failed to remove runtime file {path}")),
     }
 }
 
 impl Drop for DaemonRuntimeGuard {
     fn drop(&mut self) {
-        if let Ok(mut guard) = self.state.lock() {
-            guard.set_daemon_state(false, "");
-            let _ = guard.save();
+        if !self.active {
+            return;
         }
-        let _ = fs::remove_file(defs::PID_FILE);
-        let _ = fs::remove_file(defs::SOCKET_FILE);
+        if let Err(error) = self.cleanup() {
+            crate::scoped_log!(error, "daemon", "daemon cleanup failed: {:#}", error);
+        }
     }
 }
 

@@ -8,11 +8,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use super::types::{ModulePrepareOutcome, PrepareContext, ProcessingItem, SHALLOW_OVERLAY_DIR};
 use crate::{
-    core::{inventory::Module, recovery::ModuleStageFailure},
+    core::{failure::ModuleStageFailure, inventory::Module},
     defs,
     domain::MountMode,
     sys::fs::{copy_non_dir_entry, ensure_dir_like},
@@ -26,8 +26,11 @@ pub(super) fn prepare_module(
     system_root: &Path,
     context: &mut PrepareContext,
 ) -> Result<ModulePrepareOutcome> {
-    if !module.source_path.exists() {
-        return Ok(ModulePrepareOutcome::default());
+    if !module.source_path.is_dir() {
+        bail!(
+            "module source directory is unavailable: {}",
+            module.source_path.display()
+        );
     }
 
     context.metrics.directories_scanned += 1;
@@ -44,7 +47,7 @@ pub(super) fn prepare_module(
         let entry = entry_result
             .with_context(|| format!("failed to enumerate {}", module.source_path.display()))?;
         let file_name = entry.file_name();
-        if utils::path_file_name_eq_ignore_ascii_case(&entry.path(), defs::REPLACE_DIR_FILE_NAME) {
+        if utils::path_file_name_eq(&entry.path(), defs::REPLACE_DIR_FILE_NAME) {
             continue;
         }
 

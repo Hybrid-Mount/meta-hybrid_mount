@@ -2,10 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use std::ops::BitOr;
 use std::{
-    ffi::CString,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -17,49 +14,8 @@ use procfs::process::Process;
 use rustix::{
     fd::AsFd,
     fs::CWD,
-    mount::{MountFlags, MoveMountFlags, mount, move_mount},
+    mount::{MoveMountFlags, move_mount},
 };
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-const CWD: i32 = libc::AT_FDCWD;
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[derive(Clone, Copy)]
-struct MountFlags;
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-impl MountFlags {
-    const BIND: Self = Self;
-    const REC: Self = Self;
-
-    fn empty() -> Self {
-        Self
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-impl BitOr for MountFlags {
-    type Output = Self;
-
-    fn bitor(self, _rhs: Self) -> Self::Output {
-        Self
-    }
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn mount<P, Q>(
-    _source: P,
-    _target: Q,
-    _fstype: &str,
-    _flags: MountFlags,
-    _data: Option<&std::ffi::CStr>,
-) -> Result<()>
-where
-    P: AsRef<Path>,
-    Q: AsRef<Path>,
-{
-    bail!("mount is only supported on linux/android")
-}
 
 use crate::{
     defs,
@@ -122,49 +78,9 @@ fn mount_overlay_core(
         .filter(|wd| wd.exists())
         .map(|e| e.display().to_string());
 
-    if let Err(e) = fs(
-        upperdir_s.clone(),
-        workdir_s.clone(),
-        lowerdir_config.clone(),
-        mount_source,
-        dest,
-    ) {
-        crate::scoped_log!(warn, "overlayfs", "fsopen failed, fallback=mount: {:#}", e);
-        let safe_lower = lower_dirs
-            .iter()
-            .map(|path| escape_mount_option_value(path))
-            .collect::<Vec<_>>()
-            .join(":");
-        let mut data = format!("lowerdir={safe_lower}");
-
-        if let (Some(upperdir), Some(workdir)) = (upperdir_s, workdir_s) {
-            data = format!(
-                "{data},upperdir={},workdir={}",
-                escape_mount_option_value(&upperdir),
-                escape_mount_option_value(&workdir)
-            );
-        }
-        mount(
-            mount_source,
-            dest,
-            "overlay",
-            MountFlags::empty(),
-            Some(CString::new(data)?.as_c_str()),
-        )?;
-    }
+    fs(upperdir_s, workdir_s, lowerdir_config, mount_source, dest)?;
     crate::scoped_log!(info, "overlayfs", "mount success: {}", dest.display());
     Ok(())
-}
-
-fn escape_mount_option_value(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len());
-    for ch in value.chars() {
-        if matches!(ch, '\\' | ',' | ':') {
-            escaped.push('\\');
-        }
-        escaped.push(ch);
-    }
-    escaped
 }
 
 pub fn mount_overlayfs(
@@ -184,7 +100,7 @@ pub fn mount_overlayfs(
 
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
+            .context("system clock is before the Unix epoch")?
             .as_nanos();
         let staging_dir = Path::new(defs::RUN_DIR).join(format!(
             "staging_{}_{}",
@@ -203,7 +119,7 @@ pub fn mount_overlayfs(
             bottom_chunk.len()
         );
 
-        let _ = send_umountable(&staging_dir);
+        send_umountable(&staging_dir)?;
 
         current_layers.push(staging_dir.to_string_lossy().into_owned());
     }
@@ -217,6 +133,7 @@ pub fn mount_overlayfs(
     )
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn bind_mount(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
     crate::scoped_log!(
         info,
@@ -225,73 +142,27 @@ pub fn bind_mount(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
         from.as_ref().display(),
         to.as_ref().display()
     );
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        use rustix::mount::{OpenTreeFlags, open_tree};
-        match open_tree(
-            CWD,
-            from.as_ref(),
-            OpenTreeFlags::OPEN_TREE_CLOEXEC
-                | OpenTreeFlags::OPEN_TREE_CLONE
-                | OpenTreeFlags::AT_RECURSIVE,
-        ) {
-            Result::Ok(tree) => {
-                if move_mount(
-                    tree.as_fd(),
-                    "",
-                    CWD,
-                    to.as_ref(),
-                    MoveMountFlags::MOVE_MOUNT_F_EMPTY_PATH,
-                )
-                .is_err()
-                {
-                    mount(
-                        from.as_ref(),
-                        to.as_ref(),
-                        "",
-                        MountFlags::BIND | MountFlags::REC,
-                        None,
-                    )?;
-                }
-            }
-            _ => {
-                mount(
-                    from.as_ref(),
-                    to.as_ref(),
-                    "",
-                    MountFlags::BIND | MountFlags::REC,
-                    None,
-                )?;
-            }
-        }
-    }
+    use rustix::mount::{OpenTreeFlags, open_tree};
+    let tree = open_tree(
+        CWD,
+        from.as_ref(),
+        OpenTreeFlags::OPEN_TREE_CLOEXEC
+            | OpenTreeFlags::OPEN_TREE_CLONE
+            | OpenTreeFlags::AT_RECURSIVE,
+    )?;
+    move_mount(
+        tree.as_fd(),
+        "",
+        CWD,
+        to.as_ref(),
+        MoveMountFlags::MOVE_MOUNT_F_EMPTY_PATH,
+    )?;
+    Ok(())
+}
 
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    {
-        let _ = CWD;
-        mount(
-            from.as_ref(),
-            to.as_ref(),
-            "",
-            MountFlags::BIND | MountFlags::REC,
-            None,
-        )?;
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        // handled above
-    }
-
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    {
-        Ok(())
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        Ok(())
-    }
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn bind_mount(_from: impl AsRef<Path>, _to: impl AsRef<Path>) -> Result<()> {
+    bail!("bind mounts are only supported on linux/android")
 }
 
 fn mount_overlay_child(
@@ -308,7 +179,7 @@ fn mount_overlay_child(
         return bind_mount(stock_root, mount_point);
     }
     if !Path::new(&stock_root).is_dir() {
-        return Ok(());
+        bail!("overlay child stock path is not a directory: {stock_root}");
     }
     let mut lower_dirs: Vec<String> = vec![];
     for lower in module_roots {
@@ -317,30 +188,21 @@ fn mount_overlay_child(
         if path.is_dir() {
             lower_dirs.push(lower_dir);
         } else if path.exists() {
-            return Ok(());
+            bail!("overlay child module path is not a directory: {lower_dir}");
         }
     }
     if lower_dirs.is_empty() {
-        return Ok(());
+        bail!("overlay child has no directory layers: {mount_point}");
     }
-    if let Err(e) = mount_overlayfs(
+    mount_overlayfs(
         &lower_dirs,
         stock_root,
         None,
         None,
         mount_point,
         mount_source,
-    ) {
-        crate::scoped_log!(
-            warn,
-            "overlayfs",
-            "child overlay failed: mount_point={}, error={:#}",
-            mount_point,
-            e
-        );
-        return Err(e);
-    }
-    let _ = send_umountable(mount_point);
+    )?;
+    send_umountable(mount_point)?;
     Ok(())
 }
 
@@ -352,74 +214,45 @@ pub fn mount_overlay(
     mount_source: &str,
 ) -> Result<()> {
     crate::scoped_log!(info, "overlayfs", "mount root: target={}", root);
-    // Restore original CWD on exit — chdir is a process-global side effect.
-    let old_cwd = std::env::current_dir().ok();
+    let old_cwd = std::env::current_dir().context("failed to read current directory")?;
     std::env::set_current_dir(root).with_context(|| format!("failed to chdir to {root}"))?;
-    let stock_root = ".";
+    let result = (|| -> Result<()> {
+        let stock_root = ".";
+        let root_path = Path::new(root);
+        let mount_seq = collect_child_mount_points(root_path)?;
 
-    let root_path = Path::new(root);
-    let mount_seq = collect_child_mount_points(root_path)?;
+        mount_overlayfs(module_roots, root, upperdir, workdir, root, mount_source)
+            .context("mount overlayfs for root failed")?;
 
-    let root_result = mount_overlayfs(module_roots, root, upperdir, workdir, root, mount_source)
-        .with_context(|| "mount overlayfs for root failed");
-    if let Err(e) = root_result {
-        if let Some(cwd) = old_cwd {
-            std::env::set_current_dir(&cwd).ok();
-        }
-        return Err(e);
-    }
-
-    for mount_point in &mount_seq {
-        let relative = mount_point.replacen(root, "", 1);
-        let stock_root: String = format!("{stock_root}{relative}");
-        if !Path::new(&stock_root).exists() {
-            continue;
-        }
-        if let Err(e) = mount_overlay_child(
-            mount_point,
-            &relative,
-            module_roots,
-            &stock_root,
-            mount_source,
-        ) {
-            crate::scoped_log!(
-                warn,
-                "overlayfs",
-                "child mount failed, revert root: mount_point={}, error={:#}",
-                mount_point,
-                e
-            );
-            umount_dir(root).with_context(|| format!("failed to revert {root}"))?;
-            if let Some(cwd) = old_cwd {
-                std::env::set_current_dir(&cwd).ok();
+        for mount_point in &mount_seq {
+            let relative = mount_point.replacen(root, "", 1);
+            let stock_root: String = format!("{stock_root}{relative}");
+            if !Path::new(&stock_root).exists() {
+                continue;
             }
-            bail!(e);
+            if let Err(error) = mount_overlay_child(
+                mount_point,
+                &relative,
+                module_roots,
+                &stock_root,
+                mount_source,
+            ) {
+                umount_dir(root).with_context(|| format!("failed to revert {root}"))?;
+                return Err(error)
+                    .with_context(|| format!("failed to mount overlay child {mount_point}"));
+            }
         }
-    }
-    if let Some(cwd) = old_cwd {
-        std::env::set_current_dir(&cwd).ok();
-    }
-    Ok(())
-}
+        Ok(())
+    })();
 
-#[cfg(test)]
-mod tests {
-    use super::escape_mount_option_value;
-
-    #[test]
-    fn escape_mount_option_value_escapes_overlay_separators() {
-        assert_eq!(escape_mount_option_value("/a,b:/c\\d"), "/a\\,b\\:/c\\\\d");
-    }
-
-    #[test]
-    fn fallback_lowerdir_preserves_layer_separators() {
-        let lower_dirs = ["/a,b".to_string(), "/c:d".to_string(), "/e\\f".to_string()];
-        let lowerdir = lower_dirs
-            .iter()
-            .map(|path| escape_mount_option_value(path))
-            .collect::<Vec<_>>()
-            .join(":");
-
-        assert_eq!(lowerdir, "/a\\,b:/c\\:d:/e\\\\f");
+    let restore_result = std::env::set_current_dir(&old_cwd)
+        .with_context(|| format!("failed to restore cwd to {}", old_cwd.display()));
+    match (result, restore_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(error),
+        (Err(operation_error), Err(restore_error)) => Err(operation_error.context(format!(
+            "additionally failed to restore cwd: {restore_error:#}"
+        ))),
     }
 }

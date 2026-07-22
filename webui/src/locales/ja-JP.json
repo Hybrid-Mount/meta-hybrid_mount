@@ -10,6 +10,7 @@
     "rebootConfirm": "デバイスを再起動しますか？",
     "reboot": "再起動",
     "cancel": "キャンセル",
+    "close": "閉じる",
     "saved": "保存済み"
   },
   "tabs": {
@@ -64,8 +65,16 @@
     "mode_tmpfsDesc": "RAM ベース、高速な I/O、再起動時にリセットされます。",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "ループバックイメージ。永続的、RAM を節約できます。",
-    "daemonStartupMode": "常駐デーモン",
-    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
+    "customMounts": "カスタム Bind マウント",
+    "customMountsDesc": "指定したソースパスを既存のターゲットにバインドします",
+    "customMountsEmpty": "カスタム Bind マウントは設定されていません。",
+    "customMountSource": "ソースパス",
+    "customMountTarget": "ターゲットパス",
+    "addCustomMount": "追加",
+    "removeCustomMount": "削除",
+    "invalidCustomMount": "カスタムマウントパスが無効です",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed.",
+    "kasumiTmpfsRestriction": "このカーネルは tmpfs xattr をサポートしていないため、モジュール単位の Kasumi マウントは使用できません。"
   },
   "modules": {
     "reload": "更新",
@@ -83,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "Unmounted",
+      "blacklisted": "ブラックリスト",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -97,12 +107,7 @@
     "disableTag": "無効",
     "nativeTag": "ステルス",
     "unavailableTag": "利用不可",
-    "kasumiUnavailableHint": "Kasumi は有効ですが、現在は利用できません。",
-    "mountError": "マウントエラー",
-    "clearMountErrors": "マウントエラーをクリア",
-    "mountErrorsCleared": "マウントエラーをクリアしました",
-    "mountErrorsClearFailed": "マウントエラーのクリアに失敗",
-    "suggestIgnoreHint": "このモジュールの .sh ファイルにはマウント関連のコマンドが含まれています。モードを「Ignore」に設定することを検討してください。"
+    "kasumiUnavailableHint": "Kasumi は有効ですが、現在は利用できません。"
   },
   "kasumi": {
     "title": "Kasumi の動作状態",
@@ -160,7 +165,6 @@
     "stealthUpdated": "Stealth を更新しました",
     "hidexattrUpdated": "HideXattr を更新しました",
     "selinuxFixUpdated": "SELinux Guard を更新しました",
-    "ignoreProtocolUpdated": "プロトコル不一致ポリシーを更新しました",
     "kernelDebugUpdated": "カーネルデバッグを更新しました",
     "kmiOverride": "KMI 上書き",
     "autoKmi": "自動検出",
@@ -169,8 +173,6 @@
     "stealthTitle": "ステルス",
     "hidexattrTitle": "Xattr 非表示",
     "selinuxFixTitle": "SELinux Guard",
-    "ignoreProtocolTitle": "プロトコル不一致を無視",
-    "ignoreProtocolHint": "ユーザー空間 API とカーネルプロトコルが完全に一致しなくても、Kasumi の動作を継続します。",
     "lkmUnavailableHint": "Kasumi は有効ですが、カーネルモジュールはまだ読み込まれていません。",
     "kernelDebugTitle": "カーネルデバッグ",
     "featureBits": "機能ビット",

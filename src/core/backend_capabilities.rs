@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
+use anyhow::Result;
+
 use crate::conf::config::Config;
 #[cfg(feature = "kasumi")]
 use crate::sys::kasumi;
@@ -13,24 +15,25 @@ pub struct BackendCapabilities {
 }
 
 impl BackendCapabilities {
-    pub fn detect(config: &Config) -> Self {
+    pub fn detect(config: &Config) -> Result<Self> {
         #[cfg(not(feature = "kasumi"))]
         {
             let _ = config;
-            Self {
+            Ok(Self {
                 kasumi_status: "disabled".to_string(),
                 kasumi_usable: false,
-            }
+            })
         }
 
         #[cfg(feature = "kasumi")]
         {
-            let status = kasumi::check_status();
+            let status = kasumi::check_status()?;
 
-            Self {
+            Ok(Self {
                 kasumi_status: kasumi::status_name(status).to_string(),
-                kasumi_usable: config.kasumi.enabled && kasumi::can_operate(),
-            }
+                kasumi_usable: config.kasumi.enabled
+                    && matches!(status, kasumi::KasumiStatus::Available),
+            })
         }
     }
 

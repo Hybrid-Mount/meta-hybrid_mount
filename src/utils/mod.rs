@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub mod path;
-pub mod sync;
 pub mod validation;
 
 use std::{
@@ -11,9 +10,9 @@ use std::{
     sync::OnceLock,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result, bail};
 
-pub use self::{path::*, sync::*, validation::*};
+pub use self::{path::*, validation::*};
 #[macro_export]
 macro_rules! scoped_log {
     ($level:ident, $scope:literal, $fmt:literal $(, $args:expr)* $(,)?) => {
@@ -21,7 +20,7 @@ macro_rules! scoped_log {
     };
 }
 
-pub fn get_mnt() -> PathBuf {
+pub fn get_mnt() -> Result<PathBuf> {
     for _ in 0..100 {
         let mut name = String::from("hm_");
         for _ in 0..10 {
@@ -29,10 +28,10 @@ pub fn get_mnt() -> PathBuf {
         }
         let path = Path::new("/mnt").join(name);
         if !path.exists() {
-            return path;
+            return Ok(path);
         }
     }
-    Path::new("/mnt").join(format!("hm_mnt_{}", std::process::id()))
+    bail!("failed to allocate a unique mount path under /mnt")
 }
 
 pub fn init_logging() -> Result<()> {
@@ -48,7 +47,9 @@ pub fn init_logging() -> Result<()> {
                 .with_max_level(log::LevelFilter::Trace)
                 .with_tag("Hybrid_Logger"),
         );
-        LOGGER_INIT.set(()).ok();
+        LOGGER_INIT
+            .set(())
+            .map_err(|_| anyhow::anyhow!("logger initialization raced"))?;
     }
 
     #[cfg(not(target_os = "android"))]
@@ -68,8 +69,10 @@ pub fn init_logging() -> Result<()> {
         builder
             .filter_level(log::LevelFilter::Trace)
             .try_init()
-            .ok();
-        LOGGER_INIT.set(()).ok();
+            .context("failed to initialize logger")?;
+        LOGGER_INIT
+            .set(())
+            .map_err(|_| anyhow::anyhow!("logger initialization raced"))?;
     }
     Ok(())
 }
@@ -80,7 +83,7 @@ mod tests {
 
     #[test]
     fn generated_mount_path_uses_hybrid_prefix() {
-        let path = get_mnt();
+        let path = get_mnt().unwrap();
         let name = path.file_name().and_then(|name| name.to_str()).unwrap();
 
         assert_eq!(

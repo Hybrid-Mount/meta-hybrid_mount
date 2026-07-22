@@ -24,13 +24,18 @@ import type {
   StorageStatus,
   SystemInfo,
 } from "../types";
+import type {
+  KasumiStatusPayload,
+  RuntimeStatePayload,
+  SystemInfoPayload,
+} from "./schemas";
 
 export interface InitPayload {
-  status: unknown;
-  config: unknown;
+  status: RuntimeStatePayload;
+  config: AppConfig;
   version: string;
-  kasumi_status?: unknown;
-  system_info: unknown;
+  kasumi_status?: KasumiStatusPayload;
+  system_info: SystemInfoPayload;
 }
 
 export interface AppAPI {
@@ -42,7 +47,7 @@ export interface AppAPI {
     options?: { applyRuntime?: boolean },
   ) => Promise<AppConfig>;
   resetConfig: () => Promise<void>;
-  scanModules: (path?: string) => Promise<Module[]>;
+  scanModules: () => Promise<Module[]>;
   saveModuleRules: (moduleId: string, rules: ModuleRules) => Promise<void>;
   getStorageUsage: () => Promise<StorageStatus>;
   getSystemInfo: () => Promise<SystemInfo>;
@@ -50,7 +55,7 @@ export interface AppAPI {
   getKasumiStatus: () => Promise<KasumiStatus>;
   setKasumiEnabled: (enabled: boolean) => Promise<void>;
   setKasumiStealth: (enabled: boolean) => Promise<void>;
-  setKasumiHidexattr: (enabled: boolean) => Promise<void>;
+  setKasumiOverlayXattrHide: (enabled: boolean) => Promise<void>;
   setKasumiSelinuxFix: (enabled: boolean) => Promise<void>;
   setKasumiDebug: (enabled: boolean) => Promise<void>;
   getOriginalKernelUname: () => Promise<KernelUnameValues>;
@@ -82,7 +87,6 @@ export interface AppAPI {
   setKasumiLkmKmi: (value: string) => Promise<void>;
   clearKasumiLkmKmi: () => Promise<void>;
   fixKasumiMounts: () => Promise<void>;
-  clearMountErrors: () => Promise<void>;
   clearKasumiRules: () => Promise<void>;
   releaseKasumiConnection: () => Promise<void>;
   invalidateKasumiCache: () => Promise<void>;

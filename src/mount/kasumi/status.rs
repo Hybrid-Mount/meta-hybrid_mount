@@ -7,7 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 use crate::{
     conf::config,
@@ -35,52 +35,76 @@ struct RuntimeProbe {
 
 static RUNTIME_PROBE_CACHE: OnceLock<Mutex<Option<RuntimeProbe>>> = OnceLock::new();
 
-fn runtime_probe() -> RuntimeProbe {
+fn runtime_probe() -> Result<RuntimeProbe> {
     let cache = RUNTIME_PROBE_CACHE.get_or_init(|| Mutex::new(None));
-    if let Some(probe) = crate::utils::lock_or_recover(cache).as_ref()
+    let cached = cache
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Kasumi runtime probe cache is poisoned"))?;
+    if let Some(probe) = cached.as_ref()
         && probe.checked_at.elapsed() < RUNTIME_PROBE_TTL
     {
-        return probe.clone();
+        return Ok(probe.clone());
     }
+    drop(cached);
+
+    let live_status = kasumi::check_status()?;
+    let lkm_loaded = lkm::is_loaded()?;
+    let protocol_version = if lkm_loaded {
+        Some(kasumi::get_protocol_version()?)
+    } else {
+        None
+    };
+    let (feature_bits, hooks, rule_count) = if live_status == KasumiStatus::Available {
+        (
+            Some(kasumi::get_features()?),
+            hook_lines()?,
+            api::parse_kasumi_rule_listing(&kasumi::list_rules()?)?.len(),
+        )
+    } else {
+        (None, Vec::new(), 0)
+    };
 
     let probe = RuntimeProbe {
         checked_at: Instant::now(),
-        live_status: kasumi::check_status(),
-        lkm_loaded: lkm::is_loaded(),
-        protocol_version: kasumi::get_protocol_version().ok(),
-        feature_bits: kasumi::get_features().ok(),
-        hooks: hook_lines().unwrap_or_default(),
-        rule_count: kasumi::list_rules()
-            .map(|value| api::parse_kasumi_rule_listing(&value).len())
-            .unwrap_or(0),
-        kernel_supported: kasumi::kernel_is_supported(),
-        current_kmi: lkm::current_kmi(),
+        live_status,
+        lkm_loaded,
+        protocol_version,
+        feature_bits,
+        hooks,
+        rule_count,
+        kernel_supported: kasumi::kernel_is_supported()?,
+        current_kmi: lkm::current_kmi()?,
     };
-    *crate::utils::lock_or_recover(cache) = Some(probe.clone());
-    probe
+    *cache
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Kasumi runtime probe cache is poisoned"))? =
+        Some(probe.clone());
+    Ok(probe)
 }
 
-pub fn invalidate_runtime_caches() {
-    kasumi::invalidate_status_cache();
+pub fn invalidate_runtime_caches() -> Result<()> {
+    kasumi::invalidate_status_cache()?;
     if let Some(cache) = RUNTIME_PROBE_CACHE.get() {
-        *crate::utils::lock_or_recover(cache) = None;
+        *cache
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Kasumi runtime probe cache is poisoned"))? = None;
     }
+    Ok(())
 }
 
-pub fn can_operate(config: &config::Config) -> bool {
-    let _ = config;
+pub fn can_operate(_config: &config::Config) -> Result<bool> {
     kasumi::can_operate()
 }
 
 pub fn require_live(config: &config::Config, description: &str) -> Result<()> {
-    if can_operate(config) {
+    if can_operate(config)? {
         return Ok(());
     }
 
     bail!(
         "Kasumi is not available for {} (status={})",
         description,
-        kasumi::status_name(kasumi::check_status())
+        kasumi::status_name(kasumi::check_status()?)
     );
 }
 
@@ -93,8 +117,8 @@ pub fn hook_lines() -> Result<Vec<String>> {
         .collect())
 }
 
-pub fn collect_runtime_info(config: &config::Config) -> KasumiRuntimeInfo {
-    let probe = runtime_probe();
+pub fn collect_runtime_info(config: &config::Config) -> Result<KasumiRuntimeInfo> {
+    let probe = runtime_probe().context("Failed to probe Kasumi runtime")?;
     let live_status = probe.live_status;
     let feature_bits = probe.feature_bits;
     let feature_names = feature_bits.map(kasumi::feature_names).unwrap_or_default();
@@ -107,7 +131,7 @@ pub fn collect_runtime_info(config: &config::Config) -> KasumiRuntimeInfo {
         "disabled".to_string()
     };
 
-    KasumiRuntimeInfo {
+    Ok(KasumiRuntimeInfo {
         status,
         available,
         kernel_supported: probe.kernel_supported,
@@ -121,7 +145,7 @@ pub fn collect_runtime_info(config: &config::Config) -> KasumiRuntimeInfo {
         feature_names,
         hooks: probe.hooks,
         rule_count: probe.rule_count,
-        user_hide_rule_count: user_hide_rules::user_hide_rule_count(),
+        user_hide_rule_count: user_hide_rules::user_hide_rule_count()?,
         mirror_path: config.kasumi.mirror_path.clone(),
-    }
+    })
 }

@@ -11,7 +11,7 @@ Hybrid Mount — метамодуль для оркестрации монтир
 Он объединяет файлы модулей с разделами Android через единый движок политик и три backend-а монтирования:
 
 - **OverlayFS**: слоистое монтирование для широкой совместимости.
-- **Magic Mount**: bind mount для прямой замены путей или fallback.
+- **Magic Mount**: bind mount для прямой замены путей.
 - **Kasumi**: маршрутизация на базе LKM с runtime-функциями hide, spoof и stealth.
 
 Встроенная **WebUI на SolidJS** предоставляет графическое управление, мониторинг состояния и редактирование конфигурации.
@@ -36,7 +36,6 @@ Hybrid Mount — метамодуль для оркестрации монтир
 - [CLI](#cli)
 - [Архитектура](#архитектура)
 - [Сборка](#сборка)
-- [Эксплуатационные заметки](#эксплуатационные-заметки)
 - [Лицензия](#лицензия)
 
 ---
@@ -61,7 +60,7 @@ Hybrid Mount — метамодуль для оркестрации монтир
 
 Вариант `nano` (`--no-default-features`, без Cargo features) работает только через файл конфигурации. Он исключает WebUI, daemon, CLI и инфраструктуру control plane; остается небольшой бинарный файл, который читает `config.toml`, строит план монтирования, выполняет его и завершает работу.
 
-Nano использует `magic` как режим по умолчанию. Во время установки выбор клавишами громкости создает пустые marker-файлы `overlay` или `magic` в корне управляемого модуля. Имена marker-файлов сравниваются без учета регистра.
+Nano использует `magic` как режим по умолчанию. Во время установки выбор клавишами громкости создает пустые marker-файлы `overlay` или `magic` в корне управляемого модуля. Имена marker-файлов должны точно совпадать с этими вариантами в нижнем регистре.
 
 ### Матрица возможностей
 
@@ -73,7 +72,7 @@ Nano использует `magic` как режим по умолчанию. В�
 | WebUI | Да | Да | Нет |
 | CLI | Да | Да | Нет |
 | Daemon | Да | Да | Нет |
-| Кэш конфигурации и runtime-apply | Да | Да | Нет |
+| Runtime-применение конфигурации | Да | Да | Нет |
 | Kasumi hide/spoof/stealth | Да | Нет | Нет |
 | Автозагрузка LKM | Да | Нет | Нет |
 | Cargo features | `kasumi` (включает `control-plane`) | только `control-plane` | нет |
@@ -85,8 +84,8 @@ Nano использует `magic` как режим по умолчанию. В�
 - **Детерминированное планирование**: конфликты обнаруживаются на этапе построения плана.
 - **Встроенная WebUI**: управление модулями, редактирование конфигурации и мониторинг runtime-состояния.
 - **Runtime-интеграция Kasumi**: автозагрузка LKM, mirror routing, mount hide, spoof maps/statfs, UID hiding, uname spoof и kstat rules.
-- **Кэш конфигурации**: инкрементальные patch-изменения и немедленное применение.
-- **Восстановление**: автоматическая очистка устаревших runtime-файлов и сброс через `api config-reset`.
+- **Runtime-обновления конфигурации**: проверенные patch-изменения сохраняются и применяются немедленно.
+- **Явные ошибки**: недопустимые состояния и настройки сразу завершаются ошибкой; `api config-reset` вызывается только явно.
 - **Автоматизация**: daemon protocol JSON-over-Unix-socket и HTTP API.
 
 ---
@@ -96,7 +95,8 @@ Nano использует `magic` как режим по умолчанию. В�
 1. Установите [KernelSU](https://kernelsu.org/) или [APatch](https://apatch.dev/) на устройство.
 2. Скачайте ZIP `full`, `lite` или `nano` из [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Установите ZIP через установщик модулей root-менеджера.
-4. Перезагрузите устройство. Hybrid Mount определит окружение и применит политику overlay по умолчанию.
+4. При первой установке Full/Lite выберите режим по умолчанию: увеличение громкости выбирает OverlayFS, уменьшение — Magic Mount, а через 10 секунд без ввода выбирается OverlayFS. Это единственный запрос установщика; Nano пропускает этот шаг.
+5. Перезагрузите устройство. Hybrid Mount определит окружение и применит выбранную политику.
 
 ```bash
 # Проверить runtime-состояние
@@ -173,7 +173,6 @@ README-документация доступна на [English](https://github.c
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Хранилище upper/work для OverlayFS. |
 | `disable_umount` | bool | `false` | Пропуск umount, только для отладки. |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Глобальная политика по умолчанию. |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | Режим запуска daemon. |
 | `rules` | map | `{}` | Политики по модулям и путям. |
 
 ---
@@ -201,7 +200,7 @@ hybrid-mount kasumi clear
 2. Значение по умолчанию для модуля: `rules.<module>.default_mode`
 3. Глобальное значение по умолчанию: `default_mode`
 
-Распознаваемые marker-файлы: `disable`, `remove`, `skip_mount`, `mount_error`, `overlay`, `magic` и `.replace`. Имена marker-файлов сравниваются без учета регистра.
+Распознаваемые marker-файлы: `disable`, `remove`, `skip_mount`, `overlay`, `magic` и `.replace`. Регистр важен, имена должны совпадать точно.
 
 ---
 
@@ -260,16 +259,6 @@ cargo +nightly test
 ### CI-гейты и проверка feature flags
 
 Каждое изменение должно проходить: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --workspace`, WebUI `pnpm lint` + `pnpm test`, и проверку заголовка лицензии. `cargo clippy --all-features` проверяет только вариант `full`; также убедитесь, что комбинации **lite** (`--no-default-features --features control-plane`) и **nano** (`--no-default-features`) компилируются. Код Kasumi должен быть за `#[cfg(feature = "kasumi")]`; код daemon/CLI/WebUI — за `#[cfg(feature = "control-plane")]`.
-
----
-
-## Эксплуатационные заметки
-
-- Новые установки определяют `mountsource` автоматически.
-- При поврежденной конфигурации используйте `hybrid-mount api config-reset`, затем применяйте правила постепенно.
-- `api config-patch --apply-runtime` применяет частичные изменения сразу.
-- В Full Kasumi LKM должен соответствовать текущему kernel; используйте `lkm_kmi_override`, если KMI определен неверно.
-- `kasumi clear` очищает runtime-состояние и освобождает соединение с kernel; некоторые kernel-side rules могут сохраняться до перезагрузки LKM.
 
 ---
 

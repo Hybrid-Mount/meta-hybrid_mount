@@ -11,7 +11,7 @@ Hybrid Mount 是面向 **KernelSU** 與 **APatch** 的掛載編排元模組。
 它透過統一策略引擎，將模組檔案合併到 Android 分割區，並支援三種掛載後端：
 
 - **OverlayFS** — 分層掛載，偏向廣泛相容性。
-- **Magic Mount** — bind mount，適合直接路徑替換或回退場景。
+- **Magic Mount** — 使用 bind mount 直接替換目標路徑。
 - **Kasumi** — 基於 LKM 的路由，提供執行階段 hide、spoof 與 stealth 功能。
 
 內建 **SolidJS WebUI**，提供圖形化管理、即時狀態監控與設定編輯。
@@ -36,7 +36,6 @@ Hybrid Mount 是面向 **KernelSU** 與 **APatch** 的掛載編排元模組。
 - [CLI](#cli)
 - [架構](#架構)
 - [構建](#構建)
-- [運維注意事項](#運維注意事項)
 - [授權](#授權)
 
 ---
@@ -61,7 +60,7 @@ Hybrid Mount 是面向 **KernelSU** 與 **APatch** 的掛載編排元模組。
 
 `nano` 版本（`--no-default-features`，無 Cargo features）是純設定檔驅動的構建。它移除 WebUI、守護行程、CLI 與控制面基礎設施，只保留啟動時讀取 `config.toml`、產生掛載計畫並執行的精簡二進位。
 
-Nano 的預設模式為 `magic`。安裝時以音量鍵選擇後，會在受管理模組根目錄寫入 `overlay` 或 `magic` 標記檔；標記檔名以不區分大小寫的方式比對。啟動階段掛載完成後，Nano 二進位會結束，不保留常駐 Hybrid Mount 行程。
+Nano 的預設模式為 `magic`。安裝時以音量鍵選擇後，會在受管理模組根目錄寫入 `overlay` 或 `magic` 標記檔；標記檔名必須使用完全相同的小寫拼寫。啟動階段掛載完成後，Nano 二進位會結束，不保留常駐 Hybrid Mount 行程。
 
 ### 功能矩陣
 
@@ -73,7 +72,7 @@ Nano 的預設模式為 `magic`。安裝時以音量鍵選擇後，會在受管�
 | WebUI | 是 | 是 | 否 |
 | CLI | 是 | 是 | 否 |
 | 守護行程 | 是 | 是 | 否 |
-| 設定快取與執行階段套用 | 是 | 是 | 否 |
+| 執行階段設定套用 | 是 | 是 | 否 |
 | Kasumi hide/spoof/stealth | 是 | 否 | 否 |
 | LKM 自動載入 | 是 | 否 | 否 |
 | Cargo features | `kasumi`（包含 `control-plane`） | 僅 `control-plane` | 無 |
@@ -85,8 +84,8 @@ Nano 的預設模式為 `magic`。安裝時以音量鍵選擇後，會在受管�
 - **可預期的規劃** — 衝突在計畫階段檢出，而不是在啟動時隨機暴露。
 - **內建 WebUI** — 可管理模組、編輯設定、監控執行階段狀態；Full 版本可控制 Kasumi 功能。
 - **Kasumi 執行階段整合** — 支援 LKM 自動載入、mirror 路由、mount 隱藏、maps/statfs spoof、UID 隱藏、uname spoof 與 kstat 規則。
-- **設定快取** — 支援增量 patch 與立即套用。
-- **恢復友善** — 會清理殘留執行階段檔案；設定錯誤時可透過 `api config-reset` 重設。
+- **執行階段設定更新** — 通過嚴格驗證的設定 patch 可持久化並立即套用。
+- **明確失敗回報** — 無效狀態或設定會立即報錯；重設設定必須明確呼叫 `api config-reset`。
 - **便於自動化** — 提供 JSON-over-Unix-socket 守護行程協定與 HTTP API。
 
 ---
@@ -96,7 +95,8 @@ Nano 的預設模式為 `magic`。安裝時以音量鍵選擇後，會在受管�
 1. 在裝置上安裝 [KernelSU](https://kernelsu.org/) 或 [APatch](https://apatch.dev/)。
 2. 從 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下載 `full`、`lite` 或 `nano` ZIP。
 3. 透過 root 管理器的模組安裝器刷入 ZIP。
-4. 重新啟動。Hybrid Mount 會自動偵測環境並套用預設 overlay 策略。
+4. 首次安裝 Full/Lite 時直接選擇預設掛載模式：音量加選擇 OverlayFS，音量減選擇 Magic Mount，10 秒無操作則選擇 OverlayFS。這是安裝器唯一的互動步驟；Nano 會跳過此步驟。
+5. 重新啟動。Hybrid Mount 會自動偵測環境並套用所選策略。
 
 ```bash
 # 檢查執行階段狀態
@@ -176,7 +176,6 @@ README 文件提供 [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work 儲存模式。 |
 | `disable_umount` | bool | `false` | 跳過 umount，僅供除錯。 |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | 全域預設掛載策略。 |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | 守護行程啟動模式。 |
 | `rules` | map | `{}` | 逐模組與逐路徑策略。 |
 
 ---
@@ -206,7 +205,7 @@ hybrid-mount kasumi clear
 2. 模組級預設：`rules.<module>.default_mode`
 3. 全域預設：`default_mode`
 
-支援的模組標記檔包含 `disable`、`remove`、`skip_mount`、`mount_error`、`overlay`、`magic` 與 `.replace`。標記檔名以不區分大小寫方式比對；若同一目錄存在多個大小寫變體，清理流程會移除所有相符變體。
+支援的模組標記檔包含 `disable`、`remove`、`skip_mount`、`overlay`、`magic` 與 `.replace`。標記檔名嚴格區分大小寫，必須使用列出的精確名稱。
 
 ---
 
@@ -265,16 +264,6 @@ cargo +nightly test
 ### CI 門禁與 feature flag 檢查
 
 每次變更必須通過以下 CI 檢查：`cargo fmt --all -- --check`、`cargo clippy --all-targets -- -D warnings`、`cargo test --all-targets --workspace`、WebUI `pnpm lint` + `pnpm test`，以及授權標頭檢查。`cargo clippy --all-features` 僅檢查 `full` 版本；也請確保 **lite**（`--no-default-features --features control-plane`）與 **nano**（`--no-default-features`）版本能夠編譯。涉及 Kasumi 的程式碼須置於 `#[cfg(feature = "kasumi")]` 之後；涉及 daemon/CLI/WebUI 的程式碼須置於 `#[cfg(feature = "control-plane")]` 之後。
-
----
-
-## 運維注意事項
-
-- 新安裝會自動偵測 `mountsource`；只有自動偵測失敗時才需要手動指定。
-- 設定損壞時可執行 `hybrid-mount api config-reset` 重設，再逐步套用規則。
-- 使用 `api config-patch --apply-runtime` 可立即套用部分設定變更。
-- Full 版本的 Kasumi LKM 必須與目前核心相符；自動偵測錯誤時可使用 `lkm_kmi_override`。
-- `kasumi clear` 會清除執行階段狀態並釋放核心連線；核心側既有規則可能直到重新載入 LKM 才會完全消失。
 
 ---
 

@@ -20,23 +20,23 @@ import SectionShell from "./SectionShell";
 import type { LkmSectionProps } from "./types";
 
 export default function LkmSection(props: LkmSectionProps) {
-  const autoloadText = props.lkm?.autoload
-    ? (uiStore.L.kasumi?.autoloadOn ?? "Autoload On")
-    : (uiStore.L.kasumi?.autoloadOff ?? "Autoload Off");
+  const autoloadText = props.lkm.autoload
+    ? uiStore.L.kasumi.autoloadOn
+    : uiStore.L.kasumi.autoloadOff;
 
   return (
     <SectionShell
       id="lkm"
-      title={uiStore.L.kasumi?.lkmTitle ?? "Kernel Module"}
+      title={uiStore.L.kasumi.lkmTitle}
       isExpanded={props.isExpanded}
       onToggle={props.onToggle}
       badge={autoloadText}
-      badgeActive={Boolean(props.lkm?.autoload)}
+      badgeActive={props.lkm.autoload}
     >
       <div class="meta-list">
         <div class="meta-row">
-          <span>{uiStore.L.kasumi?.currentKmi ?? "Current KMI"}</span>
-          <strong>{props.lkm?.current_kmi || "-"}</strong>
+          <span>{uiStore.L.kasumi.currentKmi}</span>
+          <strong>{props.lkm.current_kmi}</strong>
         </div>
       </div>
       <div class="field-row">
@@ -47,10 +47,10 @@ export default function LkmSection(props: LkmSectionProps) {
           onClick={props.onShowKmiDialog}
         >
           <div class="kasumi-select-button-label">
-            {uiStore.L.kasumi?.kmiOverride ?? "KMI Override"}
+            {uiStore.L.kasumi.kmiOverride}
           </div>
           <div class="kasumi-select-button-value">
-            {props.kmi || (uiStore.L.kasumi?.autoKmi ?? "Auto Detect")}
+            {props.kmi || uiStore.L.kasumi.autoKmi}
           </div>
         </button>
       </div>
@@ -60,11 +60,11 @@ export default function LkmSection(props: LkmSectionProps) {
           onClick={() =>
             props.runAction(
               () => API.setKasumiLkmKmi(props.kmi),
-              uiStore.L.kasumi?.saveKmi ?? "KMI saved",
+              uiStore.L.kasumi.saveKmi,
             )
           }
         >
-          {uiStore.L.kasumi?.saveKmi ?? "Save KMI"}
+          {uiStore.L.kasumi.saveKmi}
         </md-filled-button>
       </div>
       <div class="button-row">
@@ -72,29 +72,29 @@ export default function LkmSection(props: LkmSectionProps) {
           disabled={props.pending}
           onClick={() =>
             props.runAction(
-              () => API.setKasumiLkmAutoload(!Boolean(props.lkm?.autoload)),
-              uiStore.L.kasumi?.autoloadUpdated ?? "Autoload updated",
+              () => API.setKasumiLkmAutoload(!props.lkm.autoload),
+              uiStore.L.kasumi.autoloadUpdated,
             )
           }
         >
-          {props.lkm?.autoload
-            ? (uiStore.L.kasumi?.disableAutoload ?? "Disable autoload")
-            : (uiStore.L.kasumi?.enableAutoload ?? "Enable autoload")}
+          {props.lkm.autoload
+            ? uiStore.L.kasumi.disableAutoload
+            : uiStore.L.kasumi.enableAutoload}
         </md-outlined-button>
         <md-filled-button
           disabled={props.pending}
           onClick={() =>
-            props.lkm?.loaded
+            props.lkm.loaded
               ? props.onShowUnloadWarning()
               : props.runAction(
                   () => API.loadKasumiLkm(),
-                  uiStore.L.kasumi?.loadLkm ?? "LKM loaded",
+                  uiStore.L.kasumi.loadLkm,
                 )
           }
         >
-          {props.lkm?.loaded
-            ? (uiStore.L.kasumi?.unloadLkm ?? "Unload LKM")
-            : (uiStore.L.kasumi?.loadLkm ?? "Load LKM")}
+          {props.lkm.loaded
+            ? uiStore.L.kasumi.unloadLkm
+            : uiStore.L.kasumi.loadLkm}
         </md-filled-button>
       </div>
     </SectionShell>

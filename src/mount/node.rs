@@ -12,7 +12,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::{defs::REPLACE_DIR_FILE_NAME, utils};
+use crate::defs::REPLACE_DIR_FILE_NAME;
 
 #[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum NodeFileType {
@@ -90,52 +90,42 @@ impl Node {
         let dir = module_dir.as_ref();
         let mut has_file = false;
         for entry_result in dir.read_dir()? {
-            let entry = match entry_result {
-                Ok(entry) => entry,
-                Err(err) => {
-                    crate::scoped_log!(
-                        warn,
-                        "node",
-                        "enumerate failed: path={}, error={}",
-                        dir.display(),
-                        err
-                    );
-                    continue;
-                }
-            };
-            let name = entry.file_name().to_string_lossy().into_owned();
+            let entry = entry_result?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| anyhow::anyhow!("non-UTF-8 entry under {}", dir.display()))?;
 
             let node = match self.children.entry(name.clone()) {
-                Entry::Occupied(o) => Some(o.into_mut()),
-                Entry::Vacant(v) => Self::new_module(&name, &entry).map(|it| v.insert(it)),
+                Entry::Occupied(o) => o.into_mut(),
+                Entry::Vacant(v) => v.insert(Self::new_module(&name, &entry)?),
             };
 
-            if let Some(node) = node {
-                has_file |= if node.file_type == NodeFileType::Directory {
-                    node.collect_module_files(dir.join(&node.name))? || node.replace
-                } else {
-                    true
-                }
+            has_file |= if node.file_type == NodeFileType::Directory {
+                node.collect_module_files(dir.join(&node.name))? || node.replace
+            } else {
+                true
             }
         }
 
         Ok(has_file)
     }
 
-    fn dir_is_replace<P>(path: P) -> bool
+    fn dir_is_replace<P>(path: P) -> Result<bool>
     where
         P: AsRef<Path>,
     {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            if let Ok(v) = extattr::lgetxattr(path.as_ref(), crate::defs::REPLACE_DIR_XATTR)
-                && String::from_utf8_lossy(&v) == "y"
-            {
-                return true;
+            match extattr::lgetxattr(path.as_ref(), crate::defs::REPLACE_DIR_XATTR) {
+                Ok(value) if value == b"y" => return Ok(true),
+                Ok(_) => {}
+                Err(err) if err.raw_os_error() == Some(libc::ENODATA) => {}
+                Err(err) => return Err(err.into()),
             }
         }
 
-        utils::dir_contains_entry_case_insensitive(path.as_ref(), REPLACE_DIR_FILE_NAME)
+        Ok(path.as_ref().join(REPLACE_DIR_FILE_NAME).is_file())
     }
 
     pub fn new_root<S>(name: S) -> Self
@@ -152,42 +142,28 @@ impl Node {
         }
     }
 
-    pub fn new_module<S>(name: &S, entry: &DirEntry) -> Option<Self>
+    pub fn new_module<S>(name: &S, entry: &DirEntry) -> Result<Self>
     where
         S: ToString,
     {
         let path = entry.path();
-        match path.symlink_metadata() {
-            Ok(metadata) => {
-                let file_type = if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
-                    NodeFileType::Whiteout
-                } else {
-                    NodeFileType::from(metadata.file_type())
-                };
-                let replace = file_type == NodeFileType::Directory && Self::dir_is_replace(&path);
-                if replace {
-                    crate::scoped_log!(debug, "node", "replace marker: path={}", path.display());
-                }
-                return Some(Self {
-                    name: name.to_string(),
-                    file_type,
-                    children: BTreeMap::default(),
-                    module_path: Some(path),
-                    replace,
-                    skip: false,
-                });
-            }
-            Err(err) => {
-                crate::scoped_log!(
-                    warn,
-                    "node",
-                    "metadata failed: path={}, error={}",
-                    path.display(),
-                    err
-                );
-            }
+        let metadata = path.symlink_metadata()?;
+        let file_type = if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
+            NodeFileType::Whiteout
+        } else {
+            NodeFileType::from(metadata.file_type())
+        };
+        let replace = file_type == NodeFileType::Directory && Self::dir_is_replace(&path)?;
+        if replace {
+            crate::scoped_log!(debug, "node", "replace marker: path={}", path.display());
         }
-
-        None
+        Ok(Self {
+            name: name.to_string(),
+            file_type,
+            children: BTreeMap::default(),
+            module_path: Some(path),
+            replace,
+            skip: false,
+        })
     }
 }

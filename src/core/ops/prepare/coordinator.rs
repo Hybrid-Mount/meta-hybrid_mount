@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use super::{
     module_processor::{
@@ -30,13 +30,11 @@ use crate::{
 };
 
 pub fn prepare_mount_plan(
-    config: &crate::conf::config::Config,
     modules: &[Module],
     target_base: &Path,
     capabilities: &BackendCapabilities,
 ) -> Result<MountPlan> {
     prepare_mount_plan_with_root(
-        config,
         modules,
         target_base,
         Path::new("/"),
@@ -46,7 +44,6 @@ pub fn prepare_mount_plan(
 }
 
 pub(crate) fn prepare_mount_plan_with_root(
-    config: &crate::conf::config::Config,
     modules: &[Module],
     target_base: &Path,
     system_root: &Path,
@@ -63,20 +60,10 @@ pub(crate) fn prepare_mount_plan_with_root(
     );
 
     if modules.iter().any(module_requests_kasumi) && !capabilities.can_use_kasumi() {
-        if config.kasumi.enabled {
-            crate::scoped_log!(
-                warn,
-                "prepare",
-                "kasumi fallback: enabled=true, status={}, action=ignore",
-                capabilities.kasumi_status()
-            );
-        } else {
-            crate::scoped_log!(
-                warn,
-                "prepare",
-                "kasumi fallback: enabled=false, action=ignore"
-            );
-        }
+        bail!(
+            "Kasumi rules require an available Kasumi backend (status: {})",
+            capabilities.kasumi_status()
+        );
     }
 
     fs::create_dir_all(target_base)
@@ -100,7 +87,7 @@ pub(crate) fn prepare_mount_plan_with_root(
         .map(|(idx, module)| (module.id.as_str(), idx))
         .collect();
     let managed_set = managed_partitions.into_iter().collect::<HashSet<_>>();
-    let mut context = PrepareContext::new(capabilities, managed_set);
+    let mut context = PrepareContext::new(managed_set);
     let mut overlay_groups: BTreeMap<PathBuf, (String, Vec<PathBuf>)> = BTreeMap::new();
     let mut magic_ids = HashSet::new();
     #[cfg(feature = "kasumi")]
@@ -138,16 +125,13 @@ pub(crate) fn prepare_mount_plan_with_root(
                     "no_mount_content"
                 }
             );
-            if let Err(err) = remove_path(prepared.final_path()) {
-                crate::scoped_log!(
-                    warn,
-                    "prepare",
-                    "cleanup stale module failed: id={}, path={}, error={:#}",
+            remove_path(prepared.final_path()).with_context(|| {
+                format!(
+                    "failed to clean stale prepared module {} at {}",
                     module.id,
-                    prepared.final_path().display(),
-                    err
-                );
-            }
+                    prepared.final_path().display()
+                )
+            })?;
             continue;
         }
 
@@ -155,19 +139,18 @@ pub(crate) fn prepare_mount_plan_with_root(
         if has_overlay {
             materialize_module_identity(module, prepared.tmp_path(), &mut context)
                 .map_err(|err| module_sync_error(module, err))?;
-            finalize_copied_tree(&module.id, prepared.tmp_path(), &outcome.opaque_dirs);
+            finalize_copied_tree(&module.id, prepared.tmp_path(), &outcome.opaque_dirs)?;
             prepared
                 .commit()
                 .map_err(|err| module_sync_error(module, err))?;
-        } else if let Err(err) = remove_path(prepared.final_path()) {
-            crate::scoped_log!(
-                warn,
-                "prepare",
-                "cleanup non-overlay storage failed: id={}, path={}, error={:#}",
-                module.id,
-                prepared.final_path().display(),
-                err
-            );
+        } else {
+            remove_path(prepared.final_path()).with_context(|| {
+                format!(
+                    "failed to clean non-overlay prepared module {} at {}",
+                    module.id,
+                    prepared.final_path().display()
+                )
+            })?;
         }
 
         crate::scoped_log!(

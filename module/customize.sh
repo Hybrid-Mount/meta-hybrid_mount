@@ -1,6 +1,7 @@
 # Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
 #
 # SPDX-License-Identifier: GPL-3.0-only
+# shellcheck shell=sh disable=SC3043
 
 if [ -z "$APATCH" ] && [ -z "$KSU" ]; then
   abort "! unsupported root platform"
@@ -36,21 +37,22 @@ set_perm "$BIN_TARGET" 0 0 0755
 rm -rf "$MODPATH/binaries"
 rm -rf "$MODPATH/system"
 if [ "$NANO_MODE" = "true" ]; then
-  rm -rf "$MODPATH/webroot" "$MODPATH/launcher.png" "$MODPATH/service.sh"
+  rm -rf "$MODPATH/webroot" "$MODPATH/launcher.png"
 fi
 BASE_DIR="/data/adb/hybrid-mount"
 mkdir -p "$BASE_DIR"
 
 wait_volume_key_or_timeout() {
-  local timeout_seconds=$1
-  local start_time=$(date +%s)
+  local timeout_seconds start_time current_time key_event
+  timeout_seconds=$1
+  start_time=$(date +%s)
   while true; do
-    local current_time=$(date +%s)
+    current_time=$(date +%s)
     if [ $((current_time - start_time)) -ge "$timeout_seconds" ]; then
       printf 'timeout\n'
       return 0
     fi
-    local key_event=$(timeout 0.5 getevent -l 2>/dev/null)
+    key_event=$(timeout 0.5 getevent -l 2>/dev/null)
     if echo "$key_event" | grep -q "KEY_VOLUMEUP"; then
       printf 'up\n'
       return 0
@@ -59,35 +61,6 @@ wait_volume_key_or_timeout() {
       return 0
     fi
   done
-}
-
-show_usage_notice_and_confirm() {
-  local github_url="https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/USAGE_NOTICE.md"
-  local confirm_timeout=15
-  ui_print " "
-  ui_print "========================================"
-  ui_print "          Important Notice (Read)       "
-  ui_print "========================================"
-  ui_print "Please read the multi-language usage notice:"
-  ui_print "$github_url"
-  ui_print "========================================"
-  ui_print "- Trying to open the GitHub notice page..."
-  if command -v am >/dev/null 2>&1; then
-    am start -a android.intent.action.VIEW -d "$github_url" >/dev/null 2>&1
-  fi
-  ui_print "- Press any volume key (Vol+ / Vol-) to confirm."
-  ui_print "- Auto-confirming in ${confirm_timeout}s if no key is detected."
-  case "$(wait_volume_key_or_timeout "$confirm_timeout")" in
-  up)
-    ui_print "- Confirmed (Vol+)"
-    ;;
-  down)
-    ui_print "- Confirmed (Vol-)"
-    ;;
-  timeout)
-    ui_print "- No key detected, auto-confirmed after ${confirm_timeout}s."
-    ;;
-  esac
 }
 
 KEY_volume_detect() {
@@ -126,7 +99,6 @@ if [ ! -f "$BASE_DIR/config.toml" ]; then
   if [ "$NANO_MODE" = "true" ]; then
     ui_print "- Nano mode uses config.toml only; skipping setup wizard"
   else
-    show_usage_notice_and_confirm
     KEY_volume_detect
   fi
 else

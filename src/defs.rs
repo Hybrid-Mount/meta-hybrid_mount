@@ -27,18 +27,10 @@ pub const KASUMI_LKM_MODULE_NAME: &str = "kasumi_lkm";
 
 pub const DISABLE_FILE_NAME: &str = "disable";
 pub const REMOVE_FILE_NAME: &str = "remove";
-pub const MOUNT_ERROR_FILE_NAME: &str = "mount_error";
 pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
-
-pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
-    "/vendor/lib",
-    "/vendor/lib64",
-    "/system/lib",
-    "/system/lib64",
-];
 
 pub const MANAGED_PARTITIONS: &[&str] = &[
     "odm",

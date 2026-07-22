@@ -8,6 +8,7 @@ overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
 custom_mounts = []
+rules = {}
 
 [kasumi]
 enabled = false
@@ -17,13 +18,16 @@ lkm_kmi_override = ""
 mirror_path = "/dev/kasumi_mirror"
 enable_kernel_debug = false
 enable_stealth = false
-enable_hidexattr = false
+enable_overlay_xattr_hide = false
+enable_selinux_fix = false
 enable_mount_hide = false
 enable_maps_spoof = false
 enable_statfs_spoof = false
 hide_uids = []
 uname_mode = "scoped"
 cmdline_value = ""
+kstat_rules = []
+maps_rules = []
 
 [kasumi.mount_hide]
 enabled = false

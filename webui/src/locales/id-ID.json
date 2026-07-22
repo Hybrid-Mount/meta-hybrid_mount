@@ -10,6 +10,7 @@
     "rebootConfirm": "Apakah Anda yakin ingin memulai ulang perangkat?",
     "reboot": "Mulai Ulang",
     "cancel": "Batal",
+    "close": "Tutup",
     "saved": "Tersimpan"
   },
   "tabs": {
@@ -55,6 +56,7 @@
     "kasumiWarningBody": "Kasumi masih dalam tahap eksperimen. Mengaktifkannya akan membuka halaman Kasumi, mengaktifkan routing modul Kasumi, dan mengizinkan autoload Kasumi LKM.",
     "kasumiEnableConfirm": "Aktifkan Kasumi",
     "kasumiConfigSaved": "Pengaturan Kasumi disimpan. Runtime tidak berubah.",
+    "kasumiTmpfsRestriction": "Mount Kasumi per modul tidak tersedia karena kernel ini tidak mendukung tmpfs xattr.",
     "kasumiEnabledSuccess": "Kasumi berhasil diaktifkan",
     "kasumiDisabledSuccess": "Kasumi berhasil dinonaktifkan",
     "webui": "Pengaturan WebUI",
@@ -65,7 +67,14 @@
     "mode_tmpfsDesc": "Berbasis RAM. I/O paling cepat, reset saat reboot.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Image loopback. Persisten dan lebih hemat RAM.",
-    "daemonStartupMode": "Daemon Persisten"
+    "customMounts": "Bind mount kustom",
+    "customMountsDesc": "Bind path sumber tertentu ke target yang sudah ada",
+    "customMountsEmpty": "Belum ada bind mount kustom.",
+    "customMountSource": "Path sumber",
+    "customMountTarget": "Path target",
+    "addCustomMount": "Tambah",
+    "removeCustomMount": "Hapus",
+    "invalidCustomMount": "Path mount kustom tidak valid"
   },
   "modules": {
     "reload": "Muat Ulang",
@@ -83,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "Tidak Dimount",
+      "blacklisted": "Diblokir",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -97,12 +107,7 @@
     "disableTag": "Nonaktif",
     "nativeTag": "Stealth",
     "unavailableTag": "Tidak Tersedia",
-    "kasumiUnavailableHint": "Kasumi aktif tetapi saat ini tidak tersedia.",
-    "mountError": "Kesalahan Mount",
-    "clearMountErrors": "Hapus Kesalahan Mount",
-    "mountErrorsCleared": "Kesalahan mount berhasil dihapus",
-    "mountErrorsClearFailed": "Gagal menghapus kesalahan mount",
-    "suggestIgnoreHint": "Modul ini berisi perintah mount di file .sh-nya. Pertimbangkan untuk mengatur modenya ke \"Ignore\"."
+    "kasumiUnavailableHint": "Kasumi aktif tetapi saat ini tidak tersedia."
   },
   "kasumi": {
     "title": "Runtime Kasumi",
@@ -170,7 +175,6 @@
     "stealthUpdated": "Stealth diperbarui",
     "hidexattrUpdated": "HideXattr diperbarui",
     "selinuxFixUpdated": "SELinux Guard diperbarui",
-    "ignoreProtocolUpdated": "Kebijakan ketidakcocokan protokol diperbarui",
     "kernelDebugUpdated": "Debug kernel diperbarui",
     "kmiOverride": "Override KMI",
     "autoKmi": "Deteksi Otomatis",
@@ -179,8 +183,6 @@
     "stealthTitle": "Stealth",
     "hidexattrTitle": "HideXattr",
     "selinuxFixTitle": "SELinux Guard",
-    "ignoreProtocolTitle": "Abaikan Ketidakcocokan Protokol",
-    "ignoreProtocolHint": "Izinkan Kasumi tetap berjalan meskipun API userspace dan protokol kernel tidak sepenuhnya cocok.",
     "lkmUnavailableHint": "Kasumi aktif, tetapi modul kernel belum dimuat.",
     "configOnlyHint": "Sebagian besar pengaturan hanya memperbarui konfigurasi. Perubahan runtime berlaku saat Kasumi dibangun ulang atau dimount ulang.",
     "kernelDebugTitle": "Debug Kernel",

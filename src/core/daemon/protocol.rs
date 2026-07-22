@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonRequest {
     pub command: DaemonCommand,
-    #[serde(default)]
-    pub config_path: Option<PathBuf>,
+    pub config_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,7 +54,6 @@ pub enum DaemonCommand {
     Modules(ModulesCommand),
     #[cfg(feature = "kasumi")]
     Kasumi(KasumiCommand),
-    Batch(BatchCommand),
 }
 
 // ── System: health, lifecycle, storage, info, misc ──────────────────────
@@ -91,8 +89,6 @@ pub enum SystemCommand {
     ApiOpenUrl { url: String },
     #[serde(rename = "api-reboot")]
     ApiReboot,
-    #[serde(rename = "clear-mount-errors")]
-    ClearMountErrors,
 }
 
 // ── Config: CRUD for the TOML configuration ─────────────────────────────
@@ -107,7 +103,6 @@ pub enum ConfigCommand {
     #[serde(rename = "api-config-patch")]
     Patch {
         patch: serde_json::Value,
-        #[serde(default)]
         apply_runtime: bool,
     },
     #[serde(rename = "api-config-reset")]
@@ -120,7 +115,7 @@ pub enum ConfigCommand {
 #[serde(tag = "type")]
 pub enum ModulesCommand {
     #[serde(rename = "api-modules-list")]
-    List { path: Option<PathBuf> },
+    List,
     #[serde(rename = "api-modules-apply")]
     Apply {
         modules: Vec<crate::core::api::ModuleApplyEntry>,
@@ -170,7 +165,7 @@ pub enum KasumiCommand {
     RuleAdd {
         target: PathBuf,
         source: PathBuf,
-        file_type: Option<i32>,
+        file_type: i32,
     },
     #[serde(rename = "kasumi-rule-merge")]
     RuleMerge { target: PathBuf, source: PathBuf },
@@ -204,23 +199,9 @@ pub enum KasumiCommand {
     LkmLoad,
     #[serde(rename = "lkm-unload")]
     LkmUnload,
-    // -- legacy API aliases
-    #[serde(rename = "api-lkm")]
-    ApiLkm,
-    #[serde(rename = "api-hooks")]
-    ApiHooks,
     // -- maps spoof
     #[serde(rename = "api-kasumi-maps-add")]
     MapsAdd { rule: serde_json::Value },
     #[serde(rename = "api-kasumi-maps-clear")]
     MapsClear,
-}
-
-// ── Batch: multiple commands in one round-trip ──────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum BatchCommand {
-    #[serde(rename = "batch")]
-    Batch { commands: Vec<DaemonCommand> },
 }

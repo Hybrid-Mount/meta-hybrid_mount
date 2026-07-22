@@ -9,8 +9,8 @@ use anyhow::Result;
 use crate::{
     conf::config::Config,
     core::{
-        inventory::InventorySummary, module_status, ops::executor::ExecutionResult,
-        runtime_state::RuntimeState, storage::StorageMode,
+        inventory::InventorySummary, ops::executor::ExecutionResult, runtime_state::RuntimeState,
+        storage::StorageMode,
     },
 };
 
@@ -32,34 +32,15 @@ pub fn finalize(
         result.kasumi_count()
     );
 
-    let blacklisted_count = inventory.blacklisted_modules.len();
-
-    module_status::update_description(
-        storage_mode,
-        config.kasumi.enabled,
-        result.overlay_module_ids.len(),
-        result.magic_module_ids.len(),
-        result.kasumi_count(),
-        blacklisted_count,
-    );
-
     let state =
-        RuntimeState::build_from_execution(config, storage_mode, mount_point, result, inventory);
-    if let Err(err) = state.save() {
-        crate::scoped_log!(
-            warn,
-            "runtime_finalization",
-            "save runtime state failed: {:#}",
-            err
-        );
-    }
+        RuntimeState::build_from_execution(config, storage_mode, mount_point, result, inventory)?;
+    state.save()?;
 
     crate::scoped_log!(
         info,
         "runtime_finalization",
-        "complete: active_mounts={}, mount_errors={}, skip_mount_modules={}",
+        "complete: active_mounts={}, skip_mount_modules={}",
         state.active_mounts.len(),
-        state.mount_error_modules.len(),
         state.skip_mount_modules.len()
     );
 

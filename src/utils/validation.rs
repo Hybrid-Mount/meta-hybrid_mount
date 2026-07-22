@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn extract_returns_none_without_module_prop() {
         let tmp = TempDir::new().unwrap();
-        let module_dir = tmp.path().join("fallback_mod");
+        let module_dir = tmp.path().join("invalid_mod");
         fs::create_dir_all(module_dir.join("sub/dir")).unwrap();
         // no module.prop anywhere — can't determine module ID
         let id = extract_module_id(&module_dir.join("sub/dir/leaf"));

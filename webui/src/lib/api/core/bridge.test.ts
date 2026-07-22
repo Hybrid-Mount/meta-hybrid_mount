@@ -55,6 +55,16 @@ describe("parseDaemonJsonOutput", () => {
     ).toBe(true);
   });
 
+  it("rejects invalid mock mode flags", () => {
+    expect(() =>
+      resolveShouldUseMock({
+        MODE: "production",
+        DEV: false,
+        VITE_USE_MOCK: "on",
+      }),
+    ).toThrow("VITE_USE_MOCK must be either true or false");
+  });
+
   it("parses valid JSON payloads", () => {
     expect(parseDaemonJsonOutput('{"storage_mode":"tmpfs"}')).toEqual({
       storage_mode: "tmpfs",
@@ -96,7 +106,7 @@ describe("parseDaemonJsonOutput", () => {
 describe("daemon command metadata", () => {
   it("deduplicates concurrent reads but keeps writes independent", () => {
     expect(
-      getDaemonCommandMetadata({ type: "api-modules-list", path: null }),
+      getDaemonCommandMetadata({ type: "api-modules-list" }),
     ).toMatchObject({
       dedupeInFlight: true,
       timeoutMs: 15000,
@@ -105,6 +115,7 @@ describe("daemon command metadata", () => {
       getDaemonCommandMetadata({
         type: "api-config-patch",
         patch: { default_mode: "magic" },
+        apply_runtime: false,
       }),
     ).toMatchObject({
       dedupeInFlight: false,
@@ -138,7 +149,6 @@ describe("SSE state update parsing", () => {
           kind: "runtime_changed",
           payload: { storage_mode: "ext4" },
         }),
-        "42",
       ),
     ).toEqual({
       schemaVersion: 1,
@@ -148,12 +158,9 @@ describe("SSE state update parsing", () => {
     });
   });
 
-  it("keeps legacy daemon SSE payloads readable", () => {
-    expect(parseSseStateUpdateData('{"storage_mode":"tmpfs"}', "7")).toEqual({
-      schemaVersion: 0,
-      id: 7,
-      kind: "legacy_state_update",
-      payload: { storage_mode: "tmpfs" },
-    });
+  it("rejects unversioned SSE payloads", () => {
+    expect(() => parseSseStateUpdateData('{"storage_mode":"tmpfs"}')).toThrow(
+      "daemon SSE envelope is invalid",
+    );
   });
 });

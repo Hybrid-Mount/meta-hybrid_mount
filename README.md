@@ -10,8 +10,8 @@
 Hybrid Mount is a mount orchestration metamodule for **KernelSU** and **APatch**.
 It merges module files into Android partitions through a unified policy engine backed by three mount backends:
 
-- **OverlayFS** — layered mounts for broad compatibility.
-- **Magic Mount** — bind-mount for direct path replacement or fallback.
+- **OverlayFS** — layered mounts with upper/work storage.
+- **Magic Mount** — bind mounts for direct path replacement.
 - **Kasumi** — LKM-backed routing with runtime hide, spoof, and stealth features.
 
 A built-in **SolidJS WebUI** provides graphical management, live state monitoring, and configuration editing.
@@ -36,7 +36,6 @@ Releases are published in three flavors — see [Build Flavors](#build-flavors) 
 - [CLI](#cli)
 - [Architecture](#architecture)
 - [Build](#build)
-- [Operational Notes](#operational-notes)
 - [License](#license)
 
 ---
@@ -70,10 +69,10 @@ Lite builds use the feature set `control-plane` only (`--no-default-features --f
 The `nano` flavor is a **config-only** build (`--no-default-features` — no Cargo features enabled). It strips the WebUI, daemon, CLI, and all control-plane infrastructure. What remains is a minimal binary that reads `config.toml`, generates a mount plan, and executes it — then exits. Key characteristics:
 
 - **No runtime daemon** — no background process, no socket, no WebUI, no CLI subcommands.
-- **No WebUI** — the `webroot/`, `launcher.png`, and `service.sh` assets are removed from the package.
+- **No WebUI** — the `webroot/` and `launcher.png` assets are removed from the package.
 - **Mount-only operation** — the binary runs during boot, mounts everything according to the config, and terminates.
 - **Default mode is `magic`** — Nano ships with `default_mode = "magic"` pre-set in its config, preferring bind mounts when no daemon is available to manage ext4 images.
-- **Module mode markers** — install-time volume-key selection writes an empty `overlay` or `magic` marker in each managed module root, and Nano reads that instead of a whitelist. Marker filenames are matched case-insensitively.
+- **Module mode markers** — install-time volume-key selection writes an empty `overlay` or `magic` marker in each managed module root, and Nano reads that instead of a whitelist. Marker filenames must use the exact lowercase spelling.
 - **No resident Hybrid Mount process** — after boot-time mounting completes, the Nano binary exits.
 
 Choose Nano if you want predictable, daemon-free mount orchestration with a smaller runtime surface.
@@ -88,7 +87,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 | WebUI | Yes | Yes | No |
 | CLI (`hybrid-mount` subcommands) | Yes | Yes | No |
 | Daemon (Unix + TCP/SSE) | Yes | Yes | No |
-| Config caching & runtime apply | Yes | Yes | No |
+| Runtime config apply | Yes | Yes | No |
 | Kasumi hide/spoof/stealth | Yes | No | No |
 | LKM autoload | Yes | No | No |
 | Cargo features | `kasumi` (implies `control-plane`) | `control-plane` only | none |
@@ -100,8 +99,8 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 - **Deterministic planning** — conflicts are detected at plan time, not discovered randomly at boot.
 - **Built-in WebUI** — manage modules, edit configuration, monitor runtime state, and control Kasumi features in full builds.
 - **Kasumi runtime integration** — LKM autoload, mirror routing, mount hiding, maps/statfs spoofing, UID hiding, uname spoofing, and kstat rules.
-- **Config caching** — runtime config cache with incremental patching and immediate apply support.
-- **Recovery-friendly** — stale runtime files are cleaned automatically; misconfigurations can be reset via `api config-reset`.
+- **Runtime config updates** — validated config patches can be persisted and applied immediately.
+- **Explicit failure reporting** — invalid state and configuration errors are surfaced immediately; configuration reset is an explicit `api config-reset` action.
 - **Automation-friendly** — JSON-over-Unix-socket daemon protocol + HTTP API for scripting or external controllers.
 
 ---
@@ -113,7 +112,8 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 1. Install [KernelSU](https://kernelsu.org/) or [APatch](https://apatch.dev/) on your device.
 2. Download the latest Hybrid Mount `full`, `lite`, or `nano` release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Flash the ZIP through your root manager's module installer.
-4. Reboot. Hybrid Mount will auto-detect your environment and apply the default overlay policy.
+4. On a fresh Full/Lite install, select the default mount mode: Volume Up selects OverlayFS, Volume Down selects Magic Mount, and a 10-second timeout selects OverlayFS. This is the only installer prompt. Nano skips this setup step.
+5. Reboot. Hybrid Mount will auto-detect your environment and apply the selected default policy.
 
 ### Post-install
 
@@ -220,7 +220,6 @@ Default path: `/data/adb/hybrid-mount/config.toml`.
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work storage mode. |
 | `disable_umount` | bool | `false` | Skip umount operations (debug only). |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Global default mount policy. |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | Daemon startup behavior. |
 | `rules` | map | `{}` | Per-module and per-path mount policies. |
 
 ### Example
@@ -229,7 +228,6 @@ Default path: `/data/adb/hybrid-mount/config.toml`.
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4"
 default_mode = "overlay"
-daemon_startup_mode = "on-demand"
 
 [rules.viper4android]
 default_mode = "magic"
@@ -256,7 +254,7 @@ Kasumi is the **LKM-backed** backend. Beyond mount routing, it provides a suite 
 Setting `kasumi.enabled = true` makes the backend available. The Kasumi runtime is actually enabled when at least one of these conditions is met:
 
 - The mount plan contains a Kasumi-managed module or path.
-- An auxiliary feature is configured (hidexattr, mount hide, maps spoof, statfs spoof, UID hiding, uname spoof, cmdline replacement, kstat rules, or user hide rules).
+- An auxiliary feature is configured (overlay xattr hiding, mount hide, maps spoof, statfs spoof, UID hiding, uname spoof, cmdline replacement, kstat rules, or user hide rules).
 
 ### Key config fields
 
@@ -269,7 +267,7 @@ Setting `kasumi.enabled = true` makes the backend available. The Kasumi runtime 
 | `kasumi.mirror_path` | Mirror root used by Kasumi rules (default `/dev/kasumi_mirror`). |
 | `kasumi.enable_kernel_debug` | Toggle kernel-side debug logging. |
 | `kasumi.enable_stealth` | Explicit stealth mode. |
-| `kasumi.enable_hidexattr` | Compatibility umbrella — enables stealth, mount hide, maps spoof, and statfs spoof together. |
+| `kasumi.enable_overlay_xattr_hide` | Hide OverlayFS metadata xattrs. This switch controls only xattr hiding. |
 | `kasumi.enable_mount_hide` | Hide mounts globally or by path pattern. |
 | `kasumi.mount_hide.path_pattern` | Path pattern for mount hiding. |
 | `kasumi.enable_maps_spoof` | Enable `/proc/<pid>/maps` spoofing. |
@@ -339,18 +337,15 @@ When multiple policies could apply to a path, evaluation order is:
 
 ### Module marker files
 
-Hybrid Mount also recognizes marker files in module directories. These markers are expected to be regular files; only the filename is used. Marker filenames are matched case-insensitively for ASCII letters, so `DISABLE`, `Disable`, and `disable` are treated as the same marker.
+Hybrid Mount also recognizes marker files in module directories. These markers are expected to be regular files; only the filename is used. Marker filenames are strict and case-sensitive: use the exact names listed below.
 
 | Marker | Location | Effect |
 | --- | --- | --- |
 | `disable` | Module root | Excludes the module from mount planning and reports it as disabled. |
 | `remove` | Module root | Excludes the module from mount planning; normally created by the root manager during removal. |
 | `skip_mount` | Module root | Excludes the module from mount processing and records it in the runtime skip list. |
-| `mount_error` | Module root | Marks a module that was skipped after a mount failure. Recovery and daemon commands may create or clear it. |
 | `overlay` / `magic` | Module root, Nano builds | Selects the module default mount backend for Nano builds. Full and Lite builds use config rules instead. |
 | `.replace` | Inside a module directory | Applies replacement semantics to the containing directory. The marker itself is not copied as normal module content; prepared overlay layers preserve the directory and set overlay opaque metadata where supported. |
-
-If multiple case variants of the same marker exist in one directory, cleanup operations remove all matching variants.
 
 ### Practical recipes
 
@@ -455,7 +450,7 @@ src/
 │   ├── ops/       Mount plan generation and per-backend execution
 │   ├── daemon/    Unix + TCP dual-protocol daemon (CLI + WebUI/SSE)
 │   ├── api/       Payload builders for WebUI endpoints
-│   ├── startup/   Boot sequence, recovery, retry logic
+│   ├── startup/   Boot sequence and daemon handoff
 │   ├── storage/   Shared storage helpers (ext4 image, tmpfs)
 │   └── runtime_state/ Daemon state persistence
 ├── mount/
@@ -541,17 +536,6 @@ Every change must pass the following CI checks (defined in `.github/workflows/`)
 - License header check on all source files
 
 `xtask lint` mirrors the local CI gate: Rust fmt, all-feature clippy/tests, **lite** (`--no-default-features --features control-plane`) tests, **nano** (`--no-default-features`) tests, and WebUI lint/tests. Code touching Kasumi must be behind `#[cfg(feature = "kasumi")]`; code touching the daemon/CLI/WebUI API must be behind `#[cfg(feature = "control-plane")]`.
-
----
-
-## Operational Notes
-
-- **Mount source auto-detection**: fresh installs detect the runtime environment automatically. Only set `mountsource` explicitly if auto-detection fails.
-- **Recovery from bad config**: run `hybrid-mount api config-reset` to reset to defaults, then reapply rules incrementally. Use `gen-config` to regenerate a fresh config file.
-- **Config caching**: the runtime maintains a cached config. Use `api config-patch --apply-runtime` to apply changes immediately, or restart the daemon.
-- **Kasumi LKM (full builds only)**: the LKM must match the running kernel. Use `lkm_kmi_override` if the auto-detected KMI is incorrect.
-- **`kasumi clear`**: clears runtime state and releases kernel connection. Existing kernel-side rules may persist until LKM reload.
-- **Binary size**: prefer dependency feature trimming and profile tuning before invasive refactoring.
 
 ---
 

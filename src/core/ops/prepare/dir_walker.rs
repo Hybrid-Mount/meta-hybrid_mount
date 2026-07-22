@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use super::{
     plan_builder::{log_mode_decision, queue_overlay},
@@ -24,24 +24,30 @@ use crate::{
 };
 
 impl PrepareContext {
-    pub(super) fn resolve_target_cached(&mut self, system_target: &Path) -> PathBuf {
+    pub(super) fn resolve_target_cached(&mut self, system_target: &Path) -> Result<PathBuf> {
         if let Some(cached) = self.target_cache.get(system_target) {
-            return cached.clone();
+            return Ok(cached.clone());
         }
 
-        let resolved = utils::resolve_link_path(system_target);
+        let resolved = utils::resolve_link_path(system_target)
+            .with_context(|| format!("failed to resolve target {}", system_target.display()))?;
         self.target_cache
             .insert(system_target.to_path_buf(), resolved.clone());
-        resolved
+        Ok(resolved)
     }
 
-    pub(super) fn should_split_overlay_target(&self, resolved_target: &Path) -> bool {
+    pub(super) fn should_split_overlay_target(&self, resolved_target: &Path) -> Result<bool> {
         let target_name = resolved_target
             .file_name()
-            .map(|value| value.to_string_lossy())
-            .unwrap_or_default();
+            .and_then(|value| value.to_str())
+            .with_context(|| {
+                format!(
+                    "overlay target has no UTF-8 filename: {}",
+                    resolved_target.display()
+                )
+            })?;
 
-        target_name == "system" || self.managed_partitions.contains(target_name.as_ref())
+        Ok(target_name == "system" || self.managed_partitions.contains(target_name))
     }
 
     pub(super) fn process_dir(
@@ -56,7 +62,10 @@ impl PrepareContext {
         let metadata = fs::symlink_metadata(&item.source_dir)
             .with_context(|| format!("failed to inspect {}", item.source_dir.display()))?;
         if !metadata.file_type().is_dir() {
-            return Ok(());
+            bail!(
+                "queued source path is not a directory: {}",
+                item.source_dir.display()
+            );
         }
         if !visited_dirs.insert((metadata.dev(), metadata.ino())) {
             return Ok(());
@@ -65,14 +74,9 @@ impl PrepareContext {
 
         let relative_key = item.relative_path.to_string_lossy();
         let requested_mode = module.rules.get_mode(relative_key.as_ref());
-        let effective_mode = if matches!(requested_mode, MountMode::Kasumi) && !self.use_kasumi {
-            MountMode::Ignore
-        } else {
-            requested_mode
-        };
         let mode_decision = ModeDecision {
             requested_mode,
-            effective_mode,
+            effective_mode: requested_mode,
             has_descendant_rules: descendant_rule_prefixes.contains(relative_key.as_ref()),
         };
         let needs_shallow_overlay = matches!(mode_decision.effective_mode, MountMode::Overlay)
@@ -91,7 +95,7 @@ impl PrepareContext {
 
         let current_target = if item.plan_active {
             if item.system_target.exists() {
-                self.resolve_target_cached(&item.system_target)
+                self.resolve_target_cached(&item.system_target)?
             } else {
                 item.system_target.clone()
             }
@@ -101,9 +105,15 @@ impl PrepareContext {
         let next_partition_label = if item.plan_active {
             current_target
                 .file_name()
-                .map(|value| value.to_string_lossy().into_owned())
+                .and_then(|value| value.to_str())
                 .filter(|value| !value.is_empty())
-                .unwrap_or_else(|| item.partition_label.clone())
+                .with_context(|| {
+                    format!(
+                        "resolved target has no UTF-8 partition label: {}",
+                        current_target.display()
+                    )
+                })?
+                .to_owned()
         } else {
             item.partition_label.clone()
         };
@@ -120,8 +130,7 @@ impl PrepareContext {
                 .with_context(|| format!("failed to enumerate {}", item.source_dir.display()))?;
             let file_name = entry.file_name();
             let source_path = entry.path();
-            if utils::path_file_name_eq_ignore_ascii_case(&source_path, defs::REPLACE_DIR_FILE_NAME)
-            {
+            if utils::path_file_name_eq(&source_path, defs::REPLACE_DIR_FILE_NAME) {
                 has_replace_marker = true;
                 if item.count_mount_content {
                     outcome.has_mount_content = true;
@@ -196,7 +205,7 @@ impl PrepareContext {
                     has_replace_marker,
                 },
                 outcome,
-            )
+            )?
         } else {
             false
         };
@@ -217,7 +226,7 @@ impl PrepareContext {
         mode_decision: ModeDecision,
         entry_state: EntryState,
         outcome: &mut ModulePrepareOutcome,
-    ) -> bool {
+    ) -> Result<bool> {
         log_mode_decision(
             module,
             &item.relative_path,
@@ -273,11 +282,11 @@ impl PrepareContext {
         }
 
         if mode_decision.has_descendant_rules {
-            return true;
+            return Ok(true);
         }
 
         match mode_decision.effective_mode {
-            MountMode::Magic | MountMode::Ignore | MountMode::Kasumi => false,
+            MountMode::Magic | MountMode::Ignore | MountMode::Kasumi => Ok(false),
             MountMode::Overlay => {
                 if !item.system_target.exists() {
                     crate::scoped_log!(
@@ -287,11 +296,11 @@ impl PrepareContext {
                         module.id,
                         item.system_target.display()
                     );
-                    return false;
+                    return Ok(false);
                 }
 
-                if self.should_split_overlay_target(resolved_target) {
-                    return true;
+                if self.should_split_overlay_target(resolved_target)? {
+                    return Ok(true);
                 }
 
                 queue_overlay(
@@ -300,7 +309,7 @@ impl PrepareContext {
                     &item.partition_label,
                     item.final_dir.clone(),
                 );
-                false
+                Ok(false)
             }
         }
     }

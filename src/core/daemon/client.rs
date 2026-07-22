@@ -37,24 +37,7 @@ fn ensure_ok(response: &DaemonResponse, context: &str) -> Result<()> {
 }
 
 fn send_request(cli: &Cli, command: DaemonCommand) -> Result<DaemonResponse> {
-    let mut stream = match connect_socket() {
-        Ok(stream) => stream,
-        Err(first_err) => {
-            if should_wake_daemon(&first_err) {
-                wake_daemon(cli).context("Failed to wake daemon")?;
-                connect_socket().with_context(|| {
-                    format!(
-                        "Failed to connect to daemon socket {} after wake attempt",
-                        defs::SOCKET_FILE
-                    )
-                })?
-            } else {
-                return Err(first_err).with_context(|| {
-                    format!("Failed to connect to daemon socket {}", defs::SOCKET_FILE)
-                });
-            }
-        }
-    };
+    let mut stream = connect_or_start_daemon(cli)?;
 
     let request = DaemonRequest {
         command,
@@ -87,24 +70,29 @@ fn connect_socket() -> Result<UnixStream> {
         .with_context(|| format!("Failed to connect to daemon socket {}", defs::SOCKET_FILE))
 }
 
-fn should_wake_daemon(err: &anyhow::Error) -> bool {
-    if matches!(
-        std::env::var("HYBRID_MOUNT_NO_DAEMON_AUTOWAKE").as_deref(),
-        Ok("1" | "true" | "yes")
-    ) {
-        return false;
+fn connect_or_start_daemon(cli: &Cli) -> Result<UnixStream> {
+    match connect_socket() {
+        Ok(stream) => Ok(stream),
+        Err(error) if daemon_is_absent(&error) => start_daemon(cli),
+        Err(error) => Err(error),
     }
-
-    let text = format!("{err:#}");
-    text.contains("No such file or directory") || text.contains("Connection refused")
 }
 
-fn wake_daemon(cli: &Cli) -> Result<()> {
+fn daemon_is_absent(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<std::io::Error>())
+        .any(|error| {
+            error
+                .raw_os_error()
+                .is_some_and(|code| code == libc::ENOENT || code == libc::ECONNREFUSED)
+        })
+}
+
+fn start_daemon(cli: &Cli) -> Result<UnixStream> {
     let current_exe = std::env::current_exe().context("Failed to locate current binary")?;
     let mut command = Command::new(current_exe);
-    if let Some(config) = &cli.config {
-        command.arg("--config").arg(config);
-    }
+    command.arg("--config").arg(&cli.config);
     command
         .arg("daemon")
         .arg("serve")
@@ -112,7 +100,6 @@ fn wake_daemon(cli: &Cli) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    // Detach daemon from terminal: setsid + double-fork → reparent to init (PID 1)
     unsafe {
         command.pre_exec(|| {
             if libc::setsid() < 0 {
@@ -126,18 +113,22 @@ fn wake_daemon(cli: &Cli) -> Result<()> {
         });
     }
 
-    let mut intermediate = command.spawn().context("Failed to spawn daemon serve")?;
-    // intermediate process already exited via _exit(0); wait to reap its zombie
-    let _ = intermediate.wait();
+    let mut intermediate = command.spawn().context("Failed to start daemon")?;
+    intermediate
+        .wait()
+        .context("Failed to reap daemon launcher")?;
 
+    let mut last_error = None;
     for _ in 0..30 {
-        if connect_socket().is_ok() {
-            return Ok(());
+        match connect_socket() {
+            Ok(stream) => return Ok(stream),
+            Err(error) => last_error = Some(error),
         }
         thread::sleep(Duration::from_millis(100));
     }
 
-    bail!("daemon serve did not create socket in time")
+    Err(last_error.context("daemon startup produced no connection error")?)
+        .context("daemon did not create its socket within 3 seconds")
 }
 
 fn print_json<T: Serialize>(payload: &T) -> Result<()> {

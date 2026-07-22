@@ -72,10 +72,7 @@ const createConfigStore = () => {
         return true;
       } catch (e: unknown) {
         uiStore.showToast(
-          getErrorMessage(
-            e,
-            uiStore.L.config?.loadError ?? "Failed to load config",
-          ),
+          getErrorMessage(e, uiStore.L.config.loadError),
           "error",
         );
         return false;
@@ -89,14 +86,10 @@ const createConfigStore = () => {
   }
 
   function loadFromInit(payload: InitPayload) {
-    if (payload.config != null) {
-      const normalized = normalizeConfig(payload.config);
-      invalidatePatchResponses();
-      setConfigStore(reconcile(normalized));
-      hasLoaded = true;
-    } else {
-      console.warn("configStore: init payload missing config");
-    }
+    const normalized = normalizeConfig(payload.config);
+    invalidatePatchResponses();
+    setConfigStore(reconcile(normalized));
+    hasLoaded = true;
   }
 
   function ensureConfigLoaded() {
@@ -137,16 +130,13 @@ const createConfigStore = () => {
         }
       });
       if (showSuccess) {
-        uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
+        uiStore.showToast(uiStore.L.common.saved, "success");
       }
       return true;
     } catch (e: unknown) {
       if (showError) {
         uiStore.showToast(
-          getErrorMessage(
-            e,
-            uiStore.L.config?.saveFailed ?? "Failed to save config",
-          ),
+          getErrorMessage(e, uiStore.L.config.saveFailed),
           "error",
         );
       }
@@ -166,17 +156,11 @@ const createConfigStore = () => {
       if (!loaded) {
         return false;
       }
-      uiStore.showToast(
-        uiStore.L.config?.resetSuccess || "Config reset to defaults",
-        "success",
-      );
+      uiStore.showToast(uiStore.L.config.resetSuccess, "success");
       return true;
     } catch (e: unknown) {
       uiStore.showToast(
-        getErrorMessage(
-          e,
-          uiStore.L.config?.saveFailed ?? "Failed to reset config",
-        ),
+        getErrorMessage(e, uiStore.L.config.saveFailed),
         "error",
       );
       return false;

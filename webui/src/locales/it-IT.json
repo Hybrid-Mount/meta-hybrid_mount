@@ -10,6 +10,7 @@
     "rebootConfirm": "Sei sicuro di voler riavviare il dispositivo?",
     "reboot": "Riavvia",
     "cancel": "Annulla",
+    "close": "Chiudi",
     "saved": "Salvato"
   },
   "tabs": {
@@ -64,8 +65,16 @@
     "mode_tmpfsDesc": "Basato su RAM. I/O piu veloce, si resetta al riavvio.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Immagine loopback. Persistente, risparmia RAM.",
-    "daemonStartupMode": "Demone persistente",
-    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
+    "customMounts": "Mount bind personalizzati",
+    "customMountsDesc": "Collega percorsi sorgente espliciti a destinazioni esistenti",
+    "customMountsEmpty": "Nessun mount bind personalizzato configurato.",
+    "customMountSource": "Percorso sorgente",
+    "customMountTarget": "Percorso destinazione",
+    "addCustomMount": "Aggiungi",
+    "removeCustomMount": "Rimuovi",
+    "invalidCustomMount": "Percorso di mount personalizzato non valido",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed.",
+    "kasumiTmpfsRestriction": "Il mount Kasumi per modulo non è disponibile perché questo kernel non supporta tmpfs xattr."
   },
   "modules": {
     "reload": "Ricarica",
@@ -83,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "Unmounted",
+      "blacklisted": "In lista nera",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -97,12 +107,7 @@
     "disableTag": "Disabilitato",
     "nativeTag": "Furtivo",
     "unavailableTag": "Non disponibile",
-    "kasumiUnavailableHint": "Kasumi e abilitato, ma al momento non e disponibile.",
-    "mountError": "Errore di mount",
-    "clearMountErrors": "Cancella errori",
-    "mountErrorsCleared": "Errori cancellati",
-    "mountErrorsClearFailed": "Cancellazione errori fallita",
-    "suggestIgnoreHint": "Questo modulo contiene comandi di mount nei suoi file .sh. Considera di impostare la modalità su \"Ignora\"."
+    "kasumiUnavailableHint": "Kasumi e abilitato, ma al momento non e disponibile."
   },
   "kasumi": {
     "title": "Runtime Kasumi",
@@ -160,7 +165,6 @@
     "stealthUpdated": "Stealth aggiornato",
     "hidexattrUpdated": "HideXattr aggiornato",
     "selinuxFixUpdated": "SELinux Guard aggiornato",
-    "ignoreProtocolUpdated": "Policy di incompatibilita del protocollo aggiornata",
     "kernelDebugUpdated": "Debug kernel aggiornato",
     "kmiOverride": "Override KMI",
     "autoKmi": "Rilevamento automatico",
@@ -169,8 +173,6 @@
     "stealthTitle": "Furtivo",
     "hidexattrTitle": "Nascondi xattr",
     "selinuxFixTitle": "SELinux Guard",
-    "ignoreProtocolTitle": "Ignora incompatibilita protocollo",
-    "ignoreProtocolHint": "Consente a Kasumi di continuare a funzionare quando l'API userspace e il protocollo kernel non corrispondono del tutto.",
     "lkmUnavailableHint": "Kasumi e abilitato, ma il modulo kernel non e ancora caricato.",
     "kernelDebugTitle": "Debug kernel",
     "featureBits": "Bit di funzionalita",

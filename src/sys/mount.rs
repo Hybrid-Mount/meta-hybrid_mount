@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{path::Path, process::Command};
+use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use anyhow::Context;
+use anyhow::{Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::process::Process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -26,42 +28,20 @@ pub fn detect_mount_source() -> String {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn is_mounted<P: AsRef<Path>>(path: P) -> bool {
-    let Some(path_str) = path.as_ref().to_str() else {
-        crate::scoped_log!(
-            debug,
-            "sys:is_mounted",
-            "skip: reason=non_utf8_path, path={}",
-            path.as_ref().display()
-        );
-        return false;
+pub fn is_mounted<P: AsRef<Path>>(path: P) -> Result<bool> {
+    let path_str = path
+        .as_ref()
+        .to_str()
+        .context("mount path is not valid UTF-8")?;
+    let search = if path_str == "/" {
+        "/"
+    } else {
+        path_str.trim_end_matches('/')
     };
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let search = if path_str == "/" {
-            "/"
-        } else {
-            path_str.trim_end_matches('/')
-        };
-
-        if let Ok(process) = Process::myself()
-            && let Ok(mountinfo) = process.mountinfo()
-        {
-            return mountinfo
-                .into_iter()
-                .any(|m| m.mount_point.to_string_lossy() == search);
-        }
-
-        crate::scoped_log!(
-            debug,
-            "sys:is_mounted",
-            "fallback: reason=mountinfo_unavailable, path={}",
-            search
-        );
-    }
-
-    false
+    let mountinfo = Process::myself()?.mountinfo()?;
+    Ok(mountinfo
+        .into_iter()
+        .any(|m| m.mount_point.to_string_lossy() == search))
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -97,50 +77,4 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
 #[allow(dead_code)]
 pub fn mount_tmpfs(_target: &Path, _source: &str) -> Result<()> {
     bail!("tmpfs mounting is only supported on linux/android")
-}
-
-pub fn repair_image(image_path: &Path) -> Result<()> {
-    crate::scoped_log!(
-        info,
-        "sys:repair_image",
-        "start: image={}",
-        image_path.display()
-    );
-    let status = Command::new("e2fsck")
-        .args(["-y", "-f"])
-        .arg(image_path)
-        .status()
-        .context("Failed to execute e2fsck")?;
-
-    match status.code() {
-        Some(code) if code > 3 => {
-            crate::scoped_log!(
-                error,
-                "sys:repair_image",
-                "failed: image={}, exit_code={}",
-                image_path.display(),
-                code
-            );
-            bail!("e2fsck failed with exit code: {}", code)
-        }
-        None => {
-            crate::scoped_log!(
-                error,
-                "sys:repair_image",
-                "failed: image={}, reason=terminated_by_signal",
-                image_path.display()
-            );
-            bail!("e2fsck terminated by signal")
-        }
-        _ => {
-            crate::scoped_log!(
-                info,
-                "sys:repair_image",
-                "complete: image={}, exit_code={}",
-                image_path.display(),
-                status.code().unwrap_or_default()
-            );
-        }
-    }
-    Ok(())
 }

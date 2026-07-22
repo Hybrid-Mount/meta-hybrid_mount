@@ -113,23 +113,15 @@ impl<'a> KasumiCoordinator<'a> {
         kasumi::apply(plan, modules, self.config)
     }
 
-    pub fn hide_overlay_xattrs(&self, target: &Path) {
+    pub fn hide_overlay_xattrs(&self, target: &Path) -> Result<()> {
         if !self.config.kasumi.enabled
-            || !self.config.kasumi.enable_hidexattr
-            || !kasumi::can_operate(self.config)
+            || !self.config.kasumi.enable_overlay_xattr_hide
+            || !kasumi::can_operate(self.config)?
         {
-            return;
+            return Ok(());
         }
 
-        if let Err(err) = crate::sys::kasumi::hide_overlay_xattrs(target) {
-            crate::scoped_log!(
-                warn,
-                "kasumi:coordinator",
-                "hide overlay xattrs failed: target={}, error={:#}",
-                target.display(),
-                err
-            );
-        }
+        crate::sys::kasumi::hide_overlay_xattrs(target)
     }
 }
 

@@ -24,6 +24,8 @@ import { features } from "../lib/features";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
 import { API } from "../lib/api";
+import { getErrorMessage } from "../lib/api/core/error";
+import type { OverlayMode } from "../lib/types";
 import "./StatusTab.css";
 
 import "@material/web/iconbutton/filled-tonal-icon-button.js";
@@ -34,24 +36,18 @@ import "@material/web/ripple/ripple.js";
 
 export default function StatusTab() {
   const displayPartitions = createMemo(() => [
-    ...new Set(sysStore.activePartitions || []),
+    ...new Set(sysStore.activePartitions),
   ]);
 
   const [showRebootConfirm, setShowRebootConfirm] = createSignal(false);
   const isMountSourceReady = createMemo(() => !configStore.loading);
   const modeStats = createMemo(() => ({
-    overlay: Number(sysStore.storage?.modeStats?.overlay) || 0,
-    magic: Number(sysStore.storage?.modeStats?.magic) || 0,
-    kasumi: Number(sysStore.storage?.modeStats?.kasumi) || 0,
+    overlay: sysStore.storage.modeStats.overlay,
+    magic: sysStore.storage.modeStats.magic,
+    kasumi: sysStore.storage.modeStats.kasumi,
   }));
 
-  const mountedCount = createMemo(() => {
-    if (typeof sysStore.storage?.mountedCount === "number") {
-      return sysStore.storage.mountedCount;
-    }
-    const stats = modeStats();
-    return stats.overlay + stats.magic + stats.kasumi;
-  });
+  const mountedCount = createMemo(() => sysStore.storage.mountedCount);
 
   const modeDistribution = createMemo(() => {
     const stats = modeStats();
@@ -69,10 +65,9 @@ export default function StatusTab() {
     };
   });
 
-  function getModeDisplayName(mode: string | null | undefined) {
-    if (!mode) return "Unknown";
+  function getModeDisplayName(mode: OverlayMode) {
     const key = `mode_${mode}` as keyof typeof uiStore.L.config;
-    return uiStore.L.config?.[key] || mode.toUpperCase();
+    return uiStore.L.config[key];
   }
 
   return (
@@ -83,16 +78,11 @@ export default function StatusTab() {
           onclose={() => setShowRebootConfirm(false)}
           class="transparent-scrim"
         >
-          <div slot="headline">
-            {uiStore.L?.common?.rebootTitle ?? "Reboot System?"}
-          </div>
-          <div slot="content">
-            {uiStore.L?.common?.rebootConfirm ??
-              "Are you sure you want to reboot the device?"}
-          </div>
+          <div slot="headline">{uiStore.L.common.rebootTitle}</div>
+          <div slot="content">{uiStore.L.common.rebootConfirm}</div>
           <div slot="actions">
             <md-text-button onClick={() => setShowRebootConfirm(false)}>
-              {uiStore.L?.common?.cancel ?? "Cancel"}
+              {uiStore.L.common.cancel}
             </md-text-button>
             <md-text-button
               onClick={async () => {
@@ -101,15 +91,13 @@ export default function StatusTab() {
                   await API.reboot();
                 } catch (error) {
                   uiStore.showToast(
-                    error instanceof Error
-                      ? error.message
-                      : (uiStore.L?.status?.loadError ?? "Reboot failed"),
+                    getErrorMessage(error, uiStore.L.status.loadError),
                     "error",
                   );
                 }
               }}
             >
-              {uiStore.L?.common?.reboot ?? "Reboot"}
+              {uiStore.L.common.reboot}
             </md-text-button>
           </div>
         </md-dialog>
@@ -128,11 +116,9 @@ export default function StatusTab() {
             }
           >
             <div class="hero-content">
-              <span class="hero-label">
-                {uiStore.L?.status?.storageTitle ?? "Backend Strategy"}
-              </span>
+              <span class="hero-label">{uiStore.L.status.storageTitle}</span>
               <span class="hero-value">
-                {getModeDisplayName(sysStore.storage?.type)}
+                {getModeDisplayName(sysStore.storage.type)}
               </span>
             </div>
 
@@ -143,7 +129,7 @@ export default function StatusTab() {
                 </svg>
               </md-icon>
               <span class="mount-base-text">
-                {sysStore.systemInfo?.mountBase || "Unknown"}
+                {sysStore.systemInfo.mountBase}
               </span>
             </div>
           </Show>
@@ -157,9 +143,7 @@ export default function StatusTab() {
               </svg>
             </div>
             <span class="metric-value">{mountedCount()}</span>
-            <span class="metric-label">
-              {uiStore.L?.status?.moduleActive ?? "Active Modules"}
-            </span>
+            <span class="metric-label">{uiStore.L.status.moduleActive}</span>
           </div>
 
           <div class="metric-card">
@@ -172,20 +156,14 @@ export default function StatusTab() {
                   <path d={ICONS.ksu} />
                 </svg>
               </div>
-              <span class="metric-value">
-                {configStore.config?.mountsource || "-"}
-              </span>
-              <span class="metric-label">
-                {uiStore.L?.config?.mountSource ?? "Mount Source"}
-              </span>
+              <span class="metric-value">{configStore.config.mountsource}</span>
+              <span class="metric-label">{uiStore.L.config.mountSource}</span>
             </Show>
           </div>
         </div>
 
         <div class="mode-stats-card">
-          <div class="card-title">
-            {uiStore.L?.status?.modeStats ?? "Mode Distribution"}
-          </div>
+          <div class="card-title">{uiStore.L.status.modeStats}</div>
           <div class="stats-bar-container">
             <div
               class="bar-segment bar-overlay"
@@ -206,7 +184,7 @@ export default function StatusTab() {
             <div class="legend-item">
               <div class="legend-dot dot-overlay"></div>
               <span>
-                {(uiStore.L.modules?.modes?.short?.overlay ?? "Overlay") +
+                {uiStore.L.modules.modes.short.overlay +
                   ": " +
                   modeStats().overlay}
               </span>
@@ -214,16 +192,14 @@ export default function StatusTab() {
             <div class="legend-item">
               <div class="legend-dot dot-magic"></div>
               <span>
-                {(uiStore.L.modules?.modes?.short?.magic ?? "Magic") +
-                  ": " +
-                  modeStats().magic}
+                {uiStore.L.modules.modes.short.magic + ": " + modeStats().magic}
               </span>
             </div>
             <Show when={ENABLE_KASUMI && features.kasumiEnabled}>
               <div class="legend-item">
                 <div class="legend-dot dot-kasumi"></div>
                 <span>
-                  {(uiStore.L.modules?.modes?.short?.kasumi ?? "Kasumi") +
+                  {uiStore.L.modules.modes.short.kasumi +
                     ": " +
                     modeStats().kasumi}
                 </span>
@@ -233,38 +209,30 @@ export default function StatusTab() {
         </div>
 
         <div class="info-card">
-          <div class="card-title">
-            {uiStore.L?.status?.sysInfoTitle ?? "System Info"}
-          </div>
+          <div class="card-title">{uiStore.L.status.sysInfoTitle}</div>
 
           <div class="info-row">
-            <span class="info-key">
-              {uiStore.L?.status?.kernel ?? "Kernel"}
-            </span>
+            <span class="info-key">{uiStore.L.status.kernel}</span>
             <Show
               when={!sysStore.loading}
               fallback={<Skeleton variant="info-wide" />}
             >
-              <span class="info-val">{sysStore.systemInfo?.kernel || "-"}</span>
+              <span class="info-val">{sysStore.systemInfo.kernel}</span>
             </Show>
           </div>
 
           <div class="info-row">
-            <span class="info-key">
-              {uiStore.L?.status?.selinux ?? "SELinux"}
-            </span>
+            <span class="info-key">{uiStore.L.status.selinux}</span>
             <Show
               when={!sysStore.loading}
               fallback={<Skeleton variant="info-narrow" />}
             >
-              <span class="info-val">
-                {sysStore.systemInfo?.selinux || "-"}
-              </span>
+              <span class="info-val">{sysStore.systemInfo.selinux}</span>
             </Show>
           </div>
 
           <div class="card-title card-title-spaced">
-            {uiStore.L?.status?.activePartitions ?? "Partitions"}
+            {uiStore.L.status.activePartitions}
           </div>
 
           <div class="partition-list">
@@ -275,7 +243,7 @@ export default function StatusTab() {
               <For each={displayPartitions()}>
                 {(part) => (
                   <div
-                    class={`partition-chip ${(sysStore.activePartitions || []).includes(part) ? "active" : ""}`}
+                    class={`partition-chip ${sysStore.activePartitions.includes(part) ? "active" : ""}`}
                   >
                     {part}
                   </div>
@@ -292,7 +260,7 @@ export default function StatusTab() {
           <md-filled-tonal-icon-button
             class="reboot-btn"
             onClick={() => setShowRebootConfirm(true)}
-            title="Reboot"
+            title={uiStore.L.common.reboot}
           >
             <md-icon>
               <svg viewBox="0 0 24 24">
@@ -304,7 +272,7 @@ export default function StatusTab() {
           <md-filled-tonal-icon-button
             onClick={() => sysStore.loadStatus()}
             disabled={sysStore.loading}
-            title={uiStore.L?.logs?.refresh}
+            title={uiStore.L.logs.refresh}
           >
             <md-icon>
               <svg viewBox="0 0 24 24">

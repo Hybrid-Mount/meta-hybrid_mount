@@ -104,14 +104,11 @@ where
                 e
             );
 
-            if let Err(detach_err) = ld.detach() {
-                crate::scoped_log!(
-                    error,
-                    "overlayfs:utils",
-                    "failed to detach loop device: device={}, error={:#}",
-                    device_path.display(),
-                    detach_err
-                );
+            if let Err(detach_error) = ld.detach() {
+                return Err(e).context(format!(
+                    "mount failed and loop device {} could not be detached: {detach_error:#}",
+                    device_path.display()
+                ));
             }
 
             Err(e).context(format!(

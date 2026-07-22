@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import { APP_VERSION } from "../../constants_gen";
 import { AppError } from "./error";
+import { PATHS } from "../../constants";
 import { shellEscapeDoubleQuoted } from "./shell";
 import {
   parseDaemonJson,
@@ -37,7 +37,7 @@ interface KsuModule {
 // Discriminated union matching Rust DaemonCommand sub-enums.
 // Wire format is flat: {"type": "kebab-case-name"}.
 // Organized by domain group to match the Rust SystemCommand / ConfigCommand /
-// ModulesCommand / KasumiCommand / BatchCommand sub-enums.
+// ModulesCommand / KasumiCommand sub-enums.
 export type DaemonCommandPayload =
   // ── SystemCommand: health, lifecycle, storage, info ──
   | { type: "ping" }
@@ -54,14 +54,13 @@ export type DaemonCommandPayload =
   | { type: "api-kernel-uname" }
   | { type: "api-open-url"; url: string }
   | { type: "api-reboot" }
-  | { type: "clear-mount-errors" }
   // ── ConfigCommand: config CRUD ──
   | { type: "api-config-get" }
   | { type: "api-config-set"; config: unknown }
-  | { type: "api-config-patch"; patch: unknown; apply_runtime?: boolean }
+  | { type: "api-config-patch"; patch: unknown; apply_runtime: boolean }
   | { type: "api-config-reset" }
   // ── ModulesCommand: module operations ──
-  | { type: "api-modules-list"; path?: string | null }
+  | { type: "api-modules-list" }
   | { type: "api-modules-apply"; modules: unknown[] }
   // ── KasumiCommand: LKM, rules, hide, maps, uname, runtime ──
   | { type: "kasumi-status" }
@@ -81,7 +80,7 @@ export type DaemonCommandPayload =
       type: "kasumi-rule-add";
       target: string;
       source: string;
-      file_type?: number;
+      file_type: number;
     }
   | { type: "kasumi-rule-merge"; target: string; source: string }
   | { type: "kasumi-rule-hide"; path: string }
@@ -95,12 +94,8 @@ export type DaemonCommandPayload =
   | { type: "lkm-status" }
   | { type: "lkm-load" }
   | { type: "lkm-unload" }
-  | { type: "api-lkm" }
-  | { type: "api-hooks" }
   | { type: "api-kasumi-maps-add"; rule: unknown }
-  | { type: "api-kasumi-maps-clear" }
-  // ── BatchCommand ──
-  | { type: "batch"; commands: DaemonCommandPayload[] };
+  | { type: "api-kasumi-maps-clear" };
 
 interface DaemonCommandMetadata {
   dedupeInFlight: boolean;
@@ -128,8 +123,6 @@ const READ_COMMAND_TYPES = new Set<DaemonCommandType>([
   "kasumi-hooks",
   "hide-list",
   "lkm-status",
-  "api-lkm",
-  "api-hooks",
 ]);
 
 let ksuExec: KsuModule["exec"] | null = null;
@@ -146,34 +139,30 @@ function hasKsuBridge(): boolean {
 }
 
 if (hasKsuBridge()) {
-  try {
-    const ksu = await import("kernelsu").catch(() => null);
-    ksuExec = ksu ? ksu.exec : null;
-  } catch {
-    console.debug("ksu bridge init skipped");
-  }
+  const ksu = await import("kernelsu");
+  ksuExec = ksu.exec;
 }
 
 export function resolveShouldUseMock(env: MockModeEnv): boolean {
   const override = env.VITE_USE_MOCK?.trim().toLowerCase();
-  if (override === "false" || override === "0" || override === "off") {
+  if (override === "false") {
     return false;
   }
-  if (override === "true" || override === "1" || override === "on") {
+  if (override === "true") {
     return true;
+  }
+  if (override) {
+    throw new AppError("VITE_USE_MOCK must be either true or false");
   }
   return Boolean(env.DEV) || env.MODE === "test";
 }
 
 export const shouldUseMock = resolveShouldUseMock(import.meta.env);
-export const defaultVersion = APP_VERSION;
 export const hasExecBridge = Boolean(ksuExec);
 const DAEMON_WAKE_TIMEOUT_MS = 5000;
 const DAEMON_HTTP_TIMEOUT_MS = 30000;
 const DAEMON_MODULES_TIMEOUT_MS = 15000;
 
-const SESSION_STORAGE_KEY = "mhm_webui_session";
-const DAEMON_PING_TIMEOUT_MS = 750;
 const SSE_RECONNECT_DELAY_MS = 1000;
 
 let daemonReady: Promise<void> | null = null;
@@ -201,26 +190,6 @@ export function getDaemonCommandMetadata(
         ? DAEMON_MODULES_TIMEOUT_MS
         : DAEMON_HTTP_TIMEOUT_MS,
   };
-}
-
-function loadStoredSession(): WebuiSession | null {
-  try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = webuiSessionSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistSession(session: WebuiSession): void {
-  try {
-    const raw = JSON.stringify(session);
-    sessionStorage.setItem(SESSION_STORAGE_KEY, raw);
-  } catch {
-    /* storage unavailable */
-  }
 }
 
 export function buildSseUrl(session: WebuiSession): string {
@@ -252,39 +221,6 @@ function setWebuiSession(session: WebuiSession): void {
 function clearWebuiSession(): void {
   webuiSession = null;
   stopSse();
-}
-
-function clearStoredSession(): void {
-  try {
-    sessionStorage.removeItem(SESSION_STORAGE_KEY);
-    localStorage.removeItem(SESSION_STORAGE_KEY);
-  } catch {
-    /* storage unavailable */
-  }
-}
-
-async function pingDaemonHttp(session: WebuiSession): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(
-    () => controller.abort(),
-    DAEMON_PING_TIMEOUT_MS,
-  );
-  try {
-    const response = await fetch(`${session.base_url}/rpc`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${session.token}`,
-      },
-      body: JSON.stringify({ command: { type: "ping" } }),
-      signal: controller.signal,
-    });
-    return response.ok;
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timer);
-  }
 }
 
 function requireExec(): KsuModule["exec"] {
@@ -351,20 +287,11 @@ export async function ensureDaemonAwake(binaryPath: string): Promise<void> {
   if (shouldUseMock || !hasExecBridge) return;
   if (!daemonReady) {
     daemonReady = (async () => {
-      const stored = loadStoredSession();
-      if (stored && (await pingDaemonHttp(stored))) {
-        setWebuiSession(stored);
-        return;
-      }
-      clearStoredSession();
-
       const session = await coldStartDaemon(binaryPath);
       setWebuiSession(session);
-      persistSession(session);
     })().catch((error) => {
       daemonReady = null;
       clearWebuiSession();
-      clearStoredSession();
       throw error;
     });
   }
@@ -383,32 +310,25 @@ export function parseDaemonJsonOutput(raw: string): unknown {
   }
 }
 
-export function parseSseStateUpdateData(
-  raw: string,
-  lastEventId?: string,
-): SseStateUpdateEvent {
+export function parseSseStateUpdateData(raw: string): SseStateUpdateEvent {
   const parsed = JSON.parse(raw) as unknown;
-  const fallbackId =
-    lastEventId && /^\d+$/.test(lastEventId) ? Number(lastEventId) : null;
-
-  if (parsed && typeof parsed === "object") {
-    const record = parsed as Record<string, unknown>;
-    if ("payload" in record) {
-      return {
-        schemaVersion:
-          typeof record.schema_version === "number" ? record.schema_version : 1,
-        id: typeof record.id === "number" ? record.id : fallbackId,
-        kind: typeof record.kind === "string" ? record.kind : "state_update",
-        payload: record.payload,
-      };
-    }
+  if (!parsed || typeof parsed !== "object") {
+    throw new AppError("daemon SSE payload is not an object");
   }
-
+  const record = parsed as Record<string, unknown>;
+  if (
+    record.schema_version !== 1 ||
+    typeof record.id !== "number" ||
+    typeof record.kind !== "string" ||
+    !("payload" in record)
+  ) {
+    throw new AppError("daemon SSE envelope is invalid");
+  }
   return {
-    schemaVersion: 0,
-    id: fallbackId,
-    kind: "legacy_state_update",
-    payload: parsed,
+    schemaVersion: record.schema_version,
+    id: record.id,
+    kind: record.kind,
+    payload: record.payload,
   };
 }
 
@@ -429,7 +349,7 @@ async function runDaemonHttp(
         "content-type": "application/json",
         authorization: `Bearer ${session.token}`,
       },
-      body: JSON.stringify({ command }),
+      body: JSON.stringify({ command, config_path: PATHS.CONFIG }),
       signal: controller.signal,
     });
     text = await response.text();
@@ -489,42 +409,18 @@ async function runDaemonCommandInternal(
   binaryPath: string,
 ): Promise<unknown> {
   await ensureDaemonAwake(binaryPath);
-  let lastError: unknown = null;
-  let firstError: unknown = null;
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const session = webuiSession;
-    if (!session) break;
-
-    try {
-      return await runDaemonHttp(session, command);
-    } catch (error) {
-      lastError = error;
-      if (attempt === 0) firstError = error;
-      if (
-        error instanceof AppError &&
-        error.message.includes("daemon HTTP request timed out")
-      ) {
-        throw error;
-      }
-      console.debug("daemon HTTP bridge request failed", error);
-      daemonReady = null;
-      clearWebuiSession();
-
-      if (attempt === 0) {
-        await ensureDaemonAwake(binaryPath);
-        continue;
-      }
-    }
+  const session = webuiSession;
+  if (!session) {
+    throw new AppError("hybrid-mount daemon WebUI session is unavailable");
   }
 
-  if (lastError) {
-    if (firstError && firstError !== lastError) {
-      console.debug("original daemon error (retry also failed)", firstError);
-    }
-    throw lastError;
+  try {
+    return await runDaemonHttp(session, command);
+  } catch (error) {
+    daemonReady = null;
+    clearWebuiSession();
+    throw error;
   }
-  throw new AppError("hybrid-mount daemon WebUI session is unavailable");
 }
 
 export function onSseStateUpdate(handler: SseStateHandler): () => void {
@@ -558,10 +454,7 @@ export function startSse(): void {
 
   source.addEventListener("state_update", (event: MessageEvent) => {
     try {
-      const update = parseSseStateUpdateData(
-        event.data as string,
-        event.lastEventId,
-      );
+      const update = parseSseStateUpdateData(event.data as string);
       for (const handler of sseHandlers) {
         try {
           handler(update);

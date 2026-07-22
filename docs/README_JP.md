@@ -36,7 +36,6 @@ Hybrid Mount は、**KernelSU** と **APatch** 向けのマウント統合メタ
 - [CLI](#cli)
 - [アーキテクチャ](#アーキテクチャ)
 - [ビルド](#ビルド)
-- [運用上の注意](#運用上の注意)
 - [ライセンス](#ライセンス)
 
 ---
@@ -70,10 +69,10 @@ Liteビルドは `control-plane` フィーチャーセット（`--no-default-fea
 `nano` フレーバーは**設定ファイル専用**のビルドです（`--no-default-features` — Cargo features なし）。WebUI、デーモン、CLI、すべての制御基盤を除外しています。残るのは、`config.toml` を読み込み、マウント計画を生成し、実行して終了する小さなバイナリです。主な特徴：
 
 - **デーモンなし** — バックグラウンドプロセス、ソケット、WebUI、CLIサブコマンドはありません。
-- **WebUIなし** — `webroot/`、`launcher.png`、`service.sh` アセットはパッケージから削除されます。
+- **WebUIなし** — `webroot/` と `launcher.png` アセットはパッケージから削除されます。
 - **マウント専用動作** — バイナリは起動時に実行され、設定に従ってすべてをマウントし、終了します。
 - **デフォルトモードは `magic`** — Nanoは `default_mode = "magic"` がプリセットされており、ext4イメージを管理するデーモンがない構成ではバインドマウントを優先します。
-- **モジュールモードマーカー** — インストール時の音量キー選択で、管理対象モジュールのルートに空の `overlay` または `magic` マーカーを置き、Nano は白リストではなくそれを読み取ります。マーカー名は大文字小文字を区別せずに扱われます。
+- **モジュールモードマーカー** — インストール時の音量キー選択で、管理対象モジュールのルートに空の `overlay` または `magic` マーカーを置き、Nano は白リストではなくそれを読み取ります。マーカー名は記載どおりの小文字でなければなりません。
 - **常駐するHybrid Mountプロセスなし** — 起動時のマウント完了後、Nanoバイナリは終了します。
 
 予測可能でデーモンフリーのマウント統合を行い、常駐コンポーネントを減らしたい場合にNanoを選んでください。
@@ -88,7 +87,7 @@ Liteビルドは `control-plane` フィーチャーセット（`--no-default-fea
 | WebUI | あり | あり | なし |
 | CLI（`hybrid-mount` サブコマンド） | あり | あり | なし |
 | デーモン（Unix + TCP/SSE） | あり | あり | なし |
-| 設定キャッシュとランタイム適用 | あり | あり | なし |
+| ランタイム設定適用 | あり | あり | なし |
 | Kasumi hide/spoof/stealth | あり | なし | なし |
 | LKM自動ロード | あり | なし | なし |
 | Cargo features | `kasumi`（`control-plane` を含む） | `control-plane` のみ | なし |
@@ -100,8 +99,8 @@ Liteビルドは `control-plane` フィーチャーセット（`--no-default-fea
 - **決定論的プランニング** — 競合は計画段階で検出され、起動時にランダムに発見されることはありません。
 - **内蔵 WebUI** — モジュール管理、設定編集、ランタイム状態の監視、FullビルドでのKasumi機能制御。
 - **Kasumi ランタイム統合** — LKM自動ロード、ミラールーティング、マウント隠蔽、maps/statfsスプーフィング、UID隠蔽、unameスプーフィング、kstatルール。
-- **設定キャッシュ** — 増分パッチと即時適用をサポートするランタイム設定キャッシュ。
-- **リカバリーフレンドリー** — 古いランタイムファイルは自動クリーンアップ。設定ミスは `api config-reset` でリセット可能。
+- **ランタイム設定更新** — 厳密に検証された設定パッチを保存し、直ちに適用できます。
+- **明示的なエラー報告** — 無効な状態や設定は直ちに失敗し、設定のリセットには `api config-reset` の明示的な実行が必要です。
 - **自動化フレンドリー** — スクリプトや外部コントローラー向けのJSON-over-Unix-socketデーモンプロトコル + HTTP API。
 
 ---
@@ -113,7 +112,8 @@ Liteビルドは `control-plane` フィーチャーセット（`--no-default-fea
 1. デバイスに [KernelSU](https://kernelsu.org/) または [APatch](https://apatch.dev/) をインストールします。
 2. [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) から最新の Hybrid Mount `full`、`lite`、または `nano` リリースZIPをダウンロードします。
 3. RootマネージャーのモジュールインストーラーからZIPをフラッシュします。
-4. 再起動します。Hybrid Mount が自動的に環境を検出し、デフォルトのoverlayポリシーを適用します。
+4. Full/Lite の初回インストールでは既定モードを直接選択します。音量上で OverlayFS、音量下で Magic Mount、10秒間入力がなければ OverlayFS が選択されます。これがインストーラー唯一の対話手順で、Nano はこの手順を省略します。
+5. 再起動します。Hybrid Mount が自動的に環境を検出し、選択したデフォルトポリシーを適用します。
 
 ### インストール後
 
@@ -210,7 +210,6 @@ WebUIは `http://127.0.0.1:<ランダムポート>` で暗号化アクセスト�
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work ストレージモード。 |
 | `disable_umount` | bool | `false` | umount操作をスキップ（デバッグ専用）。 |
 | `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | グローバルデフォルトマウントポリシー。 |
-| `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | デーモン起動動作。 |
 | `rules` | map | `{}` | モジュール・パス単位のマウントポリシー。 |
 
 ### 例
@@ -219,7 +218,6 @@ WebUIは `http://127.0.0.1:<ランダムポート>` で暗号化アクセスト�
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4"
 default_mode = "overlay"
-daemon_startup_mode = "on-demand"
 
 [rules.viper4android]
 default_mode = "magic"
@@ -246,7 +244,7 @@ Kasumi は **LKMベース** のバックエンドです。マウントルーテ�
 `kasumi.enabled = true` の設定はバックエンドを利用可能にするのみです。Kasumiランタイムが実際に有効になるのは、以下の条件のいずれかが満たされた場合です：
 
 - マウント計画にKasumi管理のモジュールまたはパスが含まれている。
-- 補助機能が設定されている（hidexattr、mount hide、maps spoof、statfs spoof、UID隠蔽、unameスプーフィング、cmdline置換、kstatルール、またはユーザーhideルール）。
+- 補助機能が設定されている（OverlayFS xattr 隠蔽、mount hide、maps spoof、statfs spoof、UID隠蔽、unameスプーフィング、cmdline置換、kstatルール、またはユーザーhideルール）。
 
 ### 主要設定フィールド
 
@@ -259,7 +257,7 @@ Kasumi は **LKMベース** のバックエンドです。マウントルーテ�
 | `kasumi.mirror_path` | Kasumiルールが使用するミラールート（デフォルト `/dev/kasumi_mirror`）。 |
 | `kasumi.enable_kernel_debug` | カーネル側デバッグログの切り替え。 |
 | `kasumi.enable_stealth` | 明示的ステルスモード。 |
-| `kasumi.enable_hidexattr` | 互換性包括スイッチ — stealth、mount hide、maps spoof、statfs spoof を一括有効化。 |
+| `kasumi.enable_overlay_xattr_hide` | OverlayFS メタデータ xattr の隠蔽のみを制御。 |
 | `kasumi.enable_mount_hide` | グローバルまたはパスパターンでマウントを隠蔽。 |
 | `kasumi.mount_hide.path_pattern` | マウント隠蔽のパスパターン。 |
 | `kasumi.enable_maps_spoof` | `/proc/<pid>/maps` スプーフィングを有効化。 |
@@ -329,18 +327,15 @@ hybrid-mount kasumi rule remove-dir --target-base /system/lib64 --source-dir /da
 
 ### モジュールマーカーファイル
 
-Hybrid Mount は、モジュールディレクトリ内のマーカーファイルも認識します。これらのマーカーは通常のファイルとして置くことを想定しており、判定にはファイル名のみを使用します。マーカー名はASCII英字について大文字小文字を区別せずに照合されるため、`DISABLE`、`Disable`、`disable` は同じマーカーとして扱われます。
+Hybrid Mount は、モジュールディレクトリ内のマーカーファイルも認識します。これらのマーカーは通常のファイルとして置くことを想定しており、判定にはファイル名のみを使用します。マーカー名は大文字小文字を厳密に区別するため、以下に記載した正確な名前を使用してください。
 
 | マーカー | 場所 | 効果 |
 | --- | --- | --- |
 | `disable` | モジュールルート | モジュールをマウント計画から除外し、無効として表示します。 |
 | `remove` | モジュールルート | モジュールをマウント計画から除外します。通常はRootマネージャーが削除時に作成します。 |
 | `skip_mount` | モジュールルート | モジュールのマウント処理をスキップし、ランタイムのskipリストに記録します。 |
-| `mount_error` | モジュールルート | マウント失敗後にスキップされたモジュールを示します。リカバリー処理やデーモンコマンドが作成または削除する場合があります。 |
 | `overlay` / `magic` | モジュールルート、Nanoビルド | Nanoビルドでモジュールのデフォルトマウントバックエンドを選択します。Full/Liteビルドでは設定ルールを使用します。 |
 | `.replace` | モジュールディレクトリ内 | そのディレクトリに置換セマンティクスを適用します。マーカー自体は通常のモジュール内容としてコピーされません。準備済みのOverlayFSレイヤーではディレクトリを保持し、対応環境ではoverlay opaqueメタデータを設定します。 |
-
-同じディレクトリに同一マーカーの大文字小文字違いが複数ある場合、クリーンアップ処理は一致するすべての変種を削除します。
 
 ### 実用的なレシピ
 
@@ -445,7 +440,7 @@ src/
 │   ├── ops/       マウント計画生成とバックエンド別実行
 │   ├── daemon/    Unix + TCP デュアルプロトコルデーモン（CLI + WebUI/SSE）
 │   ├── api/       WebUIエンドポイント向けペイロードビルダー
-│   ├── startup/   起動シーケンス、リカバリー、リトライロジック
+│   ├── startup/   起動シーケンスとデーモンへの引き継ぎ
 │   ├── storage/   共有ストレージヘルパー（ext4イメージ、tmpfs）
 │   └── runtime_state/ デーモン状態の永続化
 ├── mount/
@@ -531,17 +526,6 @@ cd webui && pnpm test
 - 全ソースファイルのライセンスヘッダーチェック
 
 `xtask lint` はローカル CI ゲートに近い検証を実行します: Rust fmt、全 feature clippy/tests、**lite**（`--no-default-features --features control-plane`）テスト、**nano**（`--no-default-features`）テスト、WebUI lint/tests。Kasumi に関するコードは `#[cfg(feature = "kasumi")]` の背後に、daemon/CLI/WebUI API に関するコードは `#[cfg(feature = "control-plane")]` の背後に配置する必要があります。
-
----
-
-## 運用上の注意
-
-- **マウントソースの自動検出**：新規インストールでは実行環境を自動検出します。自動検出が失敗した場合のみ `mountsource` を明示的に設定してください。
-- **不良設定からの回復**：`hybrid-mount api config-reset` を実行してデフォルトにリセットし、ルールを段階的に再適用します。`gen-config` で新しい設定ファイルを再生成することもできます。
-- **設定キャッシュ**：ランタイムは設定キャッシュを維持します。変更を即時適用するには `api config-patch --apply-runtime` を使用するか、デーモンを再起動します。
-- **Kasumi LKM（fullビルドのみ）**：LKMは実行中のカーネルと一致する必要があります。自動検出されたKMIが正しくない場合は `lkm_kmi_override` を使用してください。
-- **`kasumi clear`**：ランタイム状態をクリアし、カーネル接続を解放します。既存のカーネル側ルールはLKMがリロードされるまで残る可能性があります。
-- **バイナリサイズ**：大規模なリファクタリングよりも、依存機能のトリミングとプロファイルチューニングを優先してください。
 
 ---
 

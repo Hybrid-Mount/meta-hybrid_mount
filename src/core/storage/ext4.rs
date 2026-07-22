@@ -3,23 +3,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::HashSet,
     fs,
-    io::ErrorKind,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::Command,
 };
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 
 use crate::{
     core::storage::{StorageHandle, StorageMode},
     mount::overlayfs::utils as overlay_utils,
-    sys::{
-        fs::{ensure_dir_exists, lsetfilecon},
-        nuke,
-    },
+    sys::fs::{ensure_dir_exists, lsetfilecon},
 };
 
 const EXT4_MIN_IMAGE_SIZE_BYTES: u64 = 64 * 1024 * 1024;
@@ -43,19 +39,15 @@ pub(super) fn setup_ext4_image(
     fs::File::create(img_path)?.set_len(grow_size)?;
     format_ext4_image(img_path)?;
     check_image(img_path)?;
-    if let Err(e) = lsetfilecon(img_path, MODULES_IMG_SELINUX_CONTEXT) {
-        crate::scoped_log!(
-            warn,
-            "storage",
-            "selinux context set failed: path={}, error={:#}",
-            img_path.display(),
-            e
-        );
-    }
+    lsetfilecon(img_path, MODULES_IMG_SELINUX_CONTEXT).with_context(|| {
+        format!(
+            "failed to set SELinux context on ext4 image {}",
+            img_path.display()
+        )
+    })?;
     ensure_dir_exists(target)?;
 
-    mount_ext4_with_repair(img_path, target)?;
-    reset_mount_state(target);
+    overlay_utils::mount_ext4(img_path, target)?;
 
     Ok(StorageHandle::new(target, StorageMode::Ext4))
 }
@@ -63,27 +55,11 @@ pub(super) fn setup_ext4_image(
 fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
     let mut total_size = 0;
     let mut visited_node_map = HashSet::new();
-    let mut symlink_stats = SizeScanSymlinkStats::default();
-    let mut stack: Vec<PathBuf> = paths.iter().filter(|path| path.exists()).cloned().collect();
+    let mut stack: Vec<PathBuf> = paths.to_vec();
 
     while let Some(current) = stack.pop() {
-        let metadata = match fs::symlink_metadata(&current) {
-            Ok(metadata) => metadata,
-            Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
-                symlink_stats.record_loop(&current);
-                continue;
-            }
-            Err(err) if err.kind() == ErrorKind::NotFound => {
-                crate::scoped_log!(
-                    debug,
-                    "storage:ext4",
-                    "size skip: path={}, reason=not_found",
-                    current.display()
-                );
-                continue;
-            }
-            Err(err) => return Err(err.into()),
-        };
+        let metadata = fs::symlink_metadata(&current)
+            .with_context(|| format!("failed to inspect source path {}", current.display()))?;
 
         let file_type = metadata.file_type();
         if file_type.is_file() {
@@ -96,80 +72,21 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<u64> {
 
             total_size += metadata.blocks() * STAT_BLOCK_SIZE_BYTES;
         } else if file_type.is_dir() {
-            match current.read_dir() {
-                Ok(entries) => {
-                    for entry in entries {
-                        match entry {
-                            Ok(entry) => stack.push(entry.path()),
-                            Err(err) => {
-                                crate::scoped_log!(
-                                    warn,
-                                    "storage:ext4",
-                                    "skip unreadable dir entry: path={}, error={:#}",
-                                    current.display(),
-                                    err
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(_) => {
-                    crate::scoped_log!(
-                        error,
-                        "storage:ext4",
-                        "read dir failed: path={}",
-                        current.display()
-                    )
-                }
+            let entries = current.read_dir().with_context(|| {
+                format!("failed to read source directory {}", current.display())
+            })?;
+            for entry in entries {
+                stack.push(
+                    entry
+                        .with_context(|| {
+                            format!("failed to enumerate source directory {}", current.display())
+                        })?
+                        .path(),
+                );
             }
-        } else if file_type.is_symlink() {
-            symlink_stats.record_skip(&current);
         }
     }
-    symlink_stats.log();
     Ok(total_size)
-}
-
-#[derive(Default)]
-struct SizeScanSymlinkStats {
-    skipped: BTreeMap<String, usize>,
-    loops: BTreeMap<String, usize>,
-}
-
-impl SizeScanSymlinkStats {
-    fn record_skip(&mut self, path: &Path) {
-        *self.skipped.entry(module_log_key(path)).or_default() += 1;
-    }
-
-    fn record_loop(&mut self, path: &Path) {
-        *self.loops.entry(module_log_key(path)).or_default() += 1;
-    }
-
-    fn log(&self) {
-        for (module, count) in &self.skipped {
-            crate::scoped_log!(
-                debug,
-                "storage:ext4",
-                "size skip summary: module={}, reason=symlink, count={}",
-                module,
-                count
-            );
-        }
-
-        for (module, count) in &self.loops {
-            crate::scoped_log!(
-                warn,
-                "storage:ext4",
-                "size skip summary: module={}, reason=symlink_loop, count={}",
-                module,
-                count
-            );
-        }
-    }
-}
-
-fn module_log_key(path: &Path) -> String {
-    crate::utils::extract_module_id(path).unwrap_or_else(|| "<unknown>".to_string())
 }
 
 fn format_ext4_image(img_path: &Path) -> Result<()> {
@@ -204,19 +121,4 @@ fn check_image(img_path: &Path) -> Result<()> {
         code
     );
     Ok(())
-}
-
-fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
-    if overlay_utils::mount_ext4(img_path, target).is_err() {
-        if crate::sys::mount::repair_image(img_path).is_ok() {
-            overlay_utils::mount_ext4(img_path, target)?;
-        } else {
-            bail!("Failed to repair modules.img");
-        }
-    }
-    Ok(())
-}
-
-fn reset_mount_state(target: &Path) {
-    nuke::nuke_path(target);
 }

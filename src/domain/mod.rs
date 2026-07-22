@@ -50,7 +50,6 @@ impl MountMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(default)]
 pub struct ModuleRules {
     pub default_mode: MountMode,
     pub paths: HashMap<String, MountMode>,
@@ -69,13 +68,8 @@ impl ModuleRules {
         self.default_mode
     }
 
-    pub fn effective_mode(&self, relative_path: &Path, use_kasumi: bool) -> MountMode {
-        let mode = self.get_mode(relative_path.to_string_lossy().as_ref());
-        if matches!(mode, MountMode::Kasumi) && !use_kasumi {
-            MountMode::Ignore
-        } else {
-            mode
-        }
+    pub fn effective_mode(&self, relative_path: &Path) -> MountMode {
+        self.get_mode(relative_path.to_string_lossy().as_ref())
     }
 
     pub fn has_descendant_rule(&self, relative_path: &Path) -> bool {

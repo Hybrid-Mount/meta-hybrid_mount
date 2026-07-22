@@ -32,9 +32,9 @@ async function readCargoVersion() {
   return version;
 }
 
-function parseBooleanEnv(name, fallback) {
+function parseBooleanEnv(name, defaultValue) {
   const value = process.env[name]?.trim().toLowerCase();
-  if (!value) return fallback;
+  if (!value) return defaultValue;
   if (["1", "true", "yes", "on"].includes(value)) return true;
   if (["0", "false", "no", "off"].includes(value)) return false;
   throw new Error(`invalid boolean value for ${name}: ${process.env[name]}`);

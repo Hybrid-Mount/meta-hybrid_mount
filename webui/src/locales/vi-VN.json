@@ -10,6 +10,7 @@
     "rebootConfirm": "Bạn có chắc muốn khởi động lại thiết bị?",
     "reboot": "Khởi động lại",
     "cancel": "Hủy",
+    "close": "Đóng",
     "saved": "Đã lưu"
   },
   "tabs": {
@@ -64,8 +65,16 @@
     "mode_tmpfsDesc": "Dựa trên RAM. I/O nhanh nhất, đặt lại khi khởi động lại.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Hình ảnh lặp lại. Bền bỉ, tiết kiệm RAM.",
-    "daemonStartupMode": "Daemon Liên tục",
-    "kasumiConfigSaved": "Cấu hình Kasumi đã được lưu. Runtime không hề thay đổi."
+    "customMounts": "Bind mount tùy chỉnh",
+    "customMountsDesc": "Bind đường dẫn nguồn cụ thể vào đích hiện có",
+    "customMountsEmpty": "Chưa cấu hình bind mount tùy chỉnh.",
+    "customMountSource": "Đường dẫn nguồn",
+    "customMountTarget": "Đường dẫn đích",
+    "addCustomMount": "Thêm",
+    "removeCustomMount": "Xóa",
+    "invalidCustomMount": "Đường dẫn mount tùy chỉnh không hợp lệ",
+    "kasumiConfigSaved": "Cấu hình Kasumi đã được lưu. Runtime không hề thay đổi.",
+    "kasumiTmpfsRestriction": "Không thể dùng mount Kasumi theo từng mô-đun vì kernel này không hỗ trợ tmpfs xattr."
   },
   "modules": {
     "reload": "Làm mới",
@@ -83,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "Đã bỏ gắn kết",
+      "blacklisted": "Danh sách chặn",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -97,12 +107,7 @@
     "disableTag": "Tắt",
     "nativeTag": "Ẩn thân",
     "unavailableTag": "Không khả dụng",
-    "kasumiUnavailableHint": "Kasumi đã được bật nhưng hiện không khả dụng.",
-    "mountError": "Lỗi mount",
-    "clearMountErrors": "Xóa lỗi mount",
-    "mountErrorsCleared": "Đã xóa lỗi mount",
-    "mountErrorsClearFailed": "Không thể xóa lỗi mount",
-    "suggestIgnoreHint": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Bỏ qua\"."
+    "kasumiUnavailableHint": "Kasumi đã được bật nhưng hiện không khả dụng."
   },
   "kasumi": {
     "title": "Trạng thái Kasumi",
@@ -160,7 +165,6 @@
     "stealthUpdated": "Tàng hình đã được cập nhật",
     "hidexattrUpdated": "HideXattr đã được cập nhật",
     "selinuxFixUpdated": "SELinux Guard đã được cập nhật",
-    "ignoreProtocolUpdated": "Chính sách lệch giao thức đã được cập nhật",
     "kernelDebugUpdated": "Gỡ lỗi kernel đã được cập nhật",
     "kmiOverride": "Ghi đè KMI",
     "autoKmi": "Tự động Phát hiện",
@@ -169,8 +173,6 @@
     "stealthTitle": "Tàng hình",
     "hidexattrTitle": "HideXattr",
     "selinuxFixTitle": "SELinux Guard",
-    "ignoreProtocolTitle": "Bỏ qua Lệch Giao thức",
-    "ignoreProtocolHint": "Cho phép Kasumi tiếp tục hoạt động ngay cả khi API không gian người dùng và giao thức kernel không hoàn toàn khớp.",
     "lkmUnavailableHint": "Kasumi đã được bật, nhưng mô-đun kernel vẫn chưa được tải.",
     "kernelDebugTitle": "Gỡ lỗi Kernel",
     "featureBits": "Bit tính năng",

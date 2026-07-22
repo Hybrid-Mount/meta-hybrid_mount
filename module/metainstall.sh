@@ -25,17 +25,19 @@ detect_nano_mode() {
 }
 
 read_default_mount_mode() {
-  local default_mode="magic"
-  if [ -f "$BASE_DIR/config.toml" ]; then
-    local config_default_mode
-    config_default_mode=$(grep -E '^[[:space:]]*default_mode[[:space:]]*=' "$BASE_DIR/config.toml" | head -n 1 | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')
-    case "$config_default_mode" in
-    overlay | magic)
-      default_mode="$config_default_mode"
-      ;;
-    esac
+  if [ ! -f "$BASE_DIR/config.toml" ]; then
+    return 1
   fi
-  printf '%s\n' "$default_mode"
+  local default_mode
+  default_mode=$(grep -E '^[[:space:]]*default_mode[[:space:]]*=' "$BASE_DIR/config.toml" | head -n 1 | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/')
+  case "$default_mode" in
+  overlay | magic)
+    printf '%s\n' "$default_mode"
+    ;;
+  *)
+    return 1
+    ;;
+  esac
 }
 
 mode_label() {
@@ -146,7 +148,6 @@ clear_mount_mode_markers() {
   for marker in $MODE_MARKERS; do
     rm -f "$MODPATH/$marker"
   done
-  rm -f "$MODPATH/kasumi"
 }
 
 write_mount_mode_marker() {
@@ -158,14 +159,14 @@ write_mount_mode_marker() {
 prompt_module_mount_mode() {
   local default_mode default_label chosen_mode existing_mode
 
-  existing_mode="$(current_mount_mode_marker || true)"
+  existing_mode="$(current_mount_mode_marker)"
   if [ -n "$existing_mode" ]; then
     ui_print "- Existing module mount mode marker: $(mode_label "$existing_mode")"
     write_mount_mode_marker "$existing_mode"
     return 0
   fi
 
-  default_mode="$(read_default_mount_mode)"
+  default_mode="$(read_default_mount_mode)" || abort "! Missing or invalid default_mode in $BASE_DIR/config.toml"
   default_label="$(mode_label "$default_mode")"
   ui_print " "
   ui_print "========================================"

@@ -38,9 +38,7 @@ export default function HeroCard(props: {
         }
       >
         <div class="hero-content">
-          <span class="hero-label">
-            {uiStore.L.kasumi?.title ?? "Kasumi Runtime"}
-          </span>
+          <span class="hero-label">{uiStore.L.kasumi.title}</span>
           <span class="hero-value">{props.heroStatusText}</span>
           <span class="kasumi-hero-caption">{props.heroSubtitleText}</span>
         </div>

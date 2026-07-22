@@ -121,7 +121,7 @@ pub(super) fn compile_rules(
             if !partition_root.is_dir() {
                 continue;
             }
-            let normalized_partition_root = utils::resolve_link_path(&partition_root);
+            let normalized_partition_root = utils::resolve_link_path(&partition_root)?;
             if !scanned_partition_roots.insert(normalized_partition_root) {
                 crate::scoped_log!(
                     debug,
@@ -139,51 +139,36 @@ pub(super) fn compile_rules(
                 .into_iter();
 
             while let Some(entry_result) = iterator.next() {
-                let entry = match entry_result {
-                    Ok(entry) => entry,
-                    Err(err) => {
-                        crate::scoped_log!(
-                            warn,
-                            "mount:kasumi",
-                            "walk failed: module={}, partition={}, error={}",
-                            module.id,
-                            partition_name,
-                            err
-                        );
-                        continue;
-                    }
-                };
+                let entry = entry_result.with_context(|| {
+                    format!(
+                        "failed to walk Kasumi module {} partition {}",
+                        module.id, partition_name
+                    )
+                })?;
 
                 if entry.depth() == 0 {
                     continue;
                 }
 
                 let path = entry.path();
-                let relative = match path.strip_prefix(&module_root) {
-                    Ok(relative) => relative,
-                    Err(err) => {
-                        crate::scoped_log!(
-                            warn,
-                            "mount:kasumi",
-                            "relative path failed: module={}, path={}, error={}",
-                            module.id,
-                            path.display(),
-                            err
-                        );
-                        continue;
-                    }
-                };
+                let relative = path.strip_prefix(&module_root).with_context(|| {
+                    format!(
+                        "Kasumi path {} is outside module root {}",
+                        path.display(),
+                        module_root.display()
+                    )
+                })?;
 
                 if !matches!(relative_mode(module, relative), MountMode::Kasumi) {
                     continue;
                 }
 
-                if utils::path_file_name_eq_ignore_ascii_case(path, defs::REPLACE_DIR_FILE_NAME) {
+                if utils::path_file_name_eq(path, defs::REPLACE_DIR_FILE_NAME) {
                     continue;
                 }
 
                 let resolved_virtual_path =
-                    utils::resolve_path_with_root(system_root, &Path::new("/").join(relative));
+                    utils::resolve_path_with_root(system_root, &Path::new("/").join(relative))?;
                 let target_key = resolved_virtual_path.display().to_string();
 
                 if entry.file_type().is_dir() {

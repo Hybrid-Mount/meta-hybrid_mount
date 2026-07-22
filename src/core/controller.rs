@@ -9,14 +9,14 @@ use std::{
     time::Instant,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{UnmountFlags, unmount as umount};
 
 #[cfg(feature = "kasumi")]
-use crate::core::kasumi_coordinator::KasumiCoordinator;
+use crate::core::failure::ModuleStageFailure;
 #[cfg(feature = "kasumi")]
-use crate::core::recovery::ModuleStageFailure;
+use crate::core::kasumi_coordinator::KasumiCoordinator;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::mount::is_mounted;
 use crate::{
@@ -60,16 +60,16 @@ pub struct MountController<S> {
 }
 
 impl MountController<Init> {
-    pub fn new<P>(config: Config, tempdir: P) -> Self
+    pub fn new<P>(config: Config, tempdir: P) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        Self {
-            backend_capabilities: BackendCapabilities::detect(&config),
+        Ok(Self {
+            backend_capabilities: BackendCapabilities::detect(&config)?,
             config,
             state: Init,
             tempdir: tempdir.as_ref().to_path_buf(),
-        }
+        })
     }
 
     pub fn init_storage(self, mnt_base: &Path) -> Result<MountController<StorageReady>> {
@@ -122,7 +122,7 @@ impl MountController<StorageReady> {
             "scan start: moduledir={}",
             self.config.moduledir.display()
         );
-        let inventory = inventory::scan_snapshot(&self.config.moduledir, &self.config)?;
+        let inventory = inventory::scan_snapshot(&self.config)?;
         let modules = &inventory.modules;
         let scan_elapsed_ms = scan_started.elapsed().as_millis();
 
@@ -137,7 +137,6 @@ impl MountController<StorageReady> {
         crate::scoped_log!(info, "controller:scan_and_prepare_plan", "prepare start");
         let prepare_started = Instant::now();
         let plan = prepare::prepare_mount_plan(
-            &self.config,
             modules,
             self.state.handle.mount_point(),
             &self.backend_capabilities,
@@ -306,14 +305,19 @@ fn clean_up_path(
     }
 
     if kasumi_mirror_path.starts_with(tempdir) {
-        let Some(preserved_child) = kasumi_mirror_path
+        let preserved_child = kasumi_mirror_path
             .strip_prefix(tempdir)
-            .ok()
-            .and_then(|relative| relative.components().next())
+            .with_context(|| {
+                format!(
+                    "failed to resolve Kasumi mirror {} under {}",
+                    kasumi_mirror_path.display(),
+                    tempdir.display()
+                )
+            })?
+            .components()
+            .next()
             .map(|component| component.as_os_str().to_owned())
-        else {
-            return Ok(());
-        };
+            .context("Kasumi mirror path has no child component")?;
 
         crate::scoped_log!(
             info,
@@ -362,7 +366,7 @@ fn detach_tempdir_mount(tempdir: &Path) -> Result<()> {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        if !is_mounted(tempdir) {
+        if !is_mounted(tempdir)? {
             return Ok(());
         }
 
@@ -400,29 +404,11 @@ fn remove_path(path: &Path) -> Result<()> {
     };
 
     if metadata.file_type().is_dir() {
-        if let Err(err) = fs::remove_dir_all(path) {
-            if err.raw_os_error() == Some(libc::EBUSY) {
-                crate::scoped_log!(
-                    warn,
-                    "controller:finalize",
-                    "cleanup skipped: path={}, reason=resource_busy",
-                    path.display()
-                );
-                return Ok(());
-            }
-            return Err(err.into());
-        }
-    } else if let Err(err) = fs::remove_file(path) {
-        if err.raw_os_error() == Some(libc::EBUSY) {
-            crate::scoped_log!(
-                warn,
-                "controller:finalize",
-                "cleanup skipped: path={}, reason=resource_busy",
-                path.display()
-            );
-            return Ok(());
-        }
-        return Err(err.into());
+        fs::remove_dir_all(path)
+            .with_context(|| format!("failed to remove directory {}", path.display()))?;
+    } else {
+        fs::remove_file(path)
+            .with_context(|| format!("failed to remove file {}", path.display()))?;
     }
 
     Ok(())

@@ -33,12 +33,8 @@ fn mount_overlay_inner(
     kasumi: Option<&KasumiCoordinator<'_>>,
 ) -> Result<Vec<String>> {
     mount_overlay_base(op, config)?;
-    // Best-effort: hide overlay xattrs so that files under this mount point
-    // don't expose `trusted.overlay.*` extended attributes to userspace.
-    // The coordinator logs failures internally; a failure here must not abort
-    // the overlay mount that already succeeded.
     if let Some(kasumi) = kasumi {
-        kasumi.hide_overlay_xattrs(Path::new(&op.target));
+        kasumi.hide_overlay_xattrs(Path::new(&op.target))?;
     }
     Ok(super::collect_involved_modules(op))
 }
@@ -76,27 +72,21 @@ fn mount_overlay_base(op: &OverlayOperation, config: &config::Config) -> Result<
     let upper = part_rw.join("upperdir");
     let work = part_rw.join("workdir");
 
-    let (upper_opt, work_opt) = if upper.exists() && work.exists() {
-        (Some(upper), Some(work))
-    } else {
-        (None, None)
+    let (upper_opt, work_opt) = match (upper.exists(), work.exists()) {
+        (true, true) => (Some(upper), Some(work)),
+        (false, false) => (None, None),
+        _ => anyhow::bail!(
+            "overlay upper/work directories are inconsistent for {}",
+            op.partition_name
+        ),
     };
-
-    let mut mount_source = config.mountsource.clone();
-
-    if defs::IGNORE_UNMOUNT_PARTITIONS
-        .iter()
-        .any(|s| s.trim() == op.target.trim())
-    {
-        mount_source = "overlay".to_string();
-    }
 
     overlayfs::overlayfs::mount_overlay(
         &op.target,
         &lowerdir_strings,
         work_opt,
         upper_opt,
-        &mount_source,
+        &config.mountsource,
     )?;
 
     crate::scoped_log!(
@@ -104,20 +94,12 @@ fn mount_overlay_base(op: &OverlayOperation, config: &config::Config) -> Result<
         "executor:overlay",
         "complete: target={}, mount_source={}",
         op.target,
-        mount_source
+        config.mountsource
     );
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if !config.disable_umount
-        && let Err(e) = umount_mgr::send_umountable(&op.target)
-    {
-        crate::scoped_log!(
-            warn,
-            "overlay",
-            "failed to register umountable at {}: {:#}",
-            op.target,
-            e
-        );
+    if !config.disable_umount {
+        umount_mgr::send_umountable(&op.target)?;
     }
 
     Ok(())

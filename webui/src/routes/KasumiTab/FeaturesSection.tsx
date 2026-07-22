@@ -24,7 +24,7 @@ export default function FeaturesSection(props: FeaturesSectionProps) {
   return (
     <SectionShell
       id="features"
-      title={uiStore.L.kasumi?.featuresTitle ?? "Capabilities"}
+      title={uiStore.L.kasumi.featuresTitle}
       isExpanded={props.isExpanded}
       onToggle={props.onToggle}
     >
@@ -34,33 +34,33 @@ export default function FeaturesSection(props: FeaturesSectionProps) {
       >
         <div class="meta-list">
           <div class="meta-row">
-            <span>{uiStore.L.kasumi?.featureBits ?? "Feature bits"}</span>
-            <strong>{props.status?.feature_bits ?? 0}</strong>
+            <span>{uiStore.L.kasumi.featureBits}</span>
+            <strong>{props.status.feature_bits ?? 0}</strong>
           </div>
           <div class="meta-row">
-            <span>{uiStore.L.kasumi?.hideUidCount ?? "Hide UIDs"}</span>
-            <strong>{props.config?.hide_uids?.length ?? 0}</strong>
+            <span>{uiStore.L.kasumi.hideUidCount}</span>
+            <strong>{props.config.hide_uids.length}</strong>
           </div>
           <div class="meta-row">
-            <span>{uiStore.L.kasumi?.userHideCount ?? "User hide rules"}</span>
-            <strong>{props.status?.user_hide_rule_count ?? 0}</strong>
+            <span>{uiStore.L.kasumi.userHideCount}</span>
+            <strong>{props.status.user_hide_rule_count}</strong>
           </div>
           <div class="meta-row">
-            <span>{uiStore.L.kasumi?.mapsRuleCount ?? "Maps rules"}</span>
-            <strong>{props.config?.maps_rules?.length ?? 0}</strong>
+            <span>{uiStore.L.kasumi.mapsRuleCount}</span>
+            <strong>{props.config.maps_rules.length}</strong>
           </div>
           <div class="meta-row">
-            <span>{uiStore.L.kasumi?.kstatRuleCount ?? "Kstat rules"}</span>
-            <strong>{props.config?.kstat_rules?.length ?? 0}</strong>
+            <span>{uiStore.L.kasumi.kstatRuleCount}</span>
+            <strong>{props.config.kstat_rules.length}</strong>
           </div>
         </div>
         <div class="chip-section">
-          <For each={props.status?.feature_names || []}>
+          <For each={props.status.feature_names}>
             {(name) => <span class="feature-chip">{name}</span>}
           </For>
         </div>
         <div class="chip-section subdued">
-          <For each={props.status?.hooks || []}>
+          <For each={props.status.hooks}>
             {(name) => <span class="feature-chip hook">{name}</span>}
           </For>
         </div>

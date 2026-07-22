@@ -10,6 +10,7 @@
     "rebootConfirm": "Вы уверены, что хотите перезагрузить устройство?",
     "reboot": "Перезагрузить",
     "cancel": "Отмена",
+    "close": "Закрыть",
     "saved": "Сохранено"
   },
   "tabs": {
@@ -64,8 +65,16 @@
     "mode_tmpfsDesc": "На основе RAM. Самый быстрый ввод-вывод, сбрасывается после перезагрузки.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback-образ. Постоянный, экономит RAM.",
-    "daemonStartupMode": "Постоянный демон",
-    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed."
+    "customMounts": "Пользовательские bind-монтирования",
+    "customMountsDesc": "Привязывает заданные исходные пути к существующим целям",
+    "customMountsEmpty": "Пользовательские bind-монтирования не настроены.",
+    "customMountSource": "Исходный путь",
+    "customMountTarget": "Целевой путь",
+    "addCustomMount": "Добавить",
+    "removeCustomMount": "Удалить",
+    "invalidCustomMount": "Недопустимый путь пользовательского монтирования",
+    "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed.",
+    "kasumiTmpfsRestriction": "Монтирование Kasumi для отдельных модулей недоступно: ядро не поддерживает tmpfs xattr."
   },
   "modules": {
     "reload": "Обновить",
@@ -83,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "Unmounted",
+      "blacklisted": "В чёрном списке",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -97,12 +107,7 @@
     "disableTag": "Отключено",
     "nativeTag": "Стелс",
     "unavailableTag": "Недоступно",
-    "kasumiUnavailableHint": "Kasumi включён, но сейчас недоступен.",
-    "mountError": "Ошибка монтирования",
-    "clearMountErrors": "Очистить ошибки",
-    "mountErrorsCleared": "Ошибки очищены",
-    "mountErrorsClearFailed": "Не удалось очистить ошибки",
-    "suggestIgnoreHint": "Этот модуль содержит команды монтирования в своих .sh файлах. Рассмотрите установку режима \"Ignore\"."
+    "kasumiUnavailableHint": "Kasumi включён, но сейчас недоступен."
   },
   "kasumi": {
     "title": "Состояние Kasumi",
@@ -160,7 +165,6 @@
     "stealthUpdated": "Stealth обновлён",
     "hidexattrUpdated": "HideXattr обновлён",
     "selinuxFixUpdated": "SELinux Guard обновлён",
-    "ignoreProtocolUpdated": "Политика несовпадения протокола обновлена",
     "kernelDebugUpdated": "Отладка ядра обновлена",
     "kmiOverride": "Переопределение KMI",
     "autoKmi": "Автоопределение",
@@ -169,8 +173,6 @@
     "stealthTitle": "Стелс",
     "hidexattrTitle": "Скрытие xattr",
     "selinuxFixTitle": "SELinux Guard",
-    "ignoreProtocolTitle": "Игнорировать несовпадение протокола",
-    "ignoreProtocolHint": "Позволяет Kasumi продолжать работу, даже если userspace API и протокол ядра не полностью совпадают.",
     "lkmUnavailableHint": "Kasumi включён, но модуль ядра ещё не загружен.",
     "kernelDebugTitle": "Отладка ядра",
     "featureBits": "Биты возможностей",

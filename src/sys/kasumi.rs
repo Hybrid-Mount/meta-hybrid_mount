@@ -435,7 +435,6 @@ fn cstring_from_path(path: &Path) -> Result<CString> {
         .with_context(|| format!("path contains interior NUL byte: {}", path.display()))
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn lock_error(name: &str) -> anyhow::Error {
     anyhow::anyhow!("failed to lock Kasumi {name} mutex")
 }
@@ -461,29 +460,24 @@ fn write_path_into_c_buf(buf: &mut [c_char], path: &Path, field_name: &str) -> R
     write_bytes_into_c_buf(buf, path.as_os_str().as_bytes(), field_name)
 }
 
-fn module_loaded() -> bool {
-    let Ok(content) = fs::read_to_string("/proc/modules") else {
-        return false;
-    };
+fn module_loaded() -> Result<bool> {
+    let content = fs::read_to_string("/proc/modules").context("failed to read /proc/modules")?;
 
-    content.lines().any(|line| {
-        line.starts_with("kasumi_lkm ")
-            || line.starts_with("kasumi_lkm\t")
-            || line.starts_with("kasumi ")
-            || line.starts_with("kasumi\t")
-    })
+    Ok(content
+        .lines()
+        .any(|line| line.starts_with("kasumi_lkm ") || line.starts_with("kasumi_lkm\t")))
 }
 
 /// Returns `true` when the running kernel version matches one of the supported
 /// versions for which a prebuilt Kasumi LKM is available.
-pub fn kernel_is_supported() -> bool {
+pub fn kernel_is_supported() -> Result<bool> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         const SUPPORTED: &[&str] = &["5.10", "5.15", "6.1", "6.6", "6.12"];
         let uts = unsafe {
             let mut uts = std::mem::MaybeUninit::<libc::utsname>::uninit();
             if libc::uname(uts.as_mut_ptr()) != 0 {
-                return false;
+                return Err(std::io::Error::last_os_error()).context("uname failed");
             }
             uts.assume_init()
         };
@@ -492,24 +486,21 @@ pub fn kernel_is_supported() -> bool {
             .into_owned();
 
         // Extract "major.minor" prefix, e.g. "5.10" from "5.10.123-something".
-        let version_prefix = match release.find('.') {
-            Some(dot1) => {
-                let rest = &release[dot1 + 1..];
-                let dot2 = rest
-                    .find(|c: char| !c.is_ascii_digit())
-                    .unwrap_or(rest.len());
-                release[..dot1 + 1 + dot2].to_string()
-            }
-            None => String::new(),
-        };
+        let dot1 = release
+            .find('.')
+            .context("kernel release has no major/minor separator")?;
+        let rest = &release[dot1 + 1..];
+        let dot2 = rest
+            .find(|c: char| !c.is_ascii_digit())
+            .unwrap_or(rest.len());
+        let version_prefix = release[..dot1 + 1 + dot2].to_string();
 
-        SUPPORTED.contains(&version_prefix.as_str())
+        Ok(SUPPORTED.contains(&version_prefix.as_str()))
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
-        // Non-Linux hosts (macOS dev, etc.) — don't gate.
-        true
+        Ok(false)
     }
 }
 
@@ -529,7 +520,7 @@ fn fetch_anon_fd() -> Result<c_int> {
     // retry loop that can never succeed on unsupported kernels.
     // Use module_loaded() instead of check_status() to avoid recursion:
     // check_status() → get_protocol_version() → ioctl_call() → fetch_anon_fd() → check_status()
-    if !module_loaded() {
+    if !module_loaded()? {
         bail!("Kasumi LKM is not loaded");
     }
 
@@ -716,17 +707,12 @@ fn list_ioctl(request: KasumiIoctlRequest, capacity: usize, description: &str) -
     ioctl_with_arg(description, request, &mut arg)
         .with_context(|| format!("failed to query Kasumi {description}"))?;
 
-    let len = buf.iter().position(|byte| *byte == 0).unwrap_or_else(|| {
-        crate::scoped_log!(
-            warn,
-            "kasumi:list_ioctl",
-            "truncated: description={}, capacity={} (no NUL terminator found)",
-            description,
-            capacity
-        );
-        buf.len()
-    });
-    let output = String::from_utf8_lossy(&buf[..len]).into_owned();
+    let len = buf
+        .iter()
+        .position(|byte| *byte == 0)
+        .with_context(|| format!("Kasumi {description} response is not NUL-terminated"))?;
+    let output = String::from_utf8(buf[..len].to_vec())
+        .with_context(|| format!("Kasumi {description} response is not valid UTF-8"))?;
     crate::scoped_log!(
         debug,
         "kasumi:list_ioctl",
@@ -744,44 +730,39 @@ pub fn get_protocol_version() -> Result<c_int> {
     Ok(version)
 }
 
-pub fn check_status() -> KasumiStatus {
-    if let Ok(cache) = STATUS_CACHE.lock()
-        && cache.checked
-    {
+pub fn check_status() -> Result<KasumiStatus> {
+    let cache = STATUS_CACHE.lock().map_err(|_| lock_error("status"))?;
+    if cache.checked {
         crate::scoped_log!(
             debug,
             "kasumi:status",
             "complete: source=cache, status={}",
             status_name(cache.status)
         );
-        return cache.status;
+        return Ok(cache.status);
     }
+    drop(cache);
 
-    let status = if !kernel_is_supported() {
+    let status = if !kernel_is_supported()? {
         crate::scoped_log!(
             debug,
             "kasumi:status",
             "kernel version not in supported list — forcing KernelNotSupported"
         );
         KasumiStatus::KernelNotSupported
-    } else if !module_loaded() {
+    } else if !module_loaded()? {
         KasumiStatus::NotPresent
     } else {
-        match get_protocol_version() {
-            Ok(version) if version < KSM_PROTOCOL_VERSION => KasumiStatus::KernelNotSupported,
-            Ok(version) if version > KSM_PROTOCOL_VERSION => KasumiStatus::ModuleTooOld,
-            Ok(_) => KasumiStatus::Available,
-            Err(err) => {
-                crate::scoped_log!(debug, "kasumi", "protocol version query failed: {}", err);
-                KasumiStatus::NotPresent
-            }
+        match get_protocol_version()? {
+            version if version < KSM_PROTOCOL_VERSION => KasumiStatus::KernelNotSupported,
+            version if version > KSM_PROTOCOL_VERSION => KasumiStatus::ModuleTooOld,
+            _ => KasumiStatus::Available,
         }
     };
 
-    if let Ok(mut cache) = STATUS_CACHE.lock() {
-        cache.checked = true;
-        cache.status = status;
-    }
+    let mut cache = STATUS_CACHE.lock().map_err(|_| lock_error("status"))?;
+    cache.checked = true;
+    cache.status = status;
 
     crate::scoped_log!(
         debug,
@@ -790,13 +771,13 @@ pub fn check_status() -> KasumiStatus {
         status_name(status)
     );
 
-    status
+    Ok(status)
 }
 
-pub fn can_operate() -> bool {
-    let operable = matches!(check_status(), KasumiStatus::Available);
+pub fn can_operate() -> Result<bool> {
+    let operable = matches!(check_status()?, KasumiStatus::Available);
     crate::scoped_log!(debug, "kasumi:status", "complete: can_operate={}", operable);
-    operable
+    Ok(operable)
 }
 
 pub fn clear_rules() -> Result<()> {
@@ -1034,20 +1015,22 @@ pub fn set_selinux_fix(enable: bool) -> Result<()> {
     ioctl_with_bool("selinux_fix", KSM_IOC_SELINUX_FIX, enable)
 }
 
-pub fn release_connection() {
-    if let Ok(mut cache) = FD_CACHE.lock()
-        && let Some(fd) = cache.take()
-    {
-        unsafe {
-            libc::close(fd);
+pub fn release_connection() -> Result<()> {
+    let mut cache = FD_CACHE.lock().map_err(|_| lock_error("fd"))?;
+    if let Some(fd) = cache.take() {
+        let result = unsafe { libc::close(fd) };
+        if result != 0 {
+            return Err(std::io::Error::last_os_error())
+                .context("failed to close Kasumi connection");
         }
     }
-    invalidate_status_cache();
+    drop(cache);
+    invalidate_status_cache()
 }
 
-pub fn invalidate_status_cache() {
-    if let Ok(mut cache) = STATUS_CACHE.lock() {
-        cache.checked = false;
-        cache.status = KasumiStatus::NotPresent;
-    }
+pub fn invalidate_status_cache() -> Result<()> {
+    let mut cache = STATUS_CACHE.lock().map_err(|_| lock_error("status"))?;
+    cache.checked = false;
+    cache.status = KasumiStatus::NotPresent;
+    Ok(())
 }

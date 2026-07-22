@@ -123,7 +123,7 @@ where
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr::send_umountable;
 use crate::{
-    core::{inventory::Module, recovery::ModuleStageFailure, runtime_state::MountStatistics},
+    core::{failure::ModuleStageFailure, inventory::Module, runtime_state::MountStatistics},
     mount::{
         magic_mount::utils::{clone_symlink, collect_module_files, mount_mirror},
         node::{Node, NodeFileType},
@@ -131,16 +131,9 @@ use crate::{
     sys::fs::ensure_dir_exists,
 };
 
-fn try_remount_readonly(mount_target: &Path, log_path: &Path) {
-    if let Err(e) = mount_remount(mount_target, MountFlags::RDONLY | MountFlags::BIND, "") {
-        crate::scoped_log!(
-            warn,
-            "magic",
-            "remount readonly failed: path={}, error={:#?}",
-            log_path.display(),
-            e
-        );
-    }
+fn remount_readonly(mount_target: &Path, log_path: &Path) -> Result<()> {
+    mount_remount(mount_target, MountFlags::RDONLY | MountFlags::BIND, "")
+        .with_context(|| format!("failed to remount readonly: {}", log_path.display()))
 }
 
 fn collect_module_ids(node: &Node, ids: &mut HashSet<String>) {
@@ -179,18 +172,22 @@ struct MountContext {
 }
 
 impl MountContext {
-    fn record_symlink(&mut self, module_path: &Path) {
+    fn record_symlink(&mut self, module_path: &Path) -> Result<()> {
+        let module_id = crate::utils::extract_module_id(module_path).with_context(|| {
+            format!(
+                "failed to extract module id from symlink source {}",
+                module_path.display()
+            )
+        })?;
         self.stats.record_symlink();
-        let module_id =
-            crate::utils::extract_module_id(module_path).unwrap_or_else(|| "<unknown>".to_string());
         *self.symlinks_by_module.entry(module_id).or_default() += 1;
+        Ok(())
     }
 }
 
 pub struct MagicMountOptions<'a> {
     pub mount_source: &'a str,
     pub managed_partitions: &'a [String],
-    pub use_kasumi: bool,
 }
 
 struct MagicMount {
@@ -248,7 +245,7 @@ impl MagicMount {
                     self.work_dir_path.display(),
                 )
             })?;
-            context.record_symlink(module_path);
+            context.record_symlink(module_path)?;
             Ok(())
         } else {
             bail!("cannot mount root symlink {}!", self.path.display());
@@ -285,10 +282,10 @@ impl MagicMount {
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if self.umount {
-            let _ = send_umountable(target);
+            send_umountable(target)?;
         }
 
-        try_remount_readonly(target, target);
+        remount_readonly(target, target)?;
         context.stats.record_file();
         Ok(())
     }
@@ -302,27 +299,26 @@ impl MagicMount {
                 let need = match node.file_type {
                     NodeFileType::Symlink => true,
                     NodeFileType::Whiteout => real_path.exists(),
-                    _ => {
-                        if let Ok(metadata) = real_path.symlink_metadata() {
+                    _ => match real_path.symlink_metadata() {
+                        Ok(metadata) => {
                             let file_type = NodeFileType::from(metadata.file_type());
                             file_type != node.file_type || file_type == NodeFileType::Symlink
-                        } else {
-                            true
                         }
-                    }
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => true,
+                        Err(err) => {
+                            return Err(err).with_context(|| {
+                                format!("failed to inspect {}", real_path.display())
+                            });
+                        }
+                    },
                 };
                 if need {
                     if self.node.module_path.is_none() {
-                        crate::scoped_log!(
-                            error,
-                            "magic",
-                            "tmpfs create skipped: path={}, child={}, reason=root_without_module_path",
-                            self.path.display(),
-                            name
+                        bail!(
+                            "cannot create tmpfs for root child {} under {} without a module path",
+                            name,
+                            self.path.display()
                         );
-                        context.stats.record_ignored();
-                        node.skip = true;
-                        continue;
                     }
                     tmpfs = true;
                     break;
@@ -410,7 +406,7 @@ impl MagicMount {
                 self.path.display()
             );
 
-            try_remount_readonly(&self.work_dir_path, &self.path);
+            remount_readonly(&self.work_dir_path, &self.path)?;
             mount_move(&self.work_dir_path, &self.path).with_context(|| {
                 format!(
                     "moving tmpfs {} -> {}",
@@ -418,22 +414,15 @@ impl MagicMount {
                     self.path.display()
                 )
             })?;
-            if let Err(e) = mount_change(
+            mount_change(
                 &self.path,
                 MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
-            ) {
-                crate::scoped_log!(
-                    warn,
-                    "magic",
-                    "make private failed: path={}, error={:#?}",
-                    self.path.display(),
-                    e
-                );
-            }
+            )
+            .with_context(|| format!("failed to make mount private: {}", self.path.display()))?;
 
             #[cfg(any(target_os = "linux", target_os = "android"))]
             if self.umount {
-                let _ = send_umountable(&self.path);
+                send_umountable(&self.path)?;
             }
             context.stats.record_dir();
         }
@@ -523,12 +512,8 @@ where
 {
     let mut context = MountContext::default();
 
-    if let Some(root) = collect_module_files(
-        module_dir,
-        options.managed_partitions,
-        magic_modules,
-        options.use_kasumi,
-    )? {
+    if let Some(root) = collect_module_files(module_dir, options.managed_partitions, magic_modules)?
+    {
         crate::scoped_log!(debug, "magic", "collected tree: {:?}", root);
         let tmp_root = tmp_path.as_ref();
         let tmp_dir = tmp_root.join("workdir");
@@ -563,16 +548,12 @@ where
         let mut mounted_module_ids = root_module_ids;
         mounted_module_ids.retain(|id| !context.failed_module_ids.contains(id));
 
-        if let Err(e) = unmount(&tmp_dir, UnmountFlags::DETACH) {
-            crate::scoped_log!(
-                error,
-                "magic",
-                "unmount temp failed: path={}, error={}",
-                tmp_dir.display(),
-                e
-            );
-        }
-        fs::remove_dir(tmp_dir).ok();
+        let cleanup_result = unmount(&tmp_dir, UnmountFlags::DETACH)
+            .with_context(|| format!("failed to unmount temp path {}", tmp_dir.display()))
+            .and_then(|()| {
+                fs::remove_dir(&tmp_dir)
+                    .with_context(|| format!("failed to remove temp path {}", tmp_dir.display()))
+            });
 
         for (module_id, count) in &context.symlinks_by_module {
             crate::scoped_log!(
@@ -595,7 +576,9 @@ where
             context.stats.ignored_entries
         );
 
-        ret.map(|()| (mounted_module_ids, context.stats))
+        ret?;
+        cleanup_result?;
+        Ok((mounted_module_ids, context.stats))
     } else {
         crate::scoped_log!(info, "magic", "skip: reason=no_modules_to_mount");
         Ok((Vec::new(), context.stats))

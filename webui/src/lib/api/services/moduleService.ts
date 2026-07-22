@@ -21,14 +21,6 @@ import {
   moduleRuntimeEntrySchema,
   type ModuleRuntimeEntryRaw,
 } from "../schemas";
-import { normalizeMountMode } from "../core/guards";
-
-interface ModuleMetadata {
-  name: string;
-  version: string;
-  author: string;
-  description: string;
-}
 
 type ModuleApplyRulesPayload = {
   default_mode: ModuleRules["default_mode"];
@@ -37,58 +29,25 @@ type ModuleApplyRulesPayload = {
 
 type ModuleRulesApplyEntry = { id: string; rules: ModuleApplyRulesPayload };
 
-function defaultModuleMetadata(moduleId: string): ModuleMetadata {
-  return {
-    name: moduleId,
-    version: "unknown",
-    author: "unknown",
-    description: "No description",
-  };
-}
-
-function normalizeMetadataField(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function extractMetadata(entry: ModuleRuntimeEntryRaw): ModuleMetadata {
-  const defaults = defaultModuleMetadata(entry.id);
-  return {
-    name: normalizeMetadataField(entry.name) ?? defaults.name,
-    version: normalizeMetadataField(entry.version) ?? defaults.version,
-    author: normalizeMetadataField(entry.author) ?? defaults.author,
-    description:
-      normalizeMetadataField(entry.description) ?? defaults.description,
-  };
-}
-
-function toModule(
-  entry: ModuleRuntimeEntryRaw,
-  metadata: ModuleMetadata,
-): Module {
-  const rules = entry.rules ?? { default_mode: "overlay" as const, paths: {} };
+function toModule(entry: ModuleRuntimeEntryRaw): Module {
   return {
     id: entry.id,
-    name: metadata.name,
-    version: metadata.version,
-    author: metadata.author,
-    description: metadata.description,
-    mode: normalizeMountMode(entry.mode),
+    name: entry.name,
+    version: entry.version,
+    author: entry.author,
+    description: entry.description,
+    mode: entry.mode,
     is_mounted: entry.is_mounted,
     enabled: entry.enabled,
-    source_path: entry.source_path,
-    rules: {
-      default_mode: normalizeMountMode(rules.default_mode),
-      paths: rules.paths ?? {},
-    },
-    mount_error: entry.mount_error?.trim() || undefined,
-    suggest_ignore: entry.suggest_ignore,
+    rules: entry.rules,
+    is_blacklisted: entry.is_blacklisted,
   };
 }
 
 function moduleRulesPayload(rules: ModuleRules): ModuleApplyRulesPayload {
   return {
-    default_mode: normalizeMountMode(rules.default_mode),
-    paths: rules.paths ?? {},
+    default_mode: rules.default_mode,
+    paths: rules.paths,
   };
 }
 
@@ -102,12 +61,9 @@ function moduleRulesApplyEntry(
   };
 }
 
-export async function scanModules(path?: string): Promise<Module[]> {
+export async function scanModules(): Promise<Module[]> {
   const payload = await runDaemonCommand(
-    {
-      type: "api-modules-list",
-      path: path?.trim() || null,
-    },
+    { type: "api-modules-list" },
     PATHS.BINARY,
   );
   if (!Array.isArray(payload)) {
@@ -115,7 +71,7 @@ export async function scanModules(path?: string): Promise<Module[]> {
   }
 
   const entries = payload.map((item) => moduleRuntimeEntrySchema.parse(item));
-  return entries.map((entry) => toModule(entry, extractMetadata(entry)));
+  return entries.map(toModule);
 }
 
 export async function saveModuleRules(

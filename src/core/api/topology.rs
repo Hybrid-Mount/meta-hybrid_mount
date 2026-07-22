@@ -9,7 +9,8 @@ use std::{
 };
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use anyhow::{Context, Result};
+use anyhow::Context;
+use anyhow::{Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::process::{MountInfo, MountOptFields, Process};
 use serde::Serialize;
@@ -22,14 +23,12 @@ use crate::{conf::config::Config, core::runtime_state::RuntimeState};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct MountTopologyPayload {
-    pub supported: bool,
     pub inspected_pid: u32,
     pub state_pid: u32,
     pub configured_mount_source: String,
     pub state_mount_point: String,
     pub active_mounts: Vec<String>,
-    pub error: Option<String>,
-    pub summary: Option<MountTopologySummary>,
+    pub summary: MountTopologySummary,
     pub warnings: Vec<String>,
     pub focus_mounts: Vec<MountTopologyEntry>,
     pub shared_peer_groups: Vec<SharedPeerGroupSummary>,
@@ -91,47 +90,6 @@ pub struct SharedPeerGroupSummary {
     pub mount_points: Vec<String>,
 }
 
-impl MountTopologyPayload {
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
-    pub fn unsupported(msg: &str) -> Self {
-        Self {
-            supported: false,
-            inspected_pid: std::process::id(),
-            state_pid: 0,
-            configured_mount_source: String::new(),
-            state_mount_point: String::new(),
-            active_mounts: Vec::new(),
-            error: Some(msg.to_string()),
-            summary: None,
-            warnings: Vec::new(),
-            focus_mounts: Vec::new(),
-            shared_peer_groups: Vec::new(),
-        }
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    fn from_error(
-        state: &RuntimeState,
-        config: &Config,
-        inspected_pid: u32,
-        err_msg: &str,
-    ) -> Self {
-        Self {
-            supported: true,
-            inspected_pid,
-            state_pid: state.pid,
-            configured_mount_source: config.mountsource.clone(),
-            state_mount_point: state.mount_point.display().to_string(),
-            active_mounts: state.active_mounts.clone(),
-            error: Some(err_msg.to_string()),
-            summary: None,
-            warnings: Vec::new(),
-            focus_mounts: Vec::new(),
-            shared_peer_groups: Vec::new(),
-        }
-    }
-}
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[derive(Debug, Default)]
 struct MountCounters {
@@ -176,25 +134,19 @@ struct MountClassifications {
     overlayfs: bool,
 }
 
-pub fn build_mount_topology_payload(config: &Config, state: &RuntimeState) -> MountTopologyPayload {
+pub fn build_mount_topology_payload(
+    config: &Config,
+    state: &RuntimeState,
+) -> Result<MountTopologyPayload> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let inspected_pid = std::process::id();
-
-        match collect_mount_topology(config, state, inspected_pid) {
-            Ok(payload) => payload,
-            Err(err) => {
-                MountTopologyPayload::from_error(state, config, inspected_pid, &format!("{err:#}"))
-            }
-        }
+        collect_mount_topology(config, state, std::process::id())
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         let _ = (config, state);
-        MountTopologyPayload::unsupported(
-            "mount topology inspection is only supported on linux/android",
-        )
+        bail!("mount topology inspection is only supported on linux/android")
     }
 }
 
@@ -358,14 +310,12 @@ fn collect_mount_topology(
     let warnings = build_warnings(&counters, &shared_peer_groups);
 
     Ok(MountTopologyPayload {
-        supported: true,
         inspected_pid,
         state_pid: state.pid,
         configured_mount_source: config.mountsource.clone(),
         state_mount_point: state.mount_point.display().to_string(),
         active_mounts: state.active_mounts.clone(),
-        error: None,
-        summary: Some(MountTopologySummary {
+        summary: MountTopologySummary {
             total_mounts: counters.total_mounts,
             kasumi_excluded_mounts: counters.kasumi_excluded_mounts,
             inspected_mounts,
@@ -389,7 +339,7 @@ fn collect_mount_topology(
             unbindable_mounts: counters.unbindable_mounts,
             shared_peer_groups: shared_peer_groups.len(),
             largest_shared_peer_group,
-        }),
+        },
         warnings,
         focus_mounts,
         shared_peer_groups,

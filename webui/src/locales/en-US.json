@@ -10,6 +10,7 @@
     "rebootConfirm": "Are you sure you want to reboot the device?",
     "reboot": "Reboot",
     "cancel": "Cancel",
+    "close": "Close",
     "saved": "Saved"
   },
   "tabs": {
@@ -55,6 +56,7 @@
     "kasumiWarningBody": "Kasumi is still experimental. Enabling it will expose the Kasumi page, activate Kasumi module routing, and allow Kasumi LKM autoload.",
     "kasumiEnableConfirm": "Enable Kasumi",
     "kasumiConfigSaved": "Kasumi config saved. Runtime was not changed.",
+    "kasumiTmpfsRestriction": "Per-module Kasumi mount is unavailable because tmpfs xattr is not supported on this kernel.",
     "kasumiEnabledSuccess": "Kasumi enabled",
     "kasumiDisabledSuccess": "Kasumi disabled",
     "webui": "WebUI Settings",
@@ -65,7 +67,6 @@
     "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
-    "daemonStartupMode": "Persistent Daemon",
     "customMounts": "Custom Bind Mounts",
     "customMountsDesc": "Bind explicit source paths onto existing targets",
     "customMountsEmpty": "No custom bind mounts configured.",
@@ -91,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "Unmounted",
+      "blacklisted": "Blacklisted",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -105,12 +107,7 @@
     "disableTag": "Disable",
     "nativeTag": "Stealth",
     "unavailableTag": "Unavailable",
-    "kasumiUnavailableHint": "Kasumi is enabled but not currently available.",
-    "mountError": "Mount Error",
-    "suggestIgnoreHint": "This module contains mount-related commands in its .sh files. Consider setting its mode to 'Ignore'.",
-    "clearMountErrors": "Clear Mount Errors",
-    "mountErrorsCleared": "Mount errors cleared",
-    "mountErrorsClearFailed": "Failed to clear mount errors"
+    "kasumiUnavailableHint": "Kasumi is enabled but not currently available."
   },
   "kasumi": {
     "title": "Kasumi Runtime",
@@ -178,7 +175,6 @@
     "stealthUpdated": "Stealth updated",
     "hidexattrUpdated": "HideXattr updated",
     "selinuxFixUpdated": "SELinux Guard updated",
-    "ignoreProtocolUpdated": "Protocol mismatch policy updated",
     "kernelDebugUpdated": "Kernel debug updated",
     "kmiOverride": "KMI Override",
     "autoKmi": "Auto Detect",
@@ -187,8 +183,6 @@
     "stealthTitle": "Stealth",
     "hidexattrTitle": "HideXattr",
     "selinuxFixTitle": "SELinux Guard",
-    "ignoreProtocolTitle": "Ignore Protocol Mismatch",
-    "ignoreProtocolHint": "Allow Kasumi to keep working when the userspace API and kernel protocol do not fully match.",
     "lkmUnavailableHint": "Kasumi is enabled, but the kernel module is not loaded yet.",
     "configOnlyHint": "Most settings below only update config. Runtime changes take effect the next time Kasumi is rebuilt or remounted.",
     "kernelDebugTitle": "Kernel Debug",

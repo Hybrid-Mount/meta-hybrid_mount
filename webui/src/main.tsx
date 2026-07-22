@@ -17,11 +17,16 @@
 import { render } from "solid-js/web";
 import "./init";
 import App from "./App.tsx";
+import { uiStore } from "./lib/stores/uiStore";
 import "./app.css";
 import "./layout.css";
 
+await uiStore.init();
+
 const root = document.getElementById("app");
 
-if (root instanceof HTMLElement) {
-  render(() => <App />, root);
+if (!(root instanceof HTMLElement)) {
+  throw new Error("Missing #app root element");
 }
+
+render(() => <App />, root);

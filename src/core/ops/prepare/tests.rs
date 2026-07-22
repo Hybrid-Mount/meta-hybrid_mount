@@ -48,14 +48,13 @@ fn test_config() -> config::Config {
 }
 
 fn prepare_with_root(
-    config: &config::Config,
+    _config: &config::Config,
     modules: &[Module],
     target_base: &Path,
     system_root: &Path,
     capabilities: &BackendCapabilities,
 ) -> MountPlan {
     prepare_mount_plan_with_root(
-        config,
         modules,
         target_base,
         system_root,
@@ -170,7 +169,7 @@ fn prepare_mount_plan_materializes_only_overlay_descendant_of_magic_tree() {
 }
 
 #[test]
-fn prepare_mount_plan_ignores_kasumi_when_unavailable() {
+fn prepare_mount_plan_rejects_kasumi_when_unavailable() {
     let temp = TempDir::new().unwrap();
     let source = temp.path().join("module");
     write_file(&source.join("system/bin/sh"), "shell");
@@ -179,22 +178,17 @@ fn prepare_mount_plan_ignores_kasumi_when_unavailable() {
     fs::create_dir_all(system_root.join("system/bin")).unwrap();
 
     let storage = temp.path().join("storage");
-    let mut config = test_config();
-    config.kasumi.enabled = true;
     let module = make_module("foo", &source, MountMode::Kasumi, &[]);
 
-    let plan = prepare_with_root(
-        &config,
+    let result = prepare_mount_plan_with_root(
         &[module],
         &storage,
         &system_root,
         &BackendCapabilities::default(),
+        vec!["system".to_string()],
     );
 
-    assert!(plan.overlay_ops.is_empty());
-    assert!(plan.magic_module_ids.is_empty());
-    #[cfg(feature = "kasumi")]
-    assert!(plan.kasumi_module_ids.is_empty());
+    assert!(result.is_err());
     assert!(!storage.join("foo").exists());
 }
 
@@ -274,7 +268,7 @@ fn prepare_mount_plan_preserves_overlay_replace_marker_when_subtree_is_split() {
     let temp = TempDir::new().unwrap();
     let source = temp.path().join("module");
     write_file(&source.join("module.prop"), "id=foo");
-    write_file(&source.join("system/etc/.REPLACE"), "");
+    write_file(&source.join("system/etc/.replace"), "");
     write_file(&source.join("system/etc/init/ignored.rc"), "ignored");
 
     let system_root = temp.path().join("sysroot");
@@ -307,7 +301,7 @@ fn prepare_mount_plan_preserves_overlay_replace_marker_when_subtree_is_split() {
     );
     assert_eq!(plan.overlay_ops[0].lowerdirs, vec![shallow_etc.clone()]);
     assert!(shallow_etc.is_dir());
-    assert!(!shallow_etc.join(".REPLACE").exists());
+    assert!(!shallow_etc.join(".replace").exists());
     assert!(!shallow_etc.join("init").exists());
 }
 
@@ -316,7 +310,7 @@ fn prepare_mount_plan_skips_replace_marker_entries() {
     let temp = TempDir::new().unwrap();
     let source = temp.path().join("module");
     fs::create_dir_all(source.join("system")).unwrap();
-    write_file(&source.join("system/.REPLACE"), "");
+    write_file(&source.join("system/.replace"), "");
     write_file(&source.join("system/bin/sh"), "shell");
 
     let system_root = temp.path().join("sysroot");
@@ -334,7 +328,7 @@ fn prepare_mount_plan_skips_replace_marker_entries() {
     );
 
     assert!(!plan.overlay_ops.is_empty());
-    assert!(!storage.join("foo/system/.REPLACE").exists());
+    assert!(!storage.join("foo/system/.replace").exists());
     assert!(storage.join("foo/system/bin/sh").exists());
 }
 
@@ -342,7 +336,7 @@ fn prepare_mount_plan_skips_replace_marker_entries() {
 fn prepare_mount_plan_keeps_replace_only_overlay_dir() {
     let temp = TempDir::new().unwrap();
     let source = temp.path().join("module");
-    write_file(&source.join("system/app/.RePlAcE"), "");
+    write_file(&source.join("system/app/.replace"), "");
 
     let system_root = temp.path().join("sysroot");
     fs::create_dir_all(system_root.join("system/app")).unwrap();
@@ -364,14 +358,14 @@ fn prepare_mount_plan_keeps_replace_only_overlay_dir() {
         system_root.join("system/app").display().to_string()
     );
     assert!(storage.join("foo/system/app").is_dir());
-    assert!(!storage.join("foo/system/app/.RePlAcE").exists());
+    assert!(!storage.join("foo/system/app/.replace").exists());
 }
 
 #[test]
 fn prepare_mount_plan_marks_magic_for_replace_only_dir() {
     let temp = TempDir::new().unwrap();
     let source = temp.path().join("module");
-    write_file(&source.join("system/.rEpLaCe"), "");
+    write_file(&source.join("system/.replace"), "");
 
     let system_root = temp.path().join("sysroot");
     fs::create_dir_all(system_root.join("system")).unwrap();

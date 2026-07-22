@@ -11,8 +11,8 @@ use crate::defs;
 #[derive(Parser, Debug)]
 #[command(name = "hybrid-mount", version, about = "Hybrid Mount Metamodule")]
 pub struct Cli {
-    #[arg(short = 'c', long = "config")]
-    pub config: Option<PathBuf>,
+    #[arg(short = 'c', long = "config", default_value = defs::CONFIG_FILE)]
+    pub config: PathBuf,
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -126,20 +126,11 @@ pub enum ApiCommands {
     #[command(name = "config-reset")]
     ConfigReset,
     #[command(name = "modules-list")]
-    ModulesList {
-        #[arg(long)]
-        path: Option<PathBuf>,
-    },
+    ModulesList,
     #[command(name = "modules-apply")]
     ModulesApply {
         modules: String,
     },
-    #[cfg(feature = "kasumi")]
-    Lkm,
-    #[cfg(feature = "kasumi")]
-    Features,
-    #[cfg(feature = "kasumi")]
-    Hooks,
     #[command(name = "kernel-uname")]
     KernelUname,
     #[command(name = "open-url")]
@@ -183,7 +174,7 @@ pub enum KasumiRuleCommands {
         target: PathBuf,
         source: PathBuf,
         #[arg(long = "type")]
-        file_type: Option<i32>,
+        file_type: i32,
     },
     Merge {
         target: PathBuf,

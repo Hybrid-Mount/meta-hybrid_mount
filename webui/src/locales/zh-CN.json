@@ -10,6 +10,7 @@
     "rebootConfirm": "你确定你想重启系统吗？",
     "reboot": "重启",
     "cancel": "取消",
+    "close": "关闭",
     "saved": "已保存"
   },
   "tabs": {
@@ -55,6 +56,7 @@
     "kasumiWarningBody": "Kasumi 目前仍是实验性能力。启用后会显示 Kasumi 页面、激活 Kasumi 模块路由，并允许 Kasumi LKM 自动加载。",
     "kasumiEnableConfirm": "启用 Kasumi",
     "kasumiConfigSaved": "Kasumi 配置已保存，当前 runtime 未立即变更。",
+    "kasumiTmpfsRestriction": "当前内核不支持 tmpfs xattr，因此无法使用按模块 Kasumi 挂载。",
     "kasumiEnabledSuccess": "Kasumi 已启用",
     "kasumiDisabledSuccess": "Kasumi 已关闭",
     "webui": "WebUI 设置",
@@ -65,7 +67,6 @@
     "mode_tmpfsDesc": "基于内存，I/O性能优秀，重启即焚",
     "mode_ext4": "Ext4",
     "mode_ext4Desc": "节省内存，使用 Loop 设备",
-    "daemonStartupMode": "持久化守护进程",
     "customMounts": "自定义 Bind 挂载",
     "customMountsDesc": "将指定来源路径绑定到已存在的目标路径",
     "customMountsEmpty": "暂无自定义 Bind 挂载。",
@@ -91,6 +92,7 @@
       "magic": "Magic Mount",
       "kasumi": "Kasumi",
       "unmounted": "未挂载",
+      "blacklisted": "黑名单",
       "short": {
         "overlay": "Overlay",
         "magic": "Magic",
@@ -105,12 +107,7 @@
     "disableTag": "禁用",
     "nativeTag": "隐匿",
     "unavailableTag": "不可用",
-    "kasumiUnavailableHint": "Kasumi 已启用，但当前不可用。",
-    "mountError": "挂载错误",
-    "clearMountErrors": "清除挂载错误",
-    "mountErrorsCleared": "挂载错误已清除",
-    "mountErrorsClearFailed": "清除挂载错误失败",
-    "suggestIgnoreHint": "该模块的 .sh 文件中包含挂载相关命令，建议将其模式设置为 \"Ignore\"（忽略）。"
+    "kasumiUnavailableHint": "Kasumi 已启用，但当前不可用。"
   },
   "kasumi": {
     "title": "Kasumi 工作状态",
@@ -178,7 +175,6 @@
     "stealthUpdated": "Stealth 已更新",
     "hidexattrUpdated": "HideXattr 已更新",
     "selinuxFixUpdated": "SELinux 守护已更新",
-    "ignoreProtocolUpdated": "协议不匹配策略已更新",
     "kernelDebugUpdated": "内核调试已更新",
     "kmiOverride": "KMI 覆盖",
     "autoKmi": "自动识别",
@@ -187,8 +183,6 @@
     "stealthTitle": "隐匿",
     "hidexattrTitle": "隐藏 Xattr",
     "selinuxFixTitle": "SELinux 守护",
-    "ignoreProtocolTitle": "忽略协议不匹配",
-    "ignoreProtocolHint": "当用户态 API 与内核协议版本不完全一致时，允许 Kasumi 继续工作。",
     "lkmUnavailableHint": "Kasumi 已启用，但内核模块尚未加载。",
     "configOnlyHint": "下方大多数设置只会保存配置，会在下次重建或重新挂载 Kasumi runtime 时生效。",
     "kernelDebugTitle": "内核调试",

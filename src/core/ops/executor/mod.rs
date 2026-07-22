@@ -8,7 +8,7 @@ mod overlay;
 
 use std::{collections::BTreeSet, path::Path};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 #[cfg(feature = "kasumi")]
 use crate::core::kasumi_coordinator::KasumiCoordinator;
@@ -17,9 +17,9 @@ use crate::mount::umount_mgr;
 use crate::{
     conf::config,
     core::{
+        failure::{FailureStage, ModuleStageFailure},
         inventory::Module,
         ops::plan::{MountPlan, OverlayOperation},
-        recovery::{FailureStage, ModuleStageFailure},
         runtime_state::MountStatistics,
     },
     utils,
@@ -95,8 +95,6 @@ impl Executor {
             );
             false
         };
-        #[cfg(not(feature = "kasumi"))]
-        let kasumi_available = false;
         #[cfg(feature = "kasumi")]
         if !kasumi_available && !planned_kasumi_ids.is_empty() {
             return Err(ModuleStageFailure::new(
@@ -139,7 +137,7 @@ impl Executor {
                     }
                     Err(err) => {
                         let involved_modules = collect_involved_modules(op);
-                        if is_symlink_loop_mount_error(&err) {
+                        if is_symlink_loop_error(&err) {
                             crate::scoped_log!(
                                 error,
                                 "executor",
@@ -192,25 +190,20 @@ impl Executor {
                 "magic apply: modules={}",
                 magic_need_list.join(", ")
             );
-            let (mounted_ids, magic_stats) = magic::mount_magic(
-                modules,
-                &magic_need_list,
-                config,
-                tempdir.as_ref(),
-                kasumi_available,
-            )
-            .map_err(|err| {
-                let failed_module_ids = resolve_magic_failure_modules(&err, &magic_need_list);
-                ModuleStageFailure::new(
-                    FailureStage::Execute,
-                    failed_module_ids.clone(),
-                    anyhow::anyhow!(
-                        "Failed to mount Magic Mount modules [{}]: {:#}",
-                        failed_module_ids.join(", "),
-                        err
-                    ),
-                )
-            })?;
+            let (mounted_ids, magic_stats) =
+                magic::mount_magic(modules, &magic_need_list, config, tempdir.as_ref()).map_err(
+                    |err| {
+                        ModuleStageFailure::new(
+                            FailureStage::Execute,
+                            magic_need_list.clone(),
+                            anyhow::anyhow!(
+                                "Failed to mount Magic Mount modules [{}]: {:#}",
+                                magic_need_list.join(", "),
+                                err
+                            ),
+                        )
+                    },
+                )?;
             mount_stats.merge(&magic_stats);
             let mounted_ids: BTreeSet<String> = mounted_ids.into_iter().collect();
             final_magic_ids.retain(|id| mounted_ids.contains(id));
@@ -222,7 +215,8 @@ impl Executor {
             );
         }
 
-        let (custom_mount_targets, custom_stats) = custom_bind::mount_custom_binds(config);
+        let (custom_mount_targets, custom_stats) = custom_bind::mount_custom_binds(config)
+            .context("Failed to apply custom bind mounts")?;
         mount_stats.merge(&custom_stats);
 
         #[cfg(feature = "kasumi")]
@@ -247,7 +241,7 @@ impl Executor {
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if !config.disable_umount {
-            let _ = umount_mgr::commit();
+            umount_mgr::commit().context("Failed to commit umountable mount list")?;
         }
 
         let result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
@@ -284,16 +278,7 @@ impl Executor {
     }
 }
 
-fn resolve_magic_failure_modules(err: &anyhow::Error, fallback: &[String]) -> Vec<String> {
-    if let Some(magic_failure) = err.downcast_ref::<ModuleStageFailure>()
-        && !magic_failure.module_ids.is_empty()
-    {
-        return magic_failure.module_ids.clone();
-    }
-    fallback.to_vec()
-}
-
-fn is_symlink_loop_mount_error(err: &anyhow::Error) -> bool {
+fn is_symlink_loop_error(err: &anyhow::Error) -> bool {
     let mut cursor = Some(err.as_ref() as &(dyn std::error::Error + 'static));
     while let Some(current) = cursor {
         let msg = current.to_string();

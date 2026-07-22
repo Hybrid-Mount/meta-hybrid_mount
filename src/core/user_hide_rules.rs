@@ -55,8 +55,8 @@ pub fn save_user_hide_rules(rules: &[PathBuf]) -> Result<()> {
     save_user_hide_rules_to(Path::new(defs::USER_HIDE_RULES_FILE), rules)
 }
 
-pub fn user_hide_rule_count() -> usize {
-    load_user_hide_rules().map(|rules| rules.len()).unwrap_or(0)
+pub fn user_hide_rule_count() -> Result<usize> {
+    Ok(load_user_hide_rules()?.len())
 }
 
 pub fn add_user_hide_rule(path: &Path) -> Result<bool> {
@@ -87,36 +87,18 @@ pub fn remove_user_hide_rule(path: &Path) -> Result<bool> {
     Ok(true)
 }
 
-pub fn apply_user_hide_rules() -> Result<(usize, usize)> {
+pub fn apply_user_hide_rules() -> Result<usize> {
     let rules = load_user_hide_rules()?;
     apply_user_hide_rules_from_paths(&rules)
 }
 
-pub fn apply_user_hide_rules_from_paths(rules: &[PathBuf]) -> Result<(usize, usize)> {
-    if rules.is_empty() {
-        return Ok((0, 0));
-    }
-
-    let mut success = 0usize;
-    let mut failed = 0usize;
-
+pub fn apply_user_hide_rules_from_paths(rules: &[PathBuf]) -> Result<usize> {
     for path in rules {
-        match kasumi::hide_path(path) {
-            Ok(()) => success += 1,
-            Err(err) => {
-                failed += 1;
-                crate::scoped_log!(
-                    warn,
-                    "user-hide-rules",
-                    "apply failed: path={}, error={:#}",
-                    path.display(),
-                    err
-                );
-            }
-        }
+        kasumi::hide_path(path)
+            .with_context(|| format!("failed to apply hide rule for {}", path.display()))?;
     }
 
-    Ok((success, failed))
+    Ok(rules.len())
 }
 
 #[cfg(test)]

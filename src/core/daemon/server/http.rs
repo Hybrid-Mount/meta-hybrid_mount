@@ -8,7 +8,6 @@ use std::{
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     os::fd::AsRawFd,
-    path::PathBuf,
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
@@ -20,7 +19,7 @@ use anyhow::{Context, Error, Result};
 use serde_json::{Value, json};
 
 use super::super::protocol::DaemonResponse;
-use crate::{core::runtime_state::RuntimeState, defs, utils::lock_or_recover};
+use crate::core::runtime_state::RuntimeState;
 
 pub(super) struct WebuiHttpState {
     pub(super) listener: TcpListener,
@@ -127,52 +126,49 @@ impl SseClientRegistry {
         })
     }
 
-    fn insert(&self, stream: TcpStream) -> SseClientId {
+    fn insert(&self, stream: TcpStream) -> Result<SseClientId> {
         let id = SseClientId(self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
-        lock_or_recover(&self.clients).insert(id, stream);
-        id
+        self.clients
+            .lock()
+            .map_err(|_| anyhow::anyhow!("SSE client registry lock is poisoned"))?
+            .insert(id, stream);
+        Ok(id)
     }
 
-    fn remove(&self, id: SseClientId) -> bool {
-        lock_or_recover(&self.clients).remove(&id).is_some()
+    fn remove(&self, id: SseClientId) -> Result<bool> {
+        Ok(self
+            .clients
+            .lock()
+            .map_err(|_| anyhow::anyhow!("SSE client registry lock is poisoned"))?
+            .remove(&id)
+            .is_some())
     }
 
-    fn snapshot(&self) -> Vec<(SseClientId, TcpStream)> {
-        let mut failed_ids = Vec::new();
-        let snapshot = {
-            let clients = lock_or_recover(&self.clients);
-            clients
-                .iter()
-                .filter_map(|(id, stream)| match stream.try_clone() {
-                    Ok(stream) => Some((*id, stream)),
-                    Err(err) => {
-                        failed_ids.push(*id);
-                        crate::scoped_log!(
-                            debug,
-                            "daemon:sse",
-                            "client clone failed: id={}, error={:#}",
-                            id.0,
-                            err
-                        );
-                        None
-                    }
-                })
-                .collect()
-        };
-
-        if !failed_ids.is_empty() {
-            let mut clients = lock_or_recover(&self.clients);
-            for id in failed_ids {
-                clients.remove(&id);
-            }
-        }
-
-        snapshot
+    fn snapshot(&self) -> Result<Vec<(SseClientId, TcpStream)>> {
+        let clients = self
+            .clients
+            .lock()
+            .map_err(|_| anyhow::anyhow!("SSE client registry lock is poisoned"))?;
+        clients
+            .iter()
+            .map(|(id, stream)| {
+                Ok((
+                    *id,
+                    stream
+                        .try_clone()
+                        .with_context(|| format!("failed to clone SSE client {}", id.0))?,
+                ))
+            })
+            .collect()
     }
 
     #[cfg(test)]
-    fn len(&self) -> usize {
-        lock_or_recover(&self.clients).len()
+    fn len(&self) -> Result<usize> {
+        Ok(self
+            .clients
+            .lock()
+            .map_err(|_| anyhow::anyhow!("SSE client registry lock is poisoned"))?
+            .len())
     }
 }
 
@@ -252,7 +248,7 @@ pub(super) enum ConnectionAction {
 }
 
 pub(super) fn handle_http_connection(
-    config_cache: &super::commands::RuntimeConfigCache,
+    config_access: &super::commands::RuntimeConfigAccess,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
@@ -298,7 +294,7 @@ pub(super) fn handle_http_connection(
             }
         };
         if handle_http_request(
-            config_cache,
+            config_access,
             state,
             shutdown,
             webui,
@@ -452,7 +448,7 @@ fn allocate_request_body(content_length: usize) -> Result<Vec<u8>> {
 }
 
 fn handle_http_request(
-    config_cache: &super::commands::RuntimeConfigCache,
+    config_access: &super::commands::RuntimeConfigAccess,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
@@ -517,14 +513,12 @@ fn handle_http_request(
             return Ok(ConnectionAction::Close);
         }
     };
-    let config_path = request
-        .config_path
-        .unwrap_or_else(|| PathBuf::from(defs::CONFIG_FILE));
-    let effective_config = super::commands::load_runtime_config(config_cache, &config_path)?;
+    let config_path = request.config_path;
+    let effective_config = super::commands::load_runtime_config(config_access, &config_path)?;
     let ctx = super::commands::CommandContext::new(
         &effective_config,
         &config_path,
-        config_cache,
+        config_access,
         state,
         shutdown,
         webui,
@@ -611,7 +605,16 @@ fn handle_sse_endpoint(
     stream: &mut TcpStream,
     request_line: &str,
 ) -> Result<ConnectionAction> {
-    let token = parse_query_param(request_line, "token").unwrap_or("");
+    let Some(token) = parse_query_param(request_line, "token") else {
+        write_http_json(
+            stream,
+            401,
+            "Unauthorized",
+            &DaemonResponse::error("missing SSE token"),
+            ConnectionAction::Close,
+        )?;
+        return Ok(ConnectionAction::Close);
+    };
     if token != webui.token {
         write_http_json(
             stream,
@@ -649,7 +652,7 @@ fn handle_sse_endpoint(
     sse_stream
         .set_write_timeout(Some(SSE_WRITE_TIMEOUT))
         .context("Failed to set SSE write timeout")?;
-    let client_id = sse_clients.insert(sse_stream);
+    let client_id = sse_clients.insert(sse_stream)?;
     crate::scoped_log!(debug, "daemon:sse", "client registered: id={}", client_id.0);
 
     // Block until shutdown or client disconnect. Read with 5 s timeout so we
@@ -680,7 +683,7 @@ fn handle_sse_endpoint(
     }
 
     crate::scoped_log!(info, "daemon:sse", "client disconnected");
-    sse_clients.remove(client_id);
+    sse_clients.remove(client_id)?;
 
     Ok(ConnectionAction::Close)
 }
@@ -688,7 +691,9 @@ fn handle_sse_endpoint(
 fn format_sse_event(state: &Arc<Mutex<RuntimeState>>, event: &str, kind: &str) -> Result<String> {
     let id = SSE_EVENT_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
     let payload = {
-        let mut guard = lock_or_recover(state);
+        let mut guard = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("runtime state lock is poisoned"))?;
         guard
             .status_value()
             .context("Failed to build runtime status for SSE")?
@@ -708,37 +713,35 @@ pub(super) fn broadcast_sse_event(
     state: &Arc<Mutex<RuntimeState>>,
     sse_clients: &SharedSseClients,
     kind: &str,
-) {
-    let body = match format_sse_event(state, "state_update", kind) {
-        Ok(body) => body,
-        Err(e) => {
-            crate::scoped_log!(error, "daemon:sse", "failed to encode event: {:#}", e);
-            return;
-        }
-    };
+) -> Result<()> {
+    let body = format_sse_event(state, "state_update", kind)?;
 
-    for (id, mut client) in sse_clients.snapshot() {
-        if !stream_is_writable(&client)
+    for (id, mut client) in sse_clients.snapshot()? {
+        if !stream_is_writable(&client)?
             || client
                 .write_all(body.as_bytes())
                 .and_then(|_| client.flush())
                 .is_err()
         {
-            sse_clients.remove(id);
+            sse_clients.remove(id)?;
         }
     }
+    Ok(())
 }
 
-fn stream_is_writable(stream: &TcpStream) -> bool {
+fn stream_is_writable(stream: &TcpStream) -> Result<bool> {
     let mut fd = libc::pollfd {
         fd: stream.as_raw_fd(),
         events: libc::POLLOUT,
         revents: 0,
     };
     let ready = unsafe { libc::poll(&mut fd, 1, 0) };
-    ready > 0
+    if ready < 0 {
+        return Err(std::io::Error::last_os_error()).context("failed to poll SSE client");
+    }
+    Ok(ready > 0
         && fd.revents & libc::POLLOUT != 0
-        && fd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0
+        && fd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) == 0)
 }
 
 #[cfg(test)]
@@ -861,8 +864,8 @@ mod tests {
             .set_write_timeout(Some(Duration::from_secs(1)))
             .unwrap();
 
-        sse_clients.insert(server);
-        broadcast_sse_event(&state, &sse_clients, "runtime_changed");
+        sse_clients.insert(server).unwrap();
+        broadcast_sse_event(&state, &sse_clients, "runtime_changed").unwrap();
 
         let mut buf = [0u8; 4096];
         let n = client.read(&mut buf).unwrap();
@@ -895,10 +898,14 @@ mod tests {
             .shutdown(std::net::Shutdown::Write)
             .expect("shutdown write on server socket");
 
-        sse_clients.insert(server);
-        broadcast_sse_event(&state, &sse_clients, "runtime_changed");
+        sse_clients.insert(server).unwrap();
+        broadcast_sse_event(&state, &sse_clients, "runtime_changed").unwrap();
 
-        assert!(sse_clients.len() == 0, "dead client should be removed");
+        assert_eq!(
+            sse_clients.len().unwrap(),
+            0,
+            "dead client should be removed"
+        );
     }
 
     #[test]
@@ -909,11 +916,11 @@ mod tests {
         let _client = std::net::TcpStream::connect(addr).unwrap();
         let (server, _peer) = listener.accept().unwrap();
 
-        let id = sse_clients.insert(server.try_clone().unwrap());
-        assert_eq!(sse_clients.len(), 1);
-        assert!(sse_clients.remove(id));
+        let id = sse_clients.insert(server.try_clone().unwrap()).unwrap();
+        assert_eq!(sse_clients.len().unwrap(), 1);
+        assert!(sse_clients.remove(id).unwrap());
 
-        assert_eq!(sse_clients.len(), 0);
+        assert_eq!(sse_clients.len().unwrap(), 0);
     }
 
     #[test]
@@ -924,17 +931,17 @@ mod tests {
         let _client = std::net::TcpStream::connect(addr).unwrap();
         let (server, _peer) = listener.accept().unwrap();
 
-        let id = sse_clients.insert(server.try_clone().unwrap());
-        let snapshot = sse_clients.snapshot();
+        let id = sse_clients.insert(server.try_clone().unwrap()).unwrap();
+        let snapshot = sse_clients.snapshot().unwrap();
         assert_eq!(snapshot.len(), 1);
 
-        assert!(sse_clients.remove(id));
+        assert!(sse_clients.remove(id).unwrap());
 
         for (snapshot_id, mut client) in snapshot {
             assert_eq!(snapshot_id, id);
             let _ = client.write_all(b": keepalive\n\n");
         }
 
-        assert_eq!(sse_clients.len(), 0);
+        assert_eq!(sse_clients.len().unwrap(), 0);
     }
 }
