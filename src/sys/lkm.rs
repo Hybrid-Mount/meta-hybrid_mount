@@ -32,10 +32,7 @@ pub struct LkmStatus {
     target_arch = "aarch64"
 ))]
 const SYS_FINIT_MODULE_NUM: libc::c_long = 273;
-#[cfg(all(
-    any(target_os = "linux", target_os = "android"),
-    target_arch = "arm"
-))]
+#[cfg(all(any(target_os = "linux", target_os = "android"), target_arch = "arm"))]
 const SYS_FINIT_MODULE_NUM: libc::c_long = 379;
 #[cfg(all(
     any(target_os = "linux", target_os = "android"),
