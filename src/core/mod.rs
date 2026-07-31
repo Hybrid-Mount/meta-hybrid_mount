@@ -16,6 +16,7 @@ pub mod failure;
 pub mod inventory;
 #[cfg(feature = "kasumi")]
 pub mod kasumi_coordinator;
+pub mod module_status;
 pub mod ops;
 pub mod runtime_finalization;
 pub mod runtime_state;

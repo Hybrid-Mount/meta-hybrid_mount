@@ -951,7 +951,22 @@ pub fn set_hide_uids(uids: &[u32]) -> Result<()> {
 }
 
 pub fn fix_mounts() -> Result<()> {
-    ioctl_noarg("fix_mounts", KSM_IOC_REORDER_MNT_ID)
+    match ioctl_noarg("fix_mounts", KSM_IOC_REORDER_MNT_ID) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if error.downcast_ref::<Errno>().is_some_and(|errno| {
+                matches!(errno.raw_os_error(), libc::EOPNOTSUPP | libc::ENOTTY)
+            }) =>
+        {
+            crate::scoped_log!(
+                debug,
+                "kasumi:fix_mounts",
+                "skip: reason=unsupported_by_kernel_module"
+            );
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
 }
 
 pub fn hide_overlay_xattrs(path: &Path) -> Result<()> {
