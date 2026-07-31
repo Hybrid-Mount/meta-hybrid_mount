@@ -61,7 +61,17 @@ pub(super) fn build_scanned_modules_payload(
             continue;
         }
         crate::utils::validation::validate_module_id(&id)?;
-        inventory::discovery::validate_module_prop_id(&module_path.join("module.prop"), &id)?;
+        let prop_path = module_path.join("module.prop");
+        if !prop_path.is_file() {
+            crate::scoped_log!(
+                debug,
+                "api:modules",
+                "skip: module={}, reason=missing_module_prop",
+                id
+            );
+            continue;
+        }
+        inventory::discovery::validate_module_prop_id(&prop_path, &id)?;
 
         modules.push(build_module_entry(config, &runtime_index, id, module_path)?);
     }

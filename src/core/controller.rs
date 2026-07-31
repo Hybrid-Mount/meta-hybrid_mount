@@ -122,13 +122,7 @@ impl MountController<StorageReady> {
             "scan start: moduledir={}",
             self.config.moduledir.display()
         );
-        let inventory = match inventory::scan_snapshot(&self.config) {
-            Ok(inventory) => inventory,
-            Err(error) => {
-                self.rollback_storage("scan");
-                return Err(error);
-            }
-        };
+        let inventory = inventory::scan_snapshot(&self.config)?;
         let modules = &inventory.modules;
         let scan_elapsed_ms = scan_started.elapsed().as_millis();
 
@@ -142,17 +136,11 @@ impl MountController<StorageReady> {
 
         crate::scoped_log!(info, "controller:scan_and_prepare_plan", "prepare start");
         let prepare_started = Instant::now();
-        let plan = match prepare::prepare_mount_plan(
+        let plan = prepare::prepare_mount_plan(
             modules,
             self.state.handle.mount_point(),
             &self.backend_capabilities,
-        ) {
-            Ok(plan) => plan,
-            Err(error) => {
-                self.rollback_storage("prepare_plan");
-                return Err(error);
-            }
-        };
+        )?;
         let prepare_elapsed_ms = prepare_started.elapsed().as_millis();
 
         crate::scoped_log!(
@@ -180,7 +168,7 @@ impl MountController<StorageReady> {
         #[cfg(feature = "kasumi")]
         {
             let kasumi = KasumiCoordinator::new(&self.config);
-            if let Err(error) = kasumi
+            kasumi
                 .prepare_mirror_storage(
                     &self.backend_capabilities,
                     modules,
@@ -192,11 +180,7 @@ impl MountController<StorageReady> {
                         plan.kasumi_module_ids.clone(),
                         anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
                     )
-                })
-            {
-                self.rollback_storage("prepare_kasumi");
-                return Err(error.into());
-            }
+                })?;
         }
 
         Ok(MountController {
@@ -210,38 +194,18 @@ impl MountController<StorageReady> {
             tempdir: self.tempdir,
         })
     }
-
-    fn rollback_storage(&self, failed_stage: &str) {
-        rollback_storage(
-            &self.tempdir,
-            &self.config.kasumi.mirror_path,
-            self.state.handle.mode(),
-            failed_stage,
-        );
-    }
 }
 
 impl MountController<Planned> {
     pub fn execute(mut self) -> Result<MountController<Executed>> {
         let started = Instant::now();
         crate::scoped_log!(info, "controller:execute", "start");
-        let result = match executor::Executor::execute(
+        let result = executor::Executor::execute(
             &mut self.state.plan,
             &self.state.inventory.modules,
             &self.config,
             self.tempdir.clone(),
-        ) {
-            Ok(result) => result,
-            Err(error) => {
-                rollback_storage(
-                    &self.tempdir,
-                    &self.config.kasumi.mirror_path,
-                    self.state.handle.mode(),
-                    "execute",
-                );
-                return Err(error);
-            }
-        };
+        )?;
 
         crate::scoped_log!(
             info,
@@ -270,21 +234,13 @@ impl MountController<Executed> {
     pub fn finalize(self) -> Result<()> {
         let started = Instant::now();
         crate::scoped_log!(info, "controller:finalize", "start");
-        if let Err(error) = runtime_finalization::finalize(
+        runtime_finalization::finalize(
             &self.config,
             self.state.handle.mode(),
             self.state.handle.mount_point(),
             &self.state.result,
             &self.state.inventory_summary,
-        ) {
-            rollback_storage(
-                &self.tempdir,
-                &self.config.kasumi.mirror_path,
-                self.state.handle.mode(),
-                "finalize_runtime",
-            );
-            return Err(error);
-        }
+        )?;
 
         clean_up(
             &self.tempdir,
@@ -301,31 +257,6 @@ impl MountController<Executed> {
         );
 
         Ok(())
-    }
-}
-
-fn rollback_storage(
-    tempdir: &Path,
-    kasumi_mirror_path: &Path,
-    storage_mode: crate::core::storage::StorageMode,
-    failed_stage: &str,
-) {
-    crate::scoped_log!(
-        warn,
-        "controller:rollback",
-        "start: failed_stage={}, path={}",
-        failed_stage,
-        tempdir.display()
-    );
-    if let Err(error) = clean_up(tempdir, kasumi_mirror_path, storage_mode, false) {
-        crate::scoped_log!(
-            error,
-            "controller:rollback",
-            "failed: failed_stage={}, path={}, error={:#}",
-            failed_stage,
-            tempdir.display(),
-            error
-        );
     }
 }
 
