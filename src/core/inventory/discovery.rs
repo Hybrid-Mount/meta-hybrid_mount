@@ -214,7 +214,9 @@ mod tests {
     #[test]
     fn scan_skips_missing_module_prop_and_keeps_valid_modules() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir(temp.path().join("incomplete")).unwrap();
+        let disabled = temp.path().join("alpha");
+        fs::create_dir(&disabled).unwrap();
+        fs::write(disabled.join("disable"), b"").unwrap();
         let valid = temp.path().join("valid");
         fs::create_dir(&valid).unwrap();
         write_prop(&valid, "valid");

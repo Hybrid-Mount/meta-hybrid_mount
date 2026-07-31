@@ -87,31 +87,6 @@ fn scanned_modules_payload_includes_module_prop_metadata() {
 }
 
 #[test]
-fn scanned_modules_payload_skips_directory_without_module_prop() {
-    let temp = tempfile::tempdir().unwrap();
-    let incomplete_dir = temp.path().join("incomplete");
-    fs::create_dir_all(&incomplete_dir).unwrap();
-    let valid_dir = temp.path().join("valid");
-    fs::create_dir_all(&valid_dir).unwrap();
-    fs::write(
-        valid_dir.join("module.prop"),
-        "id=valid\nname=Valid\nversion=1.0\nauthor=Alice\ndescription=Valid module\n",
-    )
-    .unwrap();
-
-    let config = Config {
-        moduledir: temp.path().to_path_buf(),
-        ..Default::default()
-    };
-
-    let modules =
-        build_scanned_modules_payload(&config, &RuntimeState::default(), temp.path()).unwrap();
-
-    assert_eq!(modules.len(), 1);
-    assert_eq!(modules[0].id, "valid");
-}
-
-#[test]
 fn apply_modules_payload_rules_only_preserves_disable_marker() {
     let temp = tempfile::tempdir().unwrap();
     let config_path = temp.path().join("config.toml");

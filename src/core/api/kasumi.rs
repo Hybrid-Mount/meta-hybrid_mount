@@ -76,13 +76,6 @@ pub struct KasumiVersionPayload {
 }
 
 pub fn parse_kasumi_rule_listing(listing: &str) -> Result<Vec<KasumiRuleEntry>> {
-    const STATUS_KEYS: &[&str] = &[
-        "maps_spoof",
-        "mount_hide",
-        "selinux_fix",
-        "statfs_spoof",
-        "stealth",
-    ];
     let mut rules = Vec::new();
 
     for raw_line in listing.lines() {
@@ -154,12 +147,6 @@ pub fn parse_kasumi_rule_listing(listing: &str) -> Result<Vec<KasumiRuleEntry>> 
                     file_type: None,
                 });
             }
-            _ if STATUS_KEYS.contains(&kind_raw)
-                && matches!(parts.next(), Some("enabled" | "disabled"))
-                && parts.next().is_none() =>
-            {
-                continue;
-            }
             _ => bail!("unknown Kasumi rule type in listing: {line}"),
         }
     }
@@ -226,36 +213,5 @@ fn mismatch_message(status: KasumiStatus, kernel_version: i32) -> Option<String>
         )),
         KasumiStatus::Available => None,
         KasumiStatus::NotPresent => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_kasumi_rule_listing;
-
-    #[test]
-    fn rule_listing_skips_feature_status_lines() {
-        let listing = "Kasumi Protocol: 16\nstealth enabled\nselinux_fix disabled\nADD /system/app /mirror/app 1\n";
-
-        let rules = parse_kasumi_rule_listing(listing).unwrap();
-
-        assert_eq!(rules.len(), 1);
-        assert_eq!(rules[0].rule_type, "ADD");
-    }
-
-    #[test]
-    fn rule_listing_rejects_unknown_non_status_lines() {
-        let result = parse_kasumi_rule_listing("unknown_feature enabled\n");
-
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn rule_listing_keeps_lowercase_path_rules_named_like_status_values() {
-        let rules = parse_kasumi_rule_listing("hide enabled\ninject disabled\n").unwrap();
-
-        assert_eq!(rules.len(), 2);
-        assert_eq!(rules[0].path.as_deref(), Some("enabled"));
-        assert_eq!(rules[1].path.as_deref(), Some("disabled"));
     }
 }

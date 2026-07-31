@@ -125,11 +125,7 @@ impl MountController<StorageReady> {
         let inventory = match inventory::scan_snapshot(&self.config) {
             Ok(inventory) => inventory,
             Err(error) => {
-                if let Err(rollback_error) = self.rollback_storage("scan") {
-                    return Err(error.context(format!(
-                        "storage rollback after scan failed: {rollback_error:#}"
-                    )));
-                }
+                self.rollback_storage("scan");
                 return Err(error);
             }
         };
@@ -153,11 +149,7 @@ impl MountController<StorageReady> {
         ) {
             Ok(plan) => plan,
             Err(error) => {
-                if let Err(rollback_error) = self.rollback_storage("prepare_plan") {
-                    return Err(error.context(format!(
-                        "storage rollback after plan preparation failed: {rollback_error:#}"
-                    )));
-                }
+                self.rollback_storage("prepare_plan");
                 return Err(error);
             }
         };
@@ -202,11 +194,7 @@ impl MountController<StorageReady> {
                     )
                 })
             {
-                if let Err(rollback_error) = self.rollback_storage("prepare_kasumi") {
-                    return Err(anyhow::Error::from(error).context(format!(
-                        "storage rollback after Kasumi preparation failed: {rollback_error:#}"
-                    )));
-                }
+                self.rollback_storage("prepare_kasumi");
                 return Err(error.into());
             }
         }
@@ -223,14 +211,13 @@ impl MountController<StorageReady> {
         })
     }
 
-    fn rollback_storage(&self, failed_stage: &str) -> Result<()> {
+    fn rollback_storage(&self, failed_stage: &str) {
         rollback_storage(
             &self.tempdir,
             &self.config.kasumi.mirror_path,
             self.state.handle.mode(),
-            self.config.disable_umount,
             failed_stage,
-        )
+        );
     }
 }
 
@@ -238,12 +225,23 @@ impl MountController<Planned> {
     pub fn execute(mut self) -> Result<MountController<Executed>> {
         let started = Instant::now();
         crate::scoped_log!(info, "controller:execute", "start");
-        let result = executor::Executor::execute(
+        let result = match executor::Executor::execute(
             &mut self.state.plan,
             &self.state.inventory.modules,
             &self.config,
             self.tempdir.clone(),
-        )?;
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                rollback_storage(
+                    &self.tempdir,
+                    &self.config.kasumi.mirror_path,
+                    self.state.handle.mode(),
+                    "execute",
+                );
+                return Err(error);
+            }
+        };
 
         crate::scoped_log!(
             info,
@@ -272,13 +270,21 @@ impl MountController<Executed> {
     pub fn finalize(self) -> Result<()> {
         let started = Instant::now();
         crate::scoped_log!(info, "controller:finalize", "start");
-        runtime_finalization::finalize(
+        if let Err(error) = runtime_finalization::finalize(
             &self.config,
             self.state.handle.mode(),
             self.state.handle.mount_point(),
             &self.state.result,
             &self.state.inventory_summary,
-        )?;
+        ) {
+            rollback_storage(
+                &self.tempdir,
+                &self.config.kasumi.mirror_path,
+                self.state.handle.mode(),
+                "finalize_runtime",
+            );
+            return Err(error);
+        }
 
         clean_up(
             &self.tempdir,
@@ -302,9 +308,8 @@ fn rollback_storage(
     tempdir: &Path,
     kasumi_mirror_path: &Path,
     storage_mode: crate::core::storage::StorageMode,
-    disable_umount: bool,
     failed_stage: &str,
-) -> Result<()> {
+) {
     crate::scoped_log!(
         warn,
         "controller:rollback",
@@ -312,12 +317,16 @@ fn rollback_storage(
         failed_stage,
         tempdir.display()
     );
-    clean_up(tempdir, kasumi_mirror_path, storage_mode, disable_umount).with_context(|| {
-        format!(
-            "rollback failed at stage {failed_stage} for {}",
-            tempdir.display()
-        )
-    })
+    if let Err(error) = clean_up(tempdir, kasumi_mirror_path, storage_mode, false) {
+        crate::scoped_log!(
+            error,
+            "controller:rollback",
+            "failed: failed_stage={}, path={}, error={:#}",
+            failed_stage,
+            tempdir.display(),
+            error
+        );
+    }
 }
 
 fn clean_up(
