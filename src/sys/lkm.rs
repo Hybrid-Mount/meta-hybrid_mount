@@ -42,6 +42,22 @@ const SYS_FINIT_MODULE_NUM: libc::c_long = 313;
     any(target_os = "linux", target_os = "android"),
     target_arch = "aarch64"
 ))]
+const SYS_INIT_MODULE_NUM: libc::c_long = 105;
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    target_arch = "x86_64"
+))]
+const SYS_INIT_MODULE_NUM: libc::c_long = 175;
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    any(target_arch = "arm", target_arch = "x86")
+))]
+const SYS_INIT_MODULE_NUM: libc::c_long = 128;
+
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    target_arch = "aarch64"
+))]
 const SYS_DELETE_MODULE_NUM: libc::c_long = 106;
 #[cfg(all(
     any(target_os = "linux", target_os = "android"),
@@ -175,16 +191,49 @@ pub fn status(config: &KasumiConfig) -> Result<LkmStatus> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+fn load_module_via_init(ko_path: &Path, params: &str) -> Result<()> {
+    let image = fs::read(ko_path)
+        .with_context(|| format!("failed to read module {}", ko_path.display()))?;
+    let params = CString::new(params).context("module params contain interior NUL")?;
+    let ret = unsafe {
+        libc::syscall(
+            SYS_INIT_MODULE_NUM,
+            image.as_ptr(),
+            image.len(),
+            params.as_ptr(),
+        )
+    };
+    if ret != 0 {
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::EEXIST) {
+            return Ok(());
+        }
+        return Err(error).with_context(|| format!("init_module failed for {}", ko_path.display()));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn load_module_via_finit(ko_path: &Path, params: &str) -> Result<()> {
     let file = fs::File::open(ko_path)
         .with_context(|| format!("failed to open module {}", ko_path.display()))?;
-    let params = CString::new(params).context("module params contain interior NUL")?;
+    let c_params = CString::new(params).context("module params contain interior NUL")?;
 
-    let ret = unsafe { libc::syscall(SYS_FINIT_MODULE_NUM, file.as_raw_fd(), params.as_ptr(), 0) };
+    let ret =
+        unsafe { libc::syscall(SYS_FINIT_MODULE_NUM, file.as_raw_fd(), c_params.as_ptr(), 0) };
     if ret != 0 {
         let err = std::io::Error::last_os_error();
         if err.raw_os_error() == Some(libc::EEXIST) {
             return Ok(());
+        }
+        if err.raw_os_error() == Some(libc::ENOSYS) {
+            crate::scoped_log!(
+                debug,
+                "lkm",
+                "finit_module unavailable, falling back to init_module: file={}",
+                ko_path.display()
+            );
+            return load_module_via_init(ko_path, params);
         }
         return Err(err).with_context(|| format!("finit_module failed for {}", ko_path.display()));
     }
