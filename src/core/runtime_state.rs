@@ -371,29 +371,13 @@ impl RuntimeState {
             "start: path={}",
             defs::STATE_FILE
         );
-        Self::load_from_path(Path::new(defs::STATE_FILE))
-    }
-
-    fn load_from_path(path: &Path) -> Result<Self> {
-        let content = match fs::read_to_string(path) {
-            Ok(content) => content,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                crate::scoped_log!(
-                    debug,
-                    "runtime_state:load",
-                    "fallback: reason=state_file_missing, path={}",
-                    path.display()
-                );
-                return Ok(Self::default());
-            }
-            Err(err) => return Err(err.into()),
-        };
+        let content = fs::read_to_string(defs::STATE_FILE)?;
         let state = serde_json::from_str(&content)?;
         crate::scoped_log!(
             debug,
             "runtime_state:load",
             "complete: path={}, bytes={}",
-            path.display(),
+            defs::STATE_FILE,
             content.len()
         );
         Ok(state)
@@ -434,30 +418,4 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     );
 
     active_mounts
-}
-
-#[cfg(test)]
-mod tests {
-    use super::RuntimeState;
-
-    #[test]
-    fn load_missing_state_returns_default() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("missing-state.json");
-
-        let state = RuntimeState::load_from_path(&path).unwrap();
-
-        assert!(!state.daemon.alive);
-        assert!(state.mount_point.as_os_str().is_empty());
-        assert!(state.active_mounts.is_empty());
-    }
-
-    #[test]
-    fn load_invalid_state_still_fails() {
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("invalid-state.json");
-        std::fs::write(&path, b"not json").unwrap();
-
-        assert!(RuntimeState::load_from_path(&path).is_err());
-    }
 }

@@ -60,6 +60,7 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
     let mut skipped_reserved = 0usize;
     let mut skipped_blocked = 0usize;
     let mut skipped_blacklisted = 0usize;
+    let mut skipped_missing_prop = 0usize;
     let mut root_entries_scanned = 0usize;
     let mut marker_directory_scans = 0usize;
 
@@ -96,7 +97,14 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
 
         let prop = path.join("module.prop");
         if !prop.is_file() {
-            bail!("module {id} is missing a regular module.prop");
+            skipped_missing_prop += 1;
+            crate::scoped_log!(
+                debug,
+                "scanner",
+                "skip: module={}, reason=missing_module_prop",
+                id
+            );
+            continue;
         }
         validate_module_prop_id(&prop, &id)?;
 
@@ -128,12 +136,17 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
     crate::scoped_log!(
         info,
         "scanner",
-        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, root_entries_scanned={}, marker_directory_scans={}, elapsed_ms={}",
-        modules.len() + skipped_reserved + skipped_blocked + skipped_blacklisted,
+        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, skipped_missing_prop={}, root_entries_scanned={}, marker_directory_scans={}, elapsed_ms={}",
+        modules.len()
+            + skipped_reserved
+            + skipped_blocked
+            + skipped_blacklisted
+            + skipped_missing_prop,
         modules.len(),
         skipped_reserved,
         skipped_blocked,
         skipped_blacklisted,
+        skipped_missing_prop,
         root_entries_scanned,
         marker_directory_scans,
         started.elapsed().as_millis()
@@ -199,11 +212,19 @@ mod tests {
     }
 
     #[test]
-    fn scan_rejects_missing_module_prop() {
+    fn scan_skips_missing_module_prop_and_keeps_valid_modules() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir(temp.path().join("alpha")).unwrap();
+        let disabled = temp.path().join("alpha");
+        fs::create_dir(&disabled).unwrap();
+        fs::write(disabled.join("disable"), b"").unwrap();
+        let valid = temp.path().join("valid");
+        fs::create_dir(&valid).unwrap();
+        write_prop(&valid, "valid");
 
-        assert!(scan(&test_config(temp.path())).is_err());
+        let modules = scan(&test_config(temp.path())).unwrap();
+
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "valid");
     }
 
     #[test]
