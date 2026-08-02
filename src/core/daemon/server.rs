@@ -53,7 +53,14 @@ pub fn serve() -> Result<()> {
             );
             RuntimeState::default()
         }
-        Err(err) => return Err(err).context("Failed to load daemon runtime state"),
+        Err(err) => {
+            return Err(err).with_context(|| {
+                format!(
+                    "Failed to load daemon runtime state: path={}",
+                    defs::STATE_FILE
+                )
+            });
+        }
     };
     let listener = UnixListener::bind(defs::SOCKET_FILE)
         .with_context(|| format!("Failed to bind daemon socket {}", defs::SOCKET_FILE))?;

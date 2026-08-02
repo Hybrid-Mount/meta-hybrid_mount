@@ -68,7 +68,7 @@ fn runtime_probe() -> Result<RuntimeProbe> {
         Ok(kmi) => kmi,
         Err(err) => {
             crate::scoped_log!(
-                warn,
+                debug,
                 "kasumi:status",
                 "KMI unavailable for runtime status: error={:#}",
                 err
