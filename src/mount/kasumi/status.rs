@@ -64,6 +64,19 @@ fn runtime_probe() -> Result<RuntimeProbe> {
         (None, Vec::new(), 0)
     };
 
+    let current_kmi = match lkm::current_kmi() {
+        Ok(kmi) => kmi,
+        Err(err) => {
+            crate::scoped_log!(
+                debug,
+                "kasumi:status",
+                "KMI unavailable for runtime status: error={:#}",
+                err
+            );
+            String::new()
+        }
+    };
+
     let probe = RuntimeProbe {
         checked_at: Instant::now(),
         live_status,
@@ -73,7 +86,7 @@ fn runtime_probe() -> Result<RuntimeProbe> {
         hooks,
         rule_count,
         kernel_supported: kasumi::kernel_is_supported()?,
-        current_kmi: lkm::current_kmi()?,
+        current_kmi,
     };
     *cache
         .lock()

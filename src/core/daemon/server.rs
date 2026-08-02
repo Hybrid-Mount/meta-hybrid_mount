@@ -42,7 +42,26 @@ pub fn serve() -> Result<()> {
     fs::create_dir_all(defs::RUN_DIR)
         .with_context(|| format!("Failed to create daemon run directory {}", defs::RUN_DIR))?;
     cleanup_stale_runtime_files()?;
-    let mut runtime_state = RuntimeState::load()?;
+    let mut runtime_state = match RuntimeState::load() {
+        Ok(state) => state,
+        Err(err) if error_is_not_found(&err) => {
+            crate::scoped_log!(
+                warn,
+                "daemon",
+                "runtime state missing, starting with defaults: path={}",
+                defs::STATE_FILE
+            );
+            RuntimeState::default()
+        }
+        Err(err) => {
+            return Err(err).with_context(|| {
+                format!(
+                    "Failed to load daemon runtime state: path={}",
+                    defs::STATE_FILE
+                )
+            });
+        }
+    };
     let listener = UnixListener::bind(defs::SOCKET_FILE)
         .with_context(|| format!("Failed to bind daemon socket {}", defs::SOCKET_FILE))?;
     fs::set_permissions(defs::SOCKET_FILE, fs::Permissions::from_mode(0o600))
@@ -278,6 +297,13 @@ fn cleanup_stale_runtime_files() -> Result<()> {
     Ok(())
 }
 
+fn error_is_not_found(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<IoError>())
+        .any(|error| error.kind() == ErrorKind::NotFound)
+}
+
 fn cleanup_stale_socket(path: &Path) -> Result<()> {
     if !path.exists() {
         return Ok(());
@@ -416,6 +442,20 @@ impl Drop for DaemonRuntimeGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_runtime_state_error_is_recoverable() {
+        let error = anyhow::Error::from(IoError::from(ErrorKind::NotFound));
+
+        assert!(error_is_not_found(&error));
+    }
+
+    #[test]
+    fn malformed_runtime_state_error_is_not_recoverable() {
+        let error = anyhow::anyhow!("invalid runtime state");
+
+        assert!(!error_is_not_found(&error));
+    }
 
     #[test]
     fn limited_daemon_request_reader_accepts_one_line() {

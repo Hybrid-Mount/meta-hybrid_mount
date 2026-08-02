@@ -285,3 +285,23 @@ pub fn autoload_if_needed(config: &KasumiConfig) -> Result<bool> {
     load(config)?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse_kmi_from_release;
+
+    #[test]
+    fn parses_gki_release() {
+        assert_eq!(
+            parse_kmi_from_release("5.15.153-android13-8-g123456789abc").unwrap(),
+            "android13-5.15"
+        );
+    }
+
+    #[test]
+    fn rejects_vendor_release_without_android_kmi() {
+        let error = parse_kmi_from_release("5.15.207-g3ddad1147e36").unwrap_err();
+
+        assert!(error.to_string().contains("has no Android version"));
+    }
+}
