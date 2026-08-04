@@ -266,8 +266,9 @@ fn dispatch_config(ctx: &CommandContext<'_>, cmd: ConfigCommand) -> Result<Value
     match cmd {
         ConfigCommand::Get => to_value(config),
         ConfigCommand::Set { config: payload } => {
-            let config: Config =
+            let mut config: Config =
                 serde_json::from_value(payload).context("Failed to decode config payload")?;
+            config.sanitize_disabled_features();
             config.save_to_file(config_path)?;
             ctx.refresh(&config, json!({ "saved": true, "config": &config }))
         }
@@ -516,8 +517,9 @@ fn patch_config_file(config_path: &Path, patch: Value) -> Result<Config> {
     merge_json(&mut payload, patch, 0)
         .context("Failed to merge config patch (nesting too deep)")?;
 
-    let config: Config =
+    let mut config: Config =
         serde_json::from_value(payload).context("Failed to decode patched config")?;
+    config.sanitize_disabled_features();
     config.save_to_file(config_path)?;
     Ok(config)
 }
@@ -749,6 +751,33 @@ mod tests {
         assert!(validate_url("https://example.com\n").is_err());
         assert!(validate_url("https://example.com\r\n").is_err());
         assert!(validate_url("https://ex\0ample.com").is_err());
+    }
+
+    #[cfg(not(feature = "kasumi"))]
+    #[test]
+    fn config_patch_sanitizes_disabled_kasumi_values() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.toml");
+        Config::default().save_to_file(&config_path).unwrap();
+
+        let config = patch_config_file(
+            &config_path,
+            json!({
+                "default_mode": "kasumi",
+                "kasumi": { "enabled": true },
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(config.default_mode, crate::domain::DefaultMode::Magic);
+        assert!(!config.kasumi.enabled);
+        assert!(
+            !serde_json::to_value(config)
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("kasumi")
+        );
     }
 
     #[test]

@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import type { KasumiStatus, StorageStatus } from "../../types";
-import type { KasumiStatusPayload, RuntimeStatePayload } from "../schemas";
+import type { StorageStatus } from "../../types";
+import type { RuntimeStatePayload } from "../schemas";
 
 export function buildModeStats(
   state: RuntimeStatePayload,
@@ -23,21 +23,12 @@ export function buildModeStats(
   return {
     overlay: state.mode_stats.overlayfs,
     magic: state.mode_stats.magicmount,
-    kasumi: state.mode_stats.kasumi,
     blacklisted: state.mode_stats.blacklisted,
   };
 }
 
 export function buildMountedCount(state: RuntimeStatePayload): number {
   return (
-    state.overlay_modules.length +
-    state.magic_modules.length +
-    state.kasumi_modules.length
+    state.overlay_modules.length + state.magic_modules.length
   );
-}
-
-export function buildKasumiStatusFromPayload(
-  payload: KasumiStatusPayload,
-): KasumiStatus {
-  return payload as KasumiStatus;
 }

@@ -6,6 +6,8 @@ use std::{collections::HashMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(feature = "kasumi"))]
+use crate::domain::MountMode;
 use crate::{
     defs,
     domain::{DefaultMode, ModuleRules},
@@ -181,12 +183,39 @@ pub struct Config {
     pub overlay_mode: OverlayMode,
     pub disable_umount: bool,
     pub default_mode: DefaultMode,
+    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
     pub kasumi: KasumiConfig,
     pub rules: HashMap<String, ModuleRules>,
     #[serde(alias = "customMounts")]
     pub custom_mounts: Vec<CustomBindMount>,
     #[serde(skip)]
     pub module_blacklist: Vec<String>,
+}
+
+impl Config {
+    pub(crate) fn sanitize_disabled_features(&mut self) {
+        #[cfg(not(feature = "kasumi"))]
+        {
+            self.kasumi = KasumiConfig::default();
+            if matches!(self.default_mode, DefaultMode::Kasumi) {
+                self.default_mode = DefaultMode::Magic;
+            }
+            for rules in self.rules.values_mut() {
+                if matches!(rules.default_mode, MountMode::Kasumi) {
+                    rules.default_mode = MountMode::Magic;
+                }
+                for mode in rules.paths.values_mut() {
+                    if matches!(mode, MountMode::Kasumi) {
+                        *mode = MountMode::Magic;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn kasumi_feature_disabled(_config: &KasumiConfig) -> bool {
+    !cfg!(feature = "kasumi")
 }
 
 fn default_moduledir() -> PathBuf {

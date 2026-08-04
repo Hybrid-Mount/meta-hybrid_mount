@@ -40,10 +40,9 @@ function parseBooleanEnv(name, defaultValue) {
   throw new Error(`invalid boolean value for ${name}: ${process.env[name]}`);
 }
 
-function renderConstants({ version, isRelease, enableKasumi }) {
+function renderConstants({ version, isRelease }) {
   return `export const APP_VERSION = "${version}";
 export const IS_RELEASE = ${isRelease};
-export const ENABLE_KASUMI = ${enableKasumi};
 export const RUST_PATHS = {
   CONFIG: "/data/adb/hybrid-mount/config.toml",
   DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",
@@ -55,11 +54,10 @@ export const RUST_PATHS = {
 const version =
   process.env.HYBRID_MOUNT_WEBUI_VERSION || (await readCargoVersion());
 const isRelease = parseBooleanEnv("HYBRID_MOUNT_WEBUI_RELEASE", false);
-const enableKasumi = parseBooleanEnv("HYBRID_MOUNT_WEBUI_ENABLE_KASUMI", true);
 await mkdir(path.dirname(outputFile), { recursive: true });
 await writeFile(
   outputFile,
-  renderConstants({ version, isRelease, enableKasumi }),
+  renderConstants({ version, isRelease }),
   "utf8",
 );
 console.log(`Generated ${path.relative(webuiRoot, outputFile)}.`);

@@ -11,12 +11,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 BUILD_MODE="debug"
-BUILD_FLAVOR="full"
+BUILD_FLAVOR="lite"
 ARCH="arm64"
 ALL_ARCH=false
 SKIP_WEBUI=false
 RUN_LINT=false
-KASUMI_LKM_DIR="${HYBRID_MOUNT_KASUMI_LKM_DIR:-}"
 
 usage() {
 	cat <<'EOF'
@@ -24,20 +23,17 @@ Usage: ./scripts/build-local.sh [options]
 
 Options:
   -r, --release               Build a release package
-      --lite                  Build the lite package (no Kasumi frontend/backend/LKM)
       --nano                  Build the nano package (config-only, no WebUI/CLI/daemon)
   -a, --arch <arm64>
                               Build a single Android ABI (default: arm64)
       --all-arch              Build all supported Android ABIs (currently arm64 only)
       --skip-webui            Reuse the current WebUI assets
       --lint                  Run cargo xtask lint before building
-      --kasumi-lkm-dir <DIR>  Stage .ko files from DIR into kasumi_lkm/
   -h, --help                  Show this help message
 
 Examples:
   ./scripts/build-local.sh
   ./scripts/build-local.sh --release --arch arm64
-  ./scripts/build-local.sh --kasumi-lkm-dir /path/to/kasumi-lkm
 EOF
 }
 
@@ -81,10 +77,6 @@ while [[ $# -gt 0 ]]; do
 		BUILD_MODE="release"
 		shift
 		;;
-	--lite)
-		BUILD_FLAVOR="lite"
-		shift
-		;;
 	--nano)
 		BUILD_FLAVOR="nano"
 		shift
@@ -105,11 +97,6 @@ while [[ $# -gt 0 ]]; do
 	--lint)
 		RUN_LINT=true
 		shift
-		;;
-	--kasumi-lkm-dir)
-		require_option_value "$1" "${2:-}"
-		KASUMI_LKM_DIR="$2"
-		shift 2
 		;;
 	-h | --help)
 		usage
@@ -149,14 +136,6 @@ if [[ -z "$NDK_HOME" ]]; then
 fi
 export ANDROID_NDK_HOME="$NDK_HOME"
 
-if [[ -n "$KASUMI_LKM_DIR" ]]; then
-	if [[ ! -d "$KASUMI_LKM_DIR" ]]; then
-		echo "error: Kasumi LKM directory not found: $KASUMI_LKM_DIR" >&2
-		exit 1
-	fi
-	export HYBRID_MOUNT_KASUMI_LKM_DIR="$KASUMI_LKM_DIR"
-fi
-
 cd "$REPO_ROOT"
 
 echo "== Hybrid Mount local build =="
@@ -174,13 +153,6 @@ elif [[ "$SKIP_WEBUI" == "true" ]]; then
 	echo "WebUI: skip"
 else
 	echo "WebUI: build"
-fi
-if [[ -n "${HYBRID_MOUNT_KASUMI_LKM_DIR:-}" ]]; then
-	if [[ "$BUILD_FLAVOR" != "full" ]]; then
-		echo "Kasumi LKM dir: ignored for $BUILD_FLAVOR build"
-	else
-		echo "Kasumi LKM dir: ${HYBRID_MOUNT_KASUMI_LKM_DIR}"
-	fi
 fi
 echo
 

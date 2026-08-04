@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 
-import { AppError } from "./api/core/error";
 import { PATHS } from "./constants";
-import { ENABLE_KASUMI } from "./constants_gen";
 import { loadMockApi } from "./api.mock-loader";
 import {
   ensureDaemonAwake,
@@ -40,77 +38,6 @@ import {
 import { scanModules, saveModuleRules } from "./api/services/moduleService";
 import type { AppAPI } from "./api/contracts";
 
-function loadKasumiService() {
-  if (!ENABLE_KASUMI) {
-    return Promise.reject(
-      new AppError("Kasumi is not available in this build"),
-    );
-  }
-  return import("./api/services/kasumiService");
-}
-
-const kasumiApi: Partial<AppAPI> = ENABLE_KASUMI
-  ? {
-      getKasumiStatus: async () =>
-        (await loadKasumiService()).getKasumiStatus(),
-      setKasumiEnabled: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiEnabled(enabled),
-      setKasumiStealth: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiStealth(enabled),
-      setKasumiOverlayXattrHide: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiOverlayXattrHide(enabled),
-      setKasumiSelinuxFix: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiSelinuxFix(enabled),
-      setKasumiDebug: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiDebug(enabled),
-      getOriginalKernelUname: async () =>
-        (await loadKasumiService()).getOriginalKernelUname(),
-      setKasumiUnameMode: async (mode: "scoped" | "global") =>
-        (await loadKasumiService()).setKasumiUnameMode(mode),
-      setKasumiUname: async (uname) =>
-        (await loadKasumiService()).setKasumiUname(uname),
-      applyKasumiUname: async (mode, uname) =>
-        (await loadKasumiService()).applyKasumiUname(mode, uname),
-      clearKasumiUname: async (mode = "scoped") =>
-        (await loadKasumiService()).clearKasumiUname(mode),
-      restoreKasumiUnameGlobal: async () =>
-        (await loadKasumiService()).restoreKasumiUnameGlobal(),
-      setKasumiCmdline: async (value: string) =>
-        (await loadKasumiService()).setKasumiCmdline(value),
-      clearKasumiCmdline: async () =>
-        (await loadKasumiService()).clearKasumiCmdline(),
-      addKasumiMapsRule: async (rule) =>
-        (await loadKasumiService()).addKasumiMapsRule(rule),
-      clearKasumiMapsRules: async () =>
-        (await loadKasumiService()).clearKasumiMapsRules(),
-      getUserHideRules: async () =>
-        (await loadKasumiService()).getUserHideRules(),
-      addUserHideRule: async (path: string) =>
-        (await loadKasumiService()).addUserHideRule(path),
-      removeUserHideRule: async (path: string) =>
-        (await loadKasumiService()).removeUserHideRule(path),
-      applyUserHideRules: async () =>
-        (await loadKasumiService()).applyUserHideRules(),
-      loadKasumiLkm: async () => (await loadKasumiService()).loadKasumiLkm(),
-      unloadKasumiLkm: async () =>
-        (await loadKasumiService()).unloadKasumiLkm(),
-      setKasumiLkmAutoload: async (enabled: boolean) =>
-        (await loadKasumiService()).setKasumiLkmAutoload(enabled),
-      setKasumiLkmKmi: async (value: string) =>
-        (await loadKasumiService()).setKasumiLkmKmi(value),
-      clearKasumiLkmKmi: async () =>
-        (await loadKasumiService()).clearKasumiLkmKmi(),
-      fixKasumiMounts: async () =>
-        (await loadKasumiService()).fixKasumiMounts(),
-      clearKasumiRules: async () =>
-        (await loadKasumiService()).clearKasumiRules(),
-      releaseKasumiConnection: async () =>
-        (await loadKasumiService()).releaseKasumiConnection(),
-      invalidateKasumiCache: async () =>
-        (await loadKasumiService()).invalidateKasumiCache(),
-    }
-  : {};
-
 const RealAPI = {
   wakeDaemon: () => ensureDaemonAwake(PATHS.BINARY),
   init,
@@ -124,12 +51,12 @@ const RealAPI = {
   getStorageUsage,
   getSystemInfo,
   getVersion,
-  ...kasumiApi,
   openLink,
   reboot,
 } as AppAPI;
 
-export { AppError, hasExecBridge, runDaemonCommand };
+export { AppError } from "./api/core/error";
+export { hasExecBridge, runDaemonCommand };
 export type { AppAPI } from "./api/contracts";
 export type { DaemonCommandPayload } from "./api/core/bridge";
 const mockApi = shouldUseMock ? await loadMockApi() : null;

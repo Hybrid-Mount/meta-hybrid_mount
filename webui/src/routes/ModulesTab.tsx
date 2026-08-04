@@ -26,10 +26,7 @@ import {
 } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { moduleStore } from "../lib/stores/moduleStore";
-import { sysStore } from "../lib/stores/sysStore";
 import { ICONS } from "../lib/constants";
-import { ENABLE_KASUMI } from "../lib/constants_gen";
-import { features } from "../lib/features";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
 import type { Module, MountMode } from "../lib/types";
@@ -70,25 +67,6 @@ export default function ModulesTab() {
     filterType();
     showUnmounted();
     setVisibleCount(BATCH_SIZE);
-  });
-
-  const kasumiMasterEnabled = createMemo(
-    () => ENABLE_KASUMI && features.kasumiEnabled,
-  );
-  const kasumiAvailable = createMemo(
-    () => ENABLE_KASUMI && features.kasumiAvailable,
-  );
-  const tmpfsXattrUnsupported = createMemo(
-    () => !sysStore.systemInfo.tmpfs_xattr_supported,
-  );
-  const showKasumiStrategy = createMemo(
-    () => kasumiMasterEnabled() && !tmpfsXattrUnsupported(),
-  );
-
-  createEffect(() => {
-    if (!showKasumiStrategy() && filterType() === "kasumi") {
-      setFilterType("all");
-    }
   });
 
   function load(force = false) {
@@ -169,10 +147,6 @@ export default function ModulesTab() {
     magic: {
       label: () => uiStore.L.modules.modes.magic,
       cls: "mode-magic",
-    },
-    kasumi: {
-      label: () => uiStore.L.modules.modes.kasumi,
-      cls: "mode-kasumi",
     },
     overlay: {
       label: () => uiStore.L.modules.modes.overlay,
@@ -257,11 +231,6 @@ export default function ModulesTab() {
                 <option value="magic">
                   {uiStore.L.modules.modes.short.magic}
                 </option>
-                <Show when={ENABLE_KASUMI && showKasumiStrategy()}>
-                  <option value="kasumi">
-                    {uiStore.L.modules.modes.short.kasumi}
-                  </option>
-                </Show>
                 <option value="blacklisted">
                   {uiStore.L.modules.modes.blacklisted}
                 </option>
@@ -370,33 +339,6 @@ export default function ModulesTab() {
                                     {uiStore.L.modules.compatTag}
                                   </span>
                                 </button>
-                                <Show
-                                  when={ENABLE_KASUMI && showKasumiStrategy()}
-                                >
-                                  <button
-                                    class={`strategy-option ${effectiveDefaultMode() === "kasumi" ? "selected" : ""}`}
-                                    onClick={() =>
-                                      updateDefaultMode(mod, "kasumi")
-                                    }
-                                    disabled={!kasumiAvailable()}
-                                    title={
-                                      !kasumiAvailable()
-                                        ? uiStore.L.modules
-                                            .kasumiUnavailableHint
-                                        : undefined
-                                    }
-                                    type="button"
-                                  >
-                                    <span class="opt-title">
-                                      {uiStore.L.modules.modes.short.kasumi}
-                                    </span>
-                                    <span class="opt-sub">
-                                      {!kasumiAvailable()
-                                        ? uiStore.L.modules.unavailableTag
-                                        : uiStore.L.modules.nativeTag}
-                                    </span>
-                                  </button>
-                                </Show>
                                 <button
                                   class={`strategy-option ${effectiveDefaultMode() === "ignore" ? "selected" : ""}`}
                                   onClick={() =>

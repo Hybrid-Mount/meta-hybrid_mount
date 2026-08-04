@@ -46,7 +46,6 @@ const createModuleStore = () => {
     const stats: ModeStats = {
       overlay: 0,
       magic: 0,
-      kasumi: 0,
       blacklisted: 0,
     };
     for (const m of modules) {

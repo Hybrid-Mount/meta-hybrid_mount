@@ -19,8 +19,6 @@ import { uiStore } from "../lib/stores/uiStore";
 import { sysStore } from "../lib/stores/sysStore";
 import { configStore } from "../lib/stores/configStore";
 import { ICONS } from "../lib/constants";
-import { ENABLE_KASUMI } from "../lib/constants_gen";
-import { features } from "../lib/features";
 import Skeleton from "../components/Skeleton";
 import BottomActions from "../components/BottomActions";
 import { API } from "../lib/api";
@@ -44,24 +42,20 @@ export default function StatusTab() {
   const modeStats = createMemo(() => ({
     overlay: sysStore.storage.modeStats.overlay,
     magic: sysStore.storage.modeStats.magic,
-    kasumi: sysStore.storage.modeStats.kasumi,
   }));
 
   const mountedCount = createMemo(() => sysStore.storage.mountedCount);
 
   const modeDistribution = createMemo(() => {
     const stats = modeStats();
-    const showKasumi = ENABLE_KASUMI && features.kasumiEnabled;
     const overlay = stats.overlay;
     const magic = stats.magic;
-    const kasumi = showKasumi ? stats.kasumi : 0;
-    const total = overlay + magic + kasumi;
+    const total = overlay + magic;
 
-    if (total === 0) return { overlay: 0, magic: 0, kasumi: 0 };
+    if (total === 0) return { overlay: 0, magic: 0 };
     return {
       overlay: (overlay / total) * 100,
       magic: (magic / total) * 100,
-      kasumi: (kasumi / total) * 100,
     };
   });
 
@@ -173,12 +167,6 @@ export default function StatusTab() {
               class="bar-segment bar-magic"
               style={{ width: `${modeDistribution().magic}%` }}
             ></div>
-            <Show when={ENABLE_KASUMI && features.kasumiEnabled}>
-              <div
-                class="bar-segment bar-kasumi"
-                style={{ width: `${modeDistribution().kasumi}%` }}
-              ></div>
-            </Show>
           </div>
           <div class="stats-legend">
             <div class="legend-item">
@@ -195,16 +183,6 @@ export default function StatusTab() {
                 {uiStore.L.modules.modes.short.magic + ": " + modeStats().magic}
               </span>
             </div>
-            <Show when={ENABLE_KASUMI && features.kasumiEnabled}>
-              <div class="legend-item">
-                <div class="legend-dot dot-kasumi"></div>
-                <span>
-                  {uiStore.L.modules.modes.short.kasumi +
-                    ": " +
-                    modeStats().kasumi}
-                </span>
-              </div>
-            </Show>
           </div>
         </div>
 

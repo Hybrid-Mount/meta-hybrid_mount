@@ -100,6 +100,7 @@ impl MountStatistics {
 pub struct ModuleModeStats {
     pub overlayfs: usize,
     pub magicmount: usize,
+    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
     pub kasumi: usize,
     pub blacklisted: usize,
 }
@@ -138,6 +139,7 @@ pub struct RuntimeState {
     pub mount_point: PathBuf,
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
+    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
     pub kasumi_modules: Vec<String>,
     pub custom_mounts: Vec<String>,
     pub skip_mount_modules: Vec<String>,
@@ -147,10 +149,15 @@ pub struct RuntimeState {
     pub tmpfs_xattr_supported: bool,
     pub mount_stats: MountStatistics,
     pub mode_stats: ModuleModeStats,
+    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
     pub kasumi: KasumiRuntimeInfo,
     pub daemon: DaemonRuntimeInfo,
     #[serde(skip)]
     cached_status_value: Option<serde_json::Value>,
+}
+
+fn kasumi_feature_disabled<T>(_value: &T) -> bool {
+    !cfg!(feature = "kasumi")
 }
 
 impl RuntimeState {
@@ -418,4 +425,25 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     );
 
     active_mounts
+}
+
+#[cfg(all(test, not(feature = "kasumi")))]
+mod tests {
+    use super::RuntimeState;
+
+    #[test]
+    fn serialized_runtime_state_omits_kasumi_fields() {
+        let value = serde_json::to_value(RuntimeState::default()).unwrap();
+        let object = value.as_object().unwrap();
+
+        assert!(!object.contains_key("kasumi_modules"));
+        assert!(!object.contains_key("kasumi"));
+        assert!(
+            !object["mode_stats"]
+                .as_object()
+                .unwrap()
+                .contains_key("kasumi")
+        );
+        serde_json::from_value::<RuntimeState>(value).unwrap();
+    }
 }
