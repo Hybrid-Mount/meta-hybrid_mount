@@ -303,17 +303,17 @@ pub fn autoload_if_needed(config: &KasumiConfig) -> Result<bool> {
         return Ok(false);
     }
 
-    if config.lkm_kmi_override.trim().is_empty() {
-        if let Err(err) = current_kmi() {
-            crate::scoped_log!(
-                warn,
-                "lkm",
-                "autoload skipped: reason={:#}, dir={}",
-                err,
-                config.lkm_dir.display()
-            );
-            return Ok(false);
-        }
+    if config.lkm_kmi_override.trim().is_empty()
+        && let Err(err) = current_kmi()
+    {
+        crate::scoped_log!(
+            warn,
+            "lkm",
+            "autoload skipped: reason={:#}, dir={}",
+            err,
+            config.lkm_dir.display()
+        );
+        return Ok(false);
     }
 
     load(config)?;
