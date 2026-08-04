@@ -20,29 +20,17 @@ import { configStore } from "../lib/stores/configStore";
 import { sysStore } from "../lib/stores/sysStore";
 import { moduleStore } from "../lib/stores/moduleStore";
 import { ICONS } from "../lib/constants";
-import { ENABLE_KASUMI } from "../lib/constants_gen";
-import { features } from "../lib/features";
-import { getCookie, setCookie } from "../lib/cookies";
-import { getErrorMessage } from "../lib/api/core/error";
-import { API } from "../lib/api";
-import { kasumiStore } from "../lib/stores/kasumiStore";
 import "./ConfigTab.css";
 import "@material/web/textfield/outlined-text-field.js";
 import "@material/web/icon/icon.js";
 import "@material/web/ripple/ripple.js";
-import "@material/web/dialog/dialog.js";
-import "@material/web/button/text-button.js";
 import "@material/web/button/filled-button.js";
 import type { OverlayMode, AppConfig, CustomBindMount } from "../lib/types";
-
-const KASUMI_WARNING_COOKIE = "mhm_kasumi_warning_ack";
 
 export default function ConfigTab() {
   const [lastSavedConfig, setLastSavedConfig] = createSignal<AppConfig | null>(
     null,
   );
-  const [showKasumiWarning, setShowKasumiWarning] = createSignal(false);
-  const [kasumiPending, setKasumiPending] = createSignal(false);
   const [customSourceDraft, setCustomSourceDraft] = createSignal("");
   const [customTargetDraft, setCustomTargetDraft] = createSignal("");
   let mountSourceInputRef: HTMLElement | undefined;
@@ -51,9 +39,6 @@ export default function ConfigTab() {
   const isValidRequiredPath = (p: string) => p.startsWith("/") && p.length > 1;
   const invalidModuleDir = createMemo(
     () => !isValidPath(configStore.config.moduledir),
-  );
-  const tmpfsXattrUnsupported = createMemo(
-    () => !sysStore.systemInfo.tmpfs_xattr_supported,
   );
 
   createEffect(() => {
@@ -215,43 +200,6 @@ export default function ConfigTab() {
     await saveCustomMounts(next, previous);
   }
 
-  async function handleKasumiToggle() {
-    const wantsEnable = !features.kasumiEnabled;
-
-    if (wantsEnable && getCookie(KASUMI_WARNING_COOKIE) !== "1") {
-      setShowKasumiWarning(true);
-      return;
-    }
-
-    await applyKasumiToggle(wantsEnable);
-  }
-
-  async function applyKasumiToggle(enabled: boolean) {
-    setShowKasumiWarning(false);
-    setKasumiPending(true);
-    try {
-      await API.setKasumiEnabled(enabled);
-      kasumiStore.setEnabledOptimistic(enabled);
-      await kasumiStore.refreshStatus(true);
-      features.setKasumiStatus(
-        kasumiStore.enabled,
-        kasumiStore.status.available,
-        kasumiStore.status.kernel_supported,
-      );
-      if (enabled) {
-        setCookie(KASUMI_WARNING_COOKIE, "1");
-      }
-      uiStore.showToast(uiStore.L.config.kasumiConfigSaved, "success");
-    } catch (e: unknown) {
-      uiStore.showToast(
-        getErrorMessage(e, uiStore.L.config.saveFailed),
-        "error",
-      );
-    } finally {
-      setKasumiPending(false);
-    }
-  }
-
   const availableModes = createMemo(() => {
     let modes = sysStore.systemInfo.supported_overlay_modes;
 
@@ -264,27 +212,6 @@ export default function ConfigTab() {
 
   return (
     <>
-      <Show when={ENABLE_KASUMI && features.kasumiKernelSupported}>
-        <div class="dialog-container">
-          <md-dialog
-            open={showKasumiWarning()}
-            onclose={() => setShowKasumiWarning(false)}
-            class="transparent-scrim"
-          >
-            <div slot="headline">{uiStore.L.config.kasumiWarningTitle}</div>
-            <div slot="content">{uiStore.L.config.kasumiWarningBody}</div>
-            <div slot="actions">
-              <md-text-button onClick={() => setShowKasumiWarning(false)}>
-                {uiStore.L.common.cancel}
-              </md-text-button>
-              <md-text-button onClick={() => applyKasumiToggle(true)}>
-                {uiStore.L.config.kasumiEnableConfirm}
-              </md-text-button>
-            </div>
-          </md-dialog>
-        </div>
-      </Show>
-
       <div class="config-container">
         <section class="config-group">
           <div class="config-card">
@@ -595,55 +522,6 @@ export default function ConfigTab() {
           </div>
         </section>
 
-        <Show when={ENABLE_KASUMI && features.kasumiKernelSupported}>
-          <section class="config-group">
-            <div class="webui-label">
-              {uiStore.L.config.experimentalFeatures}
-            </div>
-            <div class="options-grid">
-              <button
-                class={`option-tile clickable secondary ${features.kasumiEnabled ? "active" : ""}`}
-                onClick={handleKasumiToggle}
-                disabled={kasumiPending()}
-                type="button"
-                aria-pressed={features.kasumiEnabled}
-                aria-label={uiStore.L.config.kasumiMasterSwitch}
-              >
-                <md-ripple></md-ripple>
-                <div class="tile-top">
-                  <div class="tile-icon">
-                    <md-icon>
-                      <svg viewBox="0 0 24 24">
-                        <path
-                          d={
-                            features.kasumiEnabled
-                              ? ICONS.snowflake_filled
-                              : ICONS.snowflake
-                          }
-                        />
-                      </svg>
-                    </md-icon>
-                  </div>
-                </div>
-                <div class="tile-bottom">
-                  <span class="tile-label">
-                    {uiStore.L.config.kasumiMasterTitle}
-                  </span>
-                </div>
-              </button>
-            </div>
-            <Show when={tmpfsXattrUnsupported()}>
-              <div class="kasumi-restriction-note">
-                <md-icon>
-                  <svg viewBox="0 0 24 24">
-                    <path d={ICONS.info} />
-                  </svg>
-                </md-icon>
-                <span>{uiStore.L.config.kasumiTmpfsRestriction}</span>
-              </div>
-            </Show>
-          </section>
-        </Show>
       </div>
     </>
   );

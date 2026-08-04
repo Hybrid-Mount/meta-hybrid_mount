@@ -89,7 +89,6 @@ jobs:
           cat <<'EOF' > src/lib/constants_gen.ts
           export const APP_VERSION = "dev";
           export const IS_RELEASE = false;
-          export const ENABLE_KASUMI = true;
           export const RUST_PATHS = {
             CONFIG: "/data/adb/hybrid-mount/config.toml",
             DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",

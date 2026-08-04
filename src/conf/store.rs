@@ -72,8 +72,9 @@ fn load_config(main_path: &Path) -> Result<Config> {
 
     let content = fs::read_to_string(main_path)
         .with_context(|| format!("failed to read config file {}", main_path.display()))?;
-    let config = toml::from_str::<Config>(&content)
+    let mut config = toml::from_str::<Config>(&content)
         .with_context(|| format!("failed to parse config file {}", main_path.display()))?;
+    config.sanitize_disabled_features();
 
     crate::scoped_log!(
         debug,
@@ -115,6 +116,8 @@ impl Config {
 #[cfg(all(test, feature = "control-plane"))]
 mod tests {
     use super::*;
+    #[cfg(not(feature = "kasumi"))]
+    use crate::domain::{DefaultMode, MountMode};
 
     #[test]
     fn packaged_config_matches_the_current_schema() {
@@ -153,5 +156,45 @@ mod tests {
 
         let previous_backup = fs::read_to_string(temp.path().join("config.toml.bak.1")).unwrap();
         assert!(previous_backup.contains("default_mode = \"magic\""));
+    }
+
+    #[cfg(not(feature = "kasumi"))]
+    #[test]
+    fn legacy_kasumi_config_is_sanitized_and_omitted() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.toml");
+        fs::write(
+            &config_path,
+            r#"
+moduledir = "/data/adb/modules"
+mountsource = "KSU"
+overlay_mode = "ext4"
+disable_umount = false
+default_mode = "kasumi"
+custom_mounts = []
+
+[rules.example]
+default_mode = "kasumi"
+
+[rules.example.paths]
+"system/app" = "kasumi"
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load_from_file(&config_path).unwrap();
+        assert!(matches!(config.default_mode, DefaultMode::Magic));
+        let rules = config.rules.get("example").unwrap();
+        assert!(matches!(rules.default_mode, MountMode::Magic));
+        assert!(matches!(
+            rules.paths.get("system/app"),
+            Some(MountMode::Magic)
+        ));
+        assert!(!config.kasumi.enabled);
+
+        config.save_to_file(&config_path).unwrap();
+        let saved = fs::read_to_string(&config_path).unwrap();
+        assert!(!saved.contains("[kasumi]"));
+        assert!(!saved.contains("kasumi"));
     }
 }

@@ -17,36 +17,6 @@
 import { RUST_PATHS } from "./constants_gen";
 import type { AppConfig } from "./types";
 
-const DEFAULT_KASUMI_CONFIG: AppConfig["kasumi"] = {
-  enabled: false,
-  lkm_autoload: true,
-  lkm_dir: "/data/adb/modules/hybrid_mount/kasumi_lkm",
-  lkm_kmi_override: "",
-  mirror_path: "/dev/kasumi_mirror",
-  enable_kernel_debug: false,
-  enable_stealth: false,
-  enable_overlay_xattr_hide: false,
-  enable_selinux_fix: false,
-  enable_mount_hide: false,
-  enable_maps_spoof: false,
-  enable_statfs_spoof: false,
-  mount_hide: { enabled: false, path_pattern: "" },
-  statfs_spoof: { enabled: false, path: "", spoof_f_type: 0 },
-  hide_uids: [],
-  uname_mode: "scoped",
-  uname: {
-    sysname: "",
-    nodename: "",
-    release: "",
-    version: "",
-    machine: "",
-    domainname: "",
-  },
-  cmdline_value: "",
-  kstat_rules: [],
-  maps_rules: [],
-};
-
 export const DEFAULT_CONFIG = {
   moduledir: "/data/adb/modules",
   mountsource: "KSU",
@@ -55,7 +25,6 @@ export const DEFAULT_CONFIG = {
   default_mode: "overlay",
   custom_mounts: [],
   rules: {},
-  kasumi: DEFAULT_KASUMI_CONFIG,
 } as AppConfig;
 
 export const PATHS = {
@@ -96,10 +65,6 @@ export const ICONS = {
     "M12 11c-1.33 0-4 .67-4 3 0 2.33 2.67 4 4 4 1.33 0 4-1.67 4-4 0-2.33-2.67-3-4-3zm-5.25-2c-.97 0-1.75.78-1.75 1.75 0 .97.78 1.75 1.75 1.75.97 0 1.75-.78 1.75-1.75 0-.97-.78-1.75-1.75-1.75zm10.5 0c-.97 0-1.75.78-1.75 1.75 0 .97.78 1.75 1.75 1.75.97 0 1.75-.78 1.75-1.75 0-.97-.78-1.75-1.75-1.75zm-8.5-4c-.97 0-1.75.78-1.75 1.75 0 .97.78 1.75 1.75 1.75.97 0 1.75-.78 1.75-1.75 0-.97-.78-1.75-1.75-1.75zm6.5 0c-.97 0-1.75.78-1.75 1.75 0 .97.78 1.75 1.75 1.75.97 0 1.75-.78 1.75-1.75 0-.97-.78-1.75-1.75-1.75z",
   ghost:
     "M12 2a9 9 0 0 0-9 9v11l3-3 3 3 3-3 3 3 3-3 3 3v-11a9 9 0 0 0-9-9zm0 14a2 2 0 1 1 2-2 2 2 0 0 1-2 2zm3-5a2 2 0 1 1 2-2 2 2 0 0 1-2 2zm-6 0a2 2 0 1 1 2-2 2 2 0 0 1-2 2z",
-  snowflake:
-    "M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.42-1.41L17.83 13H22v-2z M12 7.4 15.98 9.7v4.6L12 16.6 8.02 14.3V9.7z",
-  snowflake_filled:
-    "M22 11h-4.17l3.24-3.24-1.41-1.42L15 11h-2V9l4.66-4.66-1.42-1.41L13 6.17V2h-2v4.17L7.76 2.93 6.34 4.34 11 9v2H9L4.34 6.34 2.93 7.76 6.17 11H2v2h4.17l-3.24 3.24 1.41 1.42L9 13h2v2l-4.66 4.66 1.42 1.41L11 17.83V22h2v-4.17l3.24 3.24 1.42-1.41L13 15v-2h2l4.66 4.66 1.42-1.41L17.83 13H22v-2z",
   anchor:
     "M17 13h-2v-4h-2V6h2V4h-2V2h-2v2H9v2h2v3H9v4H7v2c0 2.76 2.24 5 5 5s5-2.24 5-5v-2zm-5 5c-1.65 0-3-1.35-3-3v-2h6v2c0 1.65-1.35 3-3 3z",
   delete:

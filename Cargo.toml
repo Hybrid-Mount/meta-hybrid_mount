@@ -25,7 +25,7 @@ nano_name = "Hybrid Mount Nano"
 nano_update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-nano.json"
 
 [features]
-default = ["kasumi", "control-plane"]
+default = ["control-plane"]
 kasumi = ["control-plane"]
 control-plane = ["dep:clap", "dep:signal-hook"]
 

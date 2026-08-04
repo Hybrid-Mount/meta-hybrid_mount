@@ -16,25 +16,17 @@
 
 import type {
   AppConfig,
-  KernelUnameValues,
-  KasumiStatus,
-  KasumiUnameConfig,
   Module,
   ModuleRules,
   StorageStatus,
   SystemInfo,
 } from "../types";
-import type {
-  KasumiStatusPayload,
-  RuntimeStatePayload,
-  SystemInfoPayload,
-} from "./schemas";
+import type { RuntimeStatePayload, SystemInfoPayload } from "./schemas";
 
 export interface InitPayload {
   status: RuntimeStatePayload;
   config: AppConfig;
   version: string;
-  kasumi_status?: KasumiStatusPayload;
   system_info: SystemInfoPayload;
 }
 
@@ -52,44 +44,6 @@ export interface AppAPI {
   getStorageUsage: () => Promise<StorageStatus>;
   getSystemInfo: () => Promise<SystemInfo>;
   getVersion: () => Promise<string>;
-  getKasumiStatus: () => Promise<KasumiStatus>;
-  setKasumiEnabled: (enabled: boolean) => Promise<void>;
-  setKasumiStealth: (enabled: boolean) => Promise<void>;
-  setKasumiOverlayXattrHide: (enabled: boolean) => Promise<void>;
-  setKasumiSelinuxFix: (enabled: boolean) => Promise<void>;
-  setKasumiDebug: (enabled: boolean) => Promise<void>;
-  getOriginalKernelUname: () => Promise<KernelUnameValues>;
-  setKasumiUnameMode: (mode: "scoped" | "global") => Promise<void>;
-  setKasumiUname: (uname: Partial<KasumiUnameConfig>) => Promise<void>;
-  applyKasumiUname: (
-    mode: "scoped" | "global",
-    uname: Pick<KasumiUnameConfig, "release" | "version">,
-  ) => Promise<void>;
-  clearKasumiUname: (mode?: "scoped" | "global") => Promise<void>;
-  restoreKasumiUnameGlobal: () => Promise<void>;
-  setKasumiCmdline: (value: string) => Promise<void>;
-  clearKasumiCmdline: () => Promise<void>;
-  addKasumiMapsRule: (rule: {
-    target_ino: number;
-    target_dev: number;
-    spoofed_ino: number;
-    spoofed_dev: number;
-    spoofed_pathname: string;
-  }) => Promise<void>;
-  clearKasumiMapsRules: () => Promise<void>;
-  getUserHideRules: () => Promise<string[]>;
-  addUserHideRule: (path: string) => Promise<void>;
-  removeUserHideRule: (path: string) => Promise<void>;
-  applyUserHideRules: () => Promise<void>;
-  loadKasumiLkm: () => Promise<void>;
-  unloadKasumiLkm: () => Promise<void>;
-  setKasumiLkmAutoload: (enabled: boolean) => Promise<void>;
-  setKasumiLkmKmi: (value: string) => Promise<void>;
-  clearKasumiLkmKmi: () => Promise<void>;
-  fixKasumiMounts: () => Promise<void>;
-  clearKasumiRules: () => Promise<void>;
-  releaseKasumiConnection: () => Promise<void>;
-  invalidateKasumiCache: () => Promise<void>;
   openLink: (url: string) => Promise<void>;
   reboot: () => Promise<void>;
 }

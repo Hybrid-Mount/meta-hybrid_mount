@@ -37,7 +37,7 @@ interface KsuModule {
 // Discriminated union matching Rust DaemonCommand sub-enums.
 // Wire format is flat: {"type": "kebab-case-name"}.
 // Organized by domain group to match the Rust SystemCommand / ConfigCommand /
-// ModulesCommand / KasumiCommand sub-enums.
+// ModulesCommand sub-enums.
 export type DaemonCommandPayload =
   // ── SystemCommand: health, lifecycle, storage, info ──
   | { type: "ping" }
@@ -51,7 +51,6 @@ export type DaemonCommandPayload =
   | { type: "api-partitions" }
   | { type: "api-system-info" }
   | { type: "api-version" }
-  | { type: "api-kernel-uname" }
   | { type: "api-open-url"; url: string }
   | { type: "api-reboot" }
   // ── ConfigCommand: config CRUD ──
@@ -61,41 +60,7 @@ export type DaemonCommandPayload =
   | { type: "api-config-reset" }
   // ── ModulesCommand: module operations ──
   | { type: "api-modules-list" }
-  | { type: "api-modules-apply"; modules: unknown[] }
-  // ── KasumiCommand: LKM, rules, hide, maps, uname, runtime ──
-  | { type: "kasumi-status" }
-  | { type: "kasumi-list" }
-  | { type: "kasumi-version" }
-  | { type: "kasumi-features" }
-  | { type: "kasumi-hooks" }
-  | { type: "kasumi-apply-config-runtime" }
-  | { type: "kasumi-clear" }
-  | { type: "kasumi-release-connection" }
-  | { type: "kasumi-invalidate-cache" }
-  | { type: "kasumi-fix-mounts" }
-  | { type: "kasumi-restore-uname-global" }
-  | { type: "kasumi-set-uname"; mode: string; release: string; version: string }
-  | { type: "kasumi-clear-uname"; mode: string }
-  | {
-      type: "kasumi-rule-add";
-      target: string;
-      source: string;
-      file_type: number;
-    }
-  | { type: "kasumi-rule-merge"; target: string; source: string }
-  | { type: "kasumi-rule-hide"; path: string }
-  | { type: "kasumi-rule-delete"; path: string }
-  | { type: "kasumi-rule-add-dir"; target_base: string; source_dir: string }
-  | { type: "kasumi-rule-remove-dir"; target_base: string; source_dir: string }
-  | { type: "hide-list" }
-  | { type: "hide-add"; path: string }
-  | { type: "hide-remove"; path: string }
-  | { type: "hide-apply" }
-  | { type: "lkm-status" }
-  | { type: "lkm-load" }
-  | { type: "lkm-unload" }
-  | { type: "api-kasumi-maps-add"; rule: unknown }
-  | { type: "api-kasumi-maps-clear" };
+  | { type: "api-modules-apply"; modules: unknown[] };
 
 interface DaemonCommandMetadata {
   dedupeInFlight: boolean;
@@ -113,16 +78,8 @@ const READ_COMMAND_TYPES = new Set<DaemonCommandType>([
   "api-partitions",
   "api-system-info",
   "api-version",
-  "api-kernel-uname",
   "api-config-get",
   "api-modules-list",
-  "kasumi-status",
-  "kasumi-list",
-  "kasumi-version",
-  "kasumi-features",
-  "kasumi-hooks",
-  "hide-list",
-  "lkm-status",
 ]);
 
 let ksuExec: KsuModule["exec"] | null = null;

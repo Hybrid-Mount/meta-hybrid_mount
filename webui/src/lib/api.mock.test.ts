@@ -17,33 +17,21 @@
 import { describe, expect, it } from "vitest";
 import { MockAPI } from "./api.mock";
 
-describe("MockAPI Kasumi controls", () => {
-  it("keeps runtime rule clearing independent from config toggles", async () => {
-    await MockAPI.setKasumiStealth(true);
-    await MockAPI.setKasumiOverlayXattrHide(false);
-    await MockAPI.setKasumiDebug(true);
+describe("MockAPI core interactions", () => {
+  it("returns a Kasumi-free init payload that can be patched", async () => {
+    const initial = await MockAPI.init();
+    expect(initial).not.toHaveProperty("kasumi_status");
+    expect(initial.config).not.toHaveProperty("kasumi");
+    expect(initial.status.mode_stats).not.toHaveProperty("kasumi");
 
-    const beforeClear = await MockAPI.getKasumiStatus();
-    expect(beforeClear.rule_count).toBeGreaterThan(0);
-    expect(beforeClear.config.enable_stealth).toBe(true);
-    expect(beforeClear.config.enable_overlay_xattr_hide).toBe(false);
-    expect(beforeClear.config.enable_kernel_debug).toBe(true);
+    const updated = await MockAPI.patchConfig({ default_mode: "magic" });
+    expect(updated.default_mode).toBe("magic");
+  });
 
-    await MockAPI.clearKasumiRules();
-
-    const afterClear = await MockAPI.getKasumiStatus();
-    expect(afterClear.rule_count).toBe(0);
-    expect(afterClear.config.enable_stealth).toBe(true);
-    expect(afterClear.config.enable_overlay_xattr_hide).toBe(false);
-    expect(afterClear.config.enable_kernel_debug).toBe(true);
-
-    await MockAPI.setKasumiStealth(false);
-    await MockAPI.setKasumiOverlayXattrHide(true);
-    await MockAPI.setKasumiDebug(false);
-
-    const afterToggle = await MockAPI.getKasumiStatus();
-    expect(afterToggle.config.enable_stealth).toBe(false);
-    expect(afterToggle.config.enable_overlay_xattr_hide).toBe(true);
-    expect(afterToggle.config.enable_kernel_debug).toBe(false);
+  it("only exposes supported module modes", async () => {
+    const modules = await MockAPI.scanModules();
+    expect(modules.map((module) => module.mode)).toEqual(
+      expect.arrayContaining(["overlay", "magic", "ignore"]),
+    );
   });
 });
