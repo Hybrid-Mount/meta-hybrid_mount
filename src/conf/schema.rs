@@ -21,8 +21,7 @@ pub enum OverlayMode {
     Ext4,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(default)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KasumiMapsRuleConfig {
     pub target_ino: u64,
     pub target_dev: u64,
@@ -32,7 +31,6 @@ pub struct KasumiMapsRuleConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(default)]
 pub struct KasumiKstatRuleConfig {
     pub target_ino: u64,
     pub target_pathname: PathBuf,

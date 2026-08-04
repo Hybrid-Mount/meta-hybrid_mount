@@ -134,6 +134,25 @@ mod tests {
         assert!(!config.kasumi.enable_overlay_xattr_hide);
     }
 
+    #[test]
+    fn incomplete_kasumi_rules_remain_invalid() {
+        let maps_result = toml::from_str::<Config>(
+            r#"
+[kasumi]
+maps_rules = [{ target_ino = 1 }]
+"#,
+        );
+        let kstat_result = toml::from_str::<Config>(
+            r#"
+[kasumi]
+kstat_rules = [{ target_ino = 1 }]
+"#,
+        );
+
+        assert!(maps_result.is_err());
+        assert!(kstat_result.is_err());
+    }
+
     #[cfg(feature = "kasumi")]
     #[test]
     fn legacy_config_field_names_are_accepted() {
