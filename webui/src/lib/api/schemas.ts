@@ -71,9 +71,10 @@ export const kasumiLkmStatusSchema = z
     module_name: z.string().nullable(),
     autoload: z.boolean(),
     kmi_override: z.string(),
-    current_kmi: z.string(),
+    current_kmi: z.string().nullable(),
     search_dir: z.string(),
-    module_file: z.string().min(1),
+    module_file: z.string().min(1).nullable(),
+    available_kmis: z.array(z.string().min(1)),
   })
   .strict();
 

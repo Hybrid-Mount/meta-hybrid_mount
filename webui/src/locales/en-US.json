@@ -179,6 +179,7 @@
     "kmiOverride": "KMI Override",
     "autoKmi": "Auto Detect",
     "currentKmi": "Current KMI",
+    "kmiUnavailable": "Auto detection unavailable",
     "lastError": "Last error",
     "stealthTitle": "Stealth",
     "hidexattrTitle": "HideXattr",

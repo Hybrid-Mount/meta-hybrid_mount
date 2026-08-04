@@ -169,6 +169,7 @@
     "kmiOverride": "KMI 覆寫",
     "autoKmi": "自動偵測",
     "currentKmi": "目前 KMI",
+    "kmiUnavailable": "無法自動偵測",
     "lastError": "最後錯誤",
     "stealthTitle": "隱身",
     "hidexattrTitle": "隱藏 Xattr",

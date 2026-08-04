@@ -169,6 +169,7 @@
     "kmiOverride": "Ghi đè KMI",
     "autoKmi": "Tự động Phát hiện",
     "currentKmi": "KMI Hiện tại",
+    "kmiUnavailable": "Không thể tự động phát hiện",
     "lastError": "Lỗi Cuối cùng",
     "stealthTitle": "Tàng hình",
     "hidexattrTitle": "HideXattr",

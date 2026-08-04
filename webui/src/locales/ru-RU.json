@@ -169,6 +169,7 @@
     "kmiOverride": "Переопределение KMI",
     "autoKmi": "Автоопределение",
     "currentKmi": "Текущий KMI",
+    "kmiUnavailable": "Автоопределение недоступно",
     "lastError": "Последняя ошибка",
     "stealthTitle": "Стелс",
     "hidexattrTitle": "Скрытие xattr",

@@ -179,6 +179,7 @@
     "kmiOverride": "KMI 覆盖",
     "autoKmi": "自动识别",
     "currentKmi": "当前 KMI",
+    "kmiUnavailable": "无法自动识别",
     "lastError": "最近错误",
     "stealthTitle": "隐匿",
     "hidexattrTitle": "隐藏 Xattr",

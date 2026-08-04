@@ -36,14 +36,17 @@ export default function LkmSection(props: LkmSectionProps) {
       <div class="meta-list">
         <div class="meta-row">
           <span>{uiStore.L.kasumi.currentKmi}</span>
-          <strong>{props.lkm.current_kmi}</strong>
+          <strong>{props.lkm.current_kmi || uiStore.L.kasumi.kmiUnavailable}</strong>
         </div>
       </div>
       <div class="field-row">
         <button
           class="kasumi-select-button"
           type="button"
-          disabled={props.pending}
+          disabled={
+            props.pending ||
+            (props.lkm.available_kmis.length === 0 && !props.kmi)
+          }
           onClick={props.onShowKmiDialog}
         >
           <div class="kasumi-select-button-label">

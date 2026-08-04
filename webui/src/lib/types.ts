@@ -72,9 +72,10 @@ export interface KasumiLkmStatus {
   module_name: string | null;
   autoload: boolean;
   kmi_override: string;
-  current_kmi: string;
+  current_kmi: string | null;
   search_dir: string;
-  module_file: string;
+  module_file: string | null;
+  available_kmis: string[];
 }
 
 export interface KasumiUnameConfig {

@@ -169,6 +169,7 @@
     "kmiOverride": "Forzar KMI",
     "autoKmi": "Detectar automáticamente",
     "currentKmi": "KMI actual",
+    "kmiUnavailable": "Detección automática no disponible",
     "lastError": "Último error",
     "stealthTitle": "Sigilo",
     "hidexattrTitle": "Ocultar xattr",

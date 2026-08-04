@@ -169,6 +169,7 @@
     "kmiOverride": "Перевизначення KMI",
     "autoKmi": "Автовизначення",
     "currentKmi": "Поточний KMI",
+    "kmiUnavailable": "Автовизначення недоступне",
     "lastError": "Остання помилка",
     "stealthTitle": "Стелс",
     "hidexattrTitle": "Приховування xattr",

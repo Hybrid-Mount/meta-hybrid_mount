@@ -169,6 +169,7 @@
     "kmiOverride": "Override KMI",
     "autoKmi": "Rilevamento automatico",
     "currentKmi": "KMI corrente",
+    "kmiUnavailable": "Rilevamento automatico non disponibile",
     "lastError": "Ultimo errore",
     "stealthTitle": "Furtivo",
     "hidexattrTitle": "Nascondi xattr",

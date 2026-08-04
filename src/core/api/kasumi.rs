@@ -44,9 +44,10 @@ pub struct LkmPayload {
     pub module_name: Option<String>,
     pub autoload: bool,
     pub kmi_override: String,
-    pub current_kmi: String,
+    pub current_kmi: Option<String>,
     pub search_dir: PathBuf,
-    pub module_file: PathBuf,
+    pub module_file: Option<PathBuf>,
+    pub available_kmis: Vec<String>,
 }
 
 impl From<LkmStatus> for LkmPayload {
@@ -59,6 +60,7 @@ impl From<LkmStatus> for LkmPayload {
             current_kmi: status.current_kmi,
             search_dir: status.search_dir,
             module_file: status.module_file,
+            available_kmis: status.available_kmis,
         }
     }
 }

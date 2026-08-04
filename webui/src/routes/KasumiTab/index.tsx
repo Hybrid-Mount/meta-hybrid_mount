@@ -45,16 +45,6 @@ import "@material/web/list/list-item.js";
 import "@material/web/ripple/ripple.js";
 import "@material/web/textfield/outlined-text-field.js";
 
-const KNOWN_KMI_OPTIONS = [
-  "android12-5.10",
-  "android13-5.10",
-  "android13-5.15",
-  "android14-5.15",
-  "android14-6.1",
-  "android15-6.6",
-  "android16-6.12",
-] as const;
-
 const USER_HIDE_RULES_CACHE_TTL_MS = 3000;
 
 export default function KasumiTab() {
@@ -241,9 +231,12 @@ export default function KasumiTab() {
     status().feature_names.includes("maps_spoof"),
   );
   const kmiOptions = createMemo(() => {
-    const options = ["", ...KNOWN_KMI_OPTIONS];
-    if (forms.kmi && !options.includes(forms.kmi)) {
-      options.push(forms.kmi);
+    const options = [...lkm().available_kmis];
+    if (
+      forms.kmi ||
+      (lkm().current_kmi && options.includes(lkm().current_kmi as string))
+    ) {
+      options.unshift("");
     }
     return options;
   });

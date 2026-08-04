@@ -19,7 +19,8 @@ pub enum OverlayMode {
     Ext4,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct KasumiMapsRuleConfig {
     pub target_ino: u64,
     pub target_dev: u64,
@@ -29,6 +30,7 @@ pub struct KasumiMapsRuleConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct KasumiKstatRuleConfig {
     pub target_ino: u64,
     pub target_pathname: PathBuf,
@@ -48,6 +50,7 @@ pub struct KasumiKstatRuleConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct KasumiUnameConfig {
     pub sysname: String,
     pub nodename: String,
@@ -66,12 +69,14 @@ pub enum KasumiUnameMode {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct KasumiMountHideConfig {
     pub enabled: bool,
     pub path_pattern: PathBuf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct KasumiStatfsSpoofConfig {
     pub enabled: bool,
     pub path: PathBuf,
@@ -79,6 +84,7 @@ pub struct KasumiStatfsSpoofConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct KasumiConfig {
     pub enabled: bool,
     pub lkm_autoload: bool,
@@ -88,6 +94,8 @@ pub struct KasumiConfig {
     pub enable_kernel_debug: bool,
     pub enable_stealth: bool,
     pub enable_overlay_xattr_hide: bool,
+    #[serde(default, rename = "enable_hidexattr", skip_serializing)]
+    pub legacy_enable_hidexattr: bool,
     pub enable_mount_hide: bool,
     pub enable_maps_spoof: bool,
     pub enable_statfs_spoof: bool,
@@ -113,6 +121,7 @@ impl Default for KasumiConfig {
             enable_kernel_debug: false,
             enable_stealth: false,
             enable_overlay_xattr_hide: false,
+            legacy_enable_hidexattr: false,
             enable_mount_hide: false,
             enable_maps_spoof: false,
             enable_statfs_spoof: false,
@@ -129,12 +138,27 @@ impl Default for KasumiConfig {
     }
 }
 
+impl KasumiConfig {
+    pub(crate) fn normalize_legacy_fields(&mut self) {
+        if self.legacy_enable_hidexattr {
+            self.enable_stealth = true;
+            self.enable_overlay_xattr_hide = true;
+            self.enable_mount_hide = true;
+            self.enable_maps_spoof = true;
+            self.enable_statfs_spoof = true;
+            self.legacy_enable_hidexattr = false;
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 pub struct BlacklistConfig {
     pub blacklist: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct CustomBindMount {
     pub source: PathBuf,
     pub target: PathBuf,
@@ -150,6 +174,7 @@ impl Default for CustomBindMount {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default)]
 pub struct Config {
     pub moduledir: PathBuf,
     pub mountsource: String,
@@ -158,6 +183,7 @@ pub struct Config {
     pub default_mode: DefaultMode,
     pub kasumi: KasumiConfig,
     pub rules: HashMap<String, ModuleRules>,
+    #[serde(alias = "customMounts")]
     pub custom_mounts: Vec<CustomBindMount>,
     #[serde(skip)]
     pub module_blacklist: Vec<String>,

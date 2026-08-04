@@ -179,6 +179,7 @@
     "kmiOverride": "Override KMI",
     "autoKmi": "Deteksi Otomatis",
     "currentKmi": "KMI Saat Ini",
+    "kmiUnavailable": "Deteksi otomatis tidak tersedia",
     "lastError": "Kesalahan Terakhir",
     "stealthTitle": "Stealth",
     "hidexattrTitle": "HideXattr",

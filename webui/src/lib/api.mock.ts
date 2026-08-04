@@ -117,6 +117,7 @@ function buildMockLkmStatus(): KasumiLkmStatus {
     current_kmi: KASUMI_CURRENT_KMI,
     search_dir: KASUMI_LKM_DIR,
     module_file: KASUMI_LKM_FILE,
+    available_kmis: [KASUMI_CURRENT_KMI],
   };
 }
 

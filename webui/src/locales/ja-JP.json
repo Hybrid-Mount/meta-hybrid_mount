@@ -169,6 +169,7 @@
     "kmiOverride": "KMI 上書き",
     "autoKmi": "自動検出",
     "currentKmi": "現在の KMI",
+    "kmiUnavailable": "自動検出を利用できません",
     "lastError": "最後のエラー",
     "stealthTitle": "ステルス",
     "hidexattrTitle": "Xattr 非表示",

@@ -72,8 +72,9 @@ fn load_config(main_path: &Path) -> Result<Config> {
 
     let content = fs::read_to_string(main_path)
         .with_context(|| format!("failed to read config file {}", main_path.display()))?;
-    let config = toml::from_str::<Config>(&content)
+    let mut config = toml::from_str::<Config>(&content)
         .with_context(|| format!("failed to parse config file {}", main_path.display()))?;
+    config.kasumi.normalize_legacy_fields();
 
     crate::scoped_log!(
         debug,
@@ -120,6 +121,47 @@ mod tests {
     fn packaged_config_matches_the_current_schema() {
         Config::load_from_file(Path::new(env!("CARGO_MANIFEST_DIR")).join("module/config.toml"))
             .unwrap();
+    }
+
+    #[test]
+    fn legacy_minimal_config_uses_defaults_for_new_fields() {
+        let config: Config = toml::from_str("moduledir = \"/data/adb/modules\"\n").unwrap();
+
+        assert!(config.custom_mounts.is_empty());
+        assert!(!config.kasumi.enable_overlay_xattr_hide);
+    }
+
+    #[test]
+    fn legacy_config_field_names_are_accepted() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.toml");
+        fs::write(
+            &config_path,
+            r#"
+customMounts = [{ source = "/source", target = "/target" }]
+
+[kasumi]
+enable_hidexattr = true
+"#,
+        )
+        .unwrap();
+        let config = Config::load_from_file(&config_path).unwrap();
+
+        assert_eq!(config.custom_mounts.len(), 1);
+        assert!(config.kasumi.enable_stealth);
+        assert!(config.kasumi.enable_overlay_xattr_hide);
+        assert!(config.kasumi.enable_mount_hide);
+        assert!(config.kasumi.enable_maps_spoof);
+        assert!(config.kasumi.enable_statfs_spoof);
+
+        config.save_to_file(&config_path).unwrap();
+        let saved = fs::read_to_string(&config_path).unwrap();
+        assert!(!saved.contains("enable_hidexattr"));
+        assert!(saved.contains("enable_stealth = true"));
+        assert!(saved.contains("enable_overlay_xattr_hide = true"));
+        assert!(saved.contains("enable_mount_hide = true"));
+        assert!(saved.contains("enable_maps_spoof = true"));
+        assert!(saved.contains("enable_statfs_spoof = true"));
     }
 
     #[test]
