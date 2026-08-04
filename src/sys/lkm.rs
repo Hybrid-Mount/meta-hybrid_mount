@@ -25,7 +25,6 @@ pub struct LkmStatus {
     pub current_kmi: Option<String>,
     pub search_dir: PathBuf,
     pub module_file: Option<PathBuf>,
-    pub available_kmis: Vec<String>,
 }
 
 #[cfg(all(
@@ -152,25 +151,6 @@ fn resolve_module_file(config: &KasumiConfig) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn available_kmis(lkm_dir: &Path) -> Result<Vec<String>> {
-    if !lkm_dir.is_dir() {
-        return Ok(Vec::new());
-    }
-
-    let suffix = format!("{}_kasumi_lkm.ko", arch_suffix());
-    let mut kmis = fs::read_dir(lkm_dir)
-        .with_context(|| format!("failed to read Kasumi LKM directory {}", lkm_dir.display()))?
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_ok_and(|file_type| file_type.is_file()))
-        .filter_map(|entry| entry.file_name().into_string().ok())
-        .filter_map(|name| name.strip_suffix(&suffix).map(str::to_string))
-        .filter(|kmi| !kmi.is_empty())
-        .collect::<Vec<_>>();
-    kmis.sort();
-    kmis.dedup();
-    Ok(kmis)
-}
-
 fn loaded_module_name() -> Result<Option<String>> {
     let content = fs::read_to_string("/proc/modules").context("failed to read /proc/modules")?;
     Ok(content.lines().find_map(|line| {
@@ -193,7 +173,6 @@ pub fn status(config: &KasumiConfig) -> Result<LkmStatus> {
         current_kmi: current_kmi().ok(),
         search_dir: config.lkm_dir.clone(),
         module_file: resolve_module_file(config).ok(),
-        available_kmis: available_kmis(&config.lkm_dir)?,
     })
 }
 
@@ -322,9 +301,7 @@ pub fn autoload_if_needed(config: &KasumiConfig) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
-    use super::{arch_suffix, available_kmis, parse_kmi_from_release};
+    use super::parse_kmi_from_release;
 
     #[test]
     fn parses_gki_release() {
@@ -339,38 +316,5 @@ mod tests {
         let error = parse_kmi_from_release("5.15.207-g3ddad1147e36").unwrap_err();
 
         assert!(error.to_string().contains("has no Android version"));
-    }
-
-    #[test]
-    fn lists_only_modules_for_the_current_architecture() {
-        let temp = tempfile::tempdir().unwrap();
-        fs::write(
-            temp.path()
-                .join(format!("android13-5.15{}_kasumi_lkm.ko", arch_suffix())),
-            [],
-        )
-        .unwrap();
-        fs::write(
-            temp.path()
-                .join(format!("android14-6.1{}_kasumi_lkm.ko", arch_suffix())),
-            [],
-        )
-        .unwrap();
-        fs::write(temp.path().join("android15-6.6_arm64_kasumi_lkm.ko"), []).unwrap();
-        fs::create_dir(
-            temp.path()
-                .join(format!("android16-6.12{}_kasumi_lkm.ko", arch_suffix())),
-        )
-        .unwrap();
-        fs::write(temp.path().join("README.txt"), []).unwrap();
-
-        let kmis = available_kmis(temp.path()).unwrap();
-
-        let mut expected = vec!["android13-5.15".to_string(), "android14-6.1".to_string()];
-        if arch_suffix() == "_arm64" {
-            expected.push("android15-6.6".to_string());
-        }
-        expected.sort();
-        assert_eq!(kmis, expected);
     }
 }
