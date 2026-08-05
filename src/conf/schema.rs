@@ -161,7 +161,9 @@ pub struct Config {
     pub default_mode: DefaultMode,
     #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
     pub kasumi: KasumiConfig,
+    #[serde(default)]
     pub rules: HashMap<String, ModuleRules>,
+    #[serde(default)]
     pub custom_mounts: Vec<CustomBindMount>,
     #[serde(skip)]
     pub module_blacklist: Vec<String>,

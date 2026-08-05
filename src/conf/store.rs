@@ -197,4 +197,37 @@ default_mode = "kasumi"
         assert!(!saved.contains("[kasumi]"));
         assert!(!saved.contains("kasumi"));
     }
+
+    #[test]
+    fn legacy_config_missing_new_collection_fields_uses_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.toml");
+        fs::write(
+            &config_path,
+            r#"
+moduledir = "/data/adb/modules"
+mountsource = "KSU"
+overlay_mode = "ext4"
+disable_umount = false
+default_mode = "overlay"
+
+[kasumi]
+enabled = false
+enable_hidexattr = false
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load_from_file(&config_path).unwrap();
+        assert!(config.rules.is_empty());
+        assert!(config.custom_mounts.is_empty());
+        assert!(!config.kasumi.enabled);
+
+        config.save_to_file(&config_path).unwrap();
+        let saved = fs::read_to_string(&config_path).unwrap();
+        assert!(saved.contains("[rules]"));
+        assert!(saved.contains("custom_mounts = []"));
+        #[cfg(not(feature = "kasumi"))]
+        assert!(!saved.contains("[kasumi]"));
+    }
 }
