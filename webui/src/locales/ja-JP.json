@@ -13,6 +13,16 @@
     "close": "閉じる",
     "saved": "保存済み"
   },
+  "compatibility": {
+    "eyebrow": "操作が必要です",
+    "title": "クリーンインストールが必要です",
+    "description": "この互換性機構が導入される前のバージョンが検出されました。残存ファイルによるマウント障害を防ぐため、クリーンインストールを行ってください。",
+    "stepsTitle": "次の順序で操作してください",
+    "uninstallStep": "KernelSU または APatch で Hybrid Mount をアンインストールする",
+    "rebootStep": "端末を再起動し、古いファイルとマウントを完全に削除する",
+    "reinstallStep": "現在のバージョンの ZIP を再度インストールする",
+    "dataWarning": "アンインストールすると、Hybrid Mount の既存の設定と実行データが削除されます。"
+  },
   "tabs": {
     "status": "ステータス",
     "config": "設定",

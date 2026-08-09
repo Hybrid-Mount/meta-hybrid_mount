@@ -12,6 +12,9 @@ use serde::Deserialize;
 #[path = "../../src/defs.rs"]
 pub mod defs;
 
+/// Increment when an in-place upgrade must be replaced by a clean reinstall.
+pub const UPGRADE_EPOCH: &str = "1";
+
 #[derive(Deserialize)]
 pub struct CargoConfig {
     pub package: Package,
@@ -51,6 +54,7 @@ pub struct ModulePropData<'a> {
     pub author: &'a str,
     pub description: &'a str,
     pub update_json: &'a str,
+    pub upgrade_epoch: &'a str,
     pub webui_icon: bool,
 }
 
@@ -79,7 +83,7 @@ pub fn git_commit_count() -> Result<i32> {
 
 pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
     let mut content = format!(
-        "id={}\nname={}\nversion={}\nversionCode={}\nauthor={}\ndescription={}\nupdateJson={}\nmetamodule=1\n",
+        "id={}\nname={}\nversion={}\nversionCode={}\nauthor={}\ndescription={}\nupdateJson={}\nmetamodule=1\nupgradeEpoch={}\n",
         data.id,
         data.name,
         data.version,
@@ -87,6 +91,7 @@ pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
         data.author,
         data.description,
         data.update_json,
+        data.upgrade_epoch,
     );
     if data.webui_icon {
         content.push_str("webuiIcon=launcher.png\n");
@@ -95,14 +100,28 @@ pub fn render_module_prop(data: &ModulePropData<'_>) -> String {
 }
 
 #[allow(dead_code)]
-pub fn render_webui_constants(
-    version: &str,
-    is_release: bool,
-    config_path: &str,
-    state_path: &str,
-    binary_path: &str,
-) -> String {
+pub struct WebuiConstantsData<'a> {
+    pub version: &'a str,
+    pub is_release: bool,
+    pub upgrade_epoch: &'a str,
+    pub config_path: &'a str,
+    pub state_path: &'a str,
+    pub binary_path: &'a str,
+    pub module_dir: &'a str,
+    pub module_update_dir: &'a str,
+}
+
+#[allow(dead_code)]
+pub fn render_webui_constants(data: &WebuiConstantsData<'_>) -> String {
     format!(
-        "export const APP_VERSION = \"{version}\";\nexport const IS_RELEASE = {is_release};\nexport const RUST_PATHS = {{\n  CONFIG: \"{config_path}\",\n  DAEMON_STATE: \"{state_path}\",\n  BINARY: \"{binary_path}\",\n}} as const;\n"
+        "export const APP_VERSION = \"{}\";\nexport const IS_RELEASE = {};\nexport const UPGRADE_EPOCH = \"{}\";\nexport const RUST_PATHS = {{\n  CONFIG: \"{}\",\n  DAEMON_STATE: \"{}\",\n  BINARY: \"{}\",\n  MODULE_DIR: \"{}\",\n  MODULE_UPDATE_DIR: \"{}\",\n}} as const;\n",
+        data.version,
+        data.is_release,
+        data.upgrade_epoch,
+        data.config_path,
+        data.state_path,
+        data.binary_path,
+        data.module_dir,
+        data.module_update_dir,
     )
 }

@@ -32,6 +32,20 @@ async function readCargoVersion() {
   return version;
 }
 
+async function readUpgradeEpoch() {
+  const source = await readFile(
+    path.join(repoRoot, "xtask/src/build_meta_shared.rs"),
+    "utf8",
+  );
+  const epoch = source.match(
+    /^pub const UPGRADE_EPOCH: &str = "([^"]+)";/m,
+  )?.[1];
+  if (!epoch) {
+    throw new Error("failed to read UPGRADE_EPOCH from build metadata");
+  }
+  return epoch;
+}
+
 function parseBooleanEnv(name, defaultValue) {
   const value = process.env[name]?.trim().toLowerCase();
   if (!value) return defaultValue;
@@ -40,13 +54,16 @@ function parseBooleanEnv(name, defaultValue) {
   throw new Error(`invalid boolean value for ${name}: ${process.env[name]}`);
 }
 
-function renderConstants({ version, isRelease }) {
+function renderConstants({ version, isRelease, upgradeEpoch }) {
   return `export const APP_VERSION = "${version}";
 export const IS_RELEASE = ${isRelease};
+export const UPGRADE_EPOCH = "${upgradeEpoch}";
 export const RUST_PATHS = {
   CONFIG: "/data/adb/hybrid-mount/config.toml",
   DAEMON_STATE: "/data/adb/hybrid-mount/run/daemon_state.json",
   BINARY: "/data/adb/modules/hybrid_mount/hybrid-mount",
+  MODULE_DIR: "/data/adb/modules/hybrid_mount",
+  MODULE_UPDATE_DIR: "/data/adb/modules_update/hybrid_mount",
 } as const;
 `;
 }
@@ -54,10 +71,11 @@ export const RUST_PATHS = {
 const version =
   process.env.HYBRID_MOUNT_WEBUI_VERSION || (await readCargoVersion());
 const isRelease = parseBooleanEnv("HYBRID_MOUNT_WEBUI_RELEASE", false);
+const upgradeEpoch = await readUpgradeEpoch();
 await mkdir(path.dirname(outputFile), { recursive: true });
 await writeFile(
   outputFile,
-  renderConstants({ version, isRelease }),
+  renderConstants({ version, isRelease, upgradeEpoch }),
   "utf8",
 );
 console.log(`Generated ${path.relative(webuiRoot, outputFile)}.`);

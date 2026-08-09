@@ -24,7 +24,7 @@ const localeModules = import.meta.glob<{ default: unknown }>(
   "../../locales/*.json",
 );
 
-function validateLocaleShape(
+export function validateLocaleShape(
   reference: unknown,
   candidate: unknown,
   path: string,

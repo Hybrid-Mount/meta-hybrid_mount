@@ -36,9 +36,11 @@ import {
   resetConfigFile,
 } from "./api/repos/configRepo";
 import { scanModules, saveModuleRules } from "./api/services/moduleService";
+import { checkInstallState } from "./api/services/installCompatibility";
 import type { AppAPI } from "./api/contracts";
 
 const RealAPI = {
+  checkInstallState,
   wakeDaemon: () => ensureDaemonAwake(PATHS.BINARY),
   init,
   loadConfig: loadConfigFromFile,

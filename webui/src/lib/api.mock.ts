@@ -17,6 +17,7 @@
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
 import type { AppAPI } from "./api/contracts";
+import { previewInstallState } from "./api/services/installCompatibility";
 import type { RuntimeStatePayload } from "./api/schemas";
 import type {
   AppConfig,
@@ -147,6 +148,11 @@ function buildMockRuntimeState(): RuntimeStatePayload {
 }
 
 export const MockAPI: AppAPI = {
+  async checkInstallState() {
+    const search = typeof window === "undefined" ? "" : window.location.search;
+    return previewInstallState(search);
+  },
+
   wakeDaemon: () => delay(20),
 
   async init() {

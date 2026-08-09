@@ -13,6 +13,16 @@
     "close": "Close",
     "saved": "Saved"
   },
+  "compatibility": {
+    "eyebrow": "Action required",
+    "title": "Clean reinstall required",
+    "description": "An installed version from before this compatibility mechanism was detected. To prevent leftover files from causing mount failures, complete a clean reinstall.",
+    "stepsTitle": "Follow these steps in order",
+    "uninstallStep": "Uninstall Hybrid Mount in KernelSU or APatch",
+    "rebootStep": "Reboot the device to fully remove the old files and mounts",
+    "reinstallStep": "Install the current version ZIP again",
+    "dataWarning": "Uninstalling clears the existing Hybrid Mount configuration and runtime data."
+  },
   "tabs": {
     "status": "Status",
     "config": "Config",

@@ -226,6 +226,18 @@ export async function readModuleProp(modulePath: string): Promise<string> {
   );
 }
 
+const MISSING_MODULE_PROP_SENTINEL = "__HYBRID_MOUNT_MODULE_PROP_MISSING__";
+
+export async function readModulePropIfPresent(
+  modulePath: string,
+): Promise<string | null> {
+  const escapedPath = shellEscapeDoubleQuoted(modulePath);
+  const output = await runCommandExpectOk(
+    `if [ -f "${escapedPath}/module.prop" ]; then cat "${escapedPath}/module.prop"; else printf '%s' '${MISSING_MODULE_PROP_SENTINEL}'; fi`,
+  );
+  return output === MISSING_MODULE_PROP_SENTINEL ? null : output;
+}
+
 async function coldStartDaemon(binaryPath: string): Promise<WebuiSession> {
   const raw = await withTimeout(
     runCommandExpectOk(hybridMountCommand(binaryPath, "daemon webui-start")),

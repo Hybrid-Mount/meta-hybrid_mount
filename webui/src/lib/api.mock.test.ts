@@ -18,6 +18,10 @@ import { describe, expect, it } from "vitest";
 import { MockAPI } from "./api.mock";
 
 describe("MockAPI core interactions", () => {
+  it("starts in the ready install state by default", async () => {
+    await expect(MockAPI.checkInstallState()).resolves.toBe("ready");
+  });
+
   it("returns a Kasumi-free init payload that can be patched", async () => {
     const initial = await MockAPI.init();
     expect(initial).not.toHaveProperty("kasumi_status");
