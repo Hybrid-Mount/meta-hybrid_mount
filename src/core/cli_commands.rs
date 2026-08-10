@@ -11,7 +11,7 @@ use crate::core::daemon::protocol::KasumiCommand;
 use crate::{
     conf::{
         cli::{ApiCommands, Cli, Commands, DaemonCommands},
-        cli_handlers,
+        cli_handlers, loader,
     },
     core::{
         daemon::{
@@ -26,6 +26,10 @@ pub fn run(cli: &Cli, command: &Commands) -> Result<()> {
     crate::utils::init_logging()?;
 
     match command {
+        Commands::EmulatedSoftReboot => {
+            let config = loader::load_config(cli)?;
+            crate::core::late_load::detach_stale_mounts(&config).map(|_| ())
+        }
         Commands::GenConfig { output, force } => cli_handlers::handle_gen_config(output, *force),
         Commands::Logs { lines } => cli_handlers::handle_logs(*lines),
         Commands::Api { command } => match api_daemon_command(command)? {

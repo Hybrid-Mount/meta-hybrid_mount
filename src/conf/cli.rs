@@ -19,6 +19,9 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Detach stale mounts before KernelSU's emulated soft reboot
+    /// when running in late-load (jailbreak) mode.
+    EmulatedSoftReboot,
     GenConfig {
         #[arg(short = 'o', long = "output", default_value = defs::CONFIG_FILE)]
         output: PathBuf,

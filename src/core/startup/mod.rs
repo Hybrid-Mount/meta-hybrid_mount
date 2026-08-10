@@ -54,6 +54,17 @@ where
         }
     };
 
+    if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
+        crate::scoped_log!(info, "startup", "mode: late_load=true");
+        let unmounted = crate::core::late_load::detach_stale_mounts(&config)?;
+        crate::scoped_log!(
+            info,
+            "startup",
+            "late_load stale mounts detached: unmounted={}",
+            unmounted
+        );
+    }
+
     #[cfg(feature = "kasumi")]
     if config.kasumi.enabled {
         let loaded = sys::lkm::autoload_if_needed(&config.kasumi)?;
