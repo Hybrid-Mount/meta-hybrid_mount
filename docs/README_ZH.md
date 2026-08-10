@@ -539,6 +539,18 @@ Release 使用 `opt-level = "z"`、`lto = "fat"`、`codegen-units = 1`、`strip 
 
 ---
 
+## Late-load（越狱模式）支持
+
+KernelSU 可以在开机后延迟加载（late-load / 越狱模式，适用于不解锁 bootloader 的设备）。Hybrid Mount 已支持该模式：
+
+- 安装时不再因 `KSU_LATE_LOAD=1` 中止。
+- KernelSU 模拟软重启时会调用 `module/emulated-soft-reboot.sh`，执行 `hybrid-mount emulated-soft-reboot`，先拆除上一次运行留下的挂载，再重新挂载，避免叠挂。
+- 启动时检测到 `KSU_LATE_LOAD=1` 也会先执行同样的清理。
+
+清理范围与 Hybrid Mount 自身创建的挂载严格对应：`mountsource` 命名的 tmpfs/overlay 挂载树、`/mnt/hm_*` 存储目录、来自模块目录且落在受管分区上的 Magic Mount bind，以及配置中自定义 bind 的目标路径。
+
+---
+
 ## 开源协议
 
 基于 [GPL-3.0](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/LICENSE) 许可。

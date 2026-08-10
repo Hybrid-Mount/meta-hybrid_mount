@@ -539,6 +539,25 @@ Every change must pass the following CI checks (defined in `.github/workflows/`)
 
 ---
 
+## Late-load (jailbreak) support
+
+KernelSU can be loaded after boot in late-load mode (jailbreak / locked
+bootloader scenarios). Hybrid Mount supports this mode:
+
+- Installation no longer aborts when `KSU_LATE_LOAD=1`.
+- KernelSU runs `module/emulated-soft-reboot.sh` during its emulated soft
+  reboot; the script calls `hybrid-mount emulated-soft-reboot` to detach the
+  previous run's mounts before the module is mounted again, so mounts never
+  stack.
+- The same cleanup also runs at startup when `KSU_LATE_LOAD=1`.
+
+The cleanup only detaches the mount families Hybrid Mount creates: mounts
+named by `mountsource` (tmpfs/overlay trees), `/mnt/hm_*` backing storage,
+Magic Mount binds sourced from the module directory on managed partitions,
+and configured custom bind targets.
+
+---
+
 ## License
 
 Licensed under [GPL-3.0](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/LICENSE).
