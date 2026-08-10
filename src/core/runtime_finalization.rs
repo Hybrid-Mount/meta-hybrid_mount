@@ -32,9 +32,13 @@ pub fn finalize(
         result.kasumi_count()
     );
 
+    let build_timer = crate::utils::StageTimer::start("runtime_finalization", "state_build");
     let state =
         RuntimeState::build_from_execution(config, storage_mode, mount_point, result, inventory)?;
+    build_timer.finish();
+    let save_timer = crate::utils::StageTimer::start("runtime_finalization", "state_save");
     state.save()?;
+    save_timer.finish();
 
     crate::scoped_log!(
         info,

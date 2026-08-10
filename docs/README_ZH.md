@@ -402,6 +402,18 @@ hybrid-mount [OPTIONS] [COMMAND]
 | `lkm load / unload / status` | LKM 生命周期管理。 |
 | `hide list / add / remove / apply` | 用户 hide 规则管理。 |
 
+### 日志与延迟
+
+正常运行默认使用 `info` 级别。启动进程前可将 `HYBRID_MOUNT_LOG_LEVEL` 设置为 `off`、`error`、`warn`、`info`、`debug` 或 `trace`；`debug` 会恢复逐模块和逐挂载明细。
+
+启动过程的粗粒度阶段会输出结构化记录，例如：
+
+```text
+[latency] scope=executor, stage=overlay_apply, status=ok, elapsed_us=1842
+```
+
+计时使用单调时钟，不会逐文件测量；如果某阶段因错误提前退出，会记录为 `status=aborted`。
+
 ---
 
 ## 架构说明

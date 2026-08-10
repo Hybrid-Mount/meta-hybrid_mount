@@ -6,7 +6,6 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    time::Instant,
 };
 
 use anyhow::{Context, Result, bail};
@@ -50,7 +49,7 @@ pub(crate) fn prepare_mount_plan_with_root(
     capabilities: &BackendCapabilities,
     managed_partitions: Vec<String>,
 ) -> Result<MountPlan> {
-    let prepare_started = Instant::now();
+    let timer = crate::utils::StageTimer::start("prepare", "plan_build");
     crate::scoped_log!(
         info,
         "prepare",
@@ -195,7 +194,7 @@ pub(crate) fn prepare_mount_plan_with_root(
         }
 
         crate::scoped_log!(
-            info,
+            debug,
             "prepare",
             "overlay op: partition={}, target={}, layers={}",
             partition_name,
@@ -210,8 +209,8 @@ pub(crate) fn prepare_mount_plan_with_root(
         });
     }
 
-    context.metrics.elapsed_ms =
-        u64::try_from(prepare_started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let elapsed = timer.finish();
+    context.metrics.elapsed_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
     let plan = MountPlan {
         prepare_metrics: context.metrics,
         overlay_ops,

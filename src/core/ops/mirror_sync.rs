@@ -39,7 +39,7 @@ pub fn sync_modules(modules: &[Module], target_base: &Path) -> Result<()> {
             continue;
         }
 
-        crate::scoped_log!(info, "mirror_sync", "module start: id={}", module.id);
+        crate::scoped_log!(debug, "mirror_sync", "module start: id={}", module.id);
 
         let prepared = PreparedDir::new(target_base, &module.id)
             .map_err(|err| module_sync_error(module, err))

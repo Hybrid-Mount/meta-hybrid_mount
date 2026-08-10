@@ -402,6 +402,18 @@ hybrid-mount [OPTIONS] [COMMAND]
 | `lkm load / unload / status` | LKM lifecycle management. |
 | `hide list / add / remove / apply` | User hide rule management. |
 
+### Logging and latency
+
+Normal runs use the `info` level. Set `HYBRID_MOUNT_LOG_LEVEL` to `off`, `error`, `warn`, `info`, `debug`, or `trace` before launching the process to change verbosity. `debug` restores per-module and per-mount details.
+
+Coarse boot stages emit structured records such as:
+
+```text
+[latency] scope=executor, stage=overlay_apply, status=ok, elapsed_us=1842
+```
+
+The measurement uses a monotonic clock and does not time individual files. A stage that exits through an error is recorded with `status=aborted`.
+
 ---
 
 ## Architecture

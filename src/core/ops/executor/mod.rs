@@ -61,6 +61,7 @@ impl Executor {
     where
         P: AsRef<Path>,
     {
+        let total_timer = crate::utils::StageTimer::start("executor", "execute_total");
         crate::scoped_log!(
             info,
             "executor",
@@ -79,6 +80,8 @@ impl Executor {
         let kasumi = KasumiCoordinator::new(config);
 
         #[cfg(feature = "kasumi")]
+        let kasumi_reset_timer = crate::utils::StageTimer::start("executor", "kasumi_reset");
+        #[cfg(feature = "kasumi")]
         let kasumi_available = if config.kasumi.enabled {
             kasumi.reset_runtime().map_err(|err| {
                 ModuleStageFailure::new(
@@ -96,6 +99,8 @@ impl Executor {
             false
         };
         #[cfg(feature = "kasumi")]
+        kasumi_reset_timer.finish();
+        #[cfg(feature = "kasumi")]
         if !kasumi_available && !planned_kasumi_ids.is_empty() {
             return Err(ModuleStageFailure::new(
                 FailureStage::Execute,
@@ -105,11 +110,16 @@ impl Executor {
             .into());
         }
 
-        if Self::is_supported()? {
+        let overlay_probe_timer =
+            crate::utils::StageTimer::start("executor", "overlay_support_probe");
+        let overlay_supported = Self::is_supported()?;
+        overlay_probe_timer.finish();
+        let overlay_apply_timer = crate::utils::StageTimer::start("executor", "overlay_apply");
+        if overlay_supported {
             crate::scoped_log!(info, "executor", "overlayfs: supported=true");
             for op in &plan.overlay_ops {
                 crate::scoped_log!(
-                    info,
+                    debug,
                     "executor",
                     "overlay apply: partition={}, target={}, layers={}",
                     op.partition_name,
@@ -125,7 +135,7 @@ impl Executor {
                 match overlay_result {
                     Ok(ids) => {
                         crate::scoped_log!(
-                            info,
+                            debug,
                             "executor",
                             "overlay success: target={}, modules={}",
                             op.target,
@@ -171,6 +181,7 @@ impl Executor {
                 "overlayfs: supported=false, pending_overlay_ops=0"
             );
         }
+        overlay_apply_timer.finish();
 
         #[cfg(feature = "kasumi")]
         {
@@ -183,9 +194,10 @@ impl Executor {
 
         let magic_need_list: Vec<String> = final_magic_ids.iter().cloned().collect();
 
+        let magic_timer = crate::utils::StageTimer::start("executor", "magic_apply");
         if !magic_need_list.is_empty() {
             crate::scoped_log!(
-                info,
+                debug,
                 "executor",
                 "magic apply: modules={}",
                 magic_need_list.join(", ")
@@ -214,11 +226,17 @@ impl Executor {
                 mounted_ids.len()
             );
         }
+        magic_timer.finish();
 
+        let custom_bind_timer = crate::utils::StageTimer::start("executor", "custom_bind_apply");
         let (custom_mount_targets, custom_stats) = custom_bind::mount_custom_binds(config)
             .context("Failed to apply custom bind mounts")?;
         mount_stats.merge(&custom_stats);
+        custom_bind_timer.finish();
 
+        #[cfg(feature = "kasumi")]
+        let kasumi_apply_timer =
+            crate::utils::StageTimer::start("executor", "kasumi_runtime_apply");
         #[cfg(feature = "kasumi")]
         let kasumi_runtime_enabled = if config.kasumi.enabled {
             kasumi.apply_runtime(plan, modules).map_err(|err| {
@@ -238,10 +256,14 @@ impl Executor {
         };
         #[cfg(not(feature = "kasumi"))]
         let kasumi_runtime_enabled = false;
+        #[cfg(feature = "kasumi")]
+        kasumi_apply_timer.finish();
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if !config.disable_umount {
+            let timer = crate::utils::StageTimer::start("executor", "umount_commit");
             umount_mgr::commit().context("Failed to commit umountable mount list")?;
+            timer.finish();
         }
 
         let result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
@@ -250,6 +272,7 @@ impl Executor {
         let kasumi_count = 0usize;
         #[cfg(feature = "kasumi")]
         let kasumi_count = final_kasumi_ids.len();
+        total_timer.finish();
 
         crate::scoped_log!(
             info,

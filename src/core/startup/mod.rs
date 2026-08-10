@@ -44,8 +44,12 @@ where
     utils::init_logging().context("Failed to initialize logging")?;
     crate::scoped_log!(info, "startup", "init: daemon=hybrid-mount");
 
+    let mount_timer = utils::StageTimer::start("startup", "mount_total");
+    let preflight_timer = utils::StageTimer::start("startup", "preflight");
     utils::check_ksu();
+    preflight_timer.finish();
 
+    let config_timer = utils::StageTimer::start("startup", "config_load");
     let config = match load_config() {
         Ok(config) => config,
         Err(error) => {
@@ -53,6 +57,7 @@ where
             return Err(error);
         }
     };
+    config_timer.finish();
 
     if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
         crate::scoped_log!(info, "startup", "mode: late_load=true");
@@ -67,7 +72,9 @@ where
 
     #[cfg(feature = "kasumi")]
     if config.kasumi.enabled {
+        let lkm_timer = utils::StageTimer::start("startup", "kasumi_lkm_autoload");
         let loaded = sys::lkm::autoload_if_needed(&config.kasumi)?;
+        lkm_timer.finish();
         if loaded {
             crate::scoped_log!(
                 info,
@@ -84,8 +91,10 @@ where
         crate::scoped_log!(warn, "startup", "config: disable_umount=true");
     }
 
+    let workspace_timer = utils::StageTimer::start("startup", "workspace_setup");
     let mnt_base = utils::get_mnt()?;
     sys::fs::ensure_dir_exists(&mnt_base)?;
+    workspace_timer.finish();
     crate::core::MountController::new(config.clone(), &mnt_base)?
         .init_storage(&mnt_base)
         .context("Failed to initialize storage")?
@@ -95,6 +104,7 @@ where
         .context("Failed to execute mount plan")?
         .finalize()
         .context("Failed to finalize boot sequence")?;
+    mount_timer.finish();
 
     Ok(config)
 }
