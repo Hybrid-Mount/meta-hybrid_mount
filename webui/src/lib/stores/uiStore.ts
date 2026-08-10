@@ -87,6 +87,7 @@ const createUiStore = () => {
     { code: "uk-UA", name: "Українська" },
     { code: "vi-VN", name: "Tiếng Việt" },
     { code: "id-ID", name: "Bahasa Indonesia" },
+    { code: "tr-TR", name: "Türkçe" },
     { code: "zh-CN", name: "简体中文" },
     { code: "zh-TW", name: "繁體中文" },
   ].sort((a, b) => {
