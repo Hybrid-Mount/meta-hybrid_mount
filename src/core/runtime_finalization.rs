@@ -24,12 +24,11 @@ pub fn finalize(
     crate::scoped_log!(
         info,
         "runtime_finalization",
-        "start: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}",
+        "start: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}",
         storage_mode.as_str(),
         mount_point.display(),
         result.overlay_module_ids.len(),
-        result.magic_module_ids.len(),
-        result.kasumi_count()
+        result.magic_module_ids.len()
     );
 
     let build_timer = crate::utils::StageTimer::start("runtime_finalization", "state_build");

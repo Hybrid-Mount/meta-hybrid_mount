@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "マウントベース",
     "activePartitions": "有効なパーティション",
-    "loadError": "システムステータスの読み込みに失敗しました"
+    "loadError": "システムステータスの読み込みに失敗しました",
+    "notMounted": "未マウント",
+    "notMountedHint": "起動時のマウントが実行されませんでした。再起動するか、KernelSU デーモン (ksud) が動作しているか確認してください。"
   },
   "config": {
     "disableUmount": "アンマウントを無効",

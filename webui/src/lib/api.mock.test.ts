@@ -22,12 +22,7 @@ describe("MockAPI core interactions", () => {
     await expect(MockAPI.checkInstallState()).resolves.toBe("ready");
   });
 
-  it("returns a Kasumi-free init payload that can be patched", async () => {
-    const initial = await MockAPI.init();
-    expect(initial).not.toHaveProperty("kasumi_status");
-    expect(initial.config).not.toHaveProperty("kasumi");
-    expect(initial.status.mode_stats).not.toHaveProperty("kasumi");
-
+  it("returns a standard init payload that can be patched", async () => {
     const updated = await MockAPI.patchConfig({ default_mode: "magic" });
     expect(updated.default_mode).toBe("magic");
   });

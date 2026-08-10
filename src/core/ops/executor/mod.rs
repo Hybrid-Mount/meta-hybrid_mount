@@ -10,8 +10,6 @@ use std::{collections::BTreeSet, path::Path};
 
 use anyhow::{Context, Result, bail};
 
-#[cfg(feature = "kasumi")]
-use crate::core::kasumi_coordinator::KasumiCoordinator;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr;
 use crate::{
@@ -30,23 +28,7 @@ pub struct ExecutionResult {
     pub overlay_partitions: Vec<String>,
     pub magic_module_ids: Vec<String>,
     pub custom_mount_targets: Vec<String>,
-    #[cfg(feature = "kasumi")]
-    pub kasumi_module_ids: Vec<String>,
-    pub kasumi_runtime_enabled: bool,
     pub mount_stats: MountStatistics,
-}
-
-impl ExecutionResult {
-    pub fn kasumi_count(&self) -> usize {
-        #[cfg(feature = "kasumi")]
-        {
-            self.kasumi_module_ids.len()
-        }
-        #[cfg(not(feature = "kasumi"))]
-        {
-            0
-        }
-    }
 }
 
 pub struct Executor;
@@ -65,50 +47,14 @@ impl Executor {
         crate::scoped_log!(
             info,
             "executor",
-            "start: overlay_ops={}, preselected_magic_modules={}, preselected_kasumi_modules={}",
+            "start: overlay_ops={}, preselected_magic_modules={}",
             plan.overlay_ops.len(),
-            plan.magic_module_ids.len(),
-            plan.kasumi_count()
+            plan.magic_module_ids.len()
         );
         let mut final_magic_ids: BTreeSet<String> = plan.magic_module_ids.iter().cloned().collect();
         let mut final_overlay_ids: BTreeSet<String> = BTreeSet::new();
         let mut final_overlay_partitions: BTreeSet<String> = BTreeSet::new();
-        #[cfg(feature = "kasumi")]
-        let planned_kasumi_ids = plan.kasumi_module_ids.clone();
         let mut mount_stats = MountStatistics::default();
-        #[cfg(feature = "kasumi")]
-        let kasumi = KasumiCoordinator::new(config);
-
-        #[cfg(feature = "kasumi")]
-        let kasumi_reset_timer = crate::utils::StageTimer::start("executor", "kasumi_reset");
-        #[cfg(feature = "kasumi")]
-        let kasumi_available = if config.kasumi.enabled {
-            kasumi.reset_runtime().map_err(|err| {
-                ModuleStageFailure::new(
-                    FailureStage::Execute,
-                    planned_kasumi_ids.clone(),
-                    anyhow::anyhow!("Failed to reset Kasumi runtime: {:#}", err),
-                )
-            })?
-        } else {
-            crate::scoped_log!(
-                debug,
-                "executor",
-                "kasumi disabled: skip_runtime_reset=true"
-            );
-            false
-        };
-        #[cfg(feature = "kasumi")]
-        kasumi_reset_timer.finish();
-        #[cfg(feature = "kasumi")]
-        if !kasumi_available && !planned_kasumi_ids.is_empty() {
-            return Err(ModuleStageFailure::new(
-                FailureStage::Execute,
-                planned_kasumi_ids.clone(),
-                anyhow::anyhow!("Kasumi became unavailable before execution"),
-            )
-            .into());
-        }
 
         let overlay_probe_timer =
             crate::utils::StageTimer::start("executor", "overlay_support_probe");
@@ -127,9 +73,6 @@ impl Executor {
                     op.lowerdirs.len()
                 );
 
-                #[cfg(feature = "kasumi")]
-                let overlay_result = overlay::mount_overlay(op, config, &kasumi);
-                #[cfg(not(feature = "kasumi"))]
                 let overlay_result = overlay::mount_overlay(op, config);
 
                 match overlay_result {
@@ -183,15 +126,6 @@ impl Executor {
         }
         overlay_apply_timer.finish();
 
-        #[cfg(feature = "kasumi")]
-        {
-            plan.kasumi_add_rules.clear();
-            plan.kasumi_merge_rules.clear();
-            plan.kasumi_hide_rules.clear();
-        }
-        #[cfg(feature = "kasumi")]
-        let final_kasumi_ids = plan.kasumi_module_ids.clone();
-
         let magic_need_list: Vec<String> = final_magic_ids.iter().cloned().collect();
 
         let magic_timer = crate::utils::StageTimer::start("executor", "magic_apply");
@@ -234,31 +168,6 @@ impl Executor {
         mount_stats.merge(&custom_stats);
         custom_bind_timer.finish();
 
-        #[cfg(feature = "kasumi")]
-        let kasumi_apply_timer =
-            crate::utils::StageTimer::start("executor", "kasumi_runtime_apply");
-        #[cfg(feature = "kasumi")]
-        let kasumi_runtime_enabled = if config.kasumi.enabled {
-            kasumi.apply_runtime(plan, modules).map_err(|err| {
-                ModuleStageFailure::new(
-                    FailureStage::Execute,
-                    final_kasumi_ids.clone(),
-                    anyhow::anyhow!("Failed to apply Kasumi late rules: {:#}", err),
-                )
-            })?
-        } else {
-            crate::scoped_log!(
-                debug,
-                "executor",
-                "kasumi disabled: skip_runtime_apply=true"
-            );
-            false
-        };
-        #[cfg(not(feature = "kasumi"))]
-        let kasumi_runtime_enabled = false;
-        #[cfg(feature = "kasumi")]
-        kasumi_apply_timer.finish();
-
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if !config.disable_umount {
             let timer = crate::utils::StageTimer::start("executor", "umount_commit");
@@ -268,20 +177,15 @@ impl Executor {
 
         let result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
         let result_magic: Vec<String> = final_magic_ids.into_iter().collect();
-        #[cfg(not(feature = "kasumi"))]
-        let kasumi_count = 0usize;
-        #[cfg(feature = "kasumi")]
-        let kasumi_count = final_kasumi_ids.len();
         total_timer.finish();
 
         crate::scoped_log!(
             info,
             "executor",
-            "complete: overlay_modules={}, magic_modules={}, custom_mounts={}, kasumi_modules={}",
+            "complete: overlay_modules={}, magic_modules={}, custom_mounts={}",
             result_overlay.len(),
             result_magic.len(),
-            custom_mount_targets.len(),
-            kasumi_count
+            custom_mount_targets.len()
         );
 
         Ok(ExecutionResult {
@@ -289,9 +193,6 @@ impl Executor {
             overlay_partitions: final_overlay_partitions.into_iter().collect(),
             magic_module_ids: result_magic,
             custom_mount_targets,
-            #[cfg(feature = "kasumi")]
-            kasumi_module_ids: final_kasumi_ids,
-            kasumi_runtime_enabled,
             mount_stats,
         })
     }

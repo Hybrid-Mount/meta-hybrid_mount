@@ -124,7 +124,7 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          LITE_ZIP="$(find packages -maxdepth 1 -type f -name '*-Lite-*' | sort | head -n 1)"
+          LITE_ZIP="$(find packages -maxdepth 1 -type f -name 'Hybrid-Mount-*.zip' ! -name '*-Nano-*' | sort | head -n 1)"
           NANO_ZIP="$(find packages -maxdepth 1 -type f -name '*-Nano-*' | sort | head -n 1)"
           test -n "$LITE_ZIP" && test -s "$LITE_ZIP"
           test -n "$NANO_ZIP" && test -s "$NANO_ZIP"
@@ -165,7 +165,7 @@ jobs:
           NANO_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$NANO_NAME"
           CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/main/changelog.md"
 
-          cat <<EOF > /tmp/update-lite.json
+          cat <<EOF > /tmp/update.json
           {
             "version": "$TAG",
             "versionCode": $VERSION_CODE,
@@ -173,6 +173,8 @@ jobs:
             "changelog": "$CHANGELOG_URL"
           }
           EOF
+
+          cp /tmp/update.json /tmp/update-lite.json
 
           cat <<EOF > /tmp/update-nano.json
           {
@@ -254,6 +256,7 @@ jobs:
           git fetch origin main
           git checkout main
 
+          mv /tmp/update.json update.json
           mv /tmp/update-lite.json update-lite.json
           mv /tmp/update-nano.json update-nano.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
@@ -264,7 +267,7 @@ jobs:
 
           cargo update
 
-          git add update-lite.json update-nano.json changelog.md Cargo.toml Cargo.lock
+          git add update.json update-lite.json update-nano.json changelog.md Cargo.toml Cargo.lock
 
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"

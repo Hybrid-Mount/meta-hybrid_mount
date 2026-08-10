@@ -40,7 +40,7 @@ body:
         为什么要将此模块加入黑名单？它会导致什么问题？
       placeholder: |
         - e.g., Causes bootloop on devices with 5.15+ kernel
-        - e.g., Incompatible with OverlayFS / Kasumi / Magic Mount
+        - e.g., Incompatible with OverlayFS / Magic Mount
         - e.g., Self-mounts bypassing Hybrid Mount orchestration
     validations:
       required: true

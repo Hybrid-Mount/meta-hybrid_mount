@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-// Generated from the non-Kasumi commands in src/core/daemon/protocol.rs.
+// Generated from the commands in src/core/daemon/protocol.rs.
 // Do not edit by hand.
 
 export const DAEMON_COMMAND_TYPES = [

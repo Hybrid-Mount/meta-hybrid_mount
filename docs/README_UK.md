@@ -8,15 +8,14 @@
 ![Version](https://img.shields.io/github/v/tag/Hybrid-Mount/meta-hybrid_mount?label=Version&color=8A2BE2&style=flat-square)
 
 Hybrid Mount — це метамодуль оркестрації монтування для **KernelSU** та **APatch**.
-Він поєднує файли модулів із розділами Android через єдиний рушій політик і три backend-и монтування:
+Він поєднує файли модулів із розділами Android через єдиний рушій політик і два backend-и монтування:
 
 - **OverlayFS**: шарове монтування для широкої сумісності.
 - **Magic Mount**: bind mount для прямої заміни шляхів.
-- **Kasumi**: маршрутизація на базі LKM із runtime-функціями hide, spoof і stealth.
 
 Вбудована **WebUI на SolidJS** забезпечує графічне керування, моніторинг стану та редагування конфігурації.
 
-Пакети публікуються у трьох варіантах. Якщо не зазначено інше, цей README описує варіант `full`.
+Пакети публікуються у двох варіантах. Якщо не зазначено інше, цей README описує варіант Lite (за замовчуванням).
 
 **[English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md)** &nbsp; **[简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md)** &nbsp; **[繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md)** &nbsp; **[日本語](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md)** &nbsp; **[Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md)** &nbsp; **[Italiano](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md)** &nbsp; **[Русский](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md)** &nbsp; **[Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md)** &nbsp; **[Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md)**
 
@@ -31,7 +30,6 @@ Hybrid Mount — це метамодуль оркестрації монтува
 - [WebUI](#webui)
 - [Підтримка мов](#підтримка-мов)
 - [Конфігурація](#конфігурація)
-- [Kasumi](#kasumi)
 - [Довідник політик](#довідник-політик)
 - [CLI](#cli)
 - [Архітектура](#архітектура)
@@ -42,19 +40,21 @@ Hybrid Mount — це метамодуль оркестрації монтува
 
 ## Варіанти збірки
 
-| Варіант | Бінарний файл | WebUI | Daemon / CLI | Kasumi LKM | Сценарій |
-|---------|---------------|-------|--------------|------------|----------|
-| **Full** | Так | Так | Так | Так | Для користувачів, яким потрібна маршрутизація Kasumi або функції hide/spoof. |
-| **Lite** | Так | Так | Так | Ні | Для користувачів, яким потрібні WebUI та повний рушій політик без LKM-based stealth. |
-| **Nano** | Так | Ні | Ні | Ні | Для конфігураційного монтування без runtime-daemon, WebUI та CLI. |
+Hybrid Mount випускається у двох варіантах, кожен під свій сценарій використання:
 
-### Full
-
-Варіант `full` містить усі підтримувані backend-и (OverlayFS, Magic Mount, Kasumi), WebUI на SolidJS, daemon з Unix socket і HTTP/SSE, CLI та ресурси Kasumi LKM. Побудовано з Cargo features `kasumi` (включає `control-plane`).
+| Варіант | Бінарний файл | WebUI | Daemon / CLI | Сценарій використання |
+|---------|---------------|-------|--------------|----------------------|
+| **Lite (за замовчуванням)** | Так | Так | Так | Випуск за замовчуванням: WebUI, daemon, CLI та обидва backend-и: OverlayFS і Magic Mount. |
+| **Nano** | Так | Ні | Ні | Для конфігураційного монтування без runtime-daemon, WebUI та CLI. |
 
 ### Lite
 
-Варіант `lite` (`--no-default-features --features control-plane`) вилучає Kasumi LKM і пов'язані функції, але зберігає WebUI, daemon, CLI, OverlayFS і Magic Mount. Він підходить, якщо ядро не підтримує зовнішні LKM або runtime-можливості hide/spoof не потрібні.
+Lite — варіант за замовчуванням. Включає WebUI на SolidJS, daemon на Unix socket (HTTP/SSE), CLI та обидва backend-и: OverlayFS і Magic Mount:
+
+- Потрібні WebUI та повний рушій політик.
+- Потрібен менший пакет із збереженням WebUI та інтерфейсу керування daemon.
+
+Збірки Lite використовують лише `control-plane` (`--no-default-features --features control-plane`).
 
 ### Nano
 
@@ -64,26 +64,21 @@ Nano використовує `magic` як режим за замовчуван�
 
 ### Матриця можливостей
 
-| Можливість | Full | Lite | Nano |
-|------------|------|------|------|
-| Backend OverlayFS | Так | Так | Через marker-файли |
-| Backend Magic Mount | Так | Так | Так, за замовчуванням |
-| Backend Kasumi | Так | Ні | Ні |
-| WebUI | Так | Так | Ні |
-| CLI | Так | Так | Ні |
-| Daemon | Так | Так | Ні |
-| Runtime-застосування конфігурації | Так | Так | Ні |
-| Kasumi hide/spoof/stealth | Так | Ні | Ні |
-| Автозавантаження LKM | Так | Ні | Ні |
-| Cargo features | `kasumi` (включає `control-plane`) | тільки `control-plane` | немає |
-| Розмір ZIP (прибл.) | ~4 MB | ~2 MB | ~1 MB |
+| Можливість | Lite | Nano |
+| ------------ | ------ | ------ |
+| Backend OverlayFS | Так | Через marker-файли |
+| Backend Magic Mount | Так | Так, за замовчуванням |
+| WebUI | Так | Ні |
+| CLI | Так | Ні |
+| Daemon | Так | Ні |
+| Runtime-застосування конфігурації | Так | Ні |
+| Cargo features | тільки `control-plane` | немає |
+| Розмір ZIP (прибл.) | ~2 MB | ~1 MB |
 
 ## Можливості
 
-- **Три backend-и, один рушій політик**: призначення OverlayFS, Magic Mount або Kasumi на рівні окремих шляхів.
 - **Детерміноване планування**: конфлікти виявляються під час побудови плану.
 - **Вбудована WebUI**: керування модулями, редагування конфігурації та моніторинг runtime-стану.
-- **Runtime-інтеграція Kasumi**: автозавантаження LKM, mirror routing, mount hide, spoof maps/statfs, UID hiding, uname spoof і kstat rules.
 - **Runtime-оновлення конфігурації**: перевірені patch-зміни зберігаються та застосовуються негайно.
 - **Явні помилки**: недійсні стани й налаштування одразу завершуються помилкою; `api config-reset` викликається лише явно.
 - **Автоматизація**: daemon protocol JSON-over-Unix-socket і HTTP API.
@@ -93,9 +88,9 @@ Nano використовує `magic` як режим за замовчуван�
 ## Швидкий старт
 
 1. Встановіть [KernelSU](https://kernelsu.org/) або [APatch](https://apatch.dev/) на пристрій.
-2. Завантажте ZIP `full`, `lite` або `nano` з [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
+2. Завантажте ZIP `lite` або `nano` з [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Встановіть ZIP через інсталятор модулів root-менеджера.
-4. Під час першого встановлення Full/Lite виберіть типовий режим: збільшення гучності обирає OverlayFS, зменшення — Magic Mount, а через 10 секунд без вводу обирається OverlayFS. Це єдиний запит інсталятора; Nano пропускає цей крок.
+4. Під час першого встановлення виберіть типовий режим: збільшення гучності обирає OverlayFS, зменшення — Magic Mount, а через 10 секунд без вводу обирається OverlayFS. Це єдиний запит інсталятора; Nano пропускає цей крок.
 5. Перезавантажте пристрій. Hybrid Mount визначить середовище й застосує вибрану політику.
 
 ```bash
@@ -106,7 +101,7 @@ hybrid-mount daemon status
 hybrid-mount api modules-list
 ```
 
-У варіантах Full/Lite WebUI відкривається із запису модуля в KernelSU або APatch.
+У варіанті Lite WebUI відкривається із запису модуля в KernelSU або APatch.
 
 ### Зміна режиму монтування модуля
 
@@ -127,7 +122,6 @@ default_mode = "magic"
 |-------|---------|--------------|
 | `overlay` | OverlayFS | Модулів, що додають або замінюють файли без конфліктів. Режим за замовчуванням. |
 | `magic` | Bind mount | Прямої заміни окремих файлів. |
-| `kasumi` | Kasumi LKM | Явного mirror routing або runtime-функцій hide/spoof. |
 | `ignore` | Немає | Виключення конкретних шляхів з обробки монтування. |
 
 OverlayFS підтримує `ext4` як постійне сховище за замовчуванням і `tmpfs` як легкий тимчасовий варіант.
@@ -142,7 +136,6 @@ WebUI на SolidJS обслуговується daemon-ом через лока�
 - Панель стану зі статистикою, розділами, storage mode і станом daemon.
 - Керування модулями та інтерактивна зміна політик.
 - Редактор `config.toml` з перевіркою та правилами за шляхами.
-- Панель Kasumi для статусу LKM, правил і spoof-налаштувань у Full.
 
 ### Підтримка мов
 
@@ -172,23 +165,7 @@ README-документація доступна [English](https://github.com/Hy
 | `mountsource` | string | auto-detect | Runtime-середовище (`KSU`, `APatch`). |
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Сховище upper/work для OverlayFS. |
 | `disable_umount` | bool | `false` | Пропуск umount, лише для налагодження. |
-| `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Глобальна політика за замовчуванням. |
 | `rules` | map | `{}` | Політики за модулями та шляхами. |
-
----
-
-## Kasumi
-
-Kasumi — backend на базі LKM. Окрім маршрутизації монтувань, він надає функції hide і spoof. Він використовується, коли `kasumi.enabled = true` і план містить правила Kasumi, або коли налаштовані додаткові функції: hidexattr, mount hide, maps/statfs spoof, UID hiding, uname spoof, заміна cmdline чи правила kstat/user hide.
-
-```bash
-hybrid-mount kasumi status
-hybrid-mount kasumi features
-hybrid-mount kasumi list
-hybrid-mount lkm status
-hybrid-mount kasumi apply-config-runtime
-hybrid-mount kasumi clear
-```
 
 ---
 
@@ -217,22 +194,16 @@ hybrid-mount [OPTIONS] [COMMAND]
 - `api config-get` / `api config-set` / `api config-patch` / `api config-reset`: керування конфігурацією.
 - `api modules-list` / `api modules-apply`: перегляд і застосування політик модулів.
 - `daemon launch` / `daemon serve` / `daemon status` / `daemon stop`: керування daemon.
-- `kasumi ...`: керування Kasumi.
-- `lkm load` / `lkm unload` / `lkm status`: керування LKM.
 
 ---
 
 ## Архітектура
-
-Hybrid Mount читає `config.toml`, знаходить inventory модулів, будує план монтування за правилами шляху, модуля та глобальними правилами, після чого виконує його через OverlayFS, Magic Mount або Kasumi. Виконавець керується **типізованим скінченним автоматом** (`src/core/controller.rs`): `MountController<Init> → StorageReady → Planned → Executed`. Кожен перехід представляє один етап конвеєра. Варіанти Full/Lite зберігають runtime-стан і відкривають до нього доступ через WebUI та CLI.
 
 Основні каталоги:
 
 - `src/conf`: schema конфігурації, TOML loader, CLI й handlers.
 - `src/domain`: основні типи, правила та matching шляхів.
 - `src/core`: inventory, планування, daemon, API, startup і runtime state.
-- `src/mount`: backend-и OverlayFS, Magic Mount і Kasumi.
-- `src/sys`: mount syscalls, LKM і Kasumi UAPI.
 - `webui`: SolidJS WebUI та i18n 9 мовами.
 - `xtask`: автоматизація збірки й релізу.
 
@@ -247,7 +218,6 @@ Hybrid Mount читає `config.toml`, знаходить inventory модулі
 - Node.js 20+ і pnpm для WebUI
 
 ```bash
-cargo run -p xtask -- build --release --flavor full
 cargo run -p xtask -- build --release --flavor lite
 cargo run -p xtask -- build --release --flavor nano
 cargo run -p xtask -- build --release --skip-webui
@@ -257,8 +227,6 @@ cargo +nightly test
 ```
 
 ### CI-гейти та перевірка feature flags
-
-Кожна зміна повинна проходити: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test --all-targets --workspace`, WebUI `pnpm lint` + `pnpm test`, і перевірку заголовка ліцензії. `cargo clippy --all-features` перевіряє лише варіант `full`; також переконайтеся, що комбінації **lite** (`--no-default-features --features control-plane`) та **nano** (`--no-default-features`) компілюються. Код Kasumi має бути за `#[cfg(feature = "kasumi")]`; код daemon/CLI/WebUI — за `#[cfg(feature = "control-plane")]`.
 
 ---
 

@@ -40,6 +40,7 @@ const createSysStore = () => {
     const status = payload.status;
     setStorage({
       type: status.storage_mode,
+      mounted: status.mounted,
       modeStats: buildModeStats(status),
       mountedCount: buildMountedCount(status),
     });
@@ -114,6 +115,7 @@ const createSysStore = () => {
     const status = runtimeStateSchema.parse(state);
     setStorage({
       type: status.storage_mode,
+      mounted: status.mounted,
       modeStats: buildModeStats(status),
       mountedCount: buildMountedCount(status),
     });

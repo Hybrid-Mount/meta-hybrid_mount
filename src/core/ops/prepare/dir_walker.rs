@@ -234,11 +234,10 @@ impl PrepareContext {
             &mode_decision.effective_mode,
         );
 
-        let has_any_entries = entry_state.direct_non_dir_entries
+        #[cfg(feature = "control-plane")]
+        let has_magic_entries = entry_state.direct_non_dir_entries
             || entry_state.has_child_dirs
             || entry_state.has_replace_marker;
-        #[cfg(feature = "control-plane")]
-        let has_magic_entries = has_any_entries;
         #[cfg(not(feature = "control-plane"))]
         let has_magic_entries = entry_state.direct_non_dir_entries
             || entry_state.has_replace_marker
@@ -247,10 +246,6 @@ impl PrepareContext {
         if matches!(mode_decision.effective_mode, MountMode::Magic) && has_magic_entries {
             outcome.plan.magic = true;
         }
-        if matches!(mode_decision.effective_mode, MountMode::Kasumi) && has_any_entries {
-            outcome.plan.kasumi = true;
-        }
-
         let needs_shallow_overlay = matches!(mode_decision.effective_mode, MountMode::Overlay)
             && mode_decision.has_descendant_rules
             && (entry_state.direct_non_dir_entries || entry_state.has_replace_marker);
@@ -286,7 +281,7 @@ impl PrepareContext {
         }
 
         match mode_decision.effective_mode {
-            MountMode::Magic | MountMode::Ignore | MountMode::Kasumi => Ok(false),
+            MountMode::Magic | MountMode::Ignore => Ok(false),
             MountMode::Overlay => {
                 if !item.system_target.exists() {
                     crate::scoped_log!(

@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use hybrid_mount::{
     conf::schema::Config,
-    core::backend_capabilities::BackendCapabilities,
     domain::{DefaultMode, ModuleRules, MountMode},
 };
 
@@ -23,14 +22,14 @@ fn module_rules_longest_prefix_match() {
         MountMode::Overlay,
         &[
             ("system", MountMode::Magic),
-            ("system/app", MountMode::Kasumi),
+            ("system/app", MountMode::Magic),
             ("system/app/private", MountMode::Overlay),
         ],
     );
 
     assert_eq!(rules.get_mode("vendor"), MountMode::Overlay);
     assert_eq!(rules.get_mode("system"), MountMode::Magic);
-    assert_eq!(rules.get_mode("system/app"), MountMode::Kasumi);
+    assert_eq!(rules.get_mode("system/app"), MountMode::Magic);
     assert_eq!(rules.get_mode("system/app/private"), MountMode::Overlay);
     assert_eq!(rules.get_mode("system/app/private/lib"), MountMode::Overlay);
 }
@@ -58,16 +57,4 @@ fn default_mode_and_config_integration() {
     assert_eq!(config.default_mode, DefaultMode::Overlay);
     assert!(!config.disable_umount);
     assert!(matches!(config.mountsource.as_str(), "APatch" | "KSU"));
-}
-
-#[test]
-fn backend_capabilities_detect_does_not_panic() {
-    let config = Config::default();
-    match BackendCapabilities::detect(&config) {
-        Ok(capabilities) => {
-            let _ = capabilities.can_use_kasumi();
-            assert!(!capabilities.kasumi_status().is_empty());
-        }
-        Err(error) => assert!(!error.to_string().is_empty()),
-    }
 }

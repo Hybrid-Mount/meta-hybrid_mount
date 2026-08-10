@@ -70,23 +70,6 @@ where
         );
     }
 
-    #[cfg(feature = "kasumi")]
-    if config.kasumi.enabled {
-        let lkm_timer = utils::StageTimer::start("startup", "kasumi_lkm_autoload");
-        let loaded = sys::lkm::autoload_if_needed(&config.kasumi)?;
-        lkm_timer.finish();
-        if loaded {
-            crate::scoped_log!(
-                info,
-                "startup",
-                "kasumi lkm autoload: loaded=true, dir={}",
-                config.kasumi.lkm_dir.display()
-            );
-        }
-    } else {
-        crate::scoped_log!(debug, "startup", "kasumi disabled: skip_lkm_autoload=true");
-    }
-
     if config.disable_umount {
         crate::scoped_log!(warn, "startup", "config: disable_umount=true");
     }

@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "Direktori Mount",
     "activePartitions": "Partisi Aktif",
-    "loadError": "Gagal memuat status sistem"
+    "loadError": "Gagal memuat status sistem",
+    "notMounted": "Belum terpasang",
+    "notMountedHint": "Pemasangan saat boot tidak berjalan. Mulai ulang, atau pastikan daemon KernelSU (ksud) berjalan."
   },
   "config": {
     "disableUmount": "Nonaktifkan Unmount",

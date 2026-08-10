@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "Cơ sở Gắn kết",
     "activePartitions": "Phân vùng Đang hoạt động",
-    "loadError": "Thất bại khi tải trạng thái hệ thống"
+    "loadError": "Thất bại khi tải trạng thái hệ thống",
+    "notMounted": "Chưa gắn kết",
+    "notMountedHint": "Quá trình gắn kết khi khởi động chưa chạy. Hãy khởi động lại hoặc kiểm tra daemon KernelSU (ksud) đang chạy."
   },
   "config": {
     "disableUmount": "Tắt Umount",

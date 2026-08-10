@@ -40,8 +40,6 @@ pub struct PackageMetadata {
 pub struct HybridMountMetadata {
     pub name: String,
     pub update: String,
-    pub lite_name: String,
-    pub lite_update: String,
     pub nano_name: String,
     pub nano_update: String,
 }

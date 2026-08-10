@@ -20,46 +20,10 @@ pub struct OverlayOperation {
     pub lowerdirs: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone)]
-#[cfg(feature = "kasumi")]
-pub struct KasumiAddRule {
-    pub target: String,
-    pub source: PathBuf,
-    pub file_type: i32,
-}
-
-#[derive(Debug, Clone)]
-#[cfg(feature = "kasumi")]
-pub struct KasumiMergeRule {
-    pub target: String,
-    pub source: PathBuf,
-}
-
 #[derive(Debug, Default)]
 pub struct MountPlan {
     pub prepare_metrics: PrepareMetrics,
     pub overlay_ops: Vec<OverlayOperation>,
-    #[cfg(feature = "kasumi")]
-    pub kasumi_add_rules: Vec<KasumiAddRule>,
-    #[cfg(feature = "kasumi")]
-    pub kasumi_merge_rules: Vec<KasumiMergeRule>,
-    #[cfg(feature = "kasumi")]
-    pub kasumi_hide_rules: Vec<String>,
     pub overlay_module_ids: Vec<String>,
     pub magic_module_ids: Vec<String>,
-    #[cfg(feature = "kasumi")]
-    pub kasumi_module_ids: Vec<String>,
-}
-
-impl MountPlan {
-    pub fn kasumi_count(&self) -> usize {
-        #[cfg(feature = "kasumi")]
-        {
-            self.kasumi_module_ids.len()
-        }
-        #[cfg(not(feature = "kasumi"))]
-        {
-            0
-        }
-    }
 }

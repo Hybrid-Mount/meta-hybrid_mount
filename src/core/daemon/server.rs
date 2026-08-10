@@ -12,7 +12,7 @@ use std::{
             net::{UnixListener, UnixStream},
         },
     },
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -28,7 +28,7 @@ use signal_hook::{
 
 use self::http::{ActiveWebuiConnectionGuard, WebuiHttpState};
 use super::protocol::{DaemonRequest, DaemonResponse};
-use crate::{core::runtime_state::RuntimeState, defs, sys::fs::atomic_write};
+use crate::{conf::config::Config, core::runtime_state::RuntimeState, defs, sys::fs::atomic_write};
 
 mod commands;
 mod http;
@@ -42,16 +42,41 @@ pub fn serve() -> Result<()> {
     fs::create_dir_all(defs::RUN_DIR)
         .with_context(|| format!("Failed to create daemon run directory {}", defs::RUN_DIR))?;
     cleanup_stale_runtime_files()?;
+    let config = Config::load_from_file(defs::CONFIG_FILE).unwrap_or_else(|error| {
+        crate::scoped_log!(
+            warn,
+            "daemon",
+            "config load failed, using defaults for idle state: error={:#}",
+            error
+        );
+        Config::default()
+    });
     let mut runtime_state = match RuntimeState::load() {
-        Ok(state) => state,
+        Ok(state) if state.has_valid_mount_identity() => state,
+        Ok(state) => {
+            crate::scoped_log!(
+                warn,
+                "daemon",
+                "runtime state is invalid, starting idle: storage_mode={}, mount_point={}",
+                state.storage_mode,
+                state.mount_point.display()
+            );
+            RuntimeState::idle(
+                config.overlay_mode.as_str(),
+                PathBuf::from(defs::HYBRID_MOUNT_DIR),
+            )
+        }
         Err(err) if error_is_not_found(&err) => {
             crate::scoped_log!(
                 warn,
                 "daemon",
-                "runtime state missing, starting with defaults: path={}",
+                "runtime state missing, starting idle: path={}",
                 defs::STATE_FILE
             );
-            RuntimeState::default()
+            RuntimeState::idle(
+                config.overlay_mode.as_str(),
+                PathBuf::from(defs::HYBRID_MOUNT_DIR),
+            )
         }
         Err(err) => {
             return Err(err).with_context(|| {

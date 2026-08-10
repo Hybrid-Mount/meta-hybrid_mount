@@ -116,6 +116,7 @@ function buildMockRuntimeState(): RuntimeStatePayload {
     pid: 1234,
     storage_mode: "ext4",
     mount_point: "/data/adb/hybrid-mount/mnt",
+    mounted: true,
     overlay_modules: ["overlay_module_2"],
     magic_modules: ["magisk_module_1"],
     custom_mounts: [],
@@ -208,6 +209,7 @@ export const MockAPI: AppAPI = {
     await delay(60);
     return {
       type: "ext4",
+      mounted: true,
       modeStats: buildModeStats(),
       mountedCount: 2,
     };

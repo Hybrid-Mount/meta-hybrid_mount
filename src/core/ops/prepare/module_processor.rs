@@ -14,7 +14,6 @@ use super::types::{ModulePrepareOutcome, PrepareContext, ProcessingItem, SHALLOW
 use crate::{
     core::{failure::ModuleStageFailure, inventory::Module},
     defs,
-    domain::MountMode,
     sys::fs::{copy_non_dir_entry, ensure_dir_like},
     utils,
 };
@@ -100,15 +99,6 @@ pub(super) fn prepare_module(
     }
 
     Ok(outcome)
-}
-
-pub(super) fn module_requests_kasumi(module: &Module) -> bool {
-    matches!(module.rules.default_mode, MountMode::Kasumi)
-        || module
-            .rules
-            .paths
-            .values()
-            .any(|mode| matches!(mode, MountMode::Kasumi))
 }
 
 pub(super) fn materialize_module_identity(

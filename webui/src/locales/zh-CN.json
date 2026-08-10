@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "挂载基点",
     "activePartitions": "活跃分区",
-    "loadError": "系统状态加载失败"
+    "loadError": "系统状态加载失败",
+    "notMounted": "未挂载",
+    "notMountedHint": "开机挂载未执行。请重启设备，或确认 KernelSU 守护进程（ksud）正在运行。"
   },
   "config": {
     "disableUmount": "禁用Umount",

@@ -151,16 +151,6 @@ mod tests {
     }
 
     #[test]
-    fn module_mount_mode_marker_ignores_kasumi_for_nano() {
-        let temp = TempDir::new().unwrap();
-        let module_path = temp.path().join("module");
-        fs::create_dir_all(&module_path).unwrap();
-        fs::write(module_path.join("kasumi"), b"").unwrap();
-
-        assert_eq!(module_mount_mode_marker(&module_path).unwrap(), None);
-    }
-
-    #[test]
     fn load_module_rules_uses_mode_marker_for_nano_default() {
         let temp = TempDir::new().unwrap();
         let module_path = temp.path().join("module");

@@ -25,9 +25,8 @@ function uniqueSorted(matches: IterableIterator<RegExpMatchArray>): string[] {
 
 describe("daemon protocol contract", () => {
   it("keeps the WebUI command surface within the Rust protocol", () => {
-    const webuiProtocolSource = rustProtocol.split("// ── Kasumi:")[0];
     const rustCommandTypes = uniqueSorted(
-      webuiProtocolSource.matchAll(/#\[serde\(rename = "([^"]+)"\)\]/g),
+      rustProtocol.matchAll(/#\[serde\(rename = "([^"]+)"\)\]/g),
     );
     const tsCommandTypes = uniqueSorted(
       tsBridge.matchAll(/\|\s*\{\s*type:\s*"([^"]+)"/g),
@@ -38,10 +37,5 @@ describe("daemon protocol contract", () => {
     expect(tsCommandTypes.every((type) => rustCommandTypes.includes(type))).toBe(
       true,
     );
-    expect(generatedCommandTypes.every((type) => !type.includes("kasumi"))).toBe(
-      true,
-    );
-    expect(tsCommandTypes).not.toContain("kasumi-status");
-    expect(tsCommandTypes).not.toContain("lkm-load");
   });
 });

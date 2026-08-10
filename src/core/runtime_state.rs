@@ -12,8 +12,6 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "kasumi")]
-use crate::mount::kasumi;
 #[cfg(feature = "control-plane")]
 use crate::sys::fs::xattr;
 use crate::{
@@ -100,28 +98,7 @@ impl MountStatistics {
 pub struct ModuleModeStats {
     pub overlayfs: usize,
     pub magicmount: usize,
-    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
-    pub kasumi: usize,
     pub blacklisted: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
-pub struct KasumiRuntimeInfo {
-    pub status: String,
-    pub available: bool,
-    pub kernel_supported: bool,
-    pub lkm_loaded: bool,
-    pub lkm_autoload: bool,
-    pub lkm_kmi_override: String,
-    pub lkm_current_kmi: String,
-    pub lkm_dir: PathBuf,
-    pub protocol_version: Option<i32>,
-    pub feature_bits: Option<i32>,
-    pub feature_names: Vec<String>,
-    pub hooks: Vec<String>,
-    pub rule_count: usize,
-    pub user_hide_rule_count: usize,
-    pub mirror_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -137,10 +114,12 @@ pub struct RuntimeState {
     pub pid: u32,
     pub storage_mode: String,
     pub mount_point: PathBuf,
+    /// True once a mount run has completed. Daemons that start without
+    /// persisted state serve an idle state with this set to false.
+    #[serde(default = "default_mounted")]
+    pub mounted: bool,
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
-    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
-    pub kasumi_modules: Vec<String>,
     pub custom_mounts: Vec<String>,
     pub skip_mount_modules: Vec<String>,
     pub blacklisted_modules: Vec<String>,
@@ -149,15 +128,13 @@ pub struct RuntimeState {
     pub tmpfs_xattr_supported: bool,
     pub mount_stats: MountStatistics,
     pub mode_stats: ModuleModeStats,
-    #[serde(default, skip_serializing_if = "kasumi_feature_disabled")]
-    pub kasumi: KasumiRuntimeInfo,
     pub daemon: DaemonRuntimeInfo,
     #[serde(skip)]
     cached_status_value: Option<serde_json::Value>,
 }
 
-fn kasumi_feature_disabled<T>(_value: &T) -> bool {
-    !cfg!(feature = "kasumi")
+fn default_mounted() -> bool {
+    true
 }
 
 impl RuntimeState {
@@ -184,12 +161,10 @@ impl RuntimeState {
         mount_point: PathBuf,
         overlay_modules: Vec<String>,
         magic_modules: Vec<String>,
-        kasumi_modules: Vec<String>,
         custom_mounts: Vec<String>,
         active_mounts: Vec<String>,
         mount_stats: MountStatistics,
         mode_stats: ModuleModeStats,
-        kasumi: KasumiRuntimeInfo,
     ) -> Result<Self> {
         let start = SystemTime::now();
 
@@ -208,9 +183,9 @@ impl RuntimeState {
             pid,
             storage_mode,
             mount_point,
+            mounted: true,
             overlay_modules,
             magic_modules,
-            kasumi_modules,
             custom_mounts,
             skip_mount_modules: Vec::new(),
             blacklisted_modules: Vec::new(),
@@ -219,7 +194,6 @@ impl RuntimeState {
             tmpfs_xattr_supported,
             mount_stats,
             mode_stats,
-            kasumi,
             daemon: DaemonRuntimeInfo::default(),
             cached_status_value: None,
         };
@@ -228,12 +202,11 @@ impl RuntimeState {
         crate::scoped_log!(
             debug,
             "runtime_state:new",
-            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, active_mounts={}, tmpfs_xattr_supported={}",
+            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, active_mounts={}, tmpfs_xattr_supported={}",
             state.storage_mode,
             state.mount_point.display(),
             state.overlay_modules.len(),
             state.magic_modules.len(),
-            state.kasumi_modules.len(),
             state.active_mounts.len(),
             state.tmpfs_xattr_supported
         );
@@ -241,16 +214,34 @@ impl RuntimeState {
         crate::scoped_log!(
             debug,
             "runtime_state:new",
-            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, active_mounts={}",
+            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, active_mounts={}",
             state.storage_mode,
             state.mount_point.display(),
             state.overlay_modules.len(),
             state.magic_modules.len(),
-            state.kasumi_modules.len(),
             state.active_mounts.len()
         );
 
         Ok(state)
+    }
+
+    /// Idle state for a daemon that started without a persisted mount run.
+    /// Uses the configured overlay mode and the data directory as mount base
+    /// so the WebUI can show "not mounted" instead of failing validation.
+    pub fn idle(storage_mode: &str, mount_point: PathBuf) -> Self {
+        Self {
+            storage_mode: storage_mode.to_owned(),
+            mount_point,
+            mounted: false,
+            ..Self::default()
+        }
+    }
+
+    /// True when the state can be served to the WebUI: a supported storage
+    /// mode and a non-empty mount base.
+    pub fn has_valid_mount_identity(&self) -> bool {
+        matches!(self.storage_mode.as_str(), "tmpfs" | "ext4")
+            && !self.mount_point.as_os_str().is_empty()
     }
 
     pub fn save(&self) -> Result<()> {
@@ -278,17 +269,16 @@ impl RuntimeState {
         crate::scoped_log!(
             info,
             "runtime_state:summary",
-            "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, daemon_alive={}",
+            "saved: storage_mode={}, active_mounts={}, daemon_alive={}",
             self.storage_mode,
             self.active_mounts.join(","),
-            self.kasumi_modules.join(","),
             self.daemon.alive
         );
         Ok(())
     }
 
     pub fn build_from_execution(
-        config: &Config,
+        _config: &Config,
         storage_mode: crate::core::storage::StorageMode,
         mount_point: &Path,
         result: &ExecutionResult,
@@ -297,41 +287,22 @@ impl RuntimeState {
         crate::scoped_log!(
             debug,
             "runtime_state:build",
-            "start: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}",
+            "start: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}",
             storage_mode.as_str(),
             mount_point.display(),
             result.overlay_module_ids.len(),
-            result.magic_module_ids.len(),
-            result.kasumi_count()
+            result.magic_module_ids.len()
         );
 
-        #[cfg(feature = "kasumi")]
-        let kasumi = kasumi::collect_runtime_info(config)?;
-        #[cfg(not(feature = "kasumi"))]
-        let kasumi = {
-            let _ = config;
-            KasumiRuntimeInfo::default()
-        };
         let mut state = Self::new(
             storage_mode.as_str().to_owned(),
             mount_point.to_path_buf(),
             result.overlay_module_ids.clone(),
             result.magic_module_ids.clone(),
-            {
-                #[cfg(feature = "kasumi")]
-                {
-                    result.kasumi_module_ids.clone()
-                }
-                #[cfg(not(feature = "kasumi"))]
-                {
-                    Vec::new()
-                }
-            },
             result.custom_mount_targets.clone(),
             collect_active_mounts(result),
             result.mount_stats.clone(),
             collect_mode_stats(result),
-            kasumi,
         )?;
         state.skip_mount_modules = inventory.skip_mount_modules.clone();
         state.blacklisted_modules = inventory.blacklisted_modules.clone();
@@ -353,7 +324,6 @@ impl RuntimeState {
         self.overlay_modules
             .iter()
             .chain(self.magic_modules.iter())
-            .chain(self.kasumi_modules.iter())
             .map(|s| s.as_str())
             .collect()
     }
@@ -395,7 +365,6 @@ fn collect_mode_stats(result: &ExecutionResult) -> ModuleModeStats {
     ModuleModeStats {
         overlayfs: result.overlay_module_ids.len(),
         magicmount: result.magic_module_ids.len(),
-        kasumi: result.kasumi_count(),
         blacklisted: 0usize,
     }
 }
@@ -407,43 +376,59 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
         active_mounts.push("custom-bind".to_string());
     }
 
-    if result.kasumi_runtime_enabled {
-        active_mounts.push("kasumi".to_string());
-    }
-
     active_mounts.sort();
     active_mounts.dedup();
 
     crate::scoped_log!(
         debug,
         "runtime_state:active_mounts",
-        "complete: overlay_partitions={}, custom_mounts={}, kasumi_runtime_enabled={}, active_mounts={}",
+        "complete: overlay_partitions={}, custom_mounts={}, active_mounts={}",
         result.overlay_partitions.len(),
         result.custom_mount_targets.len(),
-        result.kasumi_runtime_enabled,
         active_mounts.len()
     );
 
     active_mounts
 }
 
-#[cfg(all(test, not(feature = "kasumi")))]
+#[cfg(test)]
 mod tests {
     use super::RuntimeState;
 
     #[test]
-    fn serialized_runtime_state_omits_kasumi_fields() {
+    fn serialized_runtime_state_round_trips() {
         let value = serde_json::to_value(RuntimeState::default()).unwrap();
         let object = value.as_object().unwrap();
 
-        assert!(!object.contains_key("kasumi_modules"));
-        assert!(!object.contains_key("kasumi"));
-        assert!(
-            !object["mode_stats"]
-                .as_object()
-                .unwrap()
-                .contains_key("kasumi")
-        );
+        assert!(object.contains_key("mounted"));
         serde_json::from_value::<RuntimeState>(value).unwrap();
+    }
+
+    #[test]
+    fn idle_state_meets_status_contract() {
+        let state = RuntimeState::idle("ext4", std::path::PathBuf::from("/data/adb/hybrid-mount"));
+
+        assert!(!state.mounted);
+        assert!(state.has_valid_mount_identity());
+        assert_eq!(state.storage_mode, "ext4");
+        assert_eq!(
+            state.mount_point.display().to_string(),
+            "/data/adb/hybrid-mount"
+        );
+    }
+
+    #[test]
+    fn default_state_is_not_a_valid_mount_identity() {
+        assert!(!RuntimeState::default().has_valid_mount_identity());
+    }
+
+    #[test]
+    fn legacy_state_without_mounted_defaults_to_mounted() {
+        let mut value = serde_json::to_value(RuntimeState::default()).unwrap();
+        value.as_object_mut().unwrap().remove("mounted");
+
+        let state = serde_json::from_value::<RuntimeState>(value).unwrap();
+
+        assert!(state.mounted);
     }
 }

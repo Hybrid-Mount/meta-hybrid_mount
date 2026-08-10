@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "Bağlama Temeli",
     "activePartitions": "Aktif Bölümler",
-    "loadError": "Sistem durumu yüklenemedi"
+    "loadError": "Sistem durumu yüklenemedi",
+    "notMounted": "Bağlı değil",
+    "notMountedHint": "Açılışta bağlama işlemi çalışmadı. Yeniden başlatın veya KernelSU daemon'unun (ksud) çalıştığını doğrulayın."
   },
   "config": {
     "disableUmount": "Bağlantıyı Kesmeyi Devre Dışı Bırak",

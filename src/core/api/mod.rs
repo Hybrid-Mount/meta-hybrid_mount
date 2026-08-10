@@ -2,17 +2,10 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-#[cfg(feature = "kasumi")]
-mod kasumi;
 mod modules;
 mod system;
 mod topology;
 
-#[cfg(feature = "kasumi")]
-pub use self::kasumi::{
-    build_features_payload, build_kasumi_version_payload, build_lkm_payload,
-    parse_kasumi_rule_listing,
-};
 pub use self::{
     modules::{
         ModuleApplyEntry, apply_modules_payload, build_modules_payload, build_version_payload,

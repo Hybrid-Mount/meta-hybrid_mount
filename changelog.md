@@ -1,4 +1,11 @@
 
+## Unreleased
+
+### <!-- 1 --> Features
+
+- Removed the Kasumi backend (code, LKM packaging, CLI/daemon commands, WebUI references, build flavor, docs). Lite is now the default release; Nano is unchanged. Legacy configs using `kasumi` mount modes are folded into `magic` on load.
+
+
 ## v4.2.0
 
 

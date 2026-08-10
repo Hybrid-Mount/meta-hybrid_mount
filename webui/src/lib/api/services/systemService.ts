@@ -43,6 +43,7 @@ export async function getStorageUsage(): Promise<StorageStatus> {
   );
   return {
     type: state.storage_mode,
+    mounted: state.mounted,
     modeStats: buildModeStats(state),
     mountedCount: buildMountedCount(state),
   };

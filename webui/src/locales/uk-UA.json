@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "База монтування",
     "activePartitions": "Активні розділи",
-    "loadError": "Не вдалося завантажити стан системи"
+    "loadError": "Не вдалося завантажити стан системи",
+    "notMounted": "Не змонтовано",
+    "notMountedHint": "Монтування під час завантаження не виконувалось. Перезавантажте пристрій або перевірте, що демон KernelSU (ksud) працює."
   },
   "config": {
     "disableUmount": "Вимкнути Umount",

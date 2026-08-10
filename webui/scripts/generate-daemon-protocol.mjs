@@ -28,11 +28,10 @@ const outputPath = resolve(
 const checkMode = process.argv.includes("--check");
 
 function extractCommandTypes(source) {
-  const webuiProtocolSource = source.split("// ── Kasumi:")[0];
-  return [
+    return [
     ...new Set(
       Array.from(
-        webuiProtocolSource.matchAll(/#\[serde\(rename = "([^"]+)"\)\]/g),
+        source.matchAll(/#\[serde\(rename = "([^"]+)"\)\]/g),
         (match) => match[1],
       ),
     ),
@@ -57,7 +56,7 @@ function render(commandTypes) {
  * limitations under the License.
  */
 
-// Generated from the non-Kasumi commands in src/core/daemon/protocol.rs.
+// Generated from the commands in src/core/daemon/protocol.rs.
 // Do not edit by hand.
 
 export const DAEMON_COMMAND_TYPES = [

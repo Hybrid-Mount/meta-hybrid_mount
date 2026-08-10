@@ -40,67 +40,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: DaemonCommands,
     },
-    #[cfg(feature = "kasumi")]
-    Lkm {
-        #[command(subcommand)]
-        command: LkmCommands,
-    },
-    #[cfg(feature = "kasumi")]
-    Hide {
-        #[command(subcommand)]
-        command: HideCommands,
-    },
-    #[cfg(feature = "kasumi")]
-    Kasumi {
-        #[command(subcommand)]
-        command: KasumiCommands,
-    },
-}
-
-#[cfg(feature = "kasumi")]
-#[derive(Subcommand, Debug)]
-pub enum KasumiCommands {
-    Status,
-    List,
-    Version,
-    Features,
-    Hooks,
-    #[command(name = "apply-config-runtime")]
-    ApplyConfigRuntime,
-    Clear,
-    #[command(name = "release-connection")]
-    ReleaseConnection,
-    #[command(name = "invalidate-cache")]
-    InvalidateCache,
-    #[command(name = "fix-mounts")]
-    FixMounts,
-    #[command(name = "restore-uname-global")]
-    RestoreUnameGlobal,
-    #[command(name = "set-uname")]
-    SetUname {
-        #[arg(long = "mode", default_value = "scoped")]
-        mode: String,
-        release: String,
-        version: String,
-    },
-    #[command(name = "clear-uname")]
-    ClearUname {
-        #[arg(long = "mode", default_value = "scoped")]
-        mode: String,
-    },
-    Rule {
-        #[command(subcommand)]
-        command: KasumiRuleCommands,
-    },
-}
-
-#[cfg(feature = "kasumi")]
-#[derive(Subcommand, Debug)]
-pub enum HideCommands {
-    List,
-    Add { path: PathBuf },
-    Remove { path: PathBuf },
-    Apply,
 }
 
 #[derive(Subcommand, Debug)]
@@ -141,14 +80,6 @@ pub enum ApiCommands {
         url: String,
     },
     Reboot,
-    #[cfg(feature = "kasumi")]
-    #[command(name = "kasumi-maps-add")]
-    KasumiMapsAdd {
-        rule: String,
-    },
-    #[cfg(feature = "kasumi")]
-    #[command(name = "kasumi-maps-clear")]
-    KasumiMapsClear,
 }
 
 #[derive(Subcommand, Debug)]
@@ -160,43 +91,4 @@ pub enum DaemonCommands {
     WebuiStart,
     Stop,
     Status,
-}
-
-#[cfg(feature = "kasumi")]
-#[derive(Subcommand, Debug)]
-pub enum LkmCommands {
-    Load,
-    Unload,
-    Status,
-}
-
-#[cfg(feature = "kasumi")]
-#[derive(Subcommand, Debug)]
-pub enum KasumiRuleCommands {
-    Add {
-        target: PathBuf,
-        source: PathBuf,
-        #[arg(long = "type")]
-        file_type: i32,
-    },
-    Merge {
-        target: PathBuf,
-        source: PathBuf,
-    },
-    Hide {
-        path: PathBuf,
-    },
-    Delete {
-        path: PathBuf,
-    },
-    #[command(name = "add-dir")]
-    AddDir {
-        target_base: PathBuf,
-        source_dir: PathBuf,
-    },
-    #[command(name = "remove-dir")]
-    RemoveDir {
-        target_base: PathBuf,
-        source_dir: PathBuf,
-    },
 }

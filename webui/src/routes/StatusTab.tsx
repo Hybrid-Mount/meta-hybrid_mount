@@ -112,20 +112,31 @@ export default function StatusTab() {
             <div class="hero-content">
               <span class="hero-label">{uiStore.L.status.storageTitle}</span>
               <span class="hero-value">
-                {getModeDisplayName(sysStore.storage.type)}
+                {sysStore.storage.mounted
+                  ? getModeDisplayName(sysStore.storage.type)
+                  : uiStore.L.status.notMounted}
               </span>
             </div>
 
-            <div class="mount-base-chip">
-              <md-icon class="mount-base-icon">
-                <svg viewBox="0 0 24 24">
-                  <path d={ICONS.mount_path} />
-                </svg>
-              </md-icon>
-              <span class="mount-base-text">
-                {sysStore.systemInfo.mountBase}
-              </span>
-            </div>
+            <Show
+              when={sysStore.storage.mounted}
+              fallback={
+                <div class="not-mounted-hint">
+                  {uiStore.L.status.notMountedHint}
+                </div>
+              }
+            >
+              <div class="mount-base-chip">
+                <md-icon class="mount-base-icon">
+                  <svg viewBox="0 0 24 24">
+                    <path d={ICONS.mount_path} />
+                  </svg>
+                </md-icon>
+                <span class="mount-base-text">
+                  {sysStore.systemInfo.mountBase}
+                </span>
+              </div>
+            </Show>
           </Show>
         </div>
 

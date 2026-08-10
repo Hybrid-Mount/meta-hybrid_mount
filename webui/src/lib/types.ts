@@ -53,6 +53,7 @@ export interface Module {
 
 export interface StorageStatus {
   type: OverlayMode;
+  mounted: boolean;
   modeStats: ModeStats;
   mountedCount: number;
 }

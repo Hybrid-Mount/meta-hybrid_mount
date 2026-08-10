@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "Base de montaje",
     "activePartitions": "Particiones Activas",
-    "loadError": "Error al cargar el estado del sistema"
+    "loadError": "Error al cargar el estado del sistema",
+    "notMounted": "No montado",
+    "notMountedHint": "El montaje de arranque no se ejecutó. Reinicia o verifica que el daemon de KernelSU (ksud) esté en ejecución."
   },
   "config": {
     "disableUmount": "Desactivar Umount",

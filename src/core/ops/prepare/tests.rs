@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 use super::{coordinator::prepare_mount_plan_with_root, types::SHALLOW_OVERLAY_DIR};
 use crate::{
     conf::config,
-    core::{backend_capabilities::BackendCapabilities, inventory::Module, ops::plan::MountPlan},
+    core::{inventory::Module, ops::plan::MountPlan},
     domain::{ModuleRules, MountMode},
 };
 
@@ -58,13 +58,11 @@ fn prepare_with_root(
     modules: &[Module],
     target_base: &Path,
     system_root: &Path,
-    capabilities: &BackendCapabilities,
 ) -> MountPlan {
     prepare_mount_plan_with_root(
         modules,
         target_base,
         system_root,
-        capabilities,
         vec!["system".to_string()],
     )
     .unwrap()
@@ -82,18 +80,10 @@ fn prepare_mount_plan_builds_overlay_op_from_prepared_storage() {
     let storage = temp.path().join("storage");
     let module = make_module("foo", &source, MountMode::Overlay, &[]);
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert_eq!(plan.overlay_ops.len(), 1);
     assert_eq!(plan.magic_module_ids, Vec::<String>::new());
-    #[cfg(feature = "kasumi")]
-    assert_eq!(plan.kasumi_module_ids, Vec::<String>::new());
     assert!(storage.join("foo/system/bin/sh").exists());
     assert!(plan.prepare_metrics.copied_entries > 0);
     assert!(plan.prepare_metrics.copied_bytes > 0);
@@ -124,18 +114,10 @@ fn prepare_mount_plan_marks_magic_modules_without_overlay() {
         &[("system/bin", MountMode::Magic)],
     );
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert!(plan.overlay_ops.is_empty());
     assert_eq!(plan.magic_module_ids, vec!["foo".to_string()]);
-    #[cfg(feature = "kasumi")]
-    assert_eq!(plan.kasumi_module_ids, Vec::<String>::new());
     assert!(!storage.join("foo").exists());
     assert_eq!(plan.prepare_metrics.copied_entries, 0);
     assert_eq!(plan.prepare_metrics.copied_bytes, 0);
@@ -159,43 +141,13 @@ fn prepare_mount_plan_materializes_only_overlay_descendant_of_magic_tree() {
         &[("system/etc/init", MountMode::Overlay)],
     );
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert_eq!(plan.overlay_ops.len(), 1);
     assert_eq!(plan.overlay_module_ids, vec!["foo".to_string()]);
     assert_eq!(plan.magic_module_ids, vec!["foo".to_string()]);
     assert!(storage.join("foo/system/etc/init/overlay.rc").exists());
     assert!(!storage.join("foo/system/etc/magic.conf").exists());
-}
-
-#[test]
-fn prepare_mount_plan_rejects_kasumi_when_unavailable() {
-    let temp = TempDir::new().unwrap();
-    let source = temp.path().join("module");
-    write_file(&source.join("system/bin/sh"), "shell");
-
-    let system_root = temp.path().join("sysroot");
-    fs::create_dir_all(system_root.join("system/bin")).unwrap();
-
-    let storage = temp.path().join("storage");
-    let module = make_module("foo", &source, MountMode::Kasumi, &[]);
-
-    let result = prepare_mount_plan_with_root(
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-        vec!["system".to_string()],
-    );
-
-    assert!(result.is_err());
-    assert!(!storage.join("foo").exists());
 }
 
 #[test]
@@ -210,18 +162,10 @@ fn prepare_mount_plan_drops_modules_without_plan_results() {
     let storage = temp.path().join("storage");
     let module = make_module("foo", &source, MountMode::Ignore, &[]);
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert!(plan.overlay_ops.is_empty());
     assert!(plan.magic_module_ids.is_empty());
-    #[cfg(feature = "kasumi")]
-    assert!(plan.kasumi_module_ids.is_empty());
     assert!(!storage.join("foo").exists());
 }
 
@@ -244,13 +188,7 @@ fn prepare_mount_plan_preserves_overlay_direct_files_when_subtree_is_split() {
         &[("system/etc/init", MountMode::Ignore)],
     );
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     let shallow_etc = storage
         .join("foo")
@@ -288,13 +226,7 @@ fn prepare_mount_plan_preserves_overlay_replace_marker_when_subtree_is_split() {
         &[("system/etc/init", MountMode::Ignore)],
     );
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     let shallow_etc = storage
         .join("foo")
@@ -325,13 +257,7 @@ fn prepare_mount_plan_skips_replace_marker_entries() {
     let storage = temp.path().join("storage");
     let module = make_module("foo", &source, MountMode::Overlay, &[]);
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert!(!plan.overlay_ops.is_empty());
     assert!(!storage.join("foo/system/.replace").exists());
@@ -350,13 +276,7 @@ fn prepare_mount_plan_keeps_replace_only_overlay_dir() {
     let storage = temp.path().join("storage");
     let module = make_module("foo", &source, MountMode::Overlay, &[]);
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert_eq!(plan.overlay_ops.len(), 1);
     assert_eq!(
@@ -379,13 +299,7 @@ fn prepare_mount_plan_marks_magic_for_replace_only_dir() {
     let storage = temp.path().join("storage");
     let module = make_module("foo", &source, MountMode::Magic, &[]);
 
-    let plan = prepare_with_root(
-        &test_config(),
-        &[module],
-        &storage,
-        &system_root,
-        &BackendCapabilities::default(),
-    );
+    let plan = prepare_with_root(&test_config(), &[module], &storage, &system_root);
 
     assert!(plan.overlay_ops.is_empty());
     assert_eq!(plan.magic_module_ids, vec!["foo".to_string()]);

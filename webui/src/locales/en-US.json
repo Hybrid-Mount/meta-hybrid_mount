@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "Mount Base",
     "activePartitions": "Active Partitions",
-    "loadError": "Failed to load system status"
+    "loadError": "Failed to load system status",
+    "notMounted": "Not mounted",
+    "notMountedHint": "The boot-time mount did not run. Reboot, or check that the KernelSU daemon (ksud) is running."
   },
   "config": {
     "disableUmount": "Disable Umount",

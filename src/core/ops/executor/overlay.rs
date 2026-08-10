@@ -6,40 +6,14 @@ use std::path::Path;
 
 use anyhow::Result;
 
-#[cfg(feature = "kasumi")]
-use crate::core::kasumi_coordinator::KasumiCoordinator;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::mount::umount_mgr;
 use crate::{conf::config, core::ops::plan::OverlayOperation, defs, mount::overlayfs};
 
-#[cfg(feature = "kasumi")]
-pub(super) fn mount_overlay(
-    op: &OverlayOperation,
-    config: &config::Config,
-    kasumi: &KasumiCoordinator<'_>,
-) -> Result<Vec<String>> {
-    mount_overlay_inner(op, config, Some(kasumi))
-}
-
-#[cfg(not(feature = "kasumi"))]
 pub(super) fn mount_overlay(op: &OverlayOperation, config: &config::Config) -> Result<Vec<String>> {
     mount_overlay_inner(op, config)
 }
 
-#[cfg(feature = "kasumi")]
-fn mount_overlay_inner(
-    op: &OverlayOperation,
-    config: &config::Config,
-    kasumi: Option<&KasumiCoordinator<'_>>,
-) -> Result<Vec<String>> {
-    mount_overlay_base(op, config)?;
-    if let Some(kasumi) = kasumi {
-        kasumi.hide_overlay_xattrs(Path::new(&op.target))?;
-    }
-    Ok(super::collect_involved_modules(op))
-}
-
-#[cfg(not(feature = "kasumi"))]
 fn mount_overlay_inner(op: &OverlayOperation, config: &config::Config) -> Result<Vec<String>> {
     mount_overlay_base(op, config)?;
     Ok(super::collect_involved_modules(op))

@@ -38,7 +38,9 @@
     "selinux": "SELinux",
     "mountBase": "掛載基點 (Mount Base)",
     "activePartitions": "活躍分區",
-    "loadError": "系統狀態載入失敗"
+    "loadError": "系統狀態載入失敗",
+    "notMounted": "未掛載",
+    "notMountedHint": "開機掛載未執行。請重新啟動裝置，或確認 KernelSU 守護程序（ksud）正在執行。"
   },
   "config": {
     "disableUmount": "禁用命名空間分離",

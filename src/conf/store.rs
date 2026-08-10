@@ -72,9 +72,8 @@ fn load_config(main_path: &Path) -> Result<Config> {
 
     let content = fs::read_to_string(main_path)
         .with_context(|| format!("failed to read config file {}", main_path.display()))?;
-    let mut config = toml::from_str::<Config>(&content)
+    let config = toml::from_str::<Config>(&content)
         .with_context(|| format!("failed to parse config file {}", main_path.display()))?;
-    config.sanitize_disabled_features();
 
     crate::scoped_log!(
         debug,
@@ -116,7 +115,6 @@ impl Config {
 #[cfg(all(test, feature = "control-plane"))]
 mod tests {
     use super::*;
-    #[cfg(not(feature = "kasumi"))]
     use crate::domain::{DefaultMode, MountMode};
 
     #[test]
@@ -158,9 +156,8 @@ mod tests {
         assert!(previous_backup.contains("default_mode = \"magic\""));
     }
 
-    #[cfg(not(feature = "kasumi"))]
     #[test]
-    fn legacy_kasumi_config_is_sanitized_and_omitted() {
+    fn legacy_kasumi_config_is_folded_into_magic() {
         let temp = tempfile::tempdir().unwrap();
         let config_path = temp.path().join("config.toml");
         fs::write(
@@ -190,11 +187,9 @@ default_mode = "kasumi"
             rules.paths.get("system/app"),
             Some(MountMode::Magic)
         ));
-        assert!(!config.kasumi.enabled);
 
         config.save_to_file(&config_path).unwrap();
         let saved = fs::read_to_string(&config_path).unwrap();
-        assert!(!saved.contains("[kasumi]"));
         assert!(!saved.contains("kasumi"));
     }
 
@@ -210,10 +205,6 @@ mountsource = "KSU"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
-
-[kasumi]
-enabled = false
-enable_hidexattr = false
 "#,
         )
         .unwrap();
@@ -221,13 +212,11 @@ enable_hidexattr = false
         let config = Config::load_from_file(&config_path).unwrap();
         assert!(config.rules.is_empty());
         assert!(config.custom_mounts.is_empty());
-        assert!(!config.kasumi.enabled);
 
         config.save_to_file(&config_path).unwrap();
         let saved = fs::read_to_string(&config_path).unwrap();
         assert!(saved.contains("[rules]"));
         assert!(saved.contains("custom_mounts = []"));
-        #[cfg(not(feature = "kasumi"))]
-        assert!(!saved.contains("[kasumi]"));
+        assert!(!saved.contains("kasumi"));
     }
 }

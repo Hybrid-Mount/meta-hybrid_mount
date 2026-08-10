@@ -19,14 +19,11 @@ repository = "https://github.com/Hybrid-Mount/meta-hybrid_mount"
 [package.metadata.hybrid_mount]
 name = "Hybrid Mount"
 update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update.json"
-lite_name = "Hybrid Mount Lite"
-lite_update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json"
 nano_name = "Hybrid Mount Nano"
 nano_update = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-nano.json"
 
 [features]
 default = ["control-plane"]
-kasumi = ["control-plane"]
 control-plane = ["dep:clap", "dep:signal-hook"]
 
 [dependencies]
@@ -66,7 +63,6 @@ panic = "abort"
 
 [build-dependencies]
 anyhow = "1"
-bindgen = "0.72"
 semver = "1"
 serde = { version = "1.0", features = ["serde_derive"] }
 toml = "1.1"

@@ -116,6 +116,7 @@ export const runtimeStateSchema = z
     pid: z.number().int().nonnegative(),
     storage_mode: z.enum(["tmpfs", "ext4"]),
     mount_point: z.string().min(1),
+    mounted: z.boolean(),
     overlay_modules: z.array(z.string()),
     magic_modules: z.array(z.string()),
     custom_mounts: z.array(z.string()),

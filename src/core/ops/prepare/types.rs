@@ -15,12 +15,11 @@ pub(super) const SHALLOW_OVERLAY_DIR: &str = ".hybrid_overlay";
 pub(super) struct ModulePlanOutcome {
     pub(super) overlay_groups: BTreeMap<PathBuf, (String, Vec<PathBuf>)>,
     pub(super) magic: bool,
-    pub(super) kasumi: bool,
 }
 
 impl ModulePlanOutcome {
     pub(super) fn has_mount_result(&self) -> bool {
-        !self.overlay_groups.is_empty() || self.magic || self.kasumi
+        !self.overlay_groups.is_empty() || self.magic
     }
 }
 
