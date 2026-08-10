@@ -73,7 +73,8 @@ const generated = render(extractCommandTypes(protocolSource));
 
 if (checkMode) {
   const current = await readFile(outputPath, "utf8");
-  if (current !== generated) {
+  // Git may check the file out with CRLF on Windows; compare normalized.
+  if (current.replace(/\r\n/g, "\n") !== generated) {
     console.error(
       "protocol.generated.ts is stale; run pnpm generate:daemon-protocol",
     );
