@@ -155,7 +155,18 @@ pub fn unmount_stale_mounts(
 ) -> Result<usize> {
     use rustix::mount::{UnmountFlags, unmount};
 
-    let mounts = Process::myself()?.mountinfo()?;
+    let mounts = match Process::myself().and_then(|process| process.mountinfo()) {
+        Ok(mounts) => mounts,
+        Err(err) => {
+            crate::scoped_log!(
+                warn,
+                "sys:mount_source",
+                "late_load cleanup skipped: reason=mountinfo_unavailable, error={:#}",
+                err
+            );
+            return Ok(0);
+        }
+    };
     let points = stale_mount_points(
         mounts
             .iter()
