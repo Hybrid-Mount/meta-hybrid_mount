@@ -87,6 +87,31 @@ fn scanned_modules_payload_includes_module_prop_metadata() {
 }
 
 #[test]
+fn scanned_modules_payload_skips_non_directory_entries() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::write(temp.path().join("stray.txt"), b"not a module").unwrap();
+    let module_dir = temp.path().join("alpha");
+    fs::create_dir_all(&module_dir).unwrap();
+    fs::write(
+        module_dir.join("module.prop"),
+        "id=alpha\nname=Alpha\nversion=1.0\nauthor=Alice\ndescription=Test module\n",
+    )
+    .unwrap();
+
+    let config = Config {
+        moduledir: temp.path().to_path_buf(),
+        default_mode: DefaultMode::Overlay,
+        ..Default::default()
+    };
+    let state = RuntimeState::default();
+
+    let modules = build_scanned_modules_payload(&config, &state, temp.path()).unwrap();
+
+    assert_eq!(modules.len(), 1);
+    assert_eq!(modules[0].id, "alpha");
+}
+
+#[test]
 fn scanned_modules_payload_skips_directory_without_module_prop() {
     let temp = tempfile::tempdir().unwrap();
     fs::create_dir_all(temp.path().join("incomplete")).unwrap();

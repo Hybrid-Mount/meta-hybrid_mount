@@ -6,7 +6,6 @@ use std::{
     fs,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    time::Instant,
 };
 
 use anyhow::{Context, Result, bail};
@@ -38,7 +37,7 @@ pub fn scan(cfg: &config::Config) -> Result<Vec<Module>> {
 
 pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
     let source_dir = &cfg.moduledir;
-    let started = Instant::now();
+    let timer = crate::utils::StageTimer::start("scanner", "inventory_scan");
     if !source_dir.is_dir() {
         bail!(
             "module source directory is unavailable: {}",
@@ -58,6 +57,7 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
     };
     summary.blacklisted_modules.sort();
     let mut skipped_reserved = 0usize;
+    let mut skipped_non_directories = 0usize;
     let mut skipped_blocked = 0usize;
     let mut skipped_blacklisted = 0usize;
     let mut skipped_missing_prop = 0usize;
@@ -69,10 +69,14 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
         let entry = entry?;
         let file_type = entry.file_type()?;
         if !file_type.is_dir() {
-            bail!(
-                "module directory contains a non-directory entry: {}",
+            skipped_non_directories += 1;
+            crate::scoped_log!(
+                warn,
+                "scanner",
+                "skip: path={}, reason=non_directory_entry",
                 entry.path().display()
             );
+            continue;
         }
 
         let path = entry.path();
@@ -93,8 +97,6 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
             summary.skip_mount_modules.push(id.clone());
         }
 
-        validate_module_id(&id).with_context(|| format!("invalid module directory name: {id}"))?;
-
         let prop = path.join("module.prop");
         if !prop.is_file() {
             skipped_missing_prop += 1;
@@ -106,6 +108,7 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
             );
             continue;
         }
+        validate_module_id(&id).with_context(|| format!("invalid module directory name: {id}"))?;
         validate_module_prop_id(&prop, &id)?;
 
         if cfg.module_blacklist.contains(&id) {
@@ -133,23 +136,26 @@ pub fn scan_snapshot(cfg: &config::Config) -> Result<InventorySnapshot> {
         });
     }
 
+    timer.finish();
+
     crate::scoped_log!(
         info,
         "scanner",
-        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, skipped_missing_prop={}, root_entries_scanned={}, marker_directory_scans={}, elapsed_ms={}",
+        "complete: total_entries={}, active_modules={}, skipped_reserved={}, skipped_non_directories={}, skipped_blocked={}, skipped_blacklisted={}, skipped_missing_prop={}, root_entries_scanned={}, marker_directory_scans={}",
         modules.len()
             + skipped_reserved
+            + skipped_non_directories
             + skipped_blocked
             + skipped_blacklisted
             + skipped_missing_prop,
         modules.len(),
         skipped_reserved,
+        skipped_non_directories,
         skipped_blocked,
         skipped_blacklisted,
         skipped_missing_prop,
         root_entries_scanned,
-        marker_directory_scans,
-        started.elapsed().as_millis()
+        marker_directory_scans
     );
 
     modules.sort_by(|a, b| a.id.cmp(&b.id));
@@ -215,6 +221,20 @@ mod tests {
     fn scan_skips_missing_module_prop_and_keeps_valid_modules() {
         let temp = TempDir::new().unwrap();
         fs::create_dir(temp.path().join("incomplete")).unwrap();
+        let valid = temp.path().join("valid");
+        fs::create_dir(&valid).unwrap();
+        write_prop(&valid, "valid");
+
+        let modules = scan(&test_config(temp.path())).unwrap();
+
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "valid");
+    }
+
+    #[test]
+    fn scan_skips_non_directory_entries_and_keeps_valid_modules() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("stray.txt"), b"not a module").unwrap();
         let valid = temp.path().join("valid");
         fs::create_dir(&valid).unwrap();
         write_prop(&valid, "valid");

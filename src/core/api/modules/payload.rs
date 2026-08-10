@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use super::{ModuleListEntry, runtime_index::RuntimeModuleIndex, scan_info::module_scan_info};
 use crate::{
@@ -46,10 +46,13 @@ pub(super) fn build_scanned_modules_payload(
             )
         })?;
         if !file_type.is_dir() {
-            bail!(
-                "module directory contains a non-directory entry: {}",
+            crate::scoped_log!(
+                warn,
+                "api:modules",
+                "skip: path={}, reason=non_directory_entry",
                 entry.path().display()
             );
+            continue;
         }
 
         let module_path = entry.path();
