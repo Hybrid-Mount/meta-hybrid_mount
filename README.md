@@ -12,6 +12,11 @@ ReHybrid-Mount 是 Hybrid Mount 的从零重建版本，基于以下行为参考
 > 当前分支 `rehybrid-mount` 是 orphan 分支，正在从零重建。旧实现保留在原
 > `main` / `dev` / `archive/*` 分支中。
 
+## 语言 / Languages
+
+- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/rehybrid-mount/README.md)
+- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/rehybrid-mount/docs/README_TR.md)
+
 ## 许可证
 
 - 核心（Rust、module 脚本）：GPL-3.0-only（见 `LICENSE`）。
