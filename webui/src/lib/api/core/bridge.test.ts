@@ -17,11 +17,23 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./error";
 import {
+  buildSseUrl,
   parseDaemonJsonOutput,
   readModuleProp,
   resolveShouldUseMock,
   shouldUseMock,
 } from "./bridge";
+
+describe("buildSseUrl", () => {
+  it("builds SSE URLs with encoded bearer tokens", () => {
+    expect(
+      buildSseUrl({
+        base_url: "http://127.0.0.1:42321",
+        token: "token with + and /",
+      }),
+    ).toBe("http://127.0.0.1:42321/events?token=token%20with%20%2B%20and%20%2F");
+  });
+});
 
 describe("parseDaemonJsonOutput", () => {
   it("enables the mock API in test mode", () => {
