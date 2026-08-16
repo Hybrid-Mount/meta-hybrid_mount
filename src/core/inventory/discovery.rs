@@ -216,13 +216,17 @@ mod tests {
     }
 
     #[test]
-    fn scan_skips_missing_module_prop() {
+    fn scan_skips_missing_module_prop_and_keeps_valid_modules() {
         let temp = TempDir::new().unwrap();
-        fs::create_dir(temp.path().join("alpha")).unwrap();
+        fs::create_dir(temp.path().join("incomplete")).unwrap();
+        let valid = temp.path().join("valid");
+        fs::create_dir(&valid).unwrap();
+        write_prop(&valid, "valid");
 
         let modules = scan(temp.path(), &config::Config::default()).unwrap();
 
-        assert!(modules.is_empty());
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "valid");
     }
 
     #[test]
