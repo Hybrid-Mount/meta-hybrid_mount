@@ -71,6 +71,13 @@ pub fn init_logging() -> Result<()> {
             .ok();
         LOGGER_INIT.set(()).ok();
     }
+
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        previous_hook(info);
+        crate::scoped_log!(error, "panic", "panicked: {}", info);
+    }));
+
     Ok(())
 }
 
