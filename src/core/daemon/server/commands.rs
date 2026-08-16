@@ -60,13 +60,19 @@ struct CachedRuntimeConfig {
 
 pub(super) struct RuntimeConfigCache {
     entries: Mutex<HashMap<PathBuf, CachedRuntimeConfig>>,
+    write_lock: Mutex<()>,
 }
 
 impl RuntimeConfigCache {
     pub(super) fn new() -> Self {
         Self {
             entries: Mutex::new(HashMap::new()),
+            write_lock: Mutex::new(()),
         }
+    }
+
+    fn lock_writes(&self) -> std::sync::MutexGuard<'_, ()> {
+        lock_or_recover(&self.write_lock)
     }
 
     pub(super) fn load(&self, config_path: &Path) -> Result<Arc<Config>> {
@@ -197,11 +203,27 @@ fn cached_status_and_snapshot(state: &Arc<Mutex<RuntimeState>>) -> Result<(Value
 // ── Top-level dispatch ──────────────────────────────────────────────────
 
 pub(super) fn dispatch_command(ctx: &CommandContext<'_>, command: DaemonCommand) -> Result<Value> {
+    let _write_guard = command_writes_config(&command).then(|| ctx.config_cache.lock_writes());
+    dispatch_command_unlocked(ctx, command)
+}
+
+fn dispatch_command_unlocked(ctx: &CommandContext<'_>, command: DaemonCommand) -> Result<Value> {
     match command {
         DaemonCommand::System(cmd) => dispatch_system(ctx, cmd),
         DaemonCommand::Config(cmd) => dispatch_config(ctx, cmd),
         DaemonCommand::Modules(cmd) => dispatch_modules(ctx, cmd),
         DaemonCommand::Batch(BatchCommand::Batch { commands }) => dispatch_batch(ctx, commands),
+    }
+}
+
+fn command_writes_config(command: &DaemonCommand) -> bool {
+    match command {
+        DaemonCommand::Config(ConfigCommand::Get) => false,
+        DaemonCommand::Config(_) | DaemonCommand::Modules(ModulesCommand::Apply { .. }) => true,
+        DaemonCommand::Modules(ModulesCommand::List { .. }) | DaemonCommand::System(_) => false,
+        DaemonCommand::Batch(BatchCommand::Batch { commands }) => {
+            commands.iter().any(command_writes_config)
+        }
     }
 }
 
@@ -353,24 +375,30 @@ fn dispatch_modules(ctx: &CommandContext<'_>, cmd: ModulesCommand) -> Result<Val
 
 fn dispatch_batch(ctx: &CommandContext<'_>, commands: Vec<DaemonCommand>) -> Result<Value> {
     let noop_clients = http::SseClientRegistry::shared();
-    let batch_ctx = CommandContext::new(
-        ctx.config,
-        ctx.config_path,
-        ctx.config_cache,
-        ctx.state,
-        ctx.shutdown,
-        ctx.webui,
-        &noop_clients,
-    );
     let mut results: Vec<Value> = Vec::with_capacity(commands.len());
     for cmd in commands {
-        let result = match dispatch_command(&batch_ctx, cmd) {
+        // Reload between commands so a read following a write in the same
+        // batch observes the configuration that was just persisted.
+        let effective_config = load_runtime_config(ctx.config_cache, ctx.config_path)?;
+        let batch_ctx = CommandContext::new(
+            &effective_config,
+            ctx.config_path,
+            ctx.config_cache,
+            ctx.state,
+            ctx.shutdown,
+            ctx.webui,
+            &noop_clients,
+        );
+        // The outer batch holds the config write lock when any nested command
+        // writes configuration, so recursive dispatch must not acquire it again.
+        let result = match dispatch_command_unlocked(&batch_ctx, cmd) {
             Ok(value) => json!({ "ok": true, "data": value }),
             Err(err) => json!({ "ok": false, "error": format!("{err}") }),
         };
         results.push(result);
     }
-    ctx.refresh_runtime_snapshot(ctx.config)?;
+    let effective_config = load_runtime_config(ctx.config_cache, ctx.config_path)?;
+    ctx.refresh_runtime_snapshot(&effective_config)?;
     to_value(&json!({ "results": results }))
 }
 
