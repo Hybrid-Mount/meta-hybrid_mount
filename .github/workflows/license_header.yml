@@ -34,3 +34,8 @@ jobs:
 
       - name: Run HawkEye License Check
         uses: korandoru/hawkeye@32ec486c6e6a8fe3bc4178d4f4296d4a0333686c # v6
+        with:
+          config: licenserc.toml
+
+      - name: Check WebUI Apache-2.0 Headers
+        run: hawkeye check --config webui/licenserc.toml

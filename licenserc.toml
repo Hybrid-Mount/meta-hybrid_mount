@@ -2,11 +2,12 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
-inlineHeader = """
-Copyright (C) {{props["year"]}} {{props["owner"]}}
-SPDX-License-Identifier: GPL-3.0-only
-"""
+headerPath = "LICENCE_HEADER"
+excludes = ["webui/**"]
 
 [properties]
 year = 2026
 owner = "YuzakiKokuban <heibanbaize@gmail.com>"
+
+[mapping.SCRIPT_STYLE]
+extensions = ["rule"]

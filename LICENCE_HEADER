@@ -1,2 +1,3 @@
 Copyright (C) {{props["year"]}} {{props["owner"]}}
+
 SPDX-License-Identifier: GPL-3.0-only

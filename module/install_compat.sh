@@ -1,6 +1,7 @@
 # Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
 #
 # SPDX-License-Identifier: GPL-3.0-only
+
 # shellcheck shell=sh disable=SC3043
 
 HYBRID_MOUNT_UPGRADE_EPOCH_PROP="upgradeEpoch"

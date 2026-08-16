@@ -12,8 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-packages:
-  - "."
+baseDir = "webui"
+headerPath = "LICENSE_HEADER"
 
-overrides:
-  nanoid@3.3.17: 3.3.18
+[properties]
+year = 2026
+owner = "YuzakiKokuban <heibanbaize@gmail.com>"
+
+[mapping.SLASHSTAR_STYLE]
+extensions = ["mjs"]
