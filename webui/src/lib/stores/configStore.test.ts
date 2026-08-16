@@ -17,6 +17,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { API } from "../api";
 import { DEFAULT_CONFIG } from "../constants";
+import type { ConfigPatchResult } from "../api/contracts";
 import type { AppConfig } from "../types";
 import { configStore } from "./configStore";
 
@@ -28,12 +29,16 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function patchResult(config: AppConfig): ConfigPatchResult {
+  return { config, applied: false, rebootRequired: true };
+}
+
 describe("config store writes", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("ignores stale patch responses and tracks all active saves", async () => {
-    const first = deferred<AppConfig>();
-    const second = deferred<AppConfig>();
+    const first = deferred<ConfigPatchResult>();
+    const second = deferred<ConfigPatchResult>();
     vi.spyOn(API, "patchConfig")
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise);
@@ -50,12 +55,12 @@ describe("config store writes", () => {
       { showSuccess: false, showError: false },
     );
 
-    second.resolve({ ...DEFAULT_CONFIG, mountsource: "second" });
+    second.resolve(patchResult({ ...DEFAULT_CONFIG, mountsource: "second" }));
     await secondSave;
     expect(configStore.config.mountsource).toBe("second");
     expect(configStore.saving).toBe(true);
 
-    first.resolve({ ...DEFAULT_CONFIG, mountsource: "first" });
+    first.resolve(patchResult({ ...DEFAULT_CONFIG, mountsource: "first" }));
     await firstSave;
     expect(configStore.config.mountsource).toBe("second");
     expect(configStore.saving).toBe(false);

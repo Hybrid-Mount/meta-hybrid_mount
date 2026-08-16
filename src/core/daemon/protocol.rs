@@ -101,6 +101,9 @@ pub enum ConfigCommand {
     #[serde(rename = "api-config-patch")]
     Patch {
         patch: serde_json::Value,
+        /// Deprecated compatibility flag. Runtime application was removed with
+        /// the Kasumi backend; the server always reports `applied: false` and
+        /// `reboot_required: true`.
         apply_runtime: bool,
     },
     #[serde(rename = "api-config-reset")]

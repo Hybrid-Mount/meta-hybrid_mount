@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "RAM ベース、高速な I/O、再起動時にリセットされます。",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "ループバックイメージ。永続的、RAM を節約できます。",
+    "mode_ext4Desc": "ループバックイメージ。overlay xattr に対応し、起動ごとに再作成されます。",
     "customMounts": "カスタム Bind マウント",
     "customMountsDesc": "指定したソースパスを既存のターゲットにバインドします",
     "customMountsEmpty": "カスタム Bind マウントは設定されていません。",
@@ -72,7 +72,8 @@
     "customMountTarget": "ターゲットパス",
     "addCustomMount": "追加",
     "removeCustomMount": "削除",
-    "invalidCustomMount": "カスタムマウントパスが無効です"
+    "invalidCustomMount": "カスタムマウントパスが無効です",
+    "savedRebootRequired": "保存しました。変更は再起動後に反映されます。"
   },
   "modules": {
     "reload": "更新",

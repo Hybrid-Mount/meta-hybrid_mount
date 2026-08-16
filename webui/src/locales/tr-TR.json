@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "RAM tabanlıdır. En hızlı G/Ç performansı, yeniden başlatmada sıfırlanır.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Geri döngü imajı. Kalıcıdır, RAM tasarrufu sağlar.",
+    "mode_ext4Desc": "Loopback imajı. Overlay xattr destekler; her açılışta yeniden oluşturulur.",
     "customMounts": "Özel Bind Bağlantıları",
     "customMountsDesc": "Belirli kaynak yollarını mevcut hedeflere bağlayın",
     "customMountsEmpty": "Yapılandırılmış özel bind bağlantısı yok.",
@@ -72,7 +72,8 @@
     "customMountTarget": "Hedef Yol",
     "addCustomMount": "Ekle",
     "removeCustomMount": "Kaldır",
-    "invalidCustomMount": "Geçersiz özel bağlama yolu"
+    "invalidCustomMount": "Geçersiz özel bağlama yolu",
+    "savedRebootRequired": "Kaydedildi. Değişiklikler yeniden başlatmadan sonra uygulanır."
   },
   "modules": {
     "reload": "Yenile",

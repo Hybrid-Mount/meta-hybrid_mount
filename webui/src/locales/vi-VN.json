@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "Dựa trên RAM. I/O nhanh nhất, đặt lại khi khởi động lại.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Hình ảnh lặp lại. Bền bỉ, tiết kiệm RAM.",
+    "mode_ext4Desc": "Ảnh loopback. Hỗ trợ overlay xattr; được tạo lại mỗi lần khởi động.",
     "customMounts": "Bind mount tùy chỉnh",
     "customMountsDesc": "Bind đường dẫn nguồn cụ thể vào đích hiện có",
     "customMountsEmpty": "Chưa cấu hình bind mount tùy chỉnh.",
@@ -72,7 +72,8 @@
     "customMountTarget": "Đường dẫn đích",
     "addCustomMount": "Thêm",
     "removeCustomMount": "Xóa",
-    "invalidCustomMount": "Đường dẫn mount tùy chỉnh không hợp lệ"
+    "invalidCustomMount": "Đường dẫn mount tùy chỉnh không hợp lệ",
+    "savedRebootRequired": "Đã lưu. Thay đổi có hiệu lực sau khi khởi động lại."
   },
   "modules": {
     "reload": "Làm mới",

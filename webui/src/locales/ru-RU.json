@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "На основе RAM. Самый быстрый ввод-вывод, сбрасывается после перезагрузки.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Loopback-образ. Постоянный, экономит RAM.",
+    "mode_ext4Desc": "Loopback-образ. Поддерживает overlay xattr; пересоздаётся при каждой загрузке.",
     "customMounts": "Пользовательские bind-монтирования",
     "customMountsDesc": "Привязывает заданные исходные пути к существующим целям",
     "customMountsEmpty": "Пользовательские bind-монтирования не настроены.",
@@ -72,7 +72,8 @@
     "customMountTarget": "Целевой путь",
     "addCustomMount": "Добавить",
     "removeCustomMount": "Удалить",
-    "invalidCustomMount": "Недопустимый путь пользовательского монтирования"
+    "invalidCustomMount": "Недопустимый путь пользовательского монтирования",
+    "savedRebootRequired": "Сохранено. Изменения вступят в силу после перезагрузки."
   },
   "modules": {
     "reload": "Обновить",

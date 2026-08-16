@@ -15,8 +15,31 @@
  */
 
 import type { AppConfig } from "../../types";
+import type { ConfigPatchResult } from "../contracts";
 import { appConfigSchema } from "../schemas";
 
 export function normalizeConfig(value: unknown): AppConfig {
   return appConfigSchema.parse(value) as AppConfig;
+}
+
+export function normalizeConfigPatchResult(value: unknown): ConfigPatchResult {
+  if (!value || typeof value !== "object") {
+    throw new Error("daemon config patch result is not an object");
+  }
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.config !== "object" ||
+    payload.config === null ||
+    typeof payload.applied !== "boolean" ||
+    typeof payload.reboot_required !== "boolean"
+  ) {
+    throw new Error(
+      "daemon config patch result is missing config, applied, or reboot_required",
+    );
+  }
+  return {
+    config: normalizeConfig(payload.config),
+    applied: payload.applied,
+    rebootRequired: payload.reboot_required,
+  };
 }

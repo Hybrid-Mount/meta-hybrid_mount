@@ -78,7 +78,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 | WebUI | Yes | No |
 | CLI (`hybrid-mount` subcommands) | Yes | No |
 | Daemon (Unix + TCP/SSE) | Yes | No |
-| Runtime config apply | Yes | No |
+| Runtime config apply | No (saved for next boot) | No |
 | Cargo features | `control-plane` only | none |
 | ZIP size (approx.) | ~2 MB | ~1 MB |
 
@@ -87,7 +87,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 - **Two backends, one policy engine** — assign paths to OverlayFS or Magic Mount with per-path granularity.
 - **Deterministic planning** — conflicts are detected at plan time, not discovered randomly at boot.
 - **Built-in WebUI** — manage modules, edit configuration, and monitor runtime state.
-- **Runtime config updates** — validated config patches can be persisted and applied immediately.
+- **Runtime config updates** — validated config patches are persisted and take effect on the next boot. The WebUI reports this explicitly instead of pretending changes apply live.
 - **Explicit failure reporting** — invalid state and configuration errors are surfaced immediately; configuration reset is an explicit `api config-reset` action.
 - **Automation-friendly** — JSON-over-Unix-socket daemon protocol + HTTP API for scripting or external controllers.
 
@@ -150,7 +150,7 @@ Custom bind mounts run after module OverlayFS/Magic Mount execution. The source 
 
 The OverlayFS backend supports two storage strategies for the upper/work layers:
 
-- `ext4` (default) — creates an ext4 disk image. Persists across reboots, supports xattr.
+- `ext4` (default) — creates a fresh ext4 staging image for each mount run. Supports overlay xattrs; the image is removed once the mounts are finalized.
 - `tmpfs` — uses a tmpfs mount. Volatile, lighter weight, but lost on reboot.
 
 ```toml
@@ -182,10 +182,12 @@ The WebUI currently ships with these locales:
 - Русский (`ru-RU`)
 - Українська (`uk-UA`)
 - Tiếng Việt (`vi-VN`)
+- Bahasa Indonesia (`id-ID`)
+- Türkçe (`tr-TR`)
 - 简体中文 (`zh-CN`)
 - 繁體中文 (`zh-TW`)
 
-README documentation is available in [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md), [Simplified Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md), [Traditional Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md), [Japanese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md), [Spanish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md), [Italian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md), [Russian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md), [Ukrainian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md), [Vietnamese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md), and [Turkish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_TR.md).
+README documentation is available in [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md), [Simplified Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md), [Traditional Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md), [Japanese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md), [Spanish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md), [Italian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md), [Russian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md), [Ukrainian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md), [Vietnamese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md), [Indonesian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ID.md), and [Turkish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_TR.md).
 
 ### Access
 
@@ -288,8 +290,8 @@ hybrid-mount [OPTIONS] [COMMAND]
 | `api system-info` | Print system information. |
 | `api version` | Print daemon version. |
 | `api config-get` | Print effective config as JSON. |
-| `api config-set --config <JSON>` | Replace full config. |
-| `api config-patch --patch <JSON>` | Merge patch into config. |
+| `api config-set --config <JSON>` | Replace full config (applies on next boot). |
+| `api config-patch --patch <JSON>` | Merge patch into config (applies on next boot; `--apply-runtime` is a deprecated no-op). |
 | `api config-reset` | Reset config to defaults. |
 | `api modules-list` | List detected modules. |
 | `api modules-apply --modules <JSON>` | Apply module mode changes. |
@@ -379,7 +381,7 @@ webui/
 │   ├── routes/    Page components (Status, Config, Modules, Info)
 │   ├── components/ Shared UI components (NavBar, Toast, Skeleton)
 │   ├── lib/       API bridge, stores, codecs, i18n
-│   └── locales/   9-language internationalization
+│   └── locales/   11-language internationalization
 
 xtask/             Build and release automation
 module/            Module packaging scripts and static assets

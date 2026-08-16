@@ -17,12 +17,34 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "../../constants";
 import { appConfigSchema } from "../schemas";
-import { normalizeConfig } from "./configCodec";
+import {
+  normalizeConfig,
+  normalizeConfigPatchResult,
+} from "./configCodec";
 
 describe("config codec", () => {
   it("accepts the complete canonical config", () => {
     expect(DEFAULT_CONFIG.overlay_mode).toBe("ext4");
     expect(normalizeConfig(DEFAULT_CONFIG)).toEqual(DEFAULT_CONFIG);
+  });
+
+  it("accepts and normalizes a daemon config patch result", () => {
+    const result = normalizeConfigPatchResult({
+      saved: true,
+      applied: false,
+      reboot_required: true,
+      config: DEFAULT_CONFIG,
+    });
+
+    expect(result.config).toEqual(DEFAULT_CONFIG);
+    expect(result.applied).toBe(false);
+    expect(result.rebootRequired).toBe(true);
+  });
+
+  it("rejects an incomplete daemon config patch result", () => {
+    expect(() =>
+      normalizeConfigPatchResult({ saved: true, config: DEFAULT_CONFIG }),
+    ).toThrow();
   });
 
   it("rejects missing config fields", () => {

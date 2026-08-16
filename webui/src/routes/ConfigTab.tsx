@@ -69,8 +69,11 @@ export default function ConfigTab() {
     }
   }
 
-  function shouldApplyRuntime(key: keyof AppConfig) {
-    return key !== "custom_mounts";
+  function shouldApplyRuntime(_key: keyof AppConfig) {
+    // No config field can be applied live after the Kasumi backend removal.
+    // Request runtime application anyway so the store can surface the
+    // "saved, reboot required" notice from the daemon response.
+    return true;
   }
 
   async function saveConfigField<K extends keyof AppConfig>(

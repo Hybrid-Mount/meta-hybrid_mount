@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "基於 RAM，I/O 最快，重啟後重置。",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Loopback 映像。可持久保存，節省 RAM。",
+    "mode_ext4Desc": "Loop 映像。支援 overlay xattr，每次開機重建。",
     "customMounts": "自訂 Bind 掛載",
     "customMountsDesc": "將指定來源路徑綁定到既有目標路徑",
     "customMountsEmpty": "尚未設定自訂 Bind 掛載。",
@@ -72,7 +72,8 @@
     "customMountTarget": "目標路徑",
     "addCustomMount": "新增",
     "removeCustomMount": "移除",
-    "invalidCustomMount": "自訂掛載路徑無效"
+    "invalidCustomMount": "自訂掛載路徑無效",
+    "savedRebootRequired": "已儲存，重新開機後生效"
   },
   "modules": {
     "reload": "重新整理",

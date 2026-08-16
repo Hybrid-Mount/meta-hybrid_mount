@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "Basado en RAM. I/O más rápido, se restablece al reiniciar.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Imagen loopback. Persistente, ahorra RAM.",
+    "mode_ext4Desc": "Imagen loopback. Compatible con xattrs de overlay; se recrea en cada arranque.",
     "customMounts": "Montajes bind personalizados",
     "customMountsDesc": "Vincula rutas de origen explícitas a destinos existentes",
     "customMountsEmpty": "No hay montajes bind personalizados configurados.",
@@ -72,7 +72,8 @@
     "customMountTarget": "Ruta de destino",
     "addCustomMount": "Añadir",
     "removeCustomMount": "Eliminar",
-    "invalidCustomMount": "Ruta de montaje personalizada no válida"
+    "invalidCustomMount": "Ruta de montaje personalizada no válida",
+    "savedRebootRequired": "Guardado. Los cambios se aplican tras reiniciar."
   },
   "modules": {
     "reload": "Refrescar",

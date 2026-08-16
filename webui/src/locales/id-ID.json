@@ -64,7 +64,7 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "Berbasis RAM. I/O paling cepat, reset saat reboot.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Image loopback. Persisten dan lebih hemat RAM.",
+    "mode_ext4Desc": "Citra loopback. Mendukung xattr overlay; dibuat ulang setiap boot.",
     "customMounts": "Bind mount kustom",
     "customMountsDesc": "Bind path sumber tertentu ke target yang sudah ada",
     "customMountsEmpty": "Belum ada bind mount kustom.",
@@ -72,7 +72,8 @@
     "customMountTarget": "Path target",
     "addCustomMount": "Tambah",
     "removeCustomMount": "Hapus",
-    "invalidCustomMount": "Path mount kustom tidak valid"
+    "invalidCustomMount": "Path mount kustom tidak valid",
+    "savedRebootRequired": "Tersimpan. Perubahan berlaku setelah reboot."
   },
   "modules": {
     "reload": "Muat Ulang",

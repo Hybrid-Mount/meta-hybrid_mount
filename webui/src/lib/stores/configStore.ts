@@ -120,17 +120,21 @@ const createConfigStore = () => {
 
     beginSave();
     try {
-      const updated = await API.patchConfig(patch as Record<string, unknown>, {
+      const result = await API.patchConfig(patch as Record<string, unknown>, {
         applyRuntime,
       });
-      const normalized = normalizeConfig(updated);
+      const normalized = normalizeConfig(result.config);
       fields.forEach((field) => {
         if (fieldRevisions.get(field) === revision) {
           setField(field, normalized[field]);
         }
       });
       if (showSuccess) {
-        uiStore.showToast(uiStore.L.common.saved, "success");
+        if (applyRuntime && !result.applied && result.rebootRequired) {
+          uiStore.showToast(uiStore.L.config.savedRebootRequired, "info");
+        } else {
+          uiStore.showToast(uiStore.L.common.saved, "success");
+        }
       }
       return true;
     } catch (e: unknown) {
@@ -156,7 +160,7 @@ const createConfigStore = () => {
       if (!loaded) {
         return false;
       }
-      uiStore.showToast(uiStore.L.config.resetSuccess, "success");
+      uiStore.showToast(uiStore.L.config.savedRebootRequired, "info");
       return true;
     } catch (e: unknown) {
       uiStore.showToast(

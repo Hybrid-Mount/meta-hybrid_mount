@@ -16,8 +16,12 @@
 
 import { PATHS } from "../../constants";
 import type { AppConfig } from "../../types";
+import type { ConfigPatchResult } from "../contracts";
 import { runDaemonCommand } from "../core/bridge";
-import { normalizeConfig } from "../codec/configCodec";
+import {
+  normalizeConfig,
+  normalizeConfigPatchResult,
+} from "../codec/configCodec";
 
 export function extractConfig(payload: unknown): AppConfig {
   // api-config-patch and api-config-set responses wrap the updated config in a `config` field;
@@ -45,7 +49,7 @@ export async function loadConfigFromFile(): Promise<AppConfig> {
 export async function patchConfigFile(
   patch: Record<string, unknown>,
   options: { applyRuntime?: boolean } = {},
-): Promise<AppConfig> {
+): Promise<ConfigPatchResult> {
   const payload = await runDaemonCommand(
     {
       type: "api-config-patch",
@@ -54,7 +58,7 @@ export async function patchConfigFile(
     },
     PATHS.BINARY,
   );
-  return extractConfig(payload);
+  return normalizeConfigPatchResult(payload);
 }
 
 export async function resetConfigFile(): Promise<AppConfig> {

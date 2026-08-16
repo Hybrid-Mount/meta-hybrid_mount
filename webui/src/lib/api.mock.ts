@@ -16,7 +16,7 @@
 
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
-import type { AppAPI } from "./api/contracts";
+import type { AppAPI, ConfigPatchResult } from "./api/contracts";
 import { previewInstallState } from "./api/services/installCompatibility";
 import type { RuntimeStatePayload } from "./api/schemas";
 import type {
@@ -179,10 +179,17 @@ export const MockAPI: AppAPI = {
     return structuredClone(mockConfig);
   },
 
-  async patchConfig(patch: Record<string, unknown>): Promise<AppConfig> {
+  async patchConfig(
+    patch: Record<string, unknown>,
+  ): Promise<ConfigPatchResult> {
     await delay(60);
     mockConfig = { ...mockConfig, ...(patch as Partial<AppConfig>) };
-    return structuredClone(mockConfig);
+    return {
+      config: structuredClone(mockConfig),
+      // The real daemon cannot apply configs live after the Kasumi removal.
+      applied: false,
+      rebootRequired: true,
+    };
   },
 
   async resetConfig(): Promise<void> {

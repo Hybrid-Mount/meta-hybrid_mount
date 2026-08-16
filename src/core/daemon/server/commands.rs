@@ -226,7 +226,7 @@ fn dispatch_config(ctx: &CommandContext<'_>, cmd: ConfigCommand) -> Result<Value
             let config: Config =
                 serde_json::from_value(payload).context("Failed to decode config payload")?;
             config.save_to_file(config_path)?;
-            ctx.refresh(&config, json!({ "saved": true, "config": &config }))
+            ctx.refresh(&config, config_update_payload(&config, false))
         }
         ConfigCommand::Patch {
             patch,
@@ -238,19 +238,19 @@ fn dispatch_config(ctx: &CommandContext<'_>, cmd: ConfigCommand) -> Result<Value
             } else {
                 false
             };
-            ctx.refresh(
-                &config,
-                json!({
-                    "saved": true,
-                    "applied": applied,
-                    "config": &config,
-                }),
-            )
+            if apply_runtime && !applied {
+                crate::scoped_log!(
+                    warn,
+                    "daemon:config",
+                    "runtime apply requested but unsupported; changes require a reboot"
+                );
+            }
+            ctx.refresh(&config, config_update_payload(&config, applied))
         }
         ConfigCommand::Reset => {
             let config = Config::default();
             save_and_apply_runtime_config(&config, config_path)?;
-            ctx.refresh(&config, json!({ "saved": true, "config": &config }))
+            ctx.refresh(&config, config_update_payload(&config, false))
         }
     }
 }
@@ -370,8 +370,22 @@ fn save_and_apply_runtime_config(config: &Config, config_path: &Path) -> Result<
     apply_runtime_config(config)
 }
 
+/// Runtime configuration application was removed together with the Kasumi
+/// backend. OverlayFS and Magic Mount plans are built during boot, so config
+/// changes are persisted for the next boot and cannot be applied live.
+/// The `apply_runtime` protocol flag is retained for API compatibility and
+/// always reports `false` here; callers should use `reboot_required`.
 fn apply_runtime_config(_config: &Config) -> Result<bool> {
     Ok(false)
+}
+
+fn config_update_payload(config: &Config, applied: bool) -> Value {
+    json!({
+        "saved": true,
+        "applied": applied,
+        "reboot_required": !applied,
+        "config": &config,
+    })
 }
 
 fn refresh_runtime_snapshot(
@@ -447,6 +461,21 @@ mod tests {
                 .unwrap()
                 .contains_key("kasumi")
         );
+    }
+
+    #[test]
+    fn config_update_payload_reports_reboot_requirement() {
+        let config = Config::default();
+
+        let unsupported = config_update_payload(&config, false);
+        assert_eq!(unsupported["saved"], json!(true));
+        assert_eq!(unsupported["applied"], json!(false));
+        assert_eq!(unsupported["reboot_required"], json!(true));
+        assert_eq!(unsupported["config"]["default_mode"], json!("overlay"));
+
+        let applied = config_update_payload(&config, true);
+        assert_eq!(applied["applied"], json!(true));
+        assert_eq!(applied["reboot_required"], json!(false));
     }
 
     #[test]

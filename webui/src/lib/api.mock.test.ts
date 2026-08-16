@@ -23,8 +23,10 @@ describe("MockAPI core interactions", () => {
   });
 
   it("returns a standard init payload that can be patched", async () => {
-    const updated = await MockAPI.patchConfig({ default_mode: "magic" });
-    expect(updated.default_mode).toBe("magic");
+    const result = await MockAPI.patchConfig({ default_mode: "magic" });
+    expect(result.config.default_mode).toBe("magic");
+    expect(result.applied).toBe(false);
+    expect(result.rebootRequired).toBe(true);
   });
 
   it("only exposes supported module modes", async () => {
