@@ -1,0 +1,113 @@
+{
+  "lang": {
+    "display": "Türkçe"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "saving": "Kaydediliyor...",
+    "language": "Dil",
+    "rebootTitle": "Sistemi Yeniden Başlat?",
+    "rebootConfirm": "Cihazı yeniden başlatmak istediğinize emin misiniz?",
+    "reboot": "Yeniden Başlat",
+    "cancel": "İptal",
+    "saved": "Kaydedildi"
+  },
+  "compatibility": {
+    "eyebrow": "İşlem gerekli",
+    "title": "Temiz yeniden kurulum gerekli",
+    "description": "Bu uyumluluk mekanizmasından önce kurulmuş bir sürüm algılandı. Kalıntı dosyaların bağlama hatalarına yol açmasını önlemek için temiz bir yeniden kurulum yapın.",
+    "stepsTitle": "Sırasıyla şu adımları izleyin",
+    "uninstallStep": "Hybrid Mount'u KernelSU veya APatch'ten kaldırın",
+    "rebootStep": "Eski dosyaları ve bağlantıları tamamen kaldırmak için cihazı yeniden başlatın",
+    "reinstallStep": "Geçerli sürüm ZIP'ini yeniden kurun",
+    "dataWarning": "Kaldırma, mevcut Hybrid Mount yapılandırmasını ve çalışma zamanı verilerini temizler."
+  },
+  "tabs": {
+    "status": "Durum",
+    "config": "Yapılandırma",
+    "modules": "Modüller",
+    "info": "Bilgi"
+  },
+  "status": {
+    "storageTitle": "Depolama",
+    "moduleActive": "Aktif Modüller",
+    "modeStats": "Mod İstatistikleri",
+    "sysInfoTitle": "Sistem Bilgisi",
+    "kernel": "Çekirdek",
+    "selinux": "SELinux",
+    "mountBase": "Bağlama Temeli",
+    "activePartitions": "Aktif Bölümler",
+    "loadError": "Sistem durumu yüklenemedi"
+  },
+  "config": {
+    "disableUmount": "Bağlantıyı Kesmeyi Devre Dışı Bırak",
+    "moduleDir": "Modül Dizini",
+    "moduleDirDesc": "Modüllerin saklandığı dizini ayarlayın",
+    "mountSource": "Bağlama Kaynağı",
+    "mountSourceDesc": "Genel bağlama kaynağı ad alanı (örn. KSU)",
+    "reload": "Yeniden Yükle",
+    "save": "Kaydet",
+    "resetConfig": "Yapılandırmayı Sıfırla",
+    "resetConfigTitle": "Yapılandırma Sıfırlansın mı?",
+    "resetConfigConfirm": "Bu işlem, tüm arka uç ayarlarını varsayılana sıfırlayacaktır. Devam edilsin mi?",
+    "invalidPath": "Geçersiz yol tespit edildi",
+    "invalidModuleDir": "Geçersiz Yol",
+    "loadError": "Yapılandırma yüklenemedi",
+    "saveFailed": "Kaydedilemedi",
+    "resetSuccess": "Yapılandırma varsayılana sıfırlandı",
+    "webui": "WebUI Ayarları",
+    "overlayMode": "Katman Modu",
+    "overlayModeDesc": "Arka plan depolama stratejisini seçin",
+    "mode_tmpfs": "Tmpfs",
+    "mode_tmpfsDesc": "RAM tabanlıdır. En hızlı G/Ç performansı, yeniden başlatmada sıfırlanır.",
+    "mode_ext4": "Ext4",
+    "mode_ext4Desc": "Loopback imajı. Overlay xattr destekler; her açılışta yeniden oluşturulur.",
+    "daemonStartupMode": "Kalıcı Daemon",
+    "savedRebootRequired": "Kaydedildi. Değişiklikler yeniden başlatmadan sonra uygulanır."
+  },
+  "modules": {
+    "reload": "Yenile",
+    "save": "Modları Kaydet",
+    "scanError": "Modüller taranamadı",
+    "saveSuccess": "Modlar kaydedildi",
+    "saveFailed": "Modlar kaydedilemedi",
+    "searchPlaceholder": "Modülleri ara...",
+    "filterLabel": "Filtrele:",
+    "filterAll": "Tümü",
+    "loadMore": "Daha Fazla Yükle",
+    "defaultMode": "Varsayılan Strateji",
+    "modes": {
+      "overlay": "OverlayFS",
+      "magic": "Magic Mount",
+      "unmounted": "Bağlantısı Kesildi",
+      "short": {
+        "overlay": "Overlay",
+        "magic": "Magic",
+        "ignore": "Yoksay"
+      }
+    },
+    "emptyState": "Modül bulunamadı.",
+    "unmountedHiddenHint": "Bağlantısı kesilen modüller gizlendi.",
+    "defaultTag": "Varsayılan",
+    "compatTag": "Uyumlu",
+    "disableTag": "Devre Dışı",
+    "mountError": "Bağlama Hatası",
+    "suggestIgnoreHint": "Bu modül .sh dosyalarında bağlama ile ilgili komutlar içeriyor. Modunu 'Yoksay' olarak ayarlamayı düşünün.",
+    "clearMountErrors": "Bağlama Hatalarını Temizle",
+    "mountErrorsCleared": "Bağlama hataları temizlendi",
+    "mountErrorsClearFailed": "Bağlama hataları temizlenemedi"
+  },
+  "logs": {
+    "refresh": "Yenile"
+  },
+  "info": {
+    "projectLink": "Depo",
+    "donate": "Bağış Yap",
+    "contributors": "Katkıda Bulunanlar",
+    "loadFail": "Yüklenemedi (API İstek Sınırı)",
+    "noBio": "Biyografi bulunmuyor",
+    "telegram": "Telegram",
+    "supportUs": "Bizi Destekleyin",
+    "authorYuzaki": "YuzakiKokuban"
+  }
+}

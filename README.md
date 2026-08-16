@@ -17,7 +17,7 @@ A built-in **SolidJS WebUI** provides graphical management, live state monitorin
 
 Releases are published in two flavors — see [Build Flavors](#build-flavors) for a detailed comparison. Unless noted otherwise, the rest of this README describes the `lite` build.
 
-**[English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md)** &nbsp; **[简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md)** &nbsp; **[繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md)** &nbsp; **[日本語](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md)** &nbsp; **[Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md)** &nbsp; **[Italiano](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md)** &nbsp; **[Русский](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md)** &nbsp; **[Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md)** &nbsp; **[Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md)**
+**[English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md)** &nbsp; **[简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md)** &nbsp; **[繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md)** &nbsp; **[日本語](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md)** &nbsp; **[Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md)** &nbsp; **[Italiano](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md)** &nbsp; **[Русский](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md)** &nbsp; **[Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md)** &nbsp; **[Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md)** &nbsp; **[Bahasa Indonesia](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ID.md)** &nbsp; **[Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_TR.md)**
 
 ---
 
@@ -173,10 +173,12 @@ The WebUI currently ships with these locales:
 - Русский (`ru-RU`)
 - Українська (`uk-UA`)
 - Tiếng Việt (`vi-VN`)
+- Bahasa Indonesia (`id-ID`)
+- Türkçe (`tr-TR`)
 - 简体中文 (`zh-CN`)
 - 繁體中文 (`zh-TW`)
 
-README documentation is available in [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md), [Simplified Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md), [Traditional Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md), [Japanese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md), [Spanish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md), [Italian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md), [Russian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md), [Ukrainian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md), and [Vietnamese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md).
+README documentation is available in [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md), [Simplified Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md), [Traditional Chinese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md), [Japanese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md), [Spanish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md), [Italian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md), [Russian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md), [Ukrainian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md), [Vietnamese](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md), [Indonesian](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ID.md), and [Turkish](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_TR.md).
 
 ### Access
 
@@ -363,7 +365,7 @@ webui/
 │   ├── routes/    Page components (Status, Config, Modules, Info)
 │   ├── components/ Shared UI components (NavBar, Toast, Skeleton)
 │   ├── lib/       API bridge, stores, codecs, i18n
-│   └── locales/   9-language internationalization
+│   └── locales/   11-language internationalization
 
 xtask/             Build and release automation
 module/            Module packaging scripts and static assets
@@ -438,6 +440,24 @@ When making changes, verify that both the **lite** (`--no-default-features --fea
 - **Recovery from bad config**: run `hybrid-mount api config-reset` to reset to defaults, then reapply rules incrementally. Use `gen-config` to regenerate a fresh config file.
 - **Config caching**: the runtime maintains a cached config. Config changes made through the daemon API are persisted for the next boot; `api config-patch --apply-runtime` is a deprecated no-op.
 - **Binary size**: prefer dependency feature trimming and profile tuning before invasive refactoring.
+
+---
+
+## Late-load (jailbreak) support
+
+KernelSU can be loaded after boot in late-load mode (jailbreak / locked
+bootloader scenarios). Hybrid Mount supports this mode:
+
+- Installation no longer aborts when `KSU_LATE_LOAD=1`.
+- KernelSU runs `module/emulated-soft-reboot.sh` during its emulated soft
+  reboot; the script calls `hybrid-mount emulated-soft-reboot` to detach the
+  previous run's mounts before the module is mounted again, so mounts never
+  stack.
+- The same cleanup also runs at startup when `KSU_LATE_LOAD=1`.
+
+The cleanup only detaches the mount families Hybrid Mount creates: mounts
+named by `mountsource` (tmpfs/overlay trees), `/mnt/hm_*` backing storage,
+and Magic Mount binds sourced from the module directory on managed partitions.
 
 ---
 
