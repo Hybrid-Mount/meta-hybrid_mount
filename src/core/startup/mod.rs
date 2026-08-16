@@ -60,6 +60,17 @@ where
 
     let config = load_config()?;
 
+    if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
+        crate::scoped_log!(info, "startup", "mode: late_load=true");
+        let unmounted = crate::core::late_load::detach_stale_mounts(&config)?;
+        crate::scoped_log!(
+            info,
+            "startup",
+            "late_load stale mounts detached: unmounted={}",
+            unmounted
+        );
+    }
+
     if let Ok(version) = std::fs::read_to_string("/proc/sys/kernel/osrelease") {
         crate::scoped_log!(debug, "startup", "kernel: version={}", version.trim());
     }

@@ -22,6 +22,7 @@ pub mod daemon;
 #[cfg(feature = "control-plane")]
 pub mod entry;
 pub mod inventory;
+pub mod late_load;
 pub mod module_status;
 pub mod ops;
 pub mod recovery;

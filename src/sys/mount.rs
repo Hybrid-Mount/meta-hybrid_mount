@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{path::Path, process::Command};
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::{Context, Result, bail};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use procfs::process::Process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::mount::{MountFlags, mount};
+use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::fs::ensure_dir_exists;
@@ -107,6 +110,201 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
 #[allow(dead_code)]
 pub fn mount_tmpfs(_target: &Path, _source: &str) -> Result<()> {
     bail!("tmpfs mounting is only supported on linux/android")
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn is_stale_mount(
+    mount_source: Option<&str>,
+    mount_point: &Path,
+    source: &str,
+    moduledir: &Path,
+    custom_targets: &[PathBuf],
+    managed_partitions: &[String],
+) -> bool {
+    // Storage tmpfs, overlay mounts and magic-mount tmpfs trees all use the
+    // configured mount source namespace (KSU/APatch) as their mount source.
+    if mount_source == Some(source) {
+        return true;
+    }
+
+    // Our backing storage and staging trees always live under /mnt/hm_*.
+    if mount_point.starts_with("/mnt/hm_") {
+        return true;
+    }
+
+    // Custom bind mounts are registered with their exact target path.
+    if custom_targets.iter().any(|target| target == mount_point) {
+        return true;
+    }
+
+    // Magic Mount binds files directly from the module directory onto managed
+    // partitions. Restrict to managed partition roots so we never touch
+    // unrelated modules' runtime mounts.
+    let sourced_from_module_dir =
+        mount_source.is_some_and(|source| Path::new(source).starts_with(moduledir));
+    sourced_from_module_dir
+        && managed_partitions
+            .iter()
+            .any(|partition| mount_point.starts_with(Path::new("/").join(partition)))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn stale_mount_points<'a>(
+    mounts: impl IntoIterator<Item = (Option<&'a str>, &'a Path)>,
+    source: &str,
+    moduledir: &Path,
+    custom_targets: &[PathBuf],
+    managed_partitions: &[String],
+) -> Vec<PathBuf> {
+    let mut points: Vec<PathBuf> = mounts
+        .into_iter()
+        .filter(|(mount_source, mount_point)| {
+            is_stale_mount(
+                *mount_source,
+                mount_point,
+                source,
+                moduledir,
+                custom_targets,
+                managed_partitions,
+            )
+        })
+        .map(|(_, mount_point)| mount_point.to_path_buf())
+        .collect();
+
+    // Unmount deeper children before their parents (storage tree roots,
+    // overlay roots) so a DETACH never leaves children behind.
+    points.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    points.dedup();
+    points
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn unmount_stale_mounts(
+    source: &str,
+    moduledir: &Path,
+    custom_targets: &[PathBuf],
+    managed_partitions: &[String],
+) -> Result<usize> {
+    let mounts = Process::myself()?.mountinfo()?;
+    let points = stale_mount_points(
+        mounts
+            .iter()
+            .map(|mount| (mount.mount_source.as_deref(), mount.mount_point.as_path())),
+        source,
+        moduledir,
+        custom_targets,
+        managed_partitions,
+    );
+
+    let mut unmounted = 0usize;
+    for mount_point in &points {
+        crate::scoped_log!(
+            debug,
+            "sys:mount_source",
+            "late_load cleanup: unmount={}, source={}",
+            mount_point.display(),
+            source
+        );
+        match unmount(mount_point, UnmountFlags::DETACH) {
+            Ok(()) => unmounted += 1,
+            Err(err) => {
+                crate::scoped_log!(
+                    warn,
+                    "sys:mount_source",
+                    "late_load cleanup unmount failed: path={}, error={:#}",
+                    mount_point.display(),
+                    err
+                );
+            }
+        }
+    }
+
+    crate::scoped_log!(
+        info,
+        "sys:mount_source",
+        "late_load cleanup complete: attempted={}, unmounted={}",
+        points.len(),
+        unmounted
+    );
+    Ok(unmounted)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn unmount_stale_mounts(
+    _source: &str,
+    _moduledir: &Path,
+    _custom_targets: &[PathBuf],
+    _managed_partitions: &[String],
+) -> Result<usize> {
+    bail!("stale mount cleanup is only supported on linux/android")
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_mount_points_covers_ours_but_not_unrelated() {
+        let ksu = Some("KSU");
+        let module_file = Some("/data/adb/modules/foo/system/etc/hosts");
+        let other_module_runtime = Some("/data/adb/zygisk/bin/libzygisk.so");
+        let mounts = [
+            (ksu, Path::new("/system")),
+            (ksu, Path::new("/mnt/hm_abc")),
+            (module_file, Path::new("/system/etc/hosts")),
+            (other_module_runtime, Path::new("/system/bin/app_process")),
+            (None, Path::new("/data")),
+        ];
+        let custom = vec![PathBuf::from("/data/adb/hybrid-mount/custom")];
+        let partitions = vec!["system".to_string()];
+
+        let points = stale_mount_points(
+            mounts,
+            "KSU",
+            Path::new("/data/adb/modules"),
+            &custom,
+            &partitions,
+        );
+
+        assert_eq!(
+            points,
+            vec![
+                PathBuf::from("/system/etc/hosts"),
+                PathBuf::from("/mnt/hm_abc"),
+                PathBuf::from("/system"),
+            ]
+        );
+    }
+
+    #[test]
+    fn stale_mount_points_includes_exact_custom_targets() {
+        let target = PathBuf::from("/data/custom/target");
+        let mounts = [(None, target.as_path())];
+        let custom = vec![target.clone()];
+
+        let points =
+            stale_mount_points(mounts, "KSU", Path::new("/data/adb/modules"), &custom, &[]);
+
+        assert_eq!(points, vec![target]);
+    }
+
+    #[test]
+    fn stale_mount_points_ignores_module_sources_outside_managed_roots() {
+        let mounts = [(
+            Some("/data/adb/modules/foo/system/etc/hosts"),
+            Path::new("/data/not-managed"),
+        )];
+
+        let points = stale_mount_points(
+            mounts,
+            "KSU",
+            Path::new("/data/adb/modules"),
+            &[],
+            &["system".to_string()],
+        );
+
+        assert!(points.is_empty());
+    }
 }
 
 pub fn repair_image(image_path: &Path) -> Result<()> {

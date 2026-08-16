@@ -21,12 +21,6 @@ use hybrid_mount::core;
 
 fn main() -> Result<()> {
     #[cfg(feature = "control-plane")]
-    if matches!(std::env::var("KSU_LATE_LOAD").as_deref(), Ok("1")) {
-        eprintln!("Late-load (jailbreak) mode is not supported");
-        std::process::exit(1);
-    }
-
-    #[cfg(feature = "control-plane")]
     {
         let cli = Cli::parse();
         core::entry::run(cli)

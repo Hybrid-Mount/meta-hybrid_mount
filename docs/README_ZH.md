@@ -435,8 +435,20 @@ Release 使用 `opt-level = 3`、`lto = "fat"`、`codegen-units = 1`、`strip = 
 
 - **挂载来源自动检测**：新安装会默认自动检测运行环境。仅在自动检测失败时才需显式设置 `mountsource`。
 - **配置错误恢复**：执行 `hybrid-mount api config-reset` 重置为默认配置，然后逐步恢复规则。也可使用 `gen-config` 重新生成配置文件。
-- **配置缓存**：运行时维护配置缓存。使用 `api config-patch --apply-runtime` 使更改即时生效，或重启守护进程。
+- **配置缓存**：运行时维护配置缓存。通过 daemon API 修改的配置会保存并在下次启动时生效；`api config-patch --apply-runtime` 是保留的兼容选项（no-op）。
 - **减小体积**：建议优先从依赖特性裁剪和 release profile 调优入手，再考虑重构。
+
+---
+
+## Late-load（越狱模式）支持
+
+KernelSU 可以在开机后延迟加载（late-load / 越狱模式，适用于不解锁 bootloader 的设备）。Hybrid Mount 已支持该模式：
+
+- 安装时不再因 `KSU_LATE_LOAD=1` 中止。
+- KernelSU 模拟软重启时会调用 `module/emulated-soft-reboot.sh`，执行 `hybrid-mount emulated-soft-reboot`，先拆除上一次运行留下的挂载，再重新挂载，避免叠挂。
+- 启动时检测到 `KSU_LATE_LOAD=1` 也会先执行同样的清理。
+
+清理范围与 Hybrid Mount 自身创建的挂载严格对应：`mountsource` 命名的 tmpfs/overlay 挂载树、`/mnt/hm_*` 存储目录，以及来自模块目录且落在受管分区上的 Magic Mount bind。
 
 ---
 

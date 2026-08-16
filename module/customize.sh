@@ -16,10 +16,6 @@ if [ -z "$APATCH" ] && [ -z "$KSU" ]; then
   abort "! unsupported root platform"
 fi
 
-if [ -n "$KSU_LATE_LOAD" ] && [ -n "$KSU" ]; then
-  abort "! unsupported late load mode"
-fi
-
 unzip -o "$ZIPFILE" -d "$MODPATH" >&2
 case "$ARCH" in
 "arm64")
