@@ -92,19 +92,22 @@ impl Executor {
                     }
                     Err(err) => {
                         let involved_modules = collect_involved_modules(op);
+                        let error_detail = format!("{err:#}");
                         if is_symlink_loop_mount_error(&err) {
                             crate::scoped_log!(
                                 error,
                                 "executor",
-                                "overlay failed: target={}, reason=symlink_loop",
-                                op.target
+                                "overlay failed: target={}, reason=symlink_loop, error={}",
+                                op.target,
+                                error_detail
                             );
                         } else {
                             crate::scoped_log!(
                                 error,
                                 "executor",
-                                "overlay failed: target={}, reason=non_symlink_loop",
-                                op.target
+                                "overlay failed: target={}, reason=non_symlink_loop, error={}",
+                                op.target,
+                                error_detail
                             );
                         }
                         return Err(ModuleStageFailure::new(
