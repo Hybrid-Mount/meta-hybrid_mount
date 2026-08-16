@@ -96,7 +96,7 @@ cd webui && pnpm install && pnpm dev
 
 ## Conventions (enforced)
 
-- **License header**: every source file starts with the Apache-2.0 header (template in `LICENCE_HEADER`; see any existing `.rs`/`.sh`/`.toml`/`.yml`). New files **must** include it or CI fails.
+- **License header**: every non-WebUI source file starts with the GPL-3.0-only header (template in `LICENCE_HEADER`); files under `webui/` keep the Apache-2.0 header (template in `webui/LICENSE_HEADER`). New files **must** include it or CI fails.
 - **rustfmt** (`rustfmt.toml`): edition 2024, `imports_granularity = "Crate"`, `group_imports = "StdExternalCrate"`. Always run `cargo fmt` before finishing.
 - **Clippy clean** under `-D warnings`. No new warnings.
 - **Conventional commits** (`cliff.toml` drives the changelog): `feat:`, `fix:`, `refactor:`, `docs:`, `style:`, `chore:`, `ci:`, etc., with optional scope e.g. `fix(umount): ...`. Recent history mixes English and Chinese commit bodies — both are fine.
