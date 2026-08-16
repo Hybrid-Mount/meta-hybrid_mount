@@ -308,7 +308,7 @@ impl MagicMount {
                     _ => {
                         if let Ok(metadata) = real_path.symlink_metadata() {
                             let file_type = NodeFileType::from(metadata.file_type());
-                            file_type != self.node.file_type || file_type == NodeFileType::Symlink
+                            file_type != node.file_type || file_type == NodeFileType::Symlink
                         } else {
                             true
                         }
@@ -418,7 +418,10 @@ impl MagicMount {
                     self.path.display()
                 )
             })?;
-            if let Err(e) = mount_change(&self.path, MountPropagationFlags::PRIVATE) {
+            if let Err(e) = mount_change(
+                &self.path,
+                MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
+            ) {
                 crate::scoped_log!(
                     warn,
                     "magic",
@@ -533,7 +536,11 @@ where
             None,
         )
         .context("mount tmp")?;
-        mount_change(&tmp_dir, MountPropagationFlags::PRIVATE).context("make tmp private")?;
+        mount_change(
+            &tmp_dir,
+            MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
+        )
+        .context("make tmp private")?;
 
         let ret = MagicMount::new(
             &root,
