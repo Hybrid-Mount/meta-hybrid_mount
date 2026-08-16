@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 pub mod discovery;
-pub mod listing;
 
 use std::fs;
 
