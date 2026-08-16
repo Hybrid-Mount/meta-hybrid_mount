@@ -36,7 +36,9 @@ use crate::defs;
 use crate::errors::Result;
 
 /// 单个路径/模块可选的挂载后端。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     #[default]

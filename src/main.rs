@@ -8,6 +8,8 @@ mod errors;
 mod logging;
 mod magic_mount;
 mod overlayfs;
+mod plan;
+mod scanner;
 mod storage;
 mod sys;
 mod utils;

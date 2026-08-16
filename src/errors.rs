@@ -39,6 +39,17 @@ pub enum Error {
     #[error("Invalid module ID: '{module_id:?}'. Must match /^[a-zA-Z][a-zA-Z0-9._-]+$/")]
     InvalidModuleID { module_id: String },
 
+    #[error(
+        "plan conflict at {target:?}: {first_backend}({first_source}) vs {second_backend}({second_source})"
+    )]
+    PlanConflict {
+        target: String,
+        first_backend: String,
+        first_source: String,
+        second_backend: String,
+        second_source: String,
+    },
+
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("system call error: {0}")]
     Sys(#[from] rustix::io::Errno),
