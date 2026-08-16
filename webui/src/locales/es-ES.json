@@ -12,6 +12,16 @@
     "cancel": "Cancelar",
     "saved": "Guardado"
   },
+  "compatibility": {
+    "eyebrow": "Acción requerida",
+    "title": "Se requiere una instalación limpia",
+    "description": "Se detectó una versión instalada anterior a este mecanismo de compatibilidad. Para evitar fallos de montaje por archivos residuales, realiza una instalación limpia.",
+    "stepsTitle": "Sigue estos pasos en orden",
+    "uninstallStep": "Desinstala Hybrid Mount desde KernelSU o APatch",
+    "rebootStep": "Reinicia el dispositivo para eliminar por completo los archivos y montajes anteriores",
+    "reinstallStep": "Vuelve a instalar el ZIP de la versión actual",
+    "dataWarning": "Al desinstalar se borrarán la configuración y los datos de ejecución actuales de Hybrid Mount."
+  },
   "tabs": {
     "status": "Estado",
     "config": "Configuración",

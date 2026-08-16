@@ -57,6 +57,7 @@ fn gen_module_prop(data: &build_meta_shared::CargoConfig) -> Result<()> {
         author: &author,
         description: &package.description,
         update_json: &package.metadata.hybrid_mount.update,
+        upgrade_epoch: build_meta_shared::UPGRADE_EPOCH,
         webui_icon: true,
     });
 

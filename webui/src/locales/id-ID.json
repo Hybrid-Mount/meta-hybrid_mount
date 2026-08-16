@@ -12,6 +12,16 @@
     "cancel": "Batal",
     "saved": "Tersimpan"
   },
+  "compatibility": {
+    "eyebrow": "Tindakan diperlukan",
+    "title": "Instalasi bersih diperlukan",
+    "description": "Versi yang dipasang sebelum mekanisme kompatibilitas ini terdeteksi. Untuk mencegah sisa berkas menyebabkan kegagalan mount, lakukan instalasi bersih.",
+    "stepsTitle": "Ikuti langkah berikut secara berurutan",
+    "uninstallStep": "Copot pemasangan Hybrid Mount di KernelSU atau APatch",
+    "rebootStep": "Mulai ulang perangkat untuk menghapus berkas dan mount lama sepenuhnya",
+    "reinstallStep": "Pasang kembali ZIP versi saat ini",
+    "dataWarning": "Mencopot pemasangan akan menghapus konfigurasi dan data runtime Hybrid Mount yang ada."
+  },
   "tabs": {
     "status": "Status",
     "config": "Pengaturan",

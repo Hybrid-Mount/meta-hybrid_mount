@@ -20,6 +20,16 @@ MODE_MARKERS="overlay magic"
 SELF_MOUNTING_MODULE_BLOCKLIST="scene_swap_controller"
 NANO_MODE=false
 
+for HYBRID_MOUNT_MODULE_PROP in \
+  "/data/adb/modules/hybrid_mount/module.prop" \
+  "/data/adb/modules_update/hybrid_mount/module.prop"; do
+  if [ -f "$HYBRID_MOUNT_MODULE_PROP" ] && grep -q '^upgradeState=' "$HYBRID_MOUNT_MODULE_PROP"; then
+    ui_print "! Hybrid Mount is paused and requires a clean reinstall"
+    ui_print "! Uninstall it, reboot, then reinstall Hybrid Mount first"
+    abort "! Hybrid Mount cannot install modules while maintenance is required"
+  fi
+done
+
 detect_nano_mode() {
   local script_dir="${0%/*}"
   if [ "$script_dir" != "$0" ] && [ -f "$script_dir/.nano" ]; then

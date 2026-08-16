@@ -31,9 +31,17 @@ import { sysStore } from "./lib/stores/sysStore";
 import { API } from "./lib/api";
 import { getErrorMessage } from "./lib/api/core/error";
 import { onSseStateUpdate, stopSse } from "./lib/api/core/bridge";
+import { runStartupGate } from "./lib/appStartup";
 import TopBar from "./components/TopBar";
 import NavBar from "./components/NavBar";
 import Toast from "./components/Toast";
+import CleanReinstallRequired from "./components/CleanReinstallRequired";
+
+type StartupState =
+  | "checking-install"
+  | "initializing"
+  | "ready"
+  | "clean-reinstall-required";
 
 const loadStatusTab = () => import("./routes/StatusTab");
 const loadConfigTab = () => import("./routes/ConfigTab");
@@ -51,7 +59,11 @@ export default function App() {
   const [activeTab, setActiveTab] = createSignal("status");
   const [dragOffset, setDragOffset] = createSignal(0);
   const [isDragging, setIsDragging] = createSignal(false);
-  const [initialDataReady, setInitialDataReady] = createSignal(false);
+  const [startupState, setStartupState] =
+    createSignal<StartupState>("checking-install");
+  const [initializationError, setInitializationError] = createSignal<
+    string | null
+  >(null);
   const [visitedTabs, setVisitedTabs] = createSignal(
     new Set<string>([activeTab()]),
   );
@@ -68,7 +80,7 @@ export default function App() {
   const visibleRoutes = createMemo(() => routes);
   const visibleTabs = createMemo(() => visibleRoutes().map((r) => r.id));
   const tabCount = createMemo(() => Math.max(visibleTabs().length, 1));
-  const isAppReady = createMemo(() => initialDataReady());
+  const isAppReady = createMemo(() => startupState() === "ready");
 
   const baseTranslateX = createMemo(() => {
     const index = visibleTabs().indexOf(activeTab());
@@ -213,67 +225,95 @@ export default function App() {
 
   async function initializeApp() {
     try {
-      const [payload] = await Promise.all([API.init(), uiStore.init()]);
-      if (disposed) return;
+      const [startup] = await Promise.all([
+        runStartupGate(API, () => {
+          if (disposed) return false;
+          setStartupState("initializing");
+          return true;
+        }),
+        uiStore.init(),
+      ]);
+      if (disposed || startup.state === "cancelled") return;
+      if (startup.state === "clean-reinstall-required") {
+        setStartupState("clean-reinstall-required");
+        return;
+      }
+
+      const payload = startup.payload;
       sysStore.loadFromInit(payload);
       onSseStateUpdate((state) => sysStore.handleSseUpdate(state));
       configStore.loadFromInit(payload);
-      setInitialDataReady(true);
+      setStartupState("ready");
       startRoutePreload();
     } catch (e: unknown) {
       console.error("App initialization failed", e);
-      uiStore.showToast(
-        getErrorMessage(e, "App initialization failed"),
-        "error",
-      );
-      setInitialDataReady(true);
-      return;
+      const message = getErrorMessage(e, "App initialization failed");
+      setInitializationError(message);
+      uiStore.showToast(message, "error");
     }
   }
 
   return (
     <div class="app-root">
       <TopBar />
-      <main
-        class="main-content"
-        ref={containerRef}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
+      <Show
+        when={startupState() !== "clean-reinstall-required"}
+        fallback={<CleanReinstallRequired />}
       >
-        <Show
-          when={isAppReady()}
-          fallback={
-            <div class="loading-container" style={{ height: "100%" }}>
-              <div class="spinner"></div>
-              <span class="loading-text">Loading...</span>
-            </div>
-          }
+        <main
+          class="main-content"
+          ref={containerRef}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
         >
-          <div class="swipe-track" classList={{ "is-dragging": isDragging() }}>
-            <For each={visibleRoutes()}>
-              {(route) => (
-                <div class="swipe-page">
-                  <Show
-                    when={visitedTabs().has(route.id)}
-                    fallback={<div class="page-scroller" aria-hidden="true" />}
-                  >
-                    <div class="page-scroller">
-                      <route.component />
-                    </div>
-                  </Show>
+          <Show
+            when={!initializationError()}
+            fallback={
+              <div class="loading-container" style={{ height: "100%" }}>
+                <span class="loading-text">{initializationError()}</span>
+              </div>
+            }
+          >
+            <Show
+              when={isAppReady()}
+              fallback={
+                <div class="loading-container" style={{ height: "100%" }}>
+                  <div class="spinner"></div>
+                  <span class="loading-text">Loading...</span>
                 </div>
-              )}
-            </For>
-          </div>
+              }
+            >
+              <div class="swipe-track" classList={{ "is-dragging": isDragging() }}>
+                <For each={visibleRoutes()}>
+                  {(route) => (
+                    <div class="swipe-page">
+                      <Show
+                        when={visitedTabs().has(route.id)}
+                        fallback={
+                          <div class="page-scroller" aria-hidden="true" />
+                        }
+                      >
+                        <div class="page-scroller">
+                          <route.component />
+                        </div>
+                      </Show>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </Show>
+        </main>
+        <Show when={startupState() === "ready"}>
+          <NavBar
+            activeTab={activeTab()}
+            onTabChange={setActiveTab}
+            tabs={visibleRoutes()}
+          />
         </Show>
-      </main>
-      <NavBar
-        activeTab={activeTab()}
-        onTabChange={setActiveTab}
-        tabs={visibleRoutes()}
-      />
+      </Show>
       <Toast />
     </div>
   );

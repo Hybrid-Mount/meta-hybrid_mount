@@ -17,6 +17,7 @@
 import { APP_VERSION } from "./constants_gen";
 import { DEFAULT_CONFIG } from "./constants";
 import type { AppAPI } from "./api/contracts";
+import { previewInstallState } from "./api/services/installCompatibility";
 import type {
   AppConfig,
   ModeStats,
@@ -126,6 +127,11 @@ function buildModeStats(): ModeStats {
 }
 
 export const MockAPI: AppAPI = {
+  async checkInstallState() {
+    const search = typeof window === "undefined" ? "" : window.location.search;
+    return previewInstallState(search);
+  },
+
   async wakeDaemon(): Promise<void> {
     await delay(20);
   },

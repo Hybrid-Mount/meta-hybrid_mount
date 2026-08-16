@@ -41,9 +41,11 @@ import {
   saveModuleRules,
   saveAllModuleRules,
 } from "./api/services/moduleService";
+import { checkInstallState } from "./api/services/installCompatibility";
 import type { AppAPI } from "./api/contracts";
 
 const RealAPI = {
+  checkInstallState,
   wakeDaemon: () => ensureDaemonAwake(PATHS.BINARY),
   init,
   loadConfig: loadConfigFromFile,

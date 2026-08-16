@@ -488,6 +488,7 @@ fn generate_module_prop(stage_dir: &Path, info: &VersionInfo, flavor: BuildFlavo
         author: "Hybrid Mount Developers",
         description: &config.package.description,
         update_json: &update_json,
+        upgrade_epoch: build_meta_shared::UPGRADE_EPOCH,
         webui_icon: flavor.includes_webui(),
     });
 
@@ -521,16 +522,21 @@ fn build_webui(version: &str, is_release: bool) -> Result<()> {
 
 fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
     let path = Path::new("webui/src/lib/constants_gen.ts");
-    let content = build_meta_shared::render_webui_constants(
-        version,
-        is_release,
-        build_meta_shared::defs::CONFIG_FILE,
-        build_meta_shared::defs::STATE_FILE,
-        &format!(
-            "{}/hybrid-mount",
-            build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR
-        ),
+    let binary_path = format!(
+        "{}/hybrid-mount",
+        build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR
     );
+    let content =
+        build_meta_shared::render_webui_constants(&build_meta_shared::WebuiConstantsData {
+            version,
+            is_release,
+            upgrade_epoch: build_meta_shared::UPGRADE_EPOCH,
+            config_path: build_meta_shared::defs::CONFIG_FILE,
+            state_path: build_meta_shared::defs::STATE_FILE,
+            binary_path: &binary_path,
+            module_dir: build_meta_shared::defs::HYBRID_MOUNT_MODULE_DIR,
+            module_update_dir: build_meta_shared::defs::HYBRID_MOUNT_MODULE_UPDATE_DIR,
+        });
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -629,7 +635,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{BuildFlavor, configure_flavor_config, strip_toml_preamble};
+    use super::{BuildFlavor, build_meta_shared, configure_flavor_config, strip_toml_preamble};
 
     struct TestDir(std::path::PathBuf);
 
@@ -725,6 +731,40 @@ daemon_startup_mode = "persistent"
         assert_eq!(
             table.get("default_mode").and_then(toml::Value::as_str),
             Some("magic")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn installer_compatibility_contract() {
+        let script =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/installer_compat.sh");
+        let status = std::process::Command::new("sh")
+            .arg(&script)
+            .status()
+            .unwrap_or_else(|error| panic!("failed to run {}: {error}", script.display()));
+
+        assert!(status.success(), "{} failed", script.display());
+    }
+
+    #[test]
+    fn rendered_module_prop_declares_upgrade_epoch() {
+        let content = build_meta_shared::render_module_prop(&build_meta_shared::ModulePropData {
+            id: "hybrid_mount",
+            name: "Hybrid Mount",
+            version: "1.0.0",
+            version_code: "100000",
+            author: "Hybrid Mount Developers",
+            description: "test",
+            update_json: "https://example.com/update.json",
+            upgrade_epoch: build_meta_shared::UPGRADE_EPOCH,
+            webui_icon: false,
+        });
+
+        assert!(
+            content.lines().any(|line| {
+                line == format!("upgradeEpoch={}", build_meta_shared::UPGRADE_EPOCH)
+            })
         );
     }
 }

@@ -12,6 +12,16 @@
     "cancel": "取消",
     "saved": "已儲存"
   },
+  "compatibility": {
+    "eyebrow": "需要處理",
+    "title": "需要全新安裝",
+    "description": "偵測到已安裝的是此相容機制導入前的版本。為避免殘留檔案造成掛載異常，請完成一次全新安裝。",
+    "stepsTitle": "請依序操作",
+    "uninstallStep": "在 KernelSU 或 APatch 中解除安裝 Hybrid Mount",
+    "rebootStep": "重新啟動裝置，確保舊檔案與本次啟動的掛載已完全清除",
+    "reinstallStep": "重新安裝目前版本的 ZIP",
+    "dataWarning": "解除安裝會清除 Hybrid Mount 現有的設定與執行資料。"
+  },
   "tabs": {
     "status": "狀態",
     "config": "設定",

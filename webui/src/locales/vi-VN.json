@@ -12,6 +12,16 @@
     "cancel": "Hủy",
     "saved": "Đã lưu"
   },
+  "compatibility": {
+    "eyebrow": "Cần thao tác",
+    "title": "Cần cài đặt sạch",
+    "description": "Đã phát hiện phiên bản được cài trước khi cơ chế tương thích này được đưa vào. Để tránh tệp còn sót gây lỗi gắn kết, hãy thực hiện cài đặt sạch.",
+    "stepsTitle": "Thực hiện theo đúng thứ tự",
+    "uninstallStep": "Gỡ cài đặt Hybrid Mount trong KernelSU hoặc APatch",
+    "rebootStep": "Khởi động lại thiết bị để xóa hoàn toàn các tệp và điểm gắn kết cũ",
+    "reinstallStep": "Cài đặt lại tệp ZIP của phiên bản hiện tại",
+    "dataWarning": "Việc gỡ cài đặt sẽ xóa cấu hình và dữ liệu chạy hiện có của Hybrid Mount."
+  },
   "tabs": {
     "status": "Trạng thái",
     "config": "Cấu hình",

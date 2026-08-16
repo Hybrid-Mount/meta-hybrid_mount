@@ -18,6 +18,8 @@ pub const HYBRID_MOUNT_DIR: &str = "/data/adb/hybrid-mount";
 pub const MODULES_DIR: &str = "/data/adb/modules";
 #[allow(dead_code)]
 pub const HYBRID_MOUNT_MODULE_DIR: &str = "/data/adb/modules/hybrid_mount";
+#[allow(dead_code)]
+pub const HYBRID_MOUNT_MODULE_UPDATE_DIR: &str = "/data/adb/modules_update/hybrid_mount";
 
 pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
 pub const RUN_DIR: &str = "/data/adb/hybrid-mount/run/";

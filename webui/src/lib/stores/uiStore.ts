@@ -19,6 +19,50 @@ import type { ToastMessage, LanguageOption } from "../types";
 
 const localeModules = import.meta.glob("../../locales/*.json");
 
+export function validateLocaleShape(
+  reference: unknown,
+  candidate: unknown,
+  path: string,
+): void {
+  if (typeof reference === "string") {
+    if (typeof candidate !== "string") {
+      throw new Error(`Locale value must be a string: ${path}`);
+    }
+    return;
+  }
+
+  if (
+    reference === null ||
+    typeof reference !== "object" ||
+    Array.isArray(reference) ||
+    candidate === null ||
+    typeof candidate !== "object" ||
+    Array.isArray(candidate)
+  ) {
+    throw new Error(`Locale object has an invalid shape: ${path}`);
+  }
+
+  const referenceRecord = reference as Record<string, unknown>;
+  const candidateRecord = candidate as Record<string, unknown>;
+  const referenceKeys = Object.keys(referenceRecord);
+  const candidateKeys = Object.keys(candidateRecord);
+
+  if (
+    referenceKeys.length !== candidateKeys.length ||
+    candidateKeys.some((key) => !(key in referenceRecord))
+  ) {
+    throw new Error(`Locale keys do not match en-US: ${path}`);
+  }
+
+  for (const key of referenceKeys) {
+    validateLocaleShape(
+      referenceRecord[key],
+      candidateRecord[key],
+      `${path}.${key}`,
+    );
+  }
+}
+
 const createUiStore = () => {
   const [lang, setLangSignal] = createSignal("en-US");
   const [loadedLocale, setLoadedLocale] = createSignal<any>(null);

@@ -29,7 +29,10 @@ export interface InitPayload {
   system_info: unknown;
 }
 
+export type InstallState = "ready" | "clean-reinstall-required";
+
 export interface AppAPI {
+  checkInstallState: () => Promise<InstallState>;
   wakeDaemon: () => Promise<void>;
   init: () => Promise<InitPayload>;
   loadConfig: () => Promise<AppConfig>;
