@@ -56,6 +56,15 @@ jobs:
         run: cargo test -p hybrid-mount --no-default-features --lib
       - name: Check installer compatibility
         run: bash tests/installer_compat.sh
+      - name: Install ShellCheck
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends shellcheck
+          rm -rf /var/lib/apt/lists/*
+          shellcheck --version
+      - name: Lint shell scripts
+        run: shellcheck --severity=error module/*.sh scripts/*.sh tests/*.sh
 
   webui-lints:
     runs-on: ubuntu-latest

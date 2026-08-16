@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
+# shellcheck shell=sh
+
 export KSU_HAS_METAMODULE="true"
 export KSU_METAMODULE="hybrid-mount"
 BASE_DIR="/data/adb/hybrid-mount"

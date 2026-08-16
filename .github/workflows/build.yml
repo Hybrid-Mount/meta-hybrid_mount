@@ -93,6 +93,40 @@ jobs:
           echo "ARTIFACT_ZIP=$ZIP_PATH" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
 
+      - name: Verify ${{ matrix.flavor }} package contents
+        run: |
+          set -euo pipefail
+          ZIP_PATH="$ARTIFACT_ZIP"
+          test -n "$ZIP_PATH"
+          unzip -tq "$ZIP_PATH"
+          ENTRIES="$(unzip -Z1 "$ZIP_PATH")"
+          for required in module.prop config.toml customize.sh binaries/hybrid-mount; do
+            if ! grep -Fxq "$required" <<<"$ENTRIES"; then
+              echo "package is missing required entry: $required" >&2
+              exit 1
+            fi
+          done
+          case "${{ matrix.flavor }}" in
+          lite)
+            for required in launcher.png webroot/index.html; do
+              if ! grep -Fxq "$required" <<<"$ENTRIES"; then
+                echo "lite package is missing required entry: $required" >&2
+                exit 1
+              fi
+            done
+            ;;
+          nano)
+            if grep -Fxq ".nano" <<<"$ENTRIES" \
+              && ! grep -Eq '^(webroot/|webroot$|launcher\.png$)' <<<"$ENTRIES"; then
+              :
+            else
+              echo "nano package must contain .nano and must not contain webroot/ or launcher.png" >&2
+              exit 1
+            fi
+            ;;
+          esac
+          echo "package archive verified"
+
       - name: Upload ${{ matrix.flavor }} Artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

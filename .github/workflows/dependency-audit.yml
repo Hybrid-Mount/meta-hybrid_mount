@@ -1,0 +1,93 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Dependency Audit
+
+on:
+  push:
+    branches:
+      - 'dev'
+      - 'main'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'webui/pnpm-lock.yaml'
+      - '.github/workflows/dependency-audit.yml'
+  pull_request:
+    branches:
+      - 'dev'
+      - 'main'
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'webui/pnpm-lock.yaml'
+      - '.github/workflows/dependency-audit.yml'
+  schedule:
+    - cron: '0 4 * * 2'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  rust-audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          filter: 'tree:0'
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          cache-all-crates: true
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Audit Rust dependencies
+        run: cargo audit
+
+  webui-audit:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        working-directory: webui
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          filter: 'tree:0'
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --audit-level high

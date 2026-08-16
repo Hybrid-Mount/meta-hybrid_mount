@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-only
 
+# shellcheck shell=sh
 
 MNT_DIR="/data/adb/hybrid-mount/mnt"
 if [ -z "$MODULE_ID" ]; then
