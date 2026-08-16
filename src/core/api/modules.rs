@@ -122,6 +122,12 @@ fn build_scanned_modules_payload(
             )
         })?;
         if !file_type.is_dir() {
+            crate::scoped_log!(
+                warn,
+                "api:modules",
+                "skip: path={}, reason=non_directory_entry",
+                entry.path().display()
+            );
             continue;
         }
 
@@ -605,6 +611,30 @@ mod tests {
         assert_eq!(module.version, "1.2.3");
         assert_eq!(module.author, "Alice");
         assert_eq!(module.description, "Alpha description");
+    }
+
+    #[test]
+    fn scanned_modules_payload_skips_non_directory_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("stray.txt"), b"not a module").unwrap();
+        let module_dir = temp.path().join("alpha");
+        fs::create_dir_all(&module_dir).unwrap();
+        fs::write(
+            module_dir.join("module.prop"),
+            "id=alpha\nname=Alpha Module\nversion=1.2.3\nauthor=Alice\ndescription=Alpha description\n",
+        )
+        .unwrap();
+
+        let config = Config {
+            moduledir: temp.path().to_path_buf(),
+            default_mode: DefaultMode::Overlay,
+            ..Default::default()
+        };
+        let state = RuntimeState::default();
+
+        let modules = build_scanned_modules_payload(&config, &state, temp.path()).unwrap();
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "alpha");
     }
 
     #[test]

@@ -36,6 +36,7 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
 
     let mut modules = Vec::new();
     let mut skipped_reserved = 0usize;
+    let mut skipped_non_directories = 0usize;
     let mut skipped_blocked = 0usize;
     let mut skipped_blacklisted = 0usize;
     let mut skipped_invalid = 0usize;
@@ -45,6 +46,13 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
         let entry = entry?;
         let file_type = entry.file_type()?;
         if !file_type.is_dir() {
+            skipped_non_directories += 1;
+            crate::scoped_log!(
+                warn,
+                "scanner",
+                "skip: path={}, reason=non_directory_entry",
+                entry.path().display()
+            );
             continue;
         }
 
@@ -119,15 +127,17 @@ pub fn scan(source_dir: &Path, cfg: &config::Config) -> Result<Vec<Module>> {
     crate::scoped_log!(
         info,
         "scanner",
-        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_blocked={}, skipped_blacklisted={}, skipped_invalid={}, skipped_missing_prop={}",
+        "complete: total_dirs={}, active_modules={}, skipped_reserved={}, skipped_non_directories={}, skipped_blocked={}, skipped_blacklisted={}, skipped_invalid={}, skipped_missing_prop={}",
         modules.len()
             + skipped_reserved
+            + skipped_non_directories
             + skipped_blocked
             + skipped_blacklisted
             + skipped_invalid
             + skipped_missing_prop,
         modules.len(),
         skipped_reserved,
+        skipped_non_directories,
         skipped_blocked,
         skipped_blacklisted,
         skipped_invalid,
@@ -189,6 +199,20 @@ mod tests {
 
     fn write_prop_content(module_dir: &Path, content: &str) {
         fs::write(module_dir.join("module.prop"), content).unwrap();
+    }
+
+    #[test]
+    fn scan_skips_non_directory_entries() {
+        let temp = TempDir::new().unwrap();
+        fs::write(temp.path().join("stray.txt"), b"not a module").unwrap();
+        let valid = temp.path().join("valid");
+        fs::create_dir(&valid).unwrap();
+        write_prop(&valid, "valid");
+
+        let modules = scan(temp.path(), &config::Config::default()).unwrap();
+
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "valid");
     }
 
     #[test]
