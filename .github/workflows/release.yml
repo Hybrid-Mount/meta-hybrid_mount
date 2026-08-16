@@ -68,13 +68,18 @@ jobs:
           ZIP_FILENAME="$(basename "$ZIP_PATH")"
           STAGED_ZIP="/tmp/$ZIP_FILENAME"
           cp "$ZIP_PATH" "$STAGED_ZIP"
+          CHECKSUM_FILE="/tmp/$ZIP_FILENAME.sha256"
+          (cd /tmp && sha256sum "$ZIP_FILENAME") > "$CHECKSUM_FILE"
           echo "STAGED_ZIP=$STAGED_ZIP" >> "$GITHUB_ENV"
+          echo "CHECKSUM_FILE=$CHECKSUM_FILE" >> "$GITHUB_ENV"
 
       - name: Upload ${{ matrix.flavor }} Artifact
         uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.flavor }}
-          path: ${{ env.STAGED_ZIP }}
+          path: |
+            ${{ env.STAGED_ZIP }}
+            ${{ env.CHECKSUM_FILE }}
           compression-level: 0
           if-no-files-found: error
 
@@ -143,6 +148,23 @@ jobs:
           echo "lite_name=$(basename "$LITE_ZIP")" >> "$GITHUB_OUTPUT"
           echo "nano_name=$(basename "$NANO_ZIP")" >> "$GITHUB_OUTPUT"
           ls -la "$LITE_ZIP" "$NANO_ZIP"
+
+      - name: Verify checksums and build SHA256SUMS
+        id: checksums
+        run: |
+          set -euo pipefail
+          LITE_ZIP="${{ steps.paths.outputs.lite_zip }}"
+          NANO_ZIP="${{ steps.paths.outputs.nano_zip }}"
+          LITE_CHECKSUM="$(find packages -maxdepth 1 -type f -name "$(basename "$LITE_ZIP").sha256" | sort | head -n 1)"
+          NANO_CHECKSUM="$(find packages -maxdepth 1 -type f -name "$(basename "$NANO_ZIP").sha256" | sort | head -n 1)"
+          test -s "$LITE_CHECKSUM"
+          test -s "$NANO_CHECKSUM"
+          (cd packages && sha256sum -c "$(basename "$LITE_CHECKSUM")")
+          (cd packages && sha256sum -c "$(basename "$NANO_CHECKSUM")")
+          CHECKSUM_FILE="packages/SHA256SUMS"
+          (cd packages && sha256sum "$(basename "$LITE_ZIP")" "$(basename "$NANO_ZIP")") > "$CHECKSUM_FILE"
+          cat "$CHECKSUM_FILE"
+          echo "checksum_file=$CHECKSUM_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Notify Telegram album
         env:
@@ -225,6 +247,7 @@ jobs:
           files: |
             ${{ steps.paths.outputs.lite_zip }}
             ${{ steps.paths.outputs.nano_zip }}
+            ${{ steps.checksums.outputs.checksum_file }}
           body_path: /tmp/changelog.md
 
       - name: Create Remote Release (KernelSU-Repo)
@@ -249,14 +272,18 @@ jobs:
             --title "$tag" \
             --notes-file /tmp/changelog.md \
             "${{ steps.paths.outputs.lite_zip }}" \
-            "${{ steps.paths.outputs.nano_zip }}"
+            "${{ steps.paths.outputs.nano_zip }}" \
+            "${{ steps.checksums.outputs.checksum_file }}"
 
           gh release edit "$tag" \
             --repo "$repo" \
             --draft=false
 
       - name: Sync Version to Main
-        if: startsWith(github.ref, 'refs/tags/')
+        # Prereleases must never overwrite main's update.json: their numeric
+        # versionCode would collide with the later stable release and could
+        # stall update checks. Prerelease packages stay GitHub-only.
+        if: startsWith(github.ref, 'refs/tags/') && steps.release_type.outputs.prerelease == 'false'
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"

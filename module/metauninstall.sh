@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# shellcheck shell=sh
 
 MNT_DIR="/data/adb/hybrid-mount/mnt"
 if [ -z "$MODULE_ID" ]; then

@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# shellcheck shell=sh
+
 export KSU_HAS_METAMODULE="true"
 export KSU_METAMODULE="hybrid-mount"
 BASE_DIR="/data/adb/hybrid-mount"

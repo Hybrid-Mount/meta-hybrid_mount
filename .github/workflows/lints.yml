@@ -59,6 +59,17 @@ jobs:
         run: cargo test -p hybrid-mount --no-default-features --features control-plane --lib
       - name: Check nano feature set
         run: cargo test -p hybrid-mount --no-default-features --lib
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends shellcheck
+          rm -rf /var/lib/apt/lists/*
+          shellcheck --version
+      - name: Lint shell scripts
+        shell: bash
+        run: shellcheck --severity=error module/*.sh scripts/*.sh tests/*.sh
 
   webui-lints:
     runs-on: ubuntu-latest
