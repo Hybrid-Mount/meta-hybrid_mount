@@ -137,6 +137,11 @@ pub fn run(config: Config) -> Result<Config> {
 
                 let err_msg = format!("{:#}", e).replace('\n', " -> ");
                 crate::scoped_log!(error, "recovery", "unrecoverable: error={}", err_msg);
+                if let Err(cleanup_error) = crate::core::controller::remove_staging_image() {
+                    return Err(e.context(format!(
+                        "additionally failed to clean staging image: {cleanup_error:#}"
+                    )));
+                }
                 crate::core::module_status::update_crash_description(&err_msg);
                 return Err(e);
             }

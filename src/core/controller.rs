@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{UnmountFlags, unmount as umount};
 
@@ -318,4 +318,28 @@ fn remove_path(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Remove the ext4 staging image after an unsuccessful mount attempt.
+/// Successful runs already delete it in `clean_up_path`; failed runs used to
+/// leave a multi-gigabyte file behind until the next boot.
+pub(crate) fn remove_staging_image() -> Result<()> {
+    match fs::remove_file(defs::MODULES_IMG_FILE) {
+        Ok(()) => {
+            crate::scoped_log!(
+                info,
+                "controller:rollback",
+                "cleaning staging image: path={}",
+                defs::MODULES_IMG_FILE
+            );
+            Ok(())
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!(
+                "failed to remove staging image {}",
+                defs::MODULES_IMG_FILE
+            )
+        }),
+    }
 }
