@@ -13,13 +13,14 @@
 // limitations under the License.
 
 use std::{
+    collections::HashMap,
     fs,
     io::{BufRead, BufReader, ErrorKind, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     path::PathBuf,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -99,6 +100,7 @@ impl WebuiHttpSession {
     }
 }
 
+#[derive(Debug)]
 pub(super) struct WebuiHttpRequest {
     pub(super) request_line: String,
     pub(super) authorized: bool,
@@ -108,17 +110,112 @@ pub(super) struct WebuiHttpRequest {
 
 pub(super) const MAX_WEBUI_HTTP_BODY_BYTES: usize = 1024 * 1024;
 pub(super) const MAX_WEBUI_CONNECTIONS: usize = 64;
+pub(super) const MAX_WEBUI_HTTP_REQUEST_LINE_BYTES: usize = 8 * 1024;
+pub(super) const MAX_WEBUI_HTTP_HEADER_LINE_BYTES: usize = 8 * 1024;
+pub(super) const MAX_WEBUI_HTTP_HEADER_BYTES: usize = 64 * 1024;
+pub(super) const MAX_WEBUI_HTTP_HEADERS: usize = 64;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct SseClientId(u64);
+
+pub(super) type SharedSseClients = Arc<SseClientRegistry>;
+
+pub(super) struct SseClientRegistry {
+    next_id: AtomicU64,
+    clients: Mutex<HashMap<SseClientId, TcpStream>>,
+}
+
+impl SseClientRegistry {
+    pub(super) fn shared() -> SharedSseClients {
+        Arc::new(Self {
+            next_id: AtomicU64::new(0),
+            clients: Mutex::new(HashMap::new()),
+        })
+    }
+
+    fn insert(&self, stream: TcpStream) -> SseClientId {
+        let id = SseClientId(self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
+        lock_or_recover(&self.clients).insert(id, stream);
+        id
+    }
+
+    fn remove(&self, id: SseClientId) -> bool {
+        lock_or_recover(&self.clients).remove(&id).is_some()
+    }
+
+    fn snapshot(&self) -> Vec<(SseClientId, TcpStream)> {
+        let mut failed_ids = Vec::new();
+        let snapshot = {
+            let clients = lock_or_recover(&self.clients);
+            clients
+                .iter()
+                .filter_map(|(id, stream)| match stream.try_clone() {
+                    Ok(stream) => Some((*id, stream)),
+                    Err(err) => {
+                        failed_ids.push(*id);
+                        crate::scoped_log!(
+                            debug,
+                            "daemon:sse",
+                            "client clone failed: id={}, error={:#}",
+                            id.0,
+                            err
+                        );
+                        None
+                    }
+                })
+                .collect()
+        };
+
+        if !failed_ids.is_empty() {
+            let mut clients = lock_or_recover(&self.clients);
+            for id in failed_ids {
+                clients.remove(&id);
+            }
+        }
+
+        snapshot
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        lock_or_recover(&self.clients).len()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WebuiHttpRequestReadError {
+    InvalidRequest,
+    RequestLineTooLarge,
+    RequestHeaderTooLarge,
+    TooManyHeaders,
     InvalidContentLength,
+    DuplicateContentLength,
+    MissingContentLength,
+    UnsupportedTransferEncoding,
     RequestBodyTooLarge,
 }
 
 impl WebuiHttpRequestReadError {
     fn status(self) -> (u16, &'static str, &'static str) {
         match self {
+            Self::InvalidRequest => (400, "Bad Request", "invalid HTTP request"),
+            Self::RequestLineTooLarge => (414, "URI Too Long", "request line too large"),
+            Self::RequestHeaderTooLarge => (
+                431,
+                "Request Header Fields Too Large",
+                "request header too large",
+            ),
+            Self::TooManyHeaders => (
+                431,
+                "Request Header Fields Too Large",
+                "too many request headers",
+            ),
             Self::InvalidContentLength => (400, "Bad Request", "invalid content-length header"),
+            Self::DuplicateContentLength => (400, "Bad Request", "duplicate content-length header"),
+            Self::MissingContentLength => (411, "Length Required", "missing content-length header"),
+            Self::UnsupportedTransferEncoding => {
+                (501, "Not Implemented", "transfer-encoding is not supported")
+            }
             Self::RequestBodyTooLarge => (413, "Payload Too Large", "request body too large"),
         }
     }
@@ -173,7 +270,7 @@ pub(super) fn handle_http_connection(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
-    sse_clients: Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: SharedSseClients,
     mut stream: TcpStream,
 ) -> Result<()> {
     stream
@@ -231,39 +328,60 @@ pub(super) fn handle_http_connection(
     Ok(())
 }
 
-fn read_http_request(
-    reader: &mut BufReader<TcpStream>,
+fn read_http_request<R>(
+    reader: &mut R,
     webui: &WebuiHttpSession,
-) -> Result<Option<WebuiHttpRequest>> {
-    let mut request_line = String::new();
-    let bytes = match reader.read_line(&mut request_line) {
-        Ok(bytes) => bytes,
-        Err(err) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-            return Ok(None);
-        }
-        Err(err) => return Err(err).context("Failed to read WebUI HTTP request line"),
-    };
-    if bytes == 0 {
+) -> Result<Option<WebuiHttpRequest>>
+where
+    R: BufRead + Read,
+{
+    let Some(request_line) = read_limited_line(
+        reader,
+        MAX_WEBUI_HTTP_REQUEST_LINE_BYTES,
+        WebuiHttpRequestReadError::RequestLineTooLarge,
+    )
+    .context("Failed to read WebUI HTTP request line")?
+    else {
         return Ok(None);
-    }
+    };
 
     let mut content_length = 0usize;
+    let mut content_length_seen = false;
     let mut authorized = false;
     let mut close_after_response = request_line.contains("HTTP/1.0");
+    let mut header_bytes = 0usize;
+    let mut header_count = 0usize;
     loop {
-        let mut line = String::new();
-        reader
-            .read_line(&mut line)
-            .context("Failed to read WebUI HTTP header")?;
+        let line = read_limited_header_line(reader).context("Failed to read WebUI HTTP header")?;
+        header_bytes = header_bytes
+            .checked_add(line.len())
+            .ok_or_else(|| Error::new(WebuiHttpRequestReadError::RequestHeaderTooLarge))?;
+        if header_bytes > MAX_WEBUI_HTTP_HEADER_BYTES {
+            return Err(Error::new(WebuiHttpRequestReadError::RequestHeaderTooLarge));
+        }
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
             break;
+        }
+        header_count += 1;
+        if header_count > MAX_WEBUI_HTTP_HEADERS {
+            return Err(Error::new(WebuiHttpRequestReadError::TooManyHeaders));
         }
         if let Some((name, value)) = trimmed.split_once(':') {
             let name = name.trim();
             let value = value.trim();
             if name.eq_ignore_ascii_case("content-length") {
+                if content_length_seen {
+                    return Err(Error::new(
+                        WebuiHttpRequestReadError::DuplicateContentLength,
+                    ));
+                }
+                content_length_seen = true;
                 content_length = parse_content_length(value)?;
+            } else if name.eq_ignore_ascii_case("transfer-encoding") {
+                return Err(Error::new(
+                    WebuiHttpRequestReadError::UnsupportedTransferEncoding,
+                ));
             } else if name.eq_ignore_ascii_case("authorization") {
                 authorized = value == webui.bearer_token.as_str();
             } else if name.eq_ignore_ascii_case("connection") {
@@ -278,6 +396,11 @@ fn read_http_request(
         }
     }
 
+    let method = request_line.split_whitespace().next().unwrap_or("");
+    if method == "POST" && !content_length_seen {
+        return Err(Error::new(WebuiHttpRequestReadError::MissingContentLength));
+    }
+
     let mut body = allocate_request_body(content_length)?;
     std::io::Read::read_exact(reader, &mut body)
         .context("Failed to read WebUI HTTP request body")?;
@@ -290,7 +413,64 @@ fn read_http_request(
     }))
 }
 
+fn read_limited_header_line<R: BufRead>(reader: &mut R) -> Result<String> {
+    read_limited_line(
+        reader,
+        MAX_WEBUI_HTTP_HEADER_LINE_BYTES,
+        WebuiHttpRequestReadError::RequestHeaderTooLarge,
+    )?
+    .ok_or_else(|| Error::new(WebuiHttpRequestReadError::InvalidRequest))
+}
+
+fn read_limited_line<R: BufRead>(
+    reader: &mut R,
+    max_bytes: usize,
+    too_large: WebuiHttpRequestReadError,
+) -> Result<Option<String>> {
+    let mut line = Vec::new();
+    loop {
+        let available = match reader.fill_buf() {
+            Ok(available) => available,
+            Err(err)
+                if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
+                    && line.is_empty() =>
+            {
+                return Ok(None);
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if available.is_empty() {
+            if line.is_empty() {
+                return Ok(None);
+            }
+            break;
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let take_len = newline.map_or(available.len(), |index| index + 1);
+        if line.len() + take_len > max_bytes {
+            return Err(Error::new(too_large));
+        }
+
+        line.extend_from_slice(&available[..take_len]);
+        reader.consume(take_len);
+
+        if newline.is_some() {
+            break;
+        }
+    }
+
+    String::from_utf8(line)
+        .map(Some)
+        .map_err(|_| Error::new(WebuiHttpRequestReadError::InvalidRequest))
+}
+
 fn parse_content_length(value: &str) -> Result<usize> {
+    // HTTP Content-Length is 1*DIGIT only; reject signs and whitespace that
+    // `usize::from_str` would otherwise accept.
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error::new(WebuiHttpRequestReadError::InvalidContentLength));
+    }
     let content_length = value
         .parse::<usize>()
         .map_err(|_| Error::new(WebuiHttpRequestReadError::InvalidContentLength))?;
@@ -306,12 +486,30 @@ fn allocate_request_body(content_length: usize) -> Result<Vec<u8>> {
     Ok(vec![0; content_length])
 }
 
+fn request_matches_route(request_line: &str, method: &str, path: &str) -> bool {
+    let mut parts = request_line.split_whitespace();
+    let Some(request_method) = parts.next() else {
+        return false;
+    };
+    let Some(request_target) = parts.next() else {
+        return false;
+    };
+    let Some(http_version) = parts.next() else {
+        return false;
+    };
+
+    request_method == method
+        && request_target.split('?').next() == Some(path)
+        && http_version.starts_with("HTTP/")
+        && parts.next().is_none()
+}
+
 fn handle_http_request(
     config_cache: &super::commands::RuntimeConfigCache,
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &SharedSseClients,
     stream: &mut TcpStream,
     request: WebuiHttpRequest,
 ) -> Result<ConnectionAction> {
@@ -326,7 +524,7 @@ fn handle_http_request(
         write_http_response(stream, 204, "No Content", b"", connection_action)?;
         return Ok(ConnectionAction::Close);
     }
-    if request.request_line.starts_with("GET /events ") {
+    if request_matches_route(&request.request_line, "GET", "/events") {
         return handle_sse_endpoint(
             state,
             shutdown,
@@ -336,7 +534,7 @@ fn handle_http_request(
             &request.request_line,
         );
     }
-    if !request.request_line.starts_with("POST /rpc ") {
+    if !request_matches_route(&request.request_line, "POST", "/rpc") {
         write_http_json(
             stream,
             404,
@@ -448,7 +646,7 @@ fn handle_sse_endpoint(
     state: &Arc<Mutex<RuntimeState>>,
     shutdown: &Arc<AtomicBool>,
     webui: &WebuiHttpSession,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &SharedSseClients,
     stream: &mut TcpStream,
     request_line: &str,
 ) -> Result<ConnectionAction> {
@@ -491,10 +689,8 @@ fn handle_sse_endpoint(
     let sse_stream = stream
         .try_clone()
         .context("Failed to clone stream for SSE broadcast")?;
-    {
-        let mut clients = lock_or_recover(sse_clients);
-        clients.push(sse_stream);
-    }
+    let client_id = sse_clients.insert(sse_stream);
+    crate::scoped_log!(debug, "daemon:sse", "client registered: id={}", client_id.0);
 
     // Block until shutdown or client disconnect. Read with 5 s timeout so we
     // can periodically send an SSE comment keepalive.
@@ -524,13 +720,14 @@ fn handle_sse_endpoint(
     }
 
     crate::scoped_log!(info, "daemon:sse", "client disconnected");
+    sse_clients.remove(client_id);
 
     Ok(ConnectionAction::Close)
 }
 
 pub(super) fn broadcast_sse_event(
     state: &Arc<Mutex<RuntimeState>>,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &SharedSseClients,
     event: &str,
 ) {
     let body = {
@@ -562,36 +759,14 @@ pub(super) fn broadcast_sse_event(
         }
     };
 
-    // Swap out the client list so writes happen outside the lock
-    let clients: Vec<TcpStream> = {
-        let mut guard = match sse_clients.lock() {
-            Ok(g) => g,
-            Err(e) => {
-                crate::scoped_log!(
-                    error,
-                    "daemon:sse",
-                    "failed to acquire sse_clients lock: {:#}",
-                    e
-                );
-                return;
-            }
-        };
-        std::mem::take(&mut *guard)
-    };
-
-    let alive: Vec<TcpStream> = clients
-        .into_iter()
-        .filter(|mut client| {
-            client
-                .write_all(body.as_bytes())
-                .and_then(|_| client.flush())
-                .is_ok()
-        })
-        .collect();
-
-    // Merge back any clients added while we were writing
-    if let Ok(mut guard) = sse_clients.lock() {
-        guard.extend(alive);
+    for (id, mut client) in sse_clients.snapshot() {
+        if client
+            .write_all(body.as_bytes())
+            .and_then(|_| client.flush())
+            .is_err()
+        {
+            sse_clients.remove(id);
+        }
     }
 }
 
@@ -599,21 +774,158 @@ pub(super) fn broadcast_sse_event(
 mod tests {
     use super::*;
 
+    fn test_webui_session() -> WebuiHttpSession {
+        WebuiHttpSession {
+            addr: "127.0.0.1:42321".parse().unwrap(),
+            token: "secret".to_string(),
+            bearer_token: "Bearer secret".to_string(),
+        }
+    }
+
+    fn read_test_request(input: String) -> Result<Option<WebuiHttpRequest>> {
+        let mut reader = std::io::BufReader::new(std::io::Cursor::new(input.into_bytes()));
+        read_http_request(&mut reader, &test_webui_session())
+    }
+
     #[test]
     fn parse_content_length_validates_and_rejects() {
         assert_eq!(parse_content_length("128").unwrap(), 128);
+        assert_eq!(parse_content_length("0").unwrap(), 0);
 
-        let err = parse_content_length("nope").unwrap_err();
-        assert_eq!(
-            err.downcast_ref::<WebuiHttpRequestReadError>(),
-            Some(&WebuiHttpRequestReadError::InvalidContentLength)
-        );
+        for invalid in ["", "nope", "+5", "-5", " 5", "5 "] {
+            let err = parse_content_length(invalid).unwrap_err();
+            assert_eq!(
+                err.downcast_ref::<WebuiHttpRequestReadError>(),
+                Some(&WebuiHttpRequestReadError::InvalidContentLength),
+                "unexpected result for {invalid:?}: {err}"
+            );
+        }
 
         let err = parse_content_length(&(MAX_WEBUI_HTTP_BODY_BYTES + 1).to_string()).unwrap_err();
         assert_eq!(
             err.downcast_ref::<WebuiHttpRequestReadError>(),
             Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
         );
+    }
+
+    #[test]
+    fn read_http_request_rejects_long_request_line() {
+        let request = format!(
+            "GET /{} HTTP/1.1\r\n\r\n",
+            "x".repeat(MAX_WEBUI_HTTP_REQUEST_LINE_BYTES)
+        );
+
+        let err = read_test_request(request).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::RequestLineTooLarge)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_oversized_header_line() {
+        let request = format!(
+            "POST /rpc HTTP/1.1\r\nX-Long: {}\r\n\r\n",
+            "x".repeat(MAX_WEBUI_HTTP_HEADER_LINE_BYTES)
+        );
+
+        let err = read_test_request(request).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::RequestHeaderTooLarge)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_too_many_headers() {
+        let mut request = "POST /rpc HTTP/1.1\r\n".to_string();
+        for index in 0..=MAX_WEBUI_HTTP_HEADERS {
+            request.push_str(&format!("X-Test-{index}: value\r\n"));
+        }
+        request.push_str("\r\n");
+
+        let err = read_test_request(request).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::TooManyHeaders)
+        );
+    }
+
+    #[test]
+    fn read_http_request_accepts_a_post_with_one_content_length() {
+        let request =
+            "POST /rpc HTTP/1.1\r\nContent-Length: 5\r\nAuthorization: Bearer secret\r\n\r\nhello";
+        let parsed = read_test_request(request.to_string()).unwrap().unwrap();
+
+        assert!(parsed.authorized);
+        assert_eq!(parsed.body, b"hello");
+        assert!(parsed.request_line.starts_with("POST /rpc "));
+    }
+
+    #[test]
+    fn read_http_request_rejects_duplicate_content_length() {
+        let request = "POST /rpc HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n{}";
+
+        let err = read_test_request(request.to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::DuplicateContentLength)
+        );
+    }
+
+    #[test]
+    fn read_http_request_requires_content_length_for_post() {
+        let request = "POST /rpc HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n{}";
+
+        let err = read_test_request(request.to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::MissingContentLength)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_transfer_encoding() {
+        let request =
+            "POST /rpc HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 2\r\n\r\n{}";
+
+        let err = read_test_request(request.to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::UnsupportedTransferEncoding)
+        );
+    }
+
+    #[test]
+    fn get_requests_do_not_require_content_length() {
+        let request = "GET /events?token=secret HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let parsed = read_test_request(request.to_string()).unwrap().unwrap();
+
+        assert!(parsed.body.is_empty());
+    }
+
+    #[test]
+    fn route_matcher_rejects_prefixes() {
+        assert!(request_matches_route(
+            "GET /events?token=secret HTTP/1.1\r\n",
+            "GET",
+            "/events"
+        ));
+        assert!(!request_matches_route(
+            "GET /events-extra?token=secret HTTP/1.1\r\n",
+            "GET",
+            "/events"
+        ));
+        assert!(request_matches_route(
+            "POST /rpc HTTP/1.1\r\n",
+            "POST",
+            "/rpc"
+        ));
+        assert!(!request_matches_route(
+            "POST /rpc-extra HTTP/1.1\r\n",
+            "POST",
+            "/rpc"
+        ));
     }
 
     #[test]
@@ -646,7 +958,7 @@ mod tests {
         let state = Arc::new(Mutex::new(
             crate::core::runtime_state::RuntimeState::default(),
         ));
-        let sse_clients = Arc::new(Mutex::new(Vec::new()));
+        let sse_clients = SseClientRegistry::shared();
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -659,7 +971,7 @@ mod tests {
             .set_write_timeout(Some(Duration::from_secs(1)))
             .unwrap();
 
-        sse_clients.lock().unwrap().push(server);
+        sse_clients.insert(server);
         broadcast_sse_event(&state, &sse_clients, "state_update");
 
         let mut buf = [0u8; 4096];
@@ -674,7 +986,7 @@ mod tests {
         let state = Arc::new(Mutex::new(
             crate::core::runtime_state::RuntimeState::default(),
         ));
-        let sse_clients = Arc::new(Mutex::new(Vec::new()));
+        let sse_clients = SseClientRegistry::shared();
 
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -684,12 +996,46 @@ mod tests {
             .shutdown(std::net::Shutdown::Write)
             .expect("shutdown write on server socket");
 
-        sse_clients.lock().unwrap().push(server);
+        sse_clients.insert(server);
         broadcast_sse_event(&state, &sse_clients, "state_update");
 
-        assert!(
-            sse_clients.lock().unwrap().is_empty(),
-            "dead client should be removed"
-        );
+        assert_eq!(sse_clients.len(), 0, "dead client should be removed");
+    }
+
+    #[test]
+    fn sse_registry_removes_client_by_id() {
+        let sse_clients = SseClientRegistry::shared();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _client = std::net::TcpStream::connect(addr).unwrap();
+        let (server, _peer) = listener.accept().unwrap();
+
+        let id = sse_clients.insert(server.try_clone().unwrap());
+        assert_eq!(sse_clients.len(), 1);
+        assert!(sse_clients.remove(id));
+
+        assert_eq!(sse_clients.len(), 0);
+    }
+
+    #[test]
+    fn sse_registry_disconnect_during_snapshot_does_not_reinsert_client() {
+        let sse_clients = SseClientRegistry::shared();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let _client = std::net::TcpStream::connect(addr).unwrap();
+        let (server, _peer) = listener.accept().unwrap();
+
+        let id = sse_clients.insert(server.try_clone().unwrap());
+        let snapshot = sse_clients.snapshot();
+        assert_eq!(snapshot.len(), 1);
+
+        assert!(sse_clients.remove(id));
+
+        for (snapshot_id, mut client) in snapshot {
+            assert_eq!(snapshot_id, id);
+            let _ = client.write_all(b": keepalive\n\n");
+        }
+
+        assert_eq!(sse_clients.len(), 0);
     }
 }

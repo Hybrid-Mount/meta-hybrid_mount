@@ -15,7 +15,6 @@
 use std::{
     collections::HashMap,
     fs,
-    net::TcpStream,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::Command,
@@ -142,7 +141,7 @@ pub(super) struct CommandContext<'a> {
     state: &'a Arc<Mutex<RuntimeState>>,
     shutdown: &'a Arc<AtomicBool>,
     webui: &'a WebuiHttpSession,
-    sse_clients: &'a Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &'a http::SharedSseClients,
 }
 
 impl<'a> CommandContext<'a> {
@@ -153,7 +152,7 @@ impl<'a> CommandContext<'a> {
         state: &'a Arc<Mutex<RuntimeState>>,
         shutdown: &'a Arc<AtomicBool>,
         webui: &'a WebuiHttpSession,
-        sse_clients: &'a Arc<Mutex<Vec<TcpStream>>>,
+        sse_clients: &'a http::SharedSseClients,
     ) -> Self {
         Self {
             config,
@@ -353,7 +352,7 @@ fn dispatch_modules(ctx: &CommandContext<'_>, cmd: ModulesCommand) -> Result<Val
 // ── Batch commands ──────────────────────────────────────────────────────
 
 fn dispatch_batch(ctx: &CommandContext<'_>, commands: Vec<DaemonCommand>) -> Result<Value> {
-    let noop_clients = Arc::new(Mutex::new(Vec::new()));
+    let noop_clients = http::SseClientRegistry::shared();
     let batch_ctx = CommandContext::new(
         ctx.config,
         ctx.config_path,
@@ -518,7 +517,7 @@ fn apply_runtime_config(_config: &Config) -> Result<bool> {
 fn refresh_runtime_snapshot(
     _config: &Config,
     state: &Arc<Mutex<RuntimeState>>,
-    sse_clients: &Arc<Mutex<Vec<TcpStream>>>,
+    sse_clients: &http::SharedSseClients,
 ) -> Result<()> {
     let mut guard = lock_or_recover(state);
     guard.set_daemon_state(true, defs::SOCKET_FILE);
