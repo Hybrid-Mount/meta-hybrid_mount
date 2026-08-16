@@ -19,4 +19,4 @@ ReHybrid-Mount 是 Hybrid Mount 的从零重建版本，基于以下行为参考
 
 ## 规划
 
-完整实施计划见旧仓库工作树中的 `REHYBRID_MOUNT_PLAN.md`（将随骨架阶段迁入本分支）。
+完整实施计划见本仓库 `REHYBRID_MOUNT_PLAN.md`。
