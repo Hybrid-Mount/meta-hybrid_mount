@@ -179,6 +179,9 @@ pub(super) enum WebuiHttpRequestReadError {
     RequestHeaderTooLarge,
     TooManyHeaders,
     InvalidContentLength,
+    DuplicateContentLength,
+    MissingContentLength,
+    UnsupportedTransferEncoding,
     RequestBodyTooLarge,
 }
 
@@ -198,6 +201,11 @@ impl WebuiHttpRequestReadError {
                 "too many request headers",
             ),
             Self::InvalidContentLength => (400, "Bad Request", "invalid content-length header"),
+            Self::DuplicateContentLength => (400, "Bad Request", "duplicate content-length header"),
+            Self::MissingContentLength => (411, "Length Required", "missing content-length header"),
+            Self::UnsupportedTransferEncoding => {
+                (501, "Not Implemented", "transfer-encoding is not supported")
+            }
             Self::RequestBodyTooLarge => (413, "Payload Too Large", "request body too large"),
         }
     }
@@ -328,6 +336,7 @@ where
     };
 
     let mut content_length = 0usize;
+    let mut content_length_seen = false;
     let mut authorized = false;
     let mut close_after_response = request_line.contains("HTTP/1.0");
     let mut header_bytes = 0usize;
@@ -352,7 +361,17 @@ where
             let name = name.trim();
             let value = value.trim();
             if name.eq_ignore_ascii_case("content-length") {
+                if content_length_seen {
+                    return Err(Error::new(
+                        WebuiHttpRequestReadError::DuplicateContentLength,
+                    ));
+                }
+                content_length_seen = true;
                 content_length = parse_content_length(value)?;
+            } else if name.eq_ignore_ascii_case("transfer-encoding") {
+                return Err(Error::new(
+                    WebuiHttpRequestReadError::UnsupportedTransferEncoding,
+                ));
             } else if name.eq_ignore_ascii_case("authorization") {
                 authorized = value == webui.bearer_token.as_str();
             } else if name.eq_ignore_ascii_case("connection") {
@@ -365,6 +384,11 @@ where
                 }
             }
         }
+    }
+
+    let method = request_line.split_whitespace().next().unwrap_or("");
+    if method == "POST" && !content_length_seen {
+        return Err(Error::new(WebuiHttpRequestReadError::MissingContentLength));
     }
 
     let mut body = allocate_request_body(content_length)?;
@@ -432,6 +456,11 @@ fn read_limited_line<R: BufRead>(
 }
 
 fn parse_content_length(value: &str) -> Result<usize> {
+    // HTTP Content-Length is 1*DIGIT only; reject signs and whitespace that
+    // `usize::from_str` would otherwise accept.
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(Error::new(WebuiHttpRequestReadError::InvalidContentLength));
+    }
     let content_length = value
         .parse::<usize>()
         .map_err(|_| Error::new(WebuiHttpRequestReadError::InvalidContentLength))?;
@@ -495,7 +524,7 @@ fn handle_http_request(
             &request.request_line,
         );
     }
-    if !request.request_line.starts_with("POST /rpc ") {
+    if !request_matches_route(&request.request_line, "POST", "/rpc") {
         write_http_json(
             stream,
             404,
@@ -848,18 +877,89 @@ mod tests {
     #[test]
     fn parse_content_length_validates_and_rejects() {
         assert_eq!(parse_content_length("128").unwrap(), 128);
+        assert_eq!(parse_content_length("0").unwrap(), 0);
 
-        let err = parse_content_length("nope").unwrap_err();
-        assert_eq!(
-            err.downcast_ref::<WebuiHttpRequestReadError>(),
-            Some(&WebuiHttpRequestReadError::InvalidContentLength)
-        );
+        for invalid in ["", "nope", "+5", "-5", " 5", "5 "] {
+            let err = parse_content_length(invalid).unwrap_err();
+            assert_eq!(
+                err.downcast_ref::<WebuiHttpRequestReadError>(),
+                Some(&WebuiHttpRequestReadError::InvalidContentLength),
+                "unexpected result for {invalid:?}: {err}"
+            );
+        }
 
         let err = parse_content_length(&(MAX_WEBUI_HTTP_BODY_BYTES + 1).to_string()).unwrap_err();
         assert_eq!(
             err.downcast_ref::<WebuiHttpRequestReadError>(),
             Some(&WebuiHttpRequestReadError::RequestBodyTooLarge)
         );
+    }
+
+    #[test]
+    fn read_http_request_accepts_a_post_with_one_content_length() {
+        let request =
+            "POST /rpc HTTP/1.1\r\nContent-Length: 5\r\nAuthorization: Bearer secret\r\n\r\nhello";
+        let parsed = read_test_request(request.to_string()).unwrap().unwrap();
+
+        assert!(parsed.authorized);
+        assert_eq!(parsed.body, b"hello");
+        assert!(parsed.request_line.starts_with("POST /rpc "));
+    }
+
+    #[test]
+    fn read_http_request_rejects_duplicate_content_length() {
+        let request = "POST /rpc HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n{}";
+
+        let err = read_test_request(request.to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::DuplicateContentLength)
+        );
+    }
+
+    #[test]
+    fn read_http_request_requires_content_length_for_post() {
+        let request = "POST /rpc HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n{}";
+
+        let err = read_test_request(request.to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::MissingContentLength)
+        );
+    }
+
+    #[test]
+    fn read_http_request_rejects_transfer_encoding() {
+        let request =
+            "POST /rpc HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 2\r\n\r\n{}";
+
+        let err = read_test_request(request.to_string()).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<WebuiHttpRequestReadError>(),
+            Some(&WebuiHttpRequestReadError::UnsupportedTransferEncoding)
+        );
+    }
+
+    #[test]
+    fn get_requests_do_not_require_content_length() {
+        let request = "GET /events?token=secret HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n";
+        let parsed = read_test_request(request.to_string()).unwrap().unwrap();
+
+        assert!(parsed.body.is_empty());
+    }
+
+    #[test]
+    fn route_matcher_rejects_rpc_prefixes() {
+        assert!(request_matches_route(
+            "POST /rpc HTTP/1.1\r\n",
+            "POST",
+            "/rpc"
+        ));
+        assert!(!request_matches_route(
+            "POST /rpc-extra HTTP/1.1\r\n",
+            "POST",
+            "/rpc"
+        ));
     }
 
     #[test]
