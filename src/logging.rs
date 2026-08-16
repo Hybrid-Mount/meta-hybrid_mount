@@ -11,7 +11,9 @@ use std::env;
 use std::panic;
 use std::thread;
 
-use log::{LevelFilter, Log, Metadata, Record};
+use log::LevelFilter;
+#[cfg(not(target_os = "android"))]
+use log::{Log, Metadata, Record};
 
 /// 初始化日志后端并设置全局级别。重复调用是安全的。
 pub fn init() {
@@ -19,10 +21,7 @@ pub fn init() {
     log::set_max_level(level);
 
     #[cfg(target_os = "android")]
-    {
-        android_logger::init_once(android_logger::Config::default().with_max_level(level));
-        return;
-    }
+    android_logger::init_once(android_logger::Config::default().with_max_level(level));
 
     #[cfg(not(target_os = "android"))]
     if log::set_logger(&StderrLogger).is_ok() {
@@ -71,8 +70,10 @@ fn detect_level_filter() -> LevelFilter {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 struct StderrLogger;
 
+#[cfg(not(target_os = "android"))]
 impl Log for StderrLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= log::max_level()

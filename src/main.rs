@@ -6,6 +6,8 @@ mod config;
 mod defs;
 mod errors;
 mod logging;
+mod magic_mount;
+mod utils;
 
 use std::env;
 use std::process;

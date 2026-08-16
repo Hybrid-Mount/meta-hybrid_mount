@@ -26,3 +26,18 @@ pub const SCAN_RET_PATH: &str = "/data/adb/hybrid-mount/scan.ret";
 pub const STATE_PATH: &str = "/data/adb/hybrid-mount/run/state.json";
 
 pub const DEFAULT_MOUNT_SOURCE: &str = "KSU";
+
+/// 挂载临时区(参考项目行为:启动期挂在 RAM 上,不触碰模块目录)。
+pub const TMP_ROOT: &str = "/debug_ramdisk";
+pub const TMP_WORK_DIR: &str = "/debug_ramdisk/workdir";
+
+/// 模块状态标记文件名与目录标记文件。
+pub const MODULE_PROP_FILE_NAME: &str = "module.prop";
+pub const DISABLE_FILE_NAME: &str = "disable";
+pub const REMOVE_FILE_NAME: &str = "remove";
+pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
+pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
+
+/// 扩展属性名(目录替换标记与 SELinux 上下文)。
+pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
+pub const SELINUX_XATTR: &str = "security.selinux";
