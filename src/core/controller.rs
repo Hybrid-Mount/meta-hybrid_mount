@@ -36,6 +36,7 @@ use crate::{
         runtime_finalization,
         storage::StorageHandle,
     },
+    defs,
 };
 
 pub struct Init;
@@ -335,11 +336,7 @@ pub(crate) fn remove_staging_image() -> Result<()> {
             Ok(())
         }
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error).with_context(|| {
-            format!(
-                "failed to remove staging image {}",
-                defs::MODULES_IMG_FILE
-            )
-        }),
+        Err(error) => Err(error)
+            .with_context(|| format!("failed to remove staging image {}", defs::MODULES_IMG_FILE)),
     }
 }
