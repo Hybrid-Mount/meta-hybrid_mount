@@ -1,0 +1,8 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+[toolchain]
+channel = "nightly"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

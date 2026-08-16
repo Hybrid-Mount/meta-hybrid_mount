@@ -1,0 +1,26 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+
+# Node / pnpm / webui
+webui/node_modules/
+webui/dist/
+module/webroot/
+module/module.prop
+module/bin/
+
+# Build output
+/output/
+*.zip
+*.sha256
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# Local diagnostics
+*.tar.gz
+KernelSU_bugreport_*
