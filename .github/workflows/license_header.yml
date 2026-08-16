@@ -33,7 +33,7 @@ jobs:
           filter: 'tree:0'
 
       - name: Run HawkEye License Check
-        uses: korandoru/hawkeye@32ec486c6e6a8fe3bc4178d4f4296d4a0333686c # v6
+        uses: korandoru/hawkeye@7ffde2c5fd29f3c486e4a6510436dca54f386e2a # v6
         with:
           config: licenserc.toml
 
