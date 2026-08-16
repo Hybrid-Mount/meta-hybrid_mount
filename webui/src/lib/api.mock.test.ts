@@ -22,6 +22,14 @@ describe("MockAPI core interactions", () => {
     await expect(MockAPI.checkInstallState()).resolves.toBe("ready");
   });
 
+  it("reports saved configs as persisted for the next boot", async () => {
+    const result = await MockAPI.saveConfig({
+      ...(await MockAPI.loadConfig()),
+    });
+    expect(result.applied).toBe(false);
+    expect(result.rebootRequired).toBe(true);
+  });
+
   it("returns the expected init payload shape", async () => {
     const initial = await MockAPI.init();
     const config = initial.config as Record<string, unknown>;

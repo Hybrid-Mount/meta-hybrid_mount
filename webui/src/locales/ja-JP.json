@@ -61,8 +61,9 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "RAM ベース、高速な I/O、再起動時にリセットされます。",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "ループバックイメージ。永続的、RAM を節約できます。",
-    "daemonStartupMode": "常駐デーモン"
+    "mode_ext4Desc": "ループバックイメージ。overlay xattr に対応し、起動ごとに再作成されます。",
+    "daemonStartupMode": "常駐デーモン",
+    "savedRebootRequired": "保存しました。変更は再起動後に反映されます。"
   },
   "modules": {
     "reload": "更新",

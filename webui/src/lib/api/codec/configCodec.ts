@@ -16,6 +16,7 @@
 
 import { DEFAULT_CONFIG } from "../../constants";
 import type { AppConfig, ModuleRules, OverlayMode } from "../../types";
+import type { ConfigPatchResult } from "../contracts";
 import { normalizeMountMode as normalizeMountModeBase } from "../core/guards";
 
 export function normalizeMountMode(
@@ -33,8 +34,7 @@ export function normalizeConfig(value: unknown): AppConfig {
   const next = (value && typeof value === "object" ? value : {}) as Record<
     string,
     unknown
-  >;
-  const defaultMode = normalizeMountMode(
+  >;  const defaultMode = normalizeMountMode(
     next.default_mode,
     DEFAULT_CONFIG.default_mode,
   );
@@ -73,6 +73,28 @@ export function normalizeConfig(value: unknown): AppConfig {
   };
 
   return normalized as AppConfig;
+}
+
+export function normalizeConfigPatchResult(value: unknown): ConfigPatchResult {
+  if (!value || typeof value !== "object") {
+    throw new Error("daemon config patch result is not an object");
+  }
+  const payload = value as Record<string, unknown>;
+  if (
+    typeof payload.config !== "object" ||
+    payload.config === null ||
+    typeof payload.applied !== "boolean" ||
+    typeof payload.reboot_required !== "boolean"
+  ) {
+    throw new Error(
+      "daemon config patch result is missing config, applied, or reboot_required",
+    );
+  }
+  return {
+    config: normalizeConfig(payload.config),
+    applied: payload.applied,
+    rebootRequired: payload.reboot_required,
+  };
 }
 
 function normalizePathsMap(value: unknown): Record<string, string> {

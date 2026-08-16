@@ -61,12 +61,14 @@ export default function ConfigTab() {
       return false;
     }
     const prevSnapshot = lastSavedConfig();
-    const saved = await configStore.saveConfig(configStore.config, {
-      showSuccess: false,
-    });
+    const attemptedSnapshot = JSON.stringify(configStore.config);
+    const saved = await configStore.saveConfig(configStore.config);
     if (saved) {
       setLastSavedConfig(JSON.stringify(configStore.config));
-    } else if (prevSnapshot) {
+    } else if (
+      prevSnapshot &&
+      JSON.stringify(configStore.config) === attemptedSnapshot
+    ) {
       try {
         configStore.config = JSON.parse(prevSnapshot) as AppConfig;
       } catch (e) {
@@ -85,9 +87,10 @@ export default function ConfigTab() {
 
   async function toggle(key: keyof AppConfig) {
     const currentVal = configStore.config[key] as boolean;
-    updateConfig(key, !currentVal);
+    const nextVal = !currentVal;
+    updateConfig(key, nextVal);
     const saved = await saveCurrentConfig();
-    if (!saved) {
+    if (!saved && Object.is(configStore.config[key], nextVal)) {
       updateConfig(key, currentVal);
     }
   }
@@ -97,16 +100,17 @@ export default function ConfigTab() {
     const next = current === "persistent" ? "on-demand" : "persistent";
     updateConfig("daemon_startup_mode", next as "on-demand" | "persistent");
     const saved = await saveCurrentConfig();
-    if (!saved) {
+    if (!saved && Object.is(configStore.config.daemon_startup_mode, next)) {
       updateConfig("daemon_startup_mode", current);
     }
   }
 
   async function setOverlayMode(mode: string) {
     const prev = configStore.config.overlay_mode;
-    updateConfig("overlay_mode", mode as OverlayMode);
+    const next = mode as OverlayMode;
+    updateConfig("overlay_mode", next);
     const saved = await saveCurrentConfig();
-    if (!saved) {
+    if (!saved && Object.is(configStore.config.overlay_mode, next)) {
       updateConfig("overlay_mode", prev);
     }
   }

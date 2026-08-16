@@ -35,6 +35,17 @@ const createConfigStore = () => {
   const [saving, setSaving] = createSignal(false);
   let pendingLoad: Promise<boolean> | null = null;
   let hasLoaded = false;
+  let activeSaves = 0;
+
+  function beginSave() {
+    activeSaves += 1;
+    setSaving(true);
+  }
+
+  function endSave() {
+    activeSaves -= 1;
+    setSaving(activeSaves > 0);
+  }
 
   async function loadConfig(force = false) {
     if (pendingLoad) return pendingLoad;
@@ -91,11 +102,15 @@ const createConfigStore = () => {
     const { showSuccess = true, showError = true } = options;
     const normalizedConfig = normalizeConfig(nextConfig);
 
-    setSaving(true);
+    beginSave();
     try {
-      await API.saveConfig(normalizedConfig);
+      const result = await API.saveConfig(normalizedConfig);
       if (showSuccess) {
-        uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
+        if (!result.applied && result.rebootRequired) {
+          uiStore.showToast(uiStore.L.config.savedRebootRequired, "info");
+        } else {
+          uiStore.showToast(uiStore.L.common?.saved || "Saved", "success");
+        }
       }
       return true;
     } catch (e: unknown) {
@@ -110,12 +125,12 @@ const createConfigStore = () => {
       }
       return false;
     } finally {
-      setSaving(false);
+      endSave();
     }
   }
 
   async function resetConfig() {
-    setSaving(true);
+    beginSave();
     try {
       await API.resetConfig();
       invalidate();
@@ -123,10 +138,7 @@ const createConfigStore = () => {
       if (!loaded) {
         return false;
       }
-      uiStore.showToast(
-        uiStore.L.config?.resetSuccess || "Config reset to defaults",
-        "success",
-      );
+      uiStore.showToast(uiStore.L.config.savedRebootRequired, "info");
       return true;
     } catch (e: unknown) {
       uiStore.showToast(
@@ -138,7 +150,7 @@ const createConfigStore = () => {
       );
       return false;
     } finally {
-      setSaving(false);
+      endSave();
     }
   }
 

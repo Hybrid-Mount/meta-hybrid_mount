@@ -61,8 +61,9 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "RAM-based. Fastest I/O, reset on reboot.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Loopback image. Persistent, saves RAM.",
-    "daemonStartupMode": "Persistent Daemon"
+    "mode_ext4Desc": "Loopback image. Supports overlay xattrs; rebuilt each boot.",
+    "daemonStartupMode": "Persistent Daemon",
+    "savedRebootRequired": "Saved. Changes apply after reboot."
   },
   "modules": {
     "reload": "Refresh",

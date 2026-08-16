@@ -61,8 +61,9 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "Basato su RAM. I/O piu veloce, si resetta al riavvio.",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Immagine loopback. Persistente, risparmia RAM.",
-    "daemonStartupMode": "Demone persistente"
+    "mode_ext4Desc": "Immagine loopback. Supporta gli xattr overlay; ricreata a ogni avvio.",
+    "daemonStartupMode": "Demone persistente",
+    "savedRebootRequired": "Salvato. Le modifiche si applicano dopo il riavvio."
   },
   "modules": {
     "reload": "Ricarica",

@@ -61,8 +61,9 @@
     "mode_tmpfs": "Tmpfs",
     "mode_tmpfsDesc": "基於 RAM，I/O 最快，重啟後重置。",
     "mode_ext4": "Ext4",
-    "mode_ext4Desc": "Loopback 映像。可持久保存，節省 RAM。",
-    "daemonStartupMode": "持久化守護行程"
+    "mode_ext4Desc": "Loop 映像。支援 overlay xattr，每次開機重建。",
+    "daemonStartupMode": "持久化守護行程",
+    "savedRebootRequired": "已儲存，重新開機後生效"
   },
   "modules": {
     "reload": "重新整理",

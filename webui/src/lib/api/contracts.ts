@@ -31,12 +31,18 @@ export interface InitPayload {
 
 export type InstallState = "ready" | "clean-reinstall-required";
 
+export interface ConfigPatchResult {
+  config: AppConfig;
+  applied: boolean;
+  rebootRequired: boolean;
+}
+
 export interface AppAPI {
   checkInstallState: () => Promise<InstallState>;
   wakeDaemon: () => Promise<void>;
   init: () => Promise<InitPayload>;
   loadConfig: () => Promise<AppConfig>;
-  saveConfig: (config: AppConfig) => Promise<void>;
+  saveConfig: (config: AppConfig) => Promise<ConfigPatchResult>;
   resetConfig: () => Promise<void>;
   scanModules: (path?: string) => Promise<Module[]>;
   saveModules: (modules: Module[]) => Promise<void>;

@@ -68,6 +68,8 @@ pub enum ApiCommands {
     },
     #[command(name = "config-patch")]
     ConfigPatch {
+        /// Deprecated compatibility flag. Runtime application is not supported
+        /// after the Kasumi backend removal; changes take effect after a reboot.
         #[arg(long = "apply-runtime")]
         apply_runtime: bool,
         patch: String,

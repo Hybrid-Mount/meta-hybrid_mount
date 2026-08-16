@@ -80,7 +80,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 | WebUI | Yes | No |
 | CLI (`hybrid-mount` subcommands) | Yes | No |
 | Daemon (Unix + TCP/SSE) | Yes | No |
-| Config caching & runtime apply | Yes | No |
+| Runtime config apply | No (saved for next boot) | No |
 | Cargo features | `control-plane` only | none |
 | ZIP size (approx.) | ~2 MB | ~1 MB |
 
@@ -89,7 +89,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 - **Two backends, one policy engine** — assign paths to OverlayFS or Magic Mount with per-path granularity.
 - **Deterministic planning** — conflicts are detected at plan time, not discovered randomly at boot.
 - **Built-in WebUI** — manage modules, edit configuration, and monitor runtime state.
-- **Config caching** — runtime config cache with incremental patching and immediate apply support.
+- **Runtime config updates** — validated config patches are persisted and take effect on the next boot. The WebUI reports this explicitly instead of pretending changes apply live.
 - **Recovery-friendly** — stale runtime files are cleaned automatically; misconfigurations can be reset via `api config-reset`.
 - **Automation-friendly** — JSON-over-Unix-socket daemon protocol + HTTP API for scripting or external controllers.
 
@@ -141,7 +141,7 @@ default_mode = "magic"
 
 The OverlayFS backend supports two storage strategies for the upper/work layers:
 
-- `ext4` (default) — creates an ext4 disk image. Persists across reboots, supports xattr.
+- `ext4` (default) — creates a fresh ext4 staging image for each mount run. Supports overlay xattrs; the image is removed once the mounts are finalized.
 - `tmpfs` — uses a tmpfs mount. Volatile, lighter weight, but lost on reboot.
 
 ```toml
@@ -285,8 +285,8 @@ hybrid-mount [OPTIONS] [COMMAND]
 | `api system-info` | Print system information. |
 | `api version` | Print daemon version. |
 | `api config-get` | Print effective config as JSON. |
-| `api config-set --config <JSON>` | Replace full config. |
-| `api config-patch --patch <JSON>` | Merge patch into config. |
+| `api config-set --config <JSON>` | Replace full config (applies on next boot). |
+| `api config-patch --patch <JSON>` | Merge patch into config (applies on next boot; `--apply-runtime` is a deprecated no-op). |
 | `api config-reset` | Reset config to defaults. |
 | `api modules-list` | List detected modules. |
 | `api modules-apply --modules <JSON>` | Apply module mode changes. |
@@ -436,7 +436,7 @@ When making changes, verify that both the **lite** (`--no-default-features --fea
 
 - **Mount source auto-detection**: fresh installs detect the runtime environment automatically. Only set `mountsource` explicitly if auto-detection fails.
 - **Recovery from bad config**: run `hybrid-mount api config-reset` to reset to defaults, then reapply rules incrementally. Use `gen-config` to regenerate a fresh config file.
-- **Config caching**: the runtime maintains a cached config. Use `api config-patch --apply-runtime` to apply changes immediately, or restart the daemon.
+- **Config caching**: the runtime maintains a cached config. Config changes made through the daemon API are persisted for the next boot; `api config-patch --apply-runtime` is a deprecated no-op.
 - **Binary size**: prefer dependency feature trimming and profile tuning before invasive refactoring.
 
 ---
