@@ -16,7 +16,6 @@ use std::path::PathBuf;
 
 use hybrid_mount::{
     conf::schema::Config,
-    core::backend_capabilities::BackendCapabilities,
     domain::{DefaultMode, ModuleRules, MountMode},
 };
 
@@ -33,14 +32,14 @@ fn module_rules_longest_prefix_match() {
         MountMode::Overlay,
         &[
             ("system", MountMode::Magic),
-            ("system/app", MountMode::Kasumi),
+            ("system/app", MountMode::Magic),
             ("system/app/private", MountMode::Overlay),
         ],
     );
 
     assert_eq!(rules.get_mode("vendor"), MountMode::Overlay);
     assert_eq!(rules.get_mode("system"), MountMode::Magic);
-    assert_eq!(rules.get_mode("system/app"), MountMode::Kasumi);
+    assert_eq!(rules.get_mode("system/app"), MountMode::Magic);
     assert_eq!(rules.get_mode("system/app/private"), MountMode::Overlay);
     assert_eq!(rules.get_mode("system/app/private/lib"), MountMode::Overlay);
 }
@@ -71,11 +70,17 @@ fn default_mode_and_config_integration() {
 }
 
 #[test]
-fn backend_capabilities_detect_does_not_panic() {
-    let config = Config::default();
-    let capabilities = BackendCapabilities::detect(&config);
+fn legacy_kasumi_config_integration_deserializes_as_magic() {
+    let config: Config = toml::from_str(
+        r#"
+        moduledir = "/data/adb/modules"
+        default_mode = "kasumi"
+        [kasumi]
+        enabled = true
+        "#,
+    )
+    .unwrap();
 
-    // Kasumi availability varies by platform — just verify detect() doesn't panic
-    let _ = capabilities.can_use_kasumi();
-    let _ = capabilities.kasumi_status();
+    assert_eq!(config.default_mode, DefaultMode::Magic);
+    assert_eq!(config.default_mode.as_mount_mode(), MountMode::Magic);
 }

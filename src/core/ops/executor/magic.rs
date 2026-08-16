@@ -28,7 +28,6 @@ pub(super) fn mount_magic(
     ids: &[String],
     config: &config::Config,
     tempdir: &Path,
-    use_kasumi: bool,
 ) -> Result<(Vec<String>, MountStatistics)> {
     let magic_ws_path = tempdir.join("magic_workspace");
 
@@ -57,7 +56,6 @@ pub(super) fn mount_magic(
         MagicMountOptions {
             mount_source: &config.mountsource,
             managed_partitions: &managed_partitions,
-            use_kasumi,
         },
         &selected_modules,
         !config.disable_umount,

@@ -22,16 +22,11 @@ use anyhow::Result;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{UnmountFlags, unmount as umount};
 
-#[cfg(feature = "kasumi")]
-use crate::core::kasumi_coordinator::KasumiCoordinator;
-#[cfg(feature = "kasumi")]
-use crate::core::recovery::ModuleStageFailure;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::mount::is_mounted;
 use crate::{
     conf::config::Config,
     core::{
-        backend_capabilities::BackendCapabilities,
         inventory::{self},
         ops::{
             executor::{self},
@@ -62,7 +57,6 @@ pub struct Executed {
 
 pub struct MountController<S> {
     config: Config,
-    backend_capabilities: BackendCapabilities,
     state: S,
     tempdir: PathBuf,
 }
@@ -73,7 +67,6 @@ impl MountController<Init> {
         P: AsRef<Path>,
     {
         Self {
-            backend_capabilities: BackendCapabilities::detect(&config),
             config,
             state: Init,
             tempdir: tempdir.as_ref().to_path_buf(),
@@ -112,7 +105,6 @@ impl MountController<Init> {
 
         Ok(MountController {
             config: self.config,
-            backend_capabilities: self.backend_capabilities,
             state: StorageReady { handle },
             tempdir: self.tempdir,
         })
@@ -137,53 +129,19 @@ impl MountController<StorageReady> {
         );
 
         crate::scoped_log!(info, "controller:scan_and_prepare_plan", "prepare start");
-        let plan = prepare::prepare_mount_plan(
-            &self.config,
-            &modules,
-            self.state.handle.mount_point(),
-            &self.backend_capabilities,
-        )?;
+        let plan = prepare::prepare_mount_plan(&modules, self.state.handle.mount_point())?;
 
         crate::scoped_log!(
             info,
             "controller:scan_and_prepare_plan",
-            "prepare complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
+            "prepare complete: overlay_ops={}, overlay_modules={}, magic_modules={}",
             plan.overlay_ops.len(),
             plan.overlay_module_ids.len(),
-            plan.magic_module_ids.len(),
-            {
-                #[cfg(feature = "kasumi")]
-                {
-                    plan.kasumi_module_ids.len()
-                }
-                #[cfg(not(feature = "kasumi"))]
-                {
-                    0usize
-                }
-            }
+            plan.magic_module_ids.len()
         );
-
-        #[cfg(feature = "kasumi")]
-        {
-            let kasumi = KasumiCoordinator::new(&self.config);
-            kasumi
-                .prepare_mirror_storage(
-                    &self.backend_capabilities,
-                    &modules,
-                    &plan,
-                    self.state.handle.mount_point(),
-                )
-                .map_err(|err| {
-                    ModuleStageFailure::sync(
-                        plan.kasumi_module_ids.clone(),
-                        anyhow::anyhow!("Failed to prepare Kasumi mirror storage: {:#}", err),
-                    )
-                })?;
-        }
 
         Ok(MountController {
             config: self.config,
-            backend_capabilities: self.backend_capabilities,
             state: Planned {
                 handle: self.state.handle,
                 modules,
@@ -207,15 +165,13 @@ impl MountController<Planned> {
         crate::scoped_log!(
             info,
             "controller:execute",
-            "complete: overlay_mounted={}, magic_mounted={}, kasumi_mounted={}",
+            "complete: overlay_mounted={}, magic_mounted={}",
             result.overlay_module_ids.len(),
-            result.magic_module_ids.len(),
-            result.kasumi_count()
+            result.magic_module_ids.len()
         );
 
         Ok(MountController {
             config: self.config,
-            backend_capabilities: self.backend_capabilities,
             state: Executed {
                 handle: self.state.handle,
                 result,
@@ -237,7 +193,6 @@ impl MountController<Executed> {
 
         clean_up(
             &self.tempdir,
-            &self.config.kasumi.mirror_path,
             self.state.handle.mode(),
             self.config.disable_umount,
         )?;
@@ -250,7 +205,6 @@ impl MountController<Executed> {
 
 fn clean_up(
     tempdir: &Path,
-    kasumi_mirror_path: &Path,
     storage_mode: crate::core::storage::StorageMode,
     disable_umount: bool,
 ) -> Result<()> {
@@ -274,59 +228,10 @@ fn clean_up(
         return Ok(());
     }
 
-    clean_up_path(tempdir, kasumi_mirror_path, storage_mode)
+    clean_up_path(tempdir, storage_mode)
 }
 
-fn clean_up_path(
-    tempdir: &Path,
-    kasumi_mirror_path: &Path,
-    storage_mode: crate::core::storage::StorageMode,
-) -> Result<()> {
-    if tempdir == kasumi_mirror_path {
-        crate::scoped_log!(
-            info,
-            "controller:finalize",
-            "cleanup skipped: path={}, reason=kasumi_mirror",
-            tempdir.display()
-        );
-        return Ok(());
-    }
-
-    if kasumi_mirror_path.starts_with(tempdir) {
-        let Some(preserved_child) = kasumi_mirror_path
-            .strip_prefix(tempdir)
-            .ok()
-            .and_then(|relative| relative.components().next())
-            .map(|component| component.as_os_str().to_owned())
-        else {
-            return Ok(());
-        };
-
-        crate::scoped_log!(
-            info,
-            "controller:finalize",
-            "cleanup partial: path={}, preserve={}",
-            tempdir.display(),
-            kasumi_mirror_path.display()
-        );
-
-        let entries = match fs::read_dir(tempdir) {
-            Ok(entries) => entries,
-            Err(err) if err.kind() == ErrorKind::NotFound => return Ok(()),
-            Err(err) => return Err(err.into()),
-        };
-
-        for entry in entries {
-            let entry = entry?;
-            if entry.file_name() == preserved_child {
-                continue;
-            }
-            remove_path(&entry.path())?;
-        }
-
-        return Ok(());
-    }
-
+fn clean_up_path(tempdir: &Path, storage_mode: crate::core::storage::StorageMode) -> Result<()> {
     crate::scoped_log!(
         info,
         "controller:finalize",

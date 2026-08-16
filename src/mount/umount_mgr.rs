@@ -39,7 +39,7 @@ fn is_ignored_partition(path: &str) -> bool {
     // after zygote forks; if KSU detaches our overlay over /system/lib*,
     // /vendor/lib* in the app's namespace mid-flight, those checks crash with
     // SIGSEGV in libpairipcore.so. Keep the overlay visible in the app namespace
-    // for these paths and rely on Kasumi/sus_mount to handle hiding instead.
+    // for these paths and rely on sus_mount to handle hiding instead.
     defs::IGNORE_UNMOUNT_PARTITIONS.iter().any(|ignored| {
         let ignored = ignored.trim_end_matches('/');
         path == ignored

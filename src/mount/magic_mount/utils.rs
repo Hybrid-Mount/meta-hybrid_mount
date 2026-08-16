@@ -141,7 +141,6 @@ fn collect_magic_subtree(
     relative_path: &Path,
     rules: &ModuleRules,
     descendant_rule_prefixes: &HashSet<String>,
-    use_kasumi: bool,
 ) -> Result<bool> {
     let mut has_file = false;
 
@@ -165,7 +164,7 @@ fn collect_magic_subtree(
         let entry_path = entry.path();
         let next_relative = relative_path.join(&file_name);
         let next_relative_key = next_relative.to_string_lossy();
-        let effective_mode = rules.effective_mode(&next_relative, use_kasumi);
+        let effective_mode = rules.effective_mode(&next_relative);
 
         match entry.file_type() {
             Ok(file_type) if file_type.is_dir() => {
@@ -196,7 +195,6 @@ fn collect_magic_subtree(
                     &next_relative,
                     rules,
                     descendant_rule_prefixes,
-                    use_kasumi,
                 )? || node.replace;
                 if subtree_has_file {
                     target.children.insert(name, node);
@@ -235,7 +233,6 @@ pub fn collect_module_files(
     module_dir: &Path,
     managed_partitions: &[String],
     magic_modules: &[Module],
-    use_kasumi: bool,
 ) -> Result<Option<Node>> {
     let mut root = Node::new_root("");
     let mut system = Node::new_root("system");
@@ -361,7 +358,6 @@ pub fn collect_module_files(
                     Path::new(&p),
                     rules,
                     &descendant_rule_prefixes,
-                    use_kasumi,
                 )?);
                 continue;
             }
@@ -382,7 +378,6 @@ pub fn collect_module_files(
                 Path::new(&p),
                 rules,
                 &descendant_rule_prefixes,
-                use_kasumi,
             )?);
         }
     }

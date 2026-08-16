@@ -21,13 +21,12 @@ use std::{
 use anyhow::{Context, Result};
 
 use super::{
-    module_processor::{module_requests_kasumi, module_sync_error, prepare_module},
+    module_processor::{module_sync_error, prepare_module},
     plan_builder::{merge_overlay_groups, sorted_ids},
     types::PrepareContext,
 };
 use crate::{
     core::{
-        backend_capabilities::BackendCapabilities,
         inventory::Module,
         ops::plan::{MountPlan, OverlayOperation},
     },
@@ -36,28 +35,19 @@ use crate::{
     utils,
 };
 
-pub fn prepare_mount_plan(
-    config: &crate::conf::config::Config,
-    modules: &[Module],
-    target_base: &Path,
-    capabilities: &BackendCapabilities,
-) -> Result<MountPlan> {
+pub fn prepare_mount_plan(modules: &[Module], target_base: &Path) -> Result<MountPlan> {
     prepare_mount_plan_with_root(
-        config,
         modules,
         target_base,
         Path::new("/"),
-        capabilities,
         partitions::managed_partition_names(),
     )
 }
 
 pub(crate) fn prepare_mount_plan_with_root(
-    config: &crate::conf::config::Config,
     modules: &[Module],
     target_base: &Path,
     system_root: &Path,
-    capabilities: &BackendCapabilities,
     managed_partitions: Vec<String>,
 ) -> Result<MountPlan> {
     crate::scoped_log!(
@@ -67,23 +57,6 @@ pub(crate) fn prepare_mount_plan_with_root(
         modules.len(),
         target_base.display()
     );
-
-    if modules.iter().any(module_requests_kasumi) && !capabilities.can_use_kasumi() {
-        if config.kasumi.enabled {
-            crate::scoped_log!(
-                warn,
-                "prepare",
-                "kasumi fallback: enabled=true, status={}, action=ignore",
-                capabilities.kasumi_status()
-            );
-        } else {
-            crate::scoped_log!(
-                warn,
-                "prepare",
-                "kasumi fallback: enabled=false, action=ignore"
-            );
-        }
-    }
 
     fs::create_dir_all(target_base)
         .with_context(|| format!("failed to create storage root {}", target_base.display()))?;
@@ -106,11 +79,9 @@ pub(crate) fn prepare_mount_plan_with_root(
         .map(|(idx, module)| (module.id.as_str(), idx))
         .collect();
     let managed_set = managed_partitions.into_iter().collect::<HashSet<_>>();
-    let mut context = PrepareContext::new(capabilities, managed_set);
+    let mut context = PrepareContext::new(managed_set);
     let mut overlay_groups: BTreeMap<PathBuf, (String, Vec<PathBuf>)> = BTreeMap::new();
     let mut magic_ids = HashSet::new();
-    #[cfg(feature = "kasumi")]
-    let mut kasumi_ids = HashSet::new();
 
     for module in modules {
         crate::scoped_log!(
@@ -165,20 +136,15 @@ pub(crate) fn prepare_mount_plan_with_root(
         crate::scoped_log!(
             debug,
             "prepare",
-            "module prepared: id={}, overlay={}, magic={}, kasumi={}",
+            "module prepared: id={}, overlay={}, magic={}",
             module.id,
             !outcome.plan.overlay_groups.is_empty(),
-            outcome.plan.magic,
-            outcome.plan.kasumi
+            outcome.plan.magic
         );
 
         merge_overlay_groups(&mut overlay_groups, outcome.plan.overlay_groups);
         if outcome.plan.magic {
             magic_ids.insert(module.id.clone());
-        }
-        #[cfg(feature = "kasumi")]
-        if outcome.plan.kasumi {
-            kasumi_ids.insert(module.id.clone());
         }
     }
 
@@ -221,35 +187,17 @@ pub(crate) fn prepare_mount_plan_with_root(
 
     let plan = MountPlan {
         overlay_ops,
-        #[cfg(feature = "kasumi")]
-        kasumi_add_rules: Vec::new(),
-        #[cfg(feature = "kasumi")]
-        kasumi_merge_rules: Vec::new(),
-        #[cfg(feature = "kasumi")]
-        kasumi_hide_rules: Vec::new(),
         overlay_module_ids: sorted_ids(overlay_module_ids),
         magic_module_ids: sorted_ids(magic_ids),
-        #[cfg(feature = "kasumi")]
-        kasumi_module_ids: sorted_ids(kasumi_ids),
     };
 
     crate::scoped_log!(
         info,
         "prepare",
-        "complete: overlay_ops={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, kasumi_rule_compile=deferred",
+        "complete: overlay_ops={}, overlay_modules={}, magic_modules={}",
         plan.overlay_ops.len(),
         plan.overlay_module_ids.len(),
-        plan.magic_module_ids.len(),
-        {
-            #[cfg(feature = "kasumi")]
-            {
-                plan.kasumi_module_ids.len()
-            }
-            #[cfg(not(feature = "kasumi"))]
-            {
-                0usize
-            }
-        }
+        plan.magic_module_ids.len()
     );
 
     Ok(plan)

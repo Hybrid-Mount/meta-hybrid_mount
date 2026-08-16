@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(any(feature = "control-plane", feature = "kasumi"))]
+#[cfg(feature = "control-plane")]
 pub mod api;
-pub mod backend_capabilities;
 #[cfg(feature = "control-plane")]
 pub mod cli_commands;
 pub mod controller;
@@ -23,8 +22,6 @@ pub mod daemon;
 #[cfg(feature = "control-plane")]
 pub mod entry;
 pub mod inventory;
-#[cfg(feature = "kasumi")]
-pub mod kasumi_coordinator;
 pub mod module_status;
 pub mod ops;
 pub mod recovery;
@@ -32,7 +29,5 @@ pub mod runtime_finalization;
 pub mod runtime_state;
 pub mod startup;
 pub mod storage;
-#[cfg(feature = "kasumi")]
-pub mod user_hide_rules;
 
 pub use controller::MountController;

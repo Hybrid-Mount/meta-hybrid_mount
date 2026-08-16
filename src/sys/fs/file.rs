@@ -30,24 +30,6 @@ use walkdir::WalkDir;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::fs::{lgetfilecon, lsetfilecon};
-#[cfg(feature = "kasumi")]
-use crate::{defs, utils};
-
-#[derive(Debug, Default)]
-#[cfg(feature = "kasumi")]
-pub struct SyncDirStats {
-    pub has_mount_content: bool,
-    pub opaque_dirs: Vec<PathBuf>,
-}
-
-#[cfg(feature = "kasumi")]
-fn is_managed_partition_path(relative: &Path, managed_partitions: &[String]) -> bool {
-    relative
-        .components()
-        .next()
-        .and_then(|component| component.as_os_str().to_str())
-        .is_some_and(|name| managed_partitions.iter().any(|item| item == name))
-}
 
 pub fn atomic_write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, content: C) -> Result<()> {
     let path = path.as_ref();
@@ -440,86 +422,6 @@ fn make_device_node(path: &Path, mode: u32, rdev: u64) -> Result<()> {
     }
     Ok(())
 }
-
-#[cfg(feature = "kasumi")]
-fn native_cp_r(
-    src: &Path,
-    dst: &Path,
-    relative: &Path,
-    managed_partitions: &[String],
-    visited: &mut HashSet<(u64, u64)>,
-    stats: &mut SyncDirStats,
-) -> Result<()> {
-    ensure_dir_like(src, dst)?;
-
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let src_path = entry.path();
-        let file_name = entry.file_name();
-        if utils::path_file_name_eq_ignore_ascii_case(&src_path, defs::REPLACE_DIR_FILE_NAME) {
-            if is_managed_partition_path(relative, managed_partitions) {
-                stats.has_mount_content = true;
-            }
-            stats.opaque_dirs.push(dst.to_path_buf());
-            continue;
-        }
-        let dst_path = dst.join(&file_name);
-        let next_relative = relative.join(&file_name);
-
-        let ft = entry.file_type()?;
-        let metadata = fs::symlink_metadata(&src_path)?;
-        let dev = metadata.dev();
-        let ino = metadata.ino();
-
-        if !ft.is_dir() && is_managed_partition_path(&next_relative, managed_partitions) {
-            stats.has_mount_content = true;
-        }
-
-        if ft.is_dir() {
-            if !visited.insert((dev, ino)) {
-                continue;
-            }
-            native_cp_r(
-                &src_path,
-                &dst_path,
-                &next_relative,
-                managed_partitions,
-                visited,
-                stats,
-            )?;
-        } else {
-            copy_non_dir_entry(&src_path, &dst_path, &metadata, &ft)?;
-        }
-    }
-    Ok(())
-}
-
-#[cfg(feature = "kasumi")]
-pub fn sync_dir(src: &Path, dst: &Path, managed_partitions: &[String]) -> Result<SyncDirStats> {
-    if !src.exists() {
-        return Ok(SyncDirStats::default());
-    }
-    ensure_dir_exists(dst)?;
-    let mut visited = HashSet::new();
-    let mut stats = SyncDirStats::default();
-    native_cp_r(
-        src,
-        dst,
-        Path::new(""),
-        managed_partitions,
-        &mut visited,
-        &mut stats,
-    )
-    .with_context(|| {
-        format!(
-            "Failed to natively sync {} to {}",
-            src.display(),
-            dst.display()
-        )
-    })?;
-    Ok(stats)
-}
-
 pub fn prune_empty_dirs<P: AsRef<Path>>(root: P) -> Result<()> {
     prune_empty_dirs_preserving(root.as_ref(), &[])
 }

@@ -15,7 +15,6 @@
  */
 
 import { PATHS } from "../../constants";
-import { ENABLE_KASUMI } from "../../constants_gen";
 import type { AppConfig } from "../../types";
 import { runDaemonCommand } from "../core/bridge";
 import { normalizeConfig } from "../codec/configCodec";
@@ -53,7 +52,6 @@ export async function saveConfigToFile(config: AppConfig): Promise<void> {
     default_mode: normalized.default_mode,
     daemon_startup_mode: normalized.daemon_startup_mode,
     rules: normalized.rules,
-    ...(ENABLE_KASUMI ? { kasumi: normalized.kasumi } : {}),
   };
   await patchConfigFile(patch);
 }

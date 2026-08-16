@@ -22,10 +22,6 @@ describe("normalizeMountMode", () => {
     expect(normalizeMountMode("magic")).toBe("magic");
   });
 
-  it("returns kasumi when mode is kasumi", () => {
-    expect(normalizeMountMode("kasumi")).toBe("kasumi");
-  });
-
   it("returns ignore when mode is ignore", () => {
     expect(normalizeMountMode("ignore")).toBe("ignore");
   });

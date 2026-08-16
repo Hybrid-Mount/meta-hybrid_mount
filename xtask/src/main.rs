@@ -13,9 +13,7 @@
 // limitations under the License.
 
 use std::{
-    env,
-    ffi::OsStr,
-    fs,
+    env, fs,
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -32,7 +30,6 @@ mod build_meta_shared;
 mod zip_ext;
 use crate::zip_ext::zip_create_from_directory_with_options;
 
-const KASUMI_LKM_STAGE_DIR: &str = "kasumi_lkm";
 const NANO_MARKER_FILE: &str = ".nano";
 const DEFAULT_LITE_UPDATE_JSON: &str =
     "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/main/update-lite.json";
@@ -47,18 +44,15 @@ enum Arch {
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
 enum BuildFlavor {
-    /// Complete build: control plane + WebUI + Kasumi userspace + LKM assets.
-    Full,
-    /// Management build: control plane + WebUI, without any Kasumi feature surface.
+    /// Lite (default) build: control plane + WebUI.
     Lite,
-    /// Mount-only build: no control plane, no WebUI, no Kasumi.
+    /// Mount-only build: no control plane, no WebUI.
     Nano,
 }
 
 impl BuildFlavor {
     fn label(self) -> &'static str {
         match self {
-            Self::Full => "full",
             Self::Lite => "lite",
             Self::Nano => "nano",
         }
@@ -66,7 +60,6 @@ impl BuildFlavor {
 
     fn zip_stem(self, version: &str) -> String {
         match self {
-            Self::Full => format!("Hybrid-Mount-{version}"),
             Self::Lite => format!("Hybrid-Mount-Lite-{version}"),
             Self::Nano => format!("Hybrid-Mount-Nano-{version}"),
         }
@@ -74,7 +67,6 @@ impl BuildFlavor {
 
     fn module_name(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
         match self {
-            Self::Full => meta.name.clone(),
             Self::Lite => meta
                 .lite_name
                 .clone()
@@ -90,7 +82,6 @@ impl BuildFlavor {
 
     fn update_json(self, meta: &build_meta_shared::HybridMountMetadata) -> String {
         match self {
-            Self::Full => meta.update.clone(),
             Self::Lite => meta
                 .lite_update
                 .clone()
@@ -104,16 +95,8 @@ impl BuildFlavor {
         }
     }
 
-    fn includes_kasumi_lkm(self) -> bool {
-        matches!(self, Self::Full)
-    }
-
     fn includes_webui(self) -> bool {
         !matches!(self, Self::Nano)
-    }
-
-    fn enable_kasumi(self) -> bool {
-        matches!(self, Self::Full)
     }
 
     fn enable_control_plane(self) -> bool {
@@ -141,7 +124,7 @@ enum Commands {
     Build {
         #[arg(long)]
         release: bool,
-        #[arg(long, value_enum, default_value = "full")]
+        #[arg(long, value_enum, default_value = "lite")]
         flavor: BuildFlavor,
         #[arg(long)]
         skip_webui: bool,
@@ -272,7 +255,7 @@ fn build_package(
     fs::create_dir_all(&stage_dir)?;
 
     if flavor.includes_webui() && !skip_webui {
-        build_webui(&version_info.clean_version, webui_release, flavor)?;
+        build_webui(&version_info.clean_version, webui_release)?;
     }
 
     for arch in target_archs {
@@ -299,9 +282,6 @@ fn build_package(
     dir::copy(module_src, &stage_dir, &options)?;
     prune_flavor_assets(&stage_dir, flavor)?;
     configure_flavor_config(&stage_dir, flavor)?;
-    if flavor.includes_kasumi_lkm() {
-        stage_kasumi_lkm_assets(&stage_dir)?;
-    }
 
     generate_module_prop(&stage_dir, version_info, flavor)?;
 
@@ -343,10 +323,6 @@ fn configure_flavor_config(stage_dir: &Path, flavor: BuildFlavor) -> Result<()> 
     let mut table = strip_toml_preamble(&content)
         .parse::<toml::Table>()
         .with_context(|| format!("failed to parse staged config {}", config_path.display()))?;
-
-    if !flavor.enable_kasumi() {
-        table.remove("kasumi");
-    }
 
     if matches!(flavor, BuildFlavor::Nano) {
         table.insert(
@@ -489,62 +465,6 @@ fn resolve_notify_plan(
     }))
 }
 
-fn stage_kasumi_lkm_assets(stage_dir: &Path) -> Result<()> {
-    let Some(source_dir) = env::var_os("HYBRID_MOUNT_KASUMI_LKM_DIR").map(PathBuf::from) else {
-        return Ok(());
-    };
-
-    if !source_dir.is_dir() {
-        bail!(
-            "HYBRID_MOUNT_KASUMI_LKM_DIR must point to a directory containing .ko files: {}",
-            source_dir.display()
-        );
-    }
-
-    let artifacts = collect_kasumi_lkm_artifacts(&source_dir)?;
-    if artifacts.is_empty() {
-        bail!(
-            "No .ko files were found under HYBRID_MOUNT_KASUMI_LKM_DIR={}",
-            source_dir.display()
-        );
-    }
-
-    let lkm_stage_dir = stage_dir.join(KASUMI_LKM_STAGE_DIR);
-    fs::create_dir_all(&lkm_stage_dir)?;
-
-    for artifact in artifacts {
-        let Some(file_name) = artifact.file_name() else {
-            continue;
-        };
-        file::copy(
-            &artifact,
-            lkm_stage_dir.join(file_name),
-            &file::CopyOptions::new().overwrite(true),
-        )?;
-    }
-
-    Ok(())
-}
-
-fn collect_kasumi_lkm_artifacts(source_dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut stack = vec![source_dir.to_path_buf()];
-    let mut artifacts = Vec::new();
-
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir)? {
-            let path = entry?.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.extension() == Some(OsStr::new("ko")) {
-                artifacts.push(path);
-            }
-        }
-    }
-
-    artifacts.sort();
-    Ok(artifacts)
-}
-
 fn env_truthy(name: &str) -> Option<bool> {
     let value = env::var(name).ok()?;
     let normalized = value.trim().to_ascii_lowercase();
@@ -578,8 +498,8 @@ fn generate_module_prop(stage_dir: &Path, info: &VersionInfo, flavor: BuildFlavo
     Ok(())
 }
 
-fn build_webui(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<()> {
-    generate_webui_constants(version, is_release, flavor)?;
+fn build_webui(version: &str, is_release: bool) -> Result<()> {
+    generate_webui_constants(version, is_release)?;
     let webui_dir = Path::new("webui");
     let pnpm = if cfg!(windows) { "pnpm.cmd" } else { "pnpm" };
     let status = Command::new(pnpm)
@@ -599,12 +519,11 @@ fn build_webui(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<(
     Ok(())
 }
 
-fn generate_webui_constants(version: &str, is_release: bool, flavor: BuildFlavor) -> Result<()> {
+fn generate_webui_constants(version: &str, is_release: bool) -> Result<()> {
     let path = Path::new("webui/src/lib/constants_gen.ts");
     let content = build_meta_shared::render_webui_constants(
         version,
         is_release,
-        flavor.enable_kasumi(),
         build_meta_shared::defs::CONFIG_FILE,
         build_meta_shared::defs::STATE_FILE,
         &format!(
@@ -640,10 +559,8 @@ fn compile_core(release: bool, _arch: Arch, flavor: BuildFlavor) -> Result<()> {
     if release {
         cmd.arg("-r");
     }
-    if !flavor.enable_kasumi() {
-        cmd.arg("--no-default-features");
-    }
-    if flavor.enable_control_plane() && !flavor.enable_kasumi() {
+    cmd.arg("--no-default-features");
+    if flavor.enable_control_plane() {
         cmd.args(["--features", "control-plane"]);
     }
     let mut ret = cmd.spawn()?;
@@ -757,16 +674,13 @@ key = "value"
     }
 
     #[test]
-    fn lite_config_removes_kasumi_but_keeps_daemon_settings() {
+    fn lite_config_preserves_default_mode() {
         let temp = TestDir::new("xtask-lite-config");
         fs::write(
             temp.path().join("config.toml"),
             r#"
 default_mode = "overlay"
 daemon_startup_mode = "persistent"
-
-[kasumi]
-enabled = false
 "#,
         )
         .unwrap();
@@ -777,7 +691,6 @@ enabled = false
             .parse::<toml::Table>()
             .unwrap();
 
-        assert!(!table.contains_key("kasumi"));
         assert_eq!(
             table.get("default_mode").and_then(toml::Value::as_str),
             Some("overlay")
@@ -791,16 +704,13 @@ enabled = false
     }
 
     #[test]
-    fn nano_config_removes_control_plane_and_kasumi_settings() {
+    fn nano_config_forces_magic_mount_mode() {
         let temp = TestDir::new("xtask-nano-config");
         fs::write(
             temp.path().join("config.toml"),
             r#"
 default_mode = "overlay"
 daemon_startup_mode = "persistent"
-
-[kasumi]
-enabled = false
 "#,
         )
         .unwrap();
@@ -811,7 +721,6 @@ enabled = false
             .parse::<toml::Table>()
             .unwrap();
 
-        assert!(!table.contains_key("kasumi"));
         assert!(!table.contains_key("daemon_startup_mode"));
         assert_eq!(
             table.get("default_mode").and_then(toml::Value::as_str),

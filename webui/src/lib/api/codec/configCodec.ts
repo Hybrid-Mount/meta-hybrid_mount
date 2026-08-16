@@ -15,10 +15,8 @@
  */
 
 import { DEFAULT_CONFIG } from "../../constants";
-import { ENABLE_KASUMI } from "../../constants_gen";
 import type { AppConfig, ModuleRules, OverlayMode } from "../../types";
 import { normalizeMountMode as normalizeMountModeBase } from "../core/guards";
-import { kasumiConfigSchema } from "../schemas";
 
 export function normalizeMountMode(
   value: unknown,
@@ -29,13 +27,6 @@ export function normalizeMountMode(
 
 export function normalizeOverlayMode(value: unknown): OverlayMode {
   return value === "tmpfs" ? "tmpfs" : "ext4";
-}
-
-function normalizeKasumiConfig(value: unknown): AppConfig["kasumi"] {
-  const parsed = kasumiConfigSchema.safeParse(value);
-  return parsed.success
-    ? (parsed.data as unknown as AppConfig["kasumi"])
-    : (DEFAULT_CONFIG.kasumi as AppConfig["kasumi"]);
 }
 
 export function normalizeConfig(value: unknown): AppConfig {
@@ -81,10 +72,7 @@ export function normalizeConfig(value: unknown): AppConfig {
     rules,
   };
 
-  return {
-    ...normalized,
-    ...(ENABLE_KASUMI ? { kasumi: normalizeKasumiConfig(next.kasumi) } : {}),
-  } as AppConfig;
+  return normalized as AppConfig;
 }
 
 function normalizePathsMap(value: unknown): Record<string, string> {

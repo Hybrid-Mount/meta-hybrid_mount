@@ -175,7 +175,6 @@ fn build_runtime_modules_payload(config: &Config, state: &RuntimeState) -> Vec<M
     let mut ids = BTreeSet::new();
     ids.extend(state.overlay_modules.iter().cloned());
     ids.extend(state.magic_modules.iter().cloned());
-    ids.extend(state.kasumi_modules.iter().cloned());
     ids.extend(state.skip_mount_modules.iter().cloned());
     ids.extend(state.blacklisted_modules.iter().cloned());
     ids.extend(state.mount_error_modules.iter().cloned());
@@ -397,7 +396,6 @@ pub fn build_version_payload() -> VersionPayload {
 struct RuntimeModuleIndex<'a> {
     overlay: HashSet<&'a str>,
     magic: HashSet<&'a str>,
-    kasumi: HashSet<&'a str>,
     skipped: HashSet<&'a str>,
     blacklisted: HashSet<&'a str>,
     mount_errors: HashSet<&'a str>,
@@ -409,7 +407,6 @@ impl<'a> RuntimeModuleIndex<'a> {
         Self {
             overlay: state.overlay_modules.iter().map(String::as_str).collect(),
             magic: state.magic_modules.iter().map(String::as_str).collect(),
-            kasumi: state.kasumi_modules.iter().map(String::as_str).collect(),
             skipped: state
                 .skip_mount_modules
                 .iter()
@@ -433,7 +430,6 @@ impl<'a> RuntimeModuleIndex<'a> {
         [
             (&self.overlay, MountMode::Overlay),
             (&self.magic, MountMode::Magic),
-            (&self.kasumi, MountMode::Kasumi),
         ]
         .into_iter()
         .find(|(set, _)| set.contains(module_id))

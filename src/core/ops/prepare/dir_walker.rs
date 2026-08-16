@@ -75,14 +75,9 @@ impl PrepareContext {
         ensure_dir_like(&item.source_dir, &item.copy_dir)?;
         let relative_key = item.relative_path.to_string_lossy();
         let requested_mode = module.rules.get_mode(relative_key.as_ref());
-        let effective_mode = if matches!(requested_mode, MountMode::Kasumi) && !self.use_kasumi {
-            MountMode::Ignore
-        } else {
-            requested_mode
-        };
         let mode_decision = ModeDecision {
             requested_mode,
-            effective_mode,
+            effective_mode: requested_mode,
             has_descendant_rules: descendant_rule_prefixes.contains(relative_key.as_ref()),
         };
         let needs_shallow_overlay = matches!(mode_decision.effective_mode, MountMode::Overlay)
@@ -214,11 +209,11 @@ impl PrepareContext {
             &mode_decision.effective_mode,
         );
 
-        let has_any_entries = entry_state.direct_non_dir_entries
+        let _has_any_entries = entry_state.direct_non_dir_entries
             || entry_state.has_child_dirs
             || entry_state.has_replace_marker;
         #[cfg(feature = "control-plane")]
-        let has_magic_entries = has_any_entries;
+        let has_magic_entries = _has_any_entries;
         #[cfg(not(feature = "control-plane"))]
         let has_magic_entries = entry_state.direct_non_dir_entries
             || entry_state.has_replace_marker
@@ -226,9 +221,6 @@ impl PrepareContext {
 
         if matches!(mode_decision.effective_mode, MountMode::Magic) && has_magic_entries {
             outcome.plan.magic = true;
-        }
-        if matches!(mode_decision.effective_mode, MountMode::Kasumi) && has_any_entries {
-            outcome.plan.kasumi = true;
         }
 
         let needs_shallow_overlay = matches!(mode_decision.effective_mode, MountMode::Overlay)
@@ -266,7 +258,7 @@ impl PrepareContext {
         }
 
         match mode_decision.effective_mode {
-            MountMode::Magic | MountMode::Ignore | MountMode::Kasumi => false,
+            MountMode::Magic | MountMode::Ignore => false,
             MountMode::Overlay => {
                 if !item.system_target.exists() {
                     crate::scoped_log!(

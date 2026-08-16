@@ -22,8 +22,6 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "kasumi")]
-use crate::mount::kasumi;
 #[cfg(feature = "control-plane")]
 use crate::sys::fs::xattr;
 use crate::{
@@ -109,28 +107,7 @@ impl MountStatistics {
 pub struct ModuleModeStats {
     pub overlayfs: usize,
     pub magicmount: usize,
-    pub kasumi: usize,
     pub blacklisted: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct KasumiRuntimeInfo {
-    pub status: String,
-    pub available: bool,
-    pub kernel_supported: bool,
-    pub lkm_loaded: bool,
-    pub lkm_autoload: bool,
-    pub lkm_kmi_override: String,
-    pub lkm_current_kmi: String,
-    pub lkm_dir: PathBuf,
-    pub protocol_version: Option<i32>,
-    pub feature_bits: Option<i32>,
-    pub feature_names: Vec<String>,
-    pub hooks: Vec<String>,
-    pub rule_count: usize,
-    pub user_hide_rule_count: usize,
-    pub mirror_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -150,8 +127,6 @@ pub struct RuntimeState {
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
     #[serde(default)]
-    pub kasumi_modules: Vec<String>,
-    #[serde(default)]
     pub mount_error_modules: Vec<String>,
     #[serde(default)]
     pub mount_error_reasons: BTreeMap<String, String>,
@@ -168,8 +143,6 @@ pub struct RuntimeState {
     pub mount_stats: MountStatistics,
     #[serde(default)]
     pub mode_stats: ModuleModeStats,
-    #[serde(default)]
-    pub kasumi: KasumiRuntimeInfo,
     #[serde(default)]
     pub daemon: DaemonRuntimeInfo,
     #[serde(skip)]
@@ -200,11 +173,9 @@ impl RuntimeState {
         mount_point: PathBuf,
         overlay_modules: Vec<String>,
         magic_modules: Vec<String>,
-        kasumi_modules: Vec<String>,
         active_mounts: Vec<String>,
         mount_stats: MountStatistics,
         mode_stats: ModuleModeStats,
-        kasumi: KasumiRuntimeInfo,
     ) -> Self {
         let start = SystemTime::now();
 
@@ -225,7 +196,6 @@ impl RuntimeState {
             mount_point,
             overlay_modules,
             magic_modules,
-            kasumi_modules,
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
             skip_mount_modules: Vec::new(),
@@ -235,7 +205,6 @@ impl RuntimeState {
             tmpfs_xattr_supported,
             mount_stats,
             mode_stats,
-            kasumi,
             daemon: DaemonRuntimeInfo::default(),
             cached_status_value: None,
         };
@@ -244,12 +213,11 @@ impl RuntimeState {
         crate::scoped_log!(
             debug,
             "runtime_state:new",
-            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, active_mounts={}, tmpfs_xattr_supported={}",
+            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, active_mounts={}, tmpfs_xattr_supported={}",
             state.storage_mode,
             state.mount_point.display(),
             state.overlay_modules.len(),
             state.magic_modules.len(),
-            state.kasumi_modules.len(),
             state.active_mounts.len(),
             state.tmpfs_xattr_supported
         );
@@ -257,12 +225,11 @@ impl RuntimeState {
         crate::scoped_log!(
             debug,
             "runtime_state:new",
-            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}, active_mounts={}",
+            "complete: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, active_mounts={}",
             state.storage_mode,
             state.mount_point.display(),
             state.overlay_modules.len(),
             state.magic_modules.len(),
-            state.kasumi_modules.len(),
             state.active_mounts.len()
         );
 
@@ -294,20 +261,18 @@ impl RuntimeState {
             crate::scoped_log!(
                 info,
                 "runtime_state:summary",
-                "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, mount_errors=0, daemon_alive={}",
+                "saved: storage_mode={}, active_mounts={}, mount_errors=0, daemon_alive={}",
                 self.storage_mode,
                 self.active_mounts.join(","),
-                self.kasumi_modules.join(","),
                 self.daemon.alive
             );
         } else {
             crate::scoped_log!(
                 warn,
                 "runtime_state:summary",
-                "saved: storage_mode={}, active_mounts={}, kasumi_modules={}, mount_errors={}, reasons={:?}, daemon_alive={}",
+                "saved: storage_mode={}, active_mounts={}, mount_errors={}, reasons={:?}, daemon_alive={}",
                 self.storage_mode,
                 self.active_mounts.join(","),
-                self.kasumi_modules.join(","),
                 self.mount_error_modules.join(","),
                 self.mount_error_reasons,
                 self.daemon.alive
@@ -325,12 +290,11 @@ impl RuntimeState {
         crate::scoped_log!(
             debug,
             "runtime_state:build",
-            "start: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}, kasumi_modules={}",
+            "start: storage_mode={}, mount_point={}, overlay_modules={}, magic_modules={}",
             storage_mode.as_str(),
             mount_point.display(),
             result.overlay_module_ids.len(),
-            result.magic_module_ids.len(),
-            result.kasumi_count()
+            result.magic_module_ids.len()
         );
 
         let previous_state = match Self::load() {
@@ -346,32 +310,14 @@ impl RuntimeState {
             }
         };
 
-        #[cfg(feature = "kasumi")]
-        let kasumi = kasumi::collect_runtime_info(config);
-        #[cfg(not(feature = "kasumi"))]
-        let kasumi = {
-            let _ = config;
-            KasumiRuntimeInfo::default()
-        };
         let mut state = Self::new(
             storage_mode.as_str().to_owned(),
             mount_point.to_path_buf(),
             result.overlay_module_ids.clone(),
             result.magic_module_ids.clone(),
-            {
-                #[cfg(feature = "kasumi")]
-                {
-                    result.kasumi_module_ids.clone()
-                }
-                #[cfg(not(feature = "kasumi"))]
-                {
-                    Vec::new()
-                }
-            },
             collect_active_mounts(result),
             result.mount_stats.clone(),
             collect_mode_stats(result),
-            kasumi,
         );
         state.mount_error_modules = previous_state.mount_error_modules;
         state.mount_error_reasons = previous_state.mount_error_reasons;
@@ -398,7 +344,6 @@ impl RuntimeState {
         self.overlay_modules
             .iter()
             .chain(self.magic_modules.iter())
-            .chain(self.kasumi_modules.iter())
             .map(|s| s.as_str())
             .collect()
     }
@@ -448,7 +393,6 @@ fn collect_mode_stats(result: &ExecutionResult) -> ModuleModeStats {
     ModuleModeStats {
         overlayfs: result.overlay_module_ids.len(),
         magicmount: result.magic_module_ids.len(),
-        kasumi: result.kasumi_count(),
         blacklisted: 0usize,
     }
 }
@@ -456,19 +400,14 @@ fn collect_mode_stats(result: &ExecutionResult) -> ModuleModeStats {
 fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
     let mut active_mounts = result.overlay_partitions.clone();
 
-    if result.kasumi_runtime_enabled {
-        active_mounts.push("kasumi".to_string());
-    }
-
     active_mounts.sort();
     active_mounts.dedup();
 
     crate::scoped_log!(
         debug,
         "runtime_state:active_mounts",
-        "complete: overlay_partitions={}, kasumi_runtime_enabled={}, active_mounts={}",
+        "complete: overlay_partitions={}, active_mounts={}",
         result.overlay_partitions.len(),
-        result.kasumi_runtime_enabled,
         active_mounts.len()
     );
 

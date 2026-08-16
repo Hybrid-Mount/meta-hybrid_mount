@@ -48,7 +48,6 @@ pub struct MountTopologyPayload {
 #[derive(Debug, Clone, Serialize)]
 pub struct MountTopologySummary {
     pub total_mounts: usize,
-    pub kasumi_excluded_mounts: usize,
     pub inspected_mounts: usize,
     pub focus_mounts: usize,
     pub project_related_mounts: usize,
@@ -146,7 +145,6 @@ impl MountTopologyPayload {
 #[derive(Debug, Default)]
 struct MountCounters {
     total_mounts: usize,
-    kasumi_excluded_mounts: usize,
     project_related_mounts: usize,
     managed_partition_root_mounts: usize,
     managed_partition_root_propagation_mounts: usize,
@@ -221,7 +219,6 @@ fn collect_mount_topology(
     let active_partition_roots = state
         .active_mounts
         .iter()
-        .filter(|name| name.as_str() != "kasumi")
         .map(|name| PathBuf::from(format!("/{name}")))
         .collect::<Vec<_>>();
 
@@ -236,11 +233,6 @@ fn collect_mount_topology(
 
     for mount in mountinfo {
         counters.total_mounts += 1;
-
-        if is_kasumi_mount(&mount, config) {
-            counters.kasumi_excluded_mounts += 1;
-            continue;
-        }
 
         let propagation = collect_propagation(&mount.opt_fields);
         let classifications = classify_mount(
@@ -361,9 +353,7 @@ fn collect_mount_topology(
         .max()
         .unwrap_or(0);
 
-    let inspected_mounts = counters
-        .total_mounts
-        .saturating_sub(counters.kasumi_excluded_mounts);
+    let inspected_mounts = counters.total_mounts;
 
     let warnings = build_warnings(&counters, &shared_peer_groups);
 
@@ -377,7 +367,6 @@ fn collect_mount_topology(
         error: None,
         summary: Some(MountTopologySummary {
             total_mounts: counters.total_mounts,
-            kasumi_excluded_mounts: counters.kasumi_excluded_mounts,
             inspected_mounts,
             focus_mounts: focus_mounts.len(),
             project_related_mounts: counters.project_related_mounts,
@@ -506,18 +495,6 @@ fn should_include_focus_mount(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn is_kasumi_mount(mount: &MountInfo, config: &Config) -> bool {
-    let mount_point = mount.mount_point.as_path();
-    let mount_source = mount.mount_source.as_deref().map(Path::new);
-
-    mount.fs_type.to_ascii_lowercase().contains("kasumi")
-        || mount_point.starts_with(config.kasumi.mirror_path.as_path())
-        || mount_source.is_some_and(|path| path.starts_with(config.kasumi.mirror_path.as_path()))
-        || mount_point.starts_with(defs::KASUMI_MIRROR_DIR)
-        || mount_source.is_some_and(|path| path.starts_with(defs::KASUMI_MIRROR_DIR))
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn build_warnings(
     counters: &MountCounters,
     shared_peer_groups: &[SharedPeerGroupSummary],
@@ -526,13 +503,13 @@ fn build_warnings(
 
     if counters.shared_mounts > 0 {
         warnings.push(format!(
-            "{} non-Kasumi mounts still belong to shared peer groups.",
+            "{} mounts still belong to shared peer groups.",
             counters.shared_mounts
         ));
     }
     if counters.receiving_propagation_mounts > 0 {
         warnings.push(format!(
-            "{} non-Kasumi mounts still receive propagation from another peer group.",
+            "{} mounts still receive propagation from another peer group.",
             counters.receiving_propagation_mounts
         ));
     }
@@ -559,7 +536,7 @@ fn build_warnings(
         .max_by_key(|group| group.mount_count)
     {
         warnings.push(format!(
-            "Largest non-Kasumi shared peer group is {} with {} mounts.",
+            "Largest shared peer group is {} with {} mounts.",
             group.peer_group, group.mount_count
         ));
     }

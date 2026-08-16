@@ -8,15 +8,14 @@
 ![Version](https://img.shields.io/github/v/tag/Hybrid-Mount/meta-hybrid_mount?label=Version&color=8A2BE2&style=flat-square)
 
 Hybrid Mount is a mount orchestration metamodule for **KernelSU** and **APatch**.
-It merges module files into Android partitions through a unified policy engine backed by three mount backends:
+It merges module files into Android partitions through a unified policy engine backed by two mount backends:
 
 - **OverlayFS** — layered mounts for broad compatibility.
 - **Magic Mount** — bind-mount for direct path replacement or fallback.
-- **Kasumi** — LKM-backed routing with runtime hide, spoof, and stealth features.
 
 A built-in **SolidJS WebUI** provides graphical management, live state monitoring, and configuration editing.
 
-Releases are published in three flavors — see [Build Flavors](#build-flavors) for a detailed comparison. Unless noted otherwise, the rest of this README describes the `full` build.
+Releases are published in two flavors — see [Build Flavors](#build-flavors) for a detailed comparison. Unless noted otherwise, the rest of this README describes the `lite` build.
 
 **[English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/README.md)** &nbsp; **[简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH.md)** &nbsp; **[繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ZH_TW.md)** &nbsp; **[日本語](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_JP.md)** &nbsp; **[Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_ES.md)** &nbsp; **[Italiano](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_IT.md)** &nbsp; **[Русский](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_RU.md)** &nbsp; **[Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_UK.md)** &nbsp; **[Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/main/docs/README_VI.md)**
 
@@ -31,7 +30,6 @@ Releases are published in three flavors — see [Build Flavors](#build-flavors) 
 - [WebUI](#webui)
 - [Language Support](#language-support)
 - [Configuration](#configuration)
-- [Kasumi](#kasumi)
 - [Policy Reference](#policy-reference)
 - [CLI](#cli)
 - [Architecture](#architecture)
@@ -43,27 +41,22 @@ Releases are published in three flavors — see [Build Flavors](#build-flavors) 
 
 ## Build Flavors
 
-Hybrid Mount is released in three flavors, each targeting a different use case:
+Hybrid Mount is released in two flavors, each targeting a different use case:
 
-| Flavor | Binary | WebUI | Daemon / CLI | Kasumi LKM | Use case |
-|--------|--------|-------|-------------|------------|----------|
-| **Full** | Yes | Yes | Yes | Yes | Users who need Kasumi-backed routing or hide/spoof capabilities. |
-| **Lite** | Yes | Yes | Yes | No | Users who want the WebUI and full policy engine but don't need LKM-backed stealth features. |
-| **Nano** | Yes | No | No | No | Minimalists who just want mount orchestration via config file — no runtime daemon, no WebUI, no CLI. |
-
-### Full
-
-The `full` flavor includes all supported mount backends (OverlayFS, Magic Mount, Kasumi), the SolidJS WebUI, the Unix-socket daemon with HTTP/SSE, the CLI, and the Kasumi LKM assets. Use Full when Kasumi-backed routing or auxiliary hide/spoof features are required. Built with Cargo features `kasumi` (which implies `control-plane`).
+| Flavor | Binary | WebUI | Daemon / CLI | Use case |
+|--------|--------|-------|-------------|----------|
+| **Lite** | Yes | Yes | Yes | Users who want the WebUI and full policy engine but don't need LKM-backed stealth features. |
+| **Nano** | Yes | No | No | Minimalists who just want mount orchestration via config file — no runtime daemon, no WebUI, no CLI. |
 
 ### Lite
 
-The `lite` flavor strips the Kasumi LKM and all Kasumi-related features (hide, spoof, stealth, kstat rules, uname spoofing, etc.) but keeps the WebUI, daemon, CLI, and both OverlayFS and Magic Mount backends. Choose Lite if:
+The `lite` flavor is the default build. It keeps the WebUI, daemon, CLI, and both OverlayFS and Magic Mount backends. Choose Lite if:
 
 - Your kernel doesn't support loading external LKMs.
 - You don't need runtime hide/spoof capabilities.
 - You want a smaller download while keeping the WebUI and daemon management interface.
 
-Lite builds use the feature set `control-plane` only (`--no-default-features --features control-plane`). The WebUI's Kasumi panel is hidden automatically.
+Lite builds use the feature set `control-plane` only (`--no-default-features --features control-plane`).
 
 ### Nano
 
@@ -80,26 +73,22 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 
 ### Feature matrix
 
-| Feature | Full | Lite | Nano |
-|---------|------|------|------|
-| OverlayFS backend | Yes | Yes | Marker-based |
-| Magic Mount backend | Yes | Yes | Yes (default) |
-| Kasumi backend | Yes | No | No |
-| WebUI | Yes | Yes | No |
-| CLI (`hybrid-mount` subcommands) | Yes | Yes | No |
-| Daemon (Unix + TCP/SSE) | Yes | Yes | No |
-| Config caching & runtime apply | Yes | Yes | No |
-| Kasumi hide/spoof/stealth | Yes | No | No |
-| LKM autoload | Yes | No | No |
-| Cargo features | `kasumi` (implies `control-plane`) | `control-plane` only | none |
-| ZIP size (approx.) | ~4 MB | ~2 MB | ~1 MB |
+| Feature | Lite | Nano |
+|---------|------|------|
+| OverlayFS backend | Yes | Marker-based |
+| Magic Mount backend | Yes | Yes (default) |
+| WebUI | Yes | No |
+| CLI (`hybrid-mount` subcommands) | Yes | No |
+| Daemon (Unix + TCP/SSE) | Yes | No |
+| Config caching & runtime apply | Yes | No |
+| Cargo features | `control-plane` only | none |
+| ZIP size (approx.) | ~2 MB | ~1 MB |
 
 ## Features
 
-- **Three backends, one policy engine** — assign paths to OverlayFS, Magic Mount, or Kasumi with per-path granularity.
+- **Two backends, one policy engine** — assign paths to OverlayFS or Magic Mount with per-path granularity.
 - **Deterministic planning** — conflicts are detected at plan time, not discovered randomly at boot.
-- **Built-in WebUI** — manage modules, edit configuration, monitor runtime state, and control Kasumi features in full builds.
-- **Kasumi runtime integration** — LKM autoload, mirror routing, mount hiding, maps/statfs spoofing, UID hiding, uname spoofing, and kstat rules.
+- **Built-in WebUI** — manage modules, edit configuration, and monitor runtime state.
 - **Config caching** — runtime config cache with incremental patching and immediate apply support.
 - **Recovery-friendly** — stale runtime files are cleaned automatically; misconfigurations can be reset via `api config-reset`.
 - **Automation-friendly** — JSON-over-Unix-socket daemon protocol + HTTP API for scripting or external controllers.
@@ -111,7 +100,7 @@ Choose Nano if you want predictable, daemon-free mount orchestration with a smal
 ### Installation
 
 1. Install [KernelSU](https://kernelsu.org/) or [APatch](https://apatch.dev/) on your device.
-2. Download the latest Hybrid Mount `full`, `lite`, or `nano` release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
+2. Download the latest Hybrid Mount `lite` or `nano` release ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases).
 3. Flash the ZIP through your root manager's module installer.
 4. Reboot. Hybrid Mount will auto-detect your environment and apply the default overlay policy.
 
@@ -125,7 +114,7 @@ hybrid-mount daemon status
 hybrid-mount api modules-list
 ```
 
-To access the WebUI (Full/Lite flavors), open your root manager app (KernelSU or APatch), find Hybrid Mount in the modules list, and tap it — the manager will launch the WebUI in an embedded WebView.
+To access the WebUI (Lite flavor), open your root manager app (KernelSU or APatch), find Hybrid Mount in the modules list, and tap it — the manager will launch the WebUI in an embedded WebView.
 
 ### Changing mount mode for a module
 
@@ -146,7 +135,6 @@ default_mode = "magic"
 |------|---------|----------|
 | `overlay` | OverlayFS | Modules that add or replace files without conflicts. Default mode. |
 | `magic` | Bind mount | Modules that need direct per-file replacement. |
-| `kasumi` | Kasumi LKM | Modules requiring explicit mirror routing or runtime hide/spoof features. |
 | `ignore` | — | Excluding specific paths from any mount processing. |
 
 ### OverlayFS storage modes
@@ -173,7 +161,6 @@ The WebUI is designed to be opened directly from your **root manager app** (Kern
 - **Status dashboard** — live mount statistics, active partitions, storage mode, daemon health.
 - **Module management** — list all detected modules with their effective mount modes; apply mode changes interactively.
 - **Configuration editor** — full config.toml editing with validation, including per-module path rules.
-- **Kasumi control panel** — LKM status, rule listing, feature toggles, uname configuration, maps/kstat rules (Full flavor only).
 
 ### Language Support
 
@@ -209,7 +196,7 @@ Default path: `/data/adb/hybrid-mount/config.toml`.
 | `mountsource` | string | auto-detect | Runtime source tag (`KSU`, `APatch`). |
 | `overlay_mode` | `ext4` \| `tmpfs` | `ext4` | Overlay upper/work storage mode. |
 | `disable_umount` | bool | `false` | Skip umount operations (debug only). |
-| `default_mode` | `overlay` \| `magic` \| `kasumi` | `overlay` | Global default mount policy. |
+| `default_mode` | `overlay` \| `magic` | `overlay` | Global default mount policy. |
 | `daemon_startup_mode` | `on-demand` \| `persistent` | `on-demand` | Daemon startup behavior. |
 | `rules` | map | `{}` | Per-module and per-path mount policies. |
 
@@ -227,84 +214,10 @@ default_mode = "magic"
 [rules.viper4android.paths]
 "system/etc/audio_policy.conf" = "overlay"
 
-[rules.sensitive_module]
-default_mode = "kasumi"
-
-[rules.sensitive_module.paths]
-"system/bin/helper" = "kasumi"
-"system/etc/placeholder" = "ignore"
 ```
 
 ---
 
-## Kasumi
-
-Kasumi is the **LKM-backed** backend. Beyond mount routing, it provides a suite of runtime hide and spoof capabilities.
-
-### Activation
-
-Setting `kasumi.enabled = true` makes the backend available. The Kasumi runtime is actually enabled when at least one of these conditions is met:
-
-- The mount plan contains a Kasumi-managed module or path.
-- An auxiliary feature is configured (hidexattr, mount hide, maps spoof, statfs spoof, UID hiding, uname spoof, cmdline replacement, kstat rules, or user hide rules).
-
-### Key config fields
-
-| Field | Purpose |
-| --- | --- |
-| `kasumi.enabled` | Master switch for Kasumi integration. |
-| `kasumi.lkm_autoload` | Auto-load the Kasumi LKM during startup. |
-| `kasumi.lkm_dir` | LKM search directory. |
-| `kasumi.lkm_kmi_override` | Optional KMI version override for LKM selection. |
-| `kasumi.mirror_path` | Mirror root used by Kasumi rules (default `/dev/kasumi_mirror`). |
-| `kasumi.enable_kernel_debug` | Toggle kernel-side debug logging. |
-| `kasumi.enable_stealth` | Explicit stealth mode. |
-| `kasumi.enable_hidexattr` | Compatibility umbrella — enables stealth, mount hide, maps spoof, and statfs spoof together. |
-| `kasumi.enable_mount_hide` | Hide mounts globally or by path pattern. |
-| `kasumi.mount_hide.path_pattern` | Path pattern for mount hiding. |
-| `kasumi.enable_maps_spoof` | Enable `/proc/<pid>/maps` spoofing. |
-| `kasumi.maps_rules` | Per-inode/device maps rewrite rules. |
-| `kasumi.enable_statfs_spoof` | Enable `statfs` spoofing. |
-| `kasumi.statfs_spoof.path` / `.spoof_f_type` | Path-scoped statfs spoof configuration. |
-| `kasumi.hide_uids` | UIDs to hide from Kasumi-aware queries. |
-| `kasumi.uname_mode` | Uname spoof mode: `scoped` (per-process) or `global`. |
-| `kasumi.uname.*` | Structured uname spoof (sysname, nodename, release, version, machine, domainname). |
-| `kasumi.cmdline_value` | Replacement `/proc/cmdline` content. |
-| `kasumi.kstat_rules` | Per-target stat metadata spoof rules. |
-
-### Commands
-
-```bash
-# Status and diagnostics
-hybrid-mount kasumi status
-hybrid-mount kasumi version
-hybrid-mount kasumi features
-hybrid-mount kasumi hooks
-hybrid-mount kasumi list          # list active rules
-hybrid-mount lkm status
-
-# Runtime control
-hybrid-mount kasumi apply-config-runtime
-hybrid-mount kasumi clear
-hybrid-mount kasumi release-connection
-hybrid-mount kasumi invalidate-cache
-hybrid-mount kasumi fix-mounts
-
-# Uname spoofing (scoped or global)
-hybrid-mount kasumi set-uname --mode scoped <release> <version>
-hybrid-mount kasumi clear-uname --mode scoped
-hybrid-mount kasumi restore-uname-global
-
-# Rule management
-hybrid-mount kasumi rule add --target /system/bin/tool --source /data/adb/modules/my_module/system/bin/tool
-hybrid-mount kasumi rule merge --target /system/lib64 --source /data/adb/modules/my_module/system/lib64
-hybrid-mount kasumi rule hide --path /system/bin/su
-hybrid-mount kasumi rule delete --path /system/bin/old_tool
-hybrid-mount kasumi rule add-dir --target-base /system/lib64 --source-dir /data/adb/modules/my_module/system/lib64
-hybrid-mount kasumi rule remove-dir --target-base /system/lib64 --source-dir /data/adb/modules/my_module/system/lib64
-```
-
----
 
 ## Policy Reference
 
@@ -323,8 +236,6 @@ When multiple policies could apply to a path, evaluation order is:
 | `overlay` | Yes | Mount with OverlayFS. |
 | `overlay` | No | Skip and report as failed. |
 | `magic` | n/a | Mount with Magic Mount. |
-| `kasumi` | Yes | Route through Kasumi. |
-| `kasumi` | No | Skip Kasumi mapping. |
 | `ignore` | n/a | Do not mount. |
 
 ### Module marker files
@@ -337,7 +248,7 @@ Hybrid Mount also recognizes marker files in module directories. These markers a
 | `remove` | Module root | Excludes the module from mount planning; normally created by the root manager during removal. |
 | `skip_mount` | Module root | Excludes the module from mount processing and records it in the runtime skip list. |
 | `mount_error` | Module root | Marks a module that was skipped after a mount failure. Recovery and daemon commands may create or clear it. |
-| `overlay` / `magic` | Module root, Nano builds | Selects the module default mount backend for Nano builds. Full and Lite builds use config rules instead. |
+| `overlay` / `magic` | Module root, Nano builds | Selects the module default mount backend for Nano builds. Lite builds use config rules instead. |
 | `.replace` | Inside a module directory | Applies replacement semantics to the containing directory. The marker itself is not copied as normal module content; prepared overlay layers preserve the directory and set overlay opaque metadata where supported. |
 
 If multiple case variants of the same marker exist in one directory, cleanup operations remove all matching variants.
@@ -379,23 +290,16 @@ hybrid-mount [OPTIONS] [COMMAND]
 | `api config-reset` | Reset config to defaults. |
 | `api modules-list` | List detected modules. |
 | `api modules-apply --modules <JSON>` | Apply module mode changes. |
-| `api lkm` | Query LKM status. |
 | `api features` | List supported features. |
-| `api hooks` | List Kasumi hooks status. |
 | `api kernel-uname` | Print kernel uname. |
 | `api open-url --url <URL>` | Open URL on device. |
 | `api reboot` | Reboot the device. |
-| `api kasumi-maps-add --rule <JSON>` | Add a Kasumi maps spoof rule. |
-| `api kasumi-maps-clear` | Clear all Kasumi maps spoof rules. |
 | `daemon launch` | Start daemon in foreground. |
 | `daemon serve` | Start daemon (service mode). |
 | `daemon ping` | Check daemon liveness. |
 | `daemon webui-start` | Start WebUI only. |
 | `daemon stop` | Stop the daemon. |
 | `daemon status` | Query daemon runtime state. |
-| `kasumi ...` | Kasumi management (see [Kasumi](#kasumi)). |
-| `lkm load / unload / status` | LKM lifecycle management. |
-| `hide list / add / remove / apply` | User hide rule management. |
 
 ---
 
@@ -414,15 +318,15 @@ hybrid-mount [OPTIONS] [COMMAND]
 ┌─────────────────────────────────────────────┐
 │              Mount Planner                    │
 │    Evaluate rules (path > module > global)    │
-│    Generate overlay / magic / kasumi plan     │
+│    Generate overlay / magic mount plan        │
 └──────────────────┬──────────────────────────┘
                    ▼
 ┌─────────────────────────────────────────────┐
 │              Executors                        │
-│  ┌──────────┐ ┌──────────┐ ┌──────────────┐ │
-│  │ OverlayFS│ │  Magic   │ │   Kasumi     │ │
-│  │ executor │ │  Mount   │ │   executor   │ │
-│  └──────────┘ └──────────┘ └──────────────┘ │
+│  ┌──────────┐ ┌──────────┐ │
+│  │ OverlayFS│ │  Magic   │ │
+│  │ executor │ │  Mount   │ │
+│  └──────────┘ └──────────┘ │
 └──────────────────┬──────────────────────────┘
                    ▼
 ┌─────────────────────────────────────────────┐
@@ -451,13 +355,12 @@ src/
 ├── mount/
 │   ├── overlayfs/ OverlayFS backend (ext4 image / tmpfs)
 │   ├── magic_mount/ Bind-mount backend
-│   └── kasumi/    Kasumi rule compilation, runtime, status
-├── sys/           Low-level: mount syscalls, LKM load/unload, Kasumi UAPI
+├── sys/           Low-level: mount syscalls
 └── utils/         Logging, path utilities, validation
 
 webui/
 ├── src/
-│   ├── routes/    Page components (Status, Config, Modules, Kasumi, Info)
+│   ├── routes/    Page components (Status, Config, Modules, Info)
 │   ├── components/ Shared UI components (NavBar, Toast, Skeleton)
 │   ├── lib/       API bridge, stores, codecs, i18n
 │   └── locales/   9-language internationalization
@@ -479,10 +382,8 @@ module/            Module packaging scripts and static assets
 ### Commands
 
 ```bash
-# Full release package (binary + WebUI + Kasumi) → output/
-cargo run -p xtask -- build --release --flavor full
 
-# Lite release package (binary + WebUI, no Kasumi) → output/
+# Lite release package (binary + WebUI) → output/
 cargo run -p xtask -- build --release --flavor lite
 
 # Nano release package (config-only, no WebUI/CLI/daemon) → output/
@@ -500,8 +401,6 @@ cargo run -p xtask -- build --release --skip-webui
 # Local nano debug build
 ./scripts/build-local.sh --nano
 
-# Local build with prebuilt Kasumi LKM .ko assets (full only)
-./scripts/build-local.sh --release --kasumi-lkm-dir /path/to/kasumi-lkm
 
 # WebUI dev server (hot reload)
 cd webui && pnpm install && pnpm dev
@@ -529,7 +428,7 @@ Every change must pass the following CI checks (defined in `.github/workflows/`)
 - WebUI: `pnpm lint` + `pnpm test`
 - License header check on all source files
 
-`cargo clippy --all-features` (what `xtask lint` runs) only checks the `full` flavor. When making changes, also verify that the **lite** (`--no-default-features --features control-plane`) and **nano** (`--no-default-features`) flavor combinations compile. Code touching Kasumi must be behind `#[cfg(feature = "kasumi")]`; code touching the daemon/CLI/WebUI API must be behind `#[cfg(feature = "control-plane")]`.
+When making changes, verify that both the **lite** (`--no-default-features --features control-plane`) and **nano** (`--no-default-features`) flavor combinations compile. Code touching the daemon/CLI/WebUI API must be behind `#[cfg(feature = "control-plane")]`.
 
 ---
 
@@ -538,8 +437,6 @@ Every change must pass the following CI checks (defined in `.github/workflows/`)
 - **Mount source auto-detection**: fresh installs detect the runtime environment automatically. Only set `mountsource` explicitly if auto-detection fails.
 - **Recovery from bad config**: run `hybrid-mount api config-reset` to reset to defaults, then reapply rules incrementally. Use `gen-config` to regenerate a fresh config file.
 - **Config caching**: the runtime maintains a cached config. Use `api config-patch --apply-runtime` to apply changes immediately, or restart the daemon.
-- **Kasumi LKM (full builds only)**: the LKM must match the running kernel. Use `lkm_kmi_override` if the auto-detected KMI is incorrect.
-- **`kasumi clear`**: clears runtime state and releases kernel connection. Existing kernel-side rules may persist until LKM reload.
 - **Binary size**: prefer dependency feature trimming and profile tuning before invasive refactoring.
 
 ---

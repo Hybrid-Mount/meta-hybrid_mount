@@ -196,7 +196,6 @@ impl MountContext {
 pub struct MagicMountOptions<'a> {
     pub mount_source: &'a str,
     pub managed_partitions: &'a [String],
-    pub use_kasumi: bool,
 }
 
 struct MagicMount {
@@ -519,12 +518,8 @@ where
 {
     let mut context = MountContext::default();
 
-    if let Some(root) = collect_module_files(
-        module_dir,
-        options.managed_partitions,
-        magic_modules,
-        options.use_kasumi,
-    )? {
+    if let Some(root) = collect_module_files(module_dir, options.managed_partitions, magic_modules)?
+    {
         crate::scoped_log!(debug, "magic", "collected tree: {:?}", root);
         let tmp_root = tmp_path.as_ref();
         let tmp_dir = tmp_root.join("workdir");

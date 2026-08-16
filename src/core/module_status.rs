@@ -23,10 +23,8 @@ use crate::{core::storage::StorageMode, defs, sys::fs::atomic_write};
 
 pub fn update_description(
     storage_mode: StorageMode,
-    kasumi_enabled: bool,
     overlay_count: usize,
     magic_count: usize,
-    kasumi_count: usize,
     blacklisted_count: usize,
 ) {
     let prop_path = Path::new(defs::MODULE_PROP_FILE);
@@ -35,24 +33,16 @@ pub fn update_description(
         return;
     }
 
-    let desc_text = running_description(
-        storage_mode,
-        kasumi_enabled,
-        overlay_count,
-        magic_count,
-        kasumi_count,
-        blacklisted_count,
-    );
+    let desc_text =
+        running_description(storage_mode, overlay_count, magic_count, blacklisted_count);
 
     set_description(prop_path, &desc_text);
 }
 
 fn running_description(
     storage_mode: StorageMode,
-    _kasumi_enabled: bool,
     overlay_count: usize,
     magic_count: usize,
-    _kasumi_count: usize,
     blacklisted_count: usize,
 ) -> String {
     let (mode_str, status_emoji) = match storage_mode {
@@ -62,10 +52,6 @@ fn running_description(
     };
 
     let mut stats = Vec::new();
-    #[cfg(feature = "kasumi")]
-    if _kasumi_enabled {
-        stats.push(format!("Kasumi:{}", _kasumi_count));
-    }
     stats.push(format!("Overlay:{}", overlay_count));
     stats.push(format!("Magic:{}", magic_count));
     if blacklisted_count > 0 {
@@ -174,34 +160,11 @@ mod tests {
     use crate::core::storage::StorageMode;
 
     #[test]
-    #[cfg(feature = "kasumi")]
-    fn running_description_keeps_kasumi_zero_count_when_enabled() {
+    fn running_description_hides_kasumi_stats() {
         #[cfg(feature = "control-plane")]
-        let desc = running_description(StorageMode::Tmpfs, true, 2, 3, 0, 0);
+        let desc = running_description(StorageMode::Tmpfs, 2, 3, 0);
         #[cfg(not(feature = "control-plane"))]
-        let desc = running_description(StorageMode::Ext4, true, 2, 3, 0, 0);
-
-        assert!(desc.contains("Kasumi:0"));
-        assert!(desc.contains("Overlay:2"));
-        assert!(desc.contains("Magic:3"));
-    }
-
-    #[test]
-    #[cfg(not(feature = "kasumi"))]
-    fn running_description_hides_kasumi_in_lite_builds() {
-        let desc = running_description(StorageMode::Ext4, true, 2, 3, 0, 0);
-
-        assert!(!desc.contains("Kasumi:"));
-        assert!(desc.contains("Overlay:2"));
-        assert!(desc.contains("Magic:3"));
-    }
-
-    #[test]
-    fn running_description_hides_kasumi_count_when_disabled() {
-        #[cfg(feature = "control-plane")]
-        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0, 0);
-        #[cfg(not(feature = "control-plane"))]
-        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0, 0);
+        let desc = running_description(StorageMode::Ext4, 2, 3, 0);
 
         assert!(!desc.contains("Kasumi:"));
         assert!(desc.contains("Overlay:2"));
@@ -211,9 +174,9 @@ mod tests {
     #[test]
     fn running_description_shows_blacklisted_count_when_nonzero() {
         #[cfg(feature = "control-plane")]
-        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0, 1);
+        let desc = running_description(StorageMode::Tmpfs, 2, 3, 1);
         #[cfg(not(feature = "control-plane"))]
-        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0, 1);
+        let desc = running_description(StorageMode::Ext4, 2, 3, 1);
 
         assert!(desc.contains("Blacklist:1"));
     }
@@ -221,9 +184,9 @@ mod tests {
     #[test]
     fn running_description_hides_blacklisted_count_when_zero() {
         #[cfg(feature = "control-plane")]
-        let desc = running_description(StorageMode::Tmpfs, false, 2, 3, 0, 0);
+        let desc = running_description(StorageMode::Tmpfs, 2, 3, 0);
         #[cfg(not(feature = "control-plane"))]
-        let desc = running_description(StorageMode::Ext4, false, 2, 3, 0, 0);
+        let desc = running_description(StorageMode::Ext4, 2, 3, 0);
 
         assert!(!desc.contains("Blacklist:"));
     }

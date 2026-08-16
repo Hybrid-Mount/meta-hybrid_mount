@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature = "kasumi")]
-use std::collections::HashSet;
 use std::{fs, path::Path};
 
 use crate::defs;
@@ -50,11 +48,6 @@ pub fn managed_partition_names() -> Vec<String> {
     );
 
     names
-}
-
-#[cfg(feature = "kasumi")]
-pub fn managed_partition_set() -> HashSet<String> {
-    managed_partition_names().into_iter().collect()
 }
 
 #[cfg(test)]

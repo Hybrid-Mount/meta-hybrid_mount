@@ -63,8 +63,6 @@ pub enum DaemonCommand {
     System(SystemCommand),
     Config(ConfigCommand),
     Modules(ModulesCommand),
-    #[cfg(feature = "kasumi")]
-    Kasumi(KasumiCommand),
     Batch(BatchCommand),
 }
 
@@ -136,96 +134,6 @@ pub enum ModulesCommand {
         modules: Vec<crate::core::api::ModuleApplyEntry>,
     },
 }
-
-// ── Kasumi: LKM, rules, hide, maps, uname, runtime ─────────────────────
-
-#[cfg(feature = "kasumi")]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum KasumiCommand {
-    // -- core status / info
-    #[serde(rename = "kasumi-status")]
-    Status,
-    #[serde(rename = "kasumi-list")]
-    List,
-    #[serde(rename = "kasumi-version")]
-    Version,
-    #[serde(rename = "kasumi-features")]
-    Features,
-    #[serde(rename = "kasumi-hooks")]
-    Hooks,
-    #[serde(rename = "kasumi-apply-config-runtime")]
-    ApplyConfigRuntime,
-    #[serde(rename = "kasumi-clear")]
-    Clear,
-    #[serde(rename = "kasumi-release-connection")]
-    ReleaseConnection,
-    #[serde(rename = "kasumi-invalidate-cache")]
-    InvalidateCache,
-    #[serde(rename = "kasumi-fix-mounts")]
-    FixMounts,
-    // -- uname
-    #[serde(rename = "kasumi-restore-uname-global")]
-    RestoreUnameGlobal,
-    #[serde(rename = "kasumi-set-uname")]
-    SetUname {
-        mode: String,
-        release: String,
-        version: String,
-    },
-    #[serde(rename = "kasumi-clear-uname")]
-    ClearUname { mode: String },
-    // -- rules
-    #[serde(rename = "kasumi-rule-add")]
-    RuleAdd {
-        target: PathBuf,
-        source: PathBuf,
-        file_type: Option<i32>,
-    },
-    #[serde(rename = "kasumi-rule-merge")]
-    RuleMerge { target: PathBuf, source: PathBuf },
-    #[serde(rename = "kasumi-rule-hide")]
-    RuleHide { path: PathBuf },
-    #[serde(rename = "kasumi-rule-delete")]
-    RuleDelete { path: PathBuf },
-    #[serde(rename = "kasumi-rule-add-dir")]
-    RuleAddDir {
-        target_base: PathBuf,
-        source_dir: PathBuf,
-    },
-    #[serde(rename = "kasumi-rule-remove-dir")]
-    RuleRemoveDir {
-        target_base: PathBuf,
-        source_dir: PathBuf,
-    },
-    // -- user hide
-    #[serde(rename = "hide-list")]
-    HideList,
-    #[serde(rename = "hide-add")]
-    HideAdd { path: PathBuf },
-    #[serde(rename = "hide-remove")]
-    HideRemove { path: PathBuf },
-    #[serde(rename = "hide-apply")]
-    HideApply,
-    // -- LKM
-    #[serde(rename = "lkm-status")]
-    LkmStatus,
-    #[serde(rename = "lkm-load")]
-    LkmLoad,
-    #[serde(rename = "lkm-unload")]
-    LkmUnload,
-    // -- legacy API aliases
-    #[serde(rename = "api-lkm")]
-    ApiLkm,
-    #[serde(rename = "api-hooks")]
-    ApiHooks,
-    // -- maps spoof
-    #[serde(rename = "api-kasumi-maps-add")]
-    MapsAdd { rule: serde_json::Value },
-    #[serde(rename = "api-kasumi-maps-clear")]
-    MapsClear,
-}
-
 // ── Batch: multiple commands in one round-trip ──────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

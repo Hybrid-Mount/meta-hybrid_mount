@@ -13,7 +13,5 @@
 // limitations under the License.
 
 pub mod executor;
-#[cfg(feature = "kasumi")]
-pub mod mirror_sync;
 pub mod plan;
 pub mod prepare;

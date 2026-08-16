@@ -15,7 +15,6 @@
  */
 
 import type { MountMode } from "../../types";
-import { ENABLE_KASUMI } from "../../constants_gen";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object";
@@ -51,9 +50,6 @@ export function normalizeMountMode(
   value: unknown,
   fallback: MountMode = "overlay",
 ): MountMode {
-  if (value === "kasumi") {
-    return ENABLE_KASUMI ? "kasumi" : fallback;
-  }
   if (value === "magic" || value === "ignore") {
     return value;
   }

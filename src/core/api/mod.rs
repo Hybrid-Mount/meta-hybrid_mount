@@ -13,17 +13,10 @@
 // limitations under the License.
 
 mod error;
-#[cfg(feature = "kasumi")]
-mod kasumi;
 mod modules;
 mod system;
 mod topology;
 
-#[cfg(feature = "kasumi")]
-pub use self::kasumi::{
-    build_features_payload, build_kasumi_version_payload, build_lkm_payload,
-    parse_kasumi_rule_listing,
-};
 pub use self::{
     error::print_json_error,
     modules::{

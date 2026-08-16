@@ -17,7 +17,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{core::backend_capabilities::BackendCapabilities, domain::MountMode};
+use crate::domain::MountMode;
 
 pub(super) const SHALLOW_OVERLAY_DIR: &str = ".hybrid_overlay";
 
@@ -25,12 +25,11 @@ pub(super) const SHALLOW_OVERLAY_DIR: &str = ".hybrid_overlay";
 pub(super) struct ModulePlanOutcome {
     pub(super) overlay_groups: BTreeMap<PathBuf, (String, Vec<PathBuf>)>,
     pub(super) magic: bool,
-    pub(super) kasumi: bool,
 }
 
 impl ModulePlanOutcome {
     pub(super) fn has_mount_result(&self) -> bool {
-        !self.overlay_groups.is_empty() || self.magic || self.kasumi
+        !self.overlay_groups.is_empty() || self.magic
     }
 }
 
@@ -67,18 +66,13 @@ pub(super) struct ModeDecision {
 }
 
 pub(super) struct PrepareContext {
-    pub(super) use_kasumi: bool,
     pub(super) managed_partitions: HashSet<String>,
     pub(super) target_cache: HashMap<PathBuf, PathBuf>,
 }
 
 impl PrepareContext {
-    pub(super) fn new(
-        capabilities: &BackendCapabilities,
-        managed_partitions: HashSet<String>,
-    ) -> Self {
+    pub(super) fn new(managed_partitions: HashSet<String>) -> Self {
         Self {
-            use_kasumi: capabilities.can_use_kasumi(),
             managed_partitions,
             target_cache: HashMap::new(),
         }

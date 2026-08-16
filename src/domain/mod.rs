@@ -17,15 +17,17 @@ use std::{
     path::Path,
 };
 
-use serde::{Deserialize, Serialize};
+use serde::{
+    Deserialize, Serialize,
+    de::{self, Deserializer},
+};
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Default)]
+#[derive(Debug, Serialize, Clone, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum DefaultMode {
     #[default]
     Overlay,
     Magic,
-    Kasumi,
 }
 
 impl DefaultMode {
@@ -33,18 +35,31 @@ impl DefaultMode {
         match self {
             Self::Overlay => MountMode::Overlay,
             Self::Magic => MountMode::Magic,
-            Self::Kasumi => MountMode::Kasumi,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+impl<'de> Deserialize<'de> for DefaultMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "overlay" => Ok(Self::Overlay),
+            // Accept legacy "kasumi" configs and fold them into magic mode.
+            "magic" | "kasumi" => Ok(Self::Magic),
+            _ => Err(de::Error::unknown_variant(&value, &["overlay", "magic"])),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum MountMode {
     #[default]
     Overlay,
     Magic,
-    Kasumi,
     Ignore,
 }
 
@@ -53,8 +68,26 @@ impl MountMode {
         match self {
             Self::Overlay => "overlay",
             Self::Magic => "magic",
-            Self::Kasumi => "kasumi",
             Self::Ignore => "ignore",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for MountMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        match value.as_str() {
+            "overlay" => Ok(Self::Overlay),
+            // Accept legacy "kasumi" rule paths and fold them into magic mode.
+            "magic" | "kasumi" => Ok(Self::Magic),
+            "ignore" => Ok(Self::Ignore),
+            _ => Err(de::Error::unknown_variant(
+                &value,
+                &["overlay", "magic", "ignore"],
+            )),
         }
     }
 }
@@ -79,13 +112,8 @@ impl ModuleRules {
         self.default_mode
     }
 
-    pub fn effective_mode(&self, relative_path: &Path, use_kasumi: bool) -> MountMode {
-        let mode = self.get_mode(relative_path.to_string_lossy().as_ref());
-        if matches!(mode, MountMode::Kasumi) && !use_kasumi {
-            MountMode::Ignore
-        } else {
-            mode
-        }
+    pub fn effective_mode(&self, relative_path: &Path) -> MountMode {
+        self.get_mode(relative_path.to_string_lossy().as_ref())
     }
 
     pub fn has_descendant_rule(&self, relative_path: &Path) -> bool {
@@ -130,9 +158,9 @@ mod tests {
         // Duplicate keys: later entry overwrites (HashMap semantics)
         let rules = make_rules(
             MountMode::Overlay,
-            &[("sys", MountMode::Magic), ("sys", MountMode::Kasumi)],
+            &[("sys", MountMode::Magic), ("sys", MountMode::Magic)],
         );
-        assert_eq!(rules.get_mode("sys"), MountMode::Kasumi);
+        assert_eq!(rules.get_mode("sys"), MountMode::Magic);
     }
 
     #[test]
@@ -152,10 +180,10 @@ mod tests {
             MountMode::Overlay,
             &[
                 ("system", MountMode::Magic),
-                ("system/app", MountMode::Kasumi),
+                ("system/app", MountMode::Magic),
             ],
         );
-        assert_eq!(rules.get_mode("system/app/foo"), MountMode::Kasumi);
+        assert_eq!(rules.get_mode("system/app/foo"), MountMode::Magic);
         assert_eq!(rules.get_mode("system/priv-app"), MountMode::Magic);
     }
 
@@ -164,8 +192,8 @@ mod tests {
         let rules = make_rules(MountMode::Ignore, &[]);
         assert_eq!(rules.get_mode("any/path"), MountMode::Ignore);
 
-        let rules = make_rules(MountMode::Kasumi, &[]);
-        assert_eq!(rules.get_mode("system"), MountMode::Kasumi);
+        let rules = make_rules(MountMode::Magic, &[]);
+        assert_eq!(rules.get_mode("system"), MountMode::Magic);
     }
 
     #[test]
@@ -182,7 +210,7 @@ mod tests {
             MountMode::Overlay,
             &[
                 ("system/app/private", MountMode::Magic),
-                ("vendor/lib", MountMode::Kasumi),
+                ("vendor/lib", MountMode::Magic),
             ],
         );
         let prefixes = rules.descendant_rule_prefixes();
@@ -192,5 +220,22 @@ mod tests {
         assert!(prefixes.contains("vendor"));
         assert!(!prefixes.contains("system/app/private"));
         assert!(!prefixes.contains("vendor/lib"));
+    }
+
+    #[test]
+    fn legacy_kasumi_configs_deserialize_as_magic() {
+        let rules: ModuleRules = toml::from_str(
+            r#"
+            default_mode = "kasumi"
+            [paths]
+            "system/app" = "kasumi"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(rules.default_mode, MountMode::Magic);
+        assert_eq!(rules.get_mode("system/app"), MountMode::Magic);
+
+        let default_mode: DefaultMode = toml::from_str("\"kasumi\"").unwrap();
+        assert_eq!(default_mode, DefaultMode::Magic);
     }
 }
