@@ -57,6 +57,7 @@ jobs:
       - name: Check installer compatibility
         run: bash tests/installer_compat.sh
       - name: Install ShellCheck
+        shell: bash
         run: |
           set -euo pipefail
           apt-get update
@@ -64,6 +65,7 @@ jobs:
           rm -rf /var/lib/apt/lists/*
           shellcheck --version
       - name: Lint shell scripts
+        shell: bash
         run: shellcheck --severity=error module/*.sh scripts/*.sh tests/*.sh
 
   webui-lints:
