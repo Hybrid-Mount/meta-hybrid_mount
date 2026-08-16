@@ -7,6 +7,9 @@ mod defs;
 mod errors;
 mod logging;
 mod magic_mount;
+mod overlayfs;
+mod storage;
+mod sys;
 mod utils;
 
 use std::env;

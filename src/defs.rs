@@ -25,6 +25,17 @@ pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
 pub const SCAN_RET_PATH: &str = "/data/adb/hybrid-mount/scan.ret";
 pub const STATE_PATH: &str = "/data/adb/hybrid-mount/run/state.json";
 
+/// ext4 staging 镜像(v4.2.0 行为)。
+pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
+
+/// 不注册进内核尝试卸载列表的分区(pairip 完整性校验规避,v4.2.0 行为)。
+pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
+    "/vendor/lib",
+    "/vendor/lib64",
+    "/system/lib",
+    "/system/lib64",
+];
+
 pub const DEFAULT_MOUNT_SOURCE: &str = "KSU";
 
 /// 挂载临时区(参考项目行为:启动期挂在 RAM 上,不触碰模块目录)。
