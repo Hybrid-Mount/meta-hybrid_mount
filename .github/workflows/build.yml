@@ -11,6 +11,7 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.*'
+      - 'rust-toolchain.toml'
       - 'module/**'
       - 'webui'
       - 'webui/**'
@@ -25,6 +26,7 @@ on:
     paths:
       - 'src/**'
       - 'Cargo.*'
+      - 'rust-toolchain.toml'
       - 'module/**'
       - 'webui'
       - 'webui/**'
@@ -53,7 +55,7 @@ jobs:
       matrix:
         flavor: [lite, nano]
     container:
-      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -63,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           filter: 'tree:0'
@@ -72,7 +74,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           cache-all-crates: true
 
@@ -92,7 +94,7 @@ jobs:
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
 
       - name: Upload ${{ matrix.flavor }} Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ARTIFACT_ZIP }}
@@ -111,7 +113,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           filter: 'tree:0'
@@ -120,15 +122,17 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb # nightly
+        with:
+          toolchain: nightly-2026-08-10
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           cache-all-crates: true
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: notify-output
           pattern: Hybrid-Mount-*

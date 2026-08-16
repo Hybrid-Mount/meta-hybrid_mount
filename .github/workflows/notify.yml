@@ -7,7 +7,8 @@ name: Notify crate
 on:
   pull_request:
     branches:
-      - '**'
+      - 'main'
+      - 'dev'
     paths:
       - 'Cargo.lock'
       - 'Cargo.toml'
@@ -16,7 +17,8 @@ on:
       - '.github/workflows/notify.yml'
   push:
     branches:
-      - '**'
+      - 'main'
+      - 'dev'
     paths:
       - 'Cargo.lock'
       - 'Cargo.toml'
@@ -24,6 +26,10 @@ on:
       - 'tools/notify/**'
       - '.github/workflows/notify.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -37,13 +43,13 @@ jobs:
     name: Notify crate
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           filter: 'tree:0'
 
@@ -51,7 +57,7 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
 
       - name: Format notify crate
         run: cargo fmt --manifest-path tools/notify/Cargo.toml -- --check

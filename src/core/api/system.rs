@@ -237,7 +237,8 @@ fn read_mount_entries() -> Result<Vec<MountEntry>> {
 
 #[cfg(test)]
 mod tests {
-    use super::format_windows_size;
+    use super::{build_storage_payload, format_windows_size};
+    use crate::core::runtime_state::RuntimeState;
 
     #[test]
     fn formats_windows_style_sizes() {
@@ -246,5 +247,20 @@ mod tests {
         assert_eq!(format_windows_size(1024), "1 KiB");
         assert_eq!(format_windows_size(1536), "1.50 KiB");
         assert_eq!(format_windows_size(1024 * 1024), "1 MiB");
+    }
+
+    #[test]
+    fn storage_api_reports_the_stable_runtime_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let stable_path = temp.path().join("hybrid-mount");
+        std::fs::create_dir(&stable_path).unwrap();
+        let deleted_staging_path = temp.path().join("hm_deleted");
+        let mut state = RuntimeState::idle("ext4", stable_path.clone());
+        state.mounted = true;
+
+        let payload = build_storage_payload(&state).unwrap();
+
+        assert_eq!(payload.path, stable_path.display().to_string());
+        assert_ne!(payload.path, deleted_staging_path.display().to_string());
     }
 }

@@ -6,17 +6,24 @@ name: Auto Blacklist PR / 自动黑名单 PR
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [labeled]
+
+concurrency:
+  group: blacklist-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   create-blacklist-pr:
+    if: github.event.label.name == 'blacklist-request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: dev
 
       - name: Create blacklist PR
         env:

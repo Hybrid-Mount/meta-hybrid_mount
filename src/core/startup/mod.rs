@@ -75,18 +75,31 @@ where
     }
 
     let workspace_timer = utils::StageTimer::start("startup", "workspace_setup");
-    let mnt_base = utils::get_mnt()?;
-    sys::fs::ensure_dir_exists(&mnt_base)?;
+    let mnt_base = utils::create_mount_workspace()?;
     workspace_timer.finish();
-    crate::core::MountController::new(config.clone(), &mnt_base)?
-        .init_storage(&mnt_base)
-        .context("Failed to initialize storage")?
-        .scan_and_prepare_plan()
-        .context("Failed to scan modules and prepare mount plan")?
-        .execute()
-        .context("Failed to execute mount plan")?
-        .finalize()
-        .context("Failed to finalize boot sequence")?;
+    let mount_result = (|| -> Result<()> {
+        crate::core::MountController::new(config.clone(), &mnt_base)?
+            .init_storage(&mnt_base)
+            .context("Failed to initialize storage")?
+            .scan_and_prepare_plan()
+            .context("Failed to scan modules and prepare mount plan")?
+            .execute()
+            .context("Failed to execute mount plan")?
+            .finalize()
+            .context("Failed to finalize boot sequence")
+    })();
+
+    if let Err(error) = mount_result {
+        return Err(
+            match crate::core::controller::clean_up_failed_workspace(&mnt_base) {
+                Ok(()) => error,
+                Err(cleanup_error) => error.context(format!(
+                    "additionally failed to clean workspace {}: {cleanup_error:#}",
+                    mnt_base.display()
+                )),
+            },
+        );
+    }
     mount_timer.finish();
 
     Ok(config)

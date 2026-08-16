@@ -9,6 +9,25 @@ on:
     tags:
       - "v*.*.*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build (for example v4.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  # Serialize every tag. The main-branch metadata update is a shared resource,
+  # even when two distinct release tags are pushed close together.
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
 jobs:
   build:
@@ -20,7 +39,7 @@ jobs:
       matrix:
         flavor: [lite, nano]
     container:
-      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -30,16 +49,26 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
           filter: 'tree:0'
 
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Validate release tag
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          git rev-parse --verify "$RELEASE_TAG^{commit}" >/dev/null
+
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
         with:
           cache-all-crates: true
 
@@ -51,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf output
-          cargo xtask build --release --tag "${{ github.ref_name }}" --flavor ${{ matrix.flavor }}
+          cargo xtask build --release --tag "$RELEASE_TAG" --flavor ${{ matrix.flavor }}
 
           ZIP_PATH="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
           test -n "$ZIP_PATH"
@@ -61,7 +90,7 @@ jobs:
           echo "STAGED_ZIP=$STAGED_ZIP" >> "$GITHUB_ENV"
 
       - name: Upload ${{ matrix.flavor }} Artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: package-${{ matrix.flavor }}
           path: ${{ env.STAGED_ZIP }}
@@ -75,7 +104,7 @@ jobs:
       contents: write
       packages: read
     container:
-      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -85,18 +114,28 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 0
 
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Validate release tag
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          git rev-parse --verify "$RELEASE_TAG^{commit}" >/dev/null
+
       - name: Detect Release Type
         id: release_type
         run: |
           set -euo pipefail
-          tag="${{ github.ref_name }}"
+          tag="$RELEASE_TAG"
           version="${tag#v}"
           prerelease=true
           if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -114,7 +153,7 @@ jobs:
           echo "release_type=$release_type" >> "$GITHUB_OUTPUT"
 
       - name: Download package artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: packages
           pattern: package-*
@@ -134,28 +173,11 @@ jobs:
           echo "nano_name=$(basename "$NANO_ZIP")" >> "$GITHUB_OUTPUT"
           ls -la "$LITE_ZIP" "$NANO_ZIP"
 
-      - name: Notify Telegram album
-        env:
-          HYBRID_MOUNT_NOTIFY: "1"
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          set -euo pipefail
-          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
-          rm -rf "$NOTIFY_DIR"
-          mkdir -p "$NOTIFY_DIR"
-          cp "${{ steps.paths.outputs.lite_zip }}" "$NOTIFY_DIR/"
-          cp "${{ steps.paths.outputs.nano_zip }}" "$NOTIFY_DIR/"
-          cargo xtask notify \
-            --output "$NOTIFY_DIR" \
-            --label "丰收 (Harvest) [lite+nano] - ${{ github.ref_name }}" \
-            --topic-id 6
-
       - name: Prepare Release Metadata
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
-          TAG="${{ github.ref_name }}"
+          TAG="$RELEASE_TAG"
           CLEAN_VERSION="${TAG#v}"
           VERSION_CODE=$(awk -F. '{print $1 * 100000 + $2 * 1000 + $3}' <<< "$CLEAN_VERSION")
 
@@ -199,7 +221,7 @@ jobs:
 
       - name: Generate Changelog
         id: git-cliff
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
         with:
           config: cliff.toml
           args: --current
@@ -209,9 +231,9 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
 
       - name: Create Release (Local)
-        uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           draft: false
           prerelease: ${{ steps.release_type.outputs.prerelease }}
           files: |
@@ -220,13 +242,12 @@ jobs:
           body_path: /tmp/changelog.md
 
       - name: Create Remote Release (KernelSU-Repo)
-        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           set -euo pipefail
           repo="KernelSU-Modules-Repo/hybrid_mount"
-          tag="${{ github.ref_name }}"
+          tag="$RELEASE_TAG"
           prerelease="${{ steps.release_type.outputs.prerelease }}"
 
           prerelease_flag=""
@@ -234,26 +255,104 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          gh release create "$tag" \
-            --repo "$repo" \
-            --draft \
-            $prerelease_flag \
-            --title "$tag" \
-            --notes-file /tmp/changelog.md \
-            "${{ steps.paths.outputs.lite_zip }}" \
-            "${{ steps.paths.outputs.nano_zip }}"
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --repo "$repo" \
+              --title "$tag" \
+              --notes-file /tmp/changelog.md \
+              --prerelease="$prerelease"
+            gh release upload "$tag" \
+              --repo "$repo" \
+              --clobber \
+              "${{ steps.paths.outputs.lite_zip }}" \
+              "${{ steps.paths.outputs.nano_zip }}"
+          else
+            gh release create "$tag" \
+              --repo "$repo" \
+              --draft \
+              $prerelease_flag \
+              --title "$tag" \
+              --notes-file /tmp/changelog.md \
+              "${{ steps.paths.outputs.lite_zip }}" \
+              "${{ steps.paths.outputs.nano_zip }}"
+          fi
 
           gh release edit "$tag" \
             --repo "$repo" \
             --draft=false
 
       - name: Sync Version to Main
-        if: startsWith(github.ref, 'refs/tags/')
+        id: sync_main
+        if: github.event_name == 'push'
         run: |
+          set -euo pipefail
+          echo "changed=false" >> "$GITHUB_OUTPUT"
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           git fetch origin main
+          CURRENT_TAG="$(git show origin/main:update.json 2>/dev/null | jq -r '.version // empty' 2>/dev/null || true)"
+          if [[ -n "$CURRENT_TAG" ]]; then
+            if [[ ! "$CURRENT_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo "Refusing to replace invalid current release version: $CURRENT_TAG" >&2
+              exit 1
+            fi
+
+            # Print -1, 0, or 1 for CURRENT_TAG compared with RELEASE_TAG.
+            # SemVer build metadata is ignored; a stable version outranks a
+            # prerelease with the same numeric core.
+            VERSION_ORDER="$(node - "$CURRENT_TAG" "$RELEASE_TAG" <<'NODE'
+          const [currentText, releaseText] = process.argv.slice(2);
+          const pattern = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+          function parse(text) {
+            const match = pattern.exec(text);
+            if (!match) throw new Error(`invalid SemVer tag: ${text}`);
+            return {
+              core: match.slice(1, 4).map(BigInt),
+              prerelease: match[4]?.split('.') ?? null,
+            };
+          }
+
+          function compareIdentifiers(left, right) {
+            const leftNumeric = /^\d+$/.test(left);
+            const rightNumeric = /^\d+$/.test(right);
+            if (leftNumeric && rightNumeric) {
+              return BigInt(left) < BigInt(right) ? -1 : BigInt(left) > BigInt(right) ? 1 : 0;
+            }
+            if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+            return left < right ? -1 : left > right ? 1 : 0;
+          }
+
+          function compare(left, right) {
+            for (let index = 0; index < left.core.length; index += 1) {
+              if (left.core[index] !== right.core[index]) {
+                return left.core[index] < right.core[index] ? -1 : 1;
+              }
+            }
+            if (left.prerelease === null || right.prerelease === null) {
+              return left.prerelease === right.prerelease ? 0 : left.prerelease === null ? 1 : -1;
+            }
+            const length = Math.max(left.prerelease.length, right.prerelease.length);
+            for (let index = 0; index < length; index += 1) {
+              if (left.prerelease[index] === undefined) return -1;
+              if (right.prerelease[index] === undefined) return 1;
+              const result = compareIdentifiers(left.prerelease[index], right.prerelease[index]);
+              if (result !== 0) return result;
+            }
+            return 0;
+          }
+
+          process.stdout.write(String(compare(parse(currentText), parse(releaseText))));
+          NODE
+            )"
+
+            if [[ "$VERSION_ORDER" != "-1" ]]; then
+              echo "Main already has $CURRENT_TAG; refusing to replace it with non-newer $RELEASE_TAG"
+              exit 0
+            fi
+          fi
+
           git checkout main
 
           mv /tmp/update.json update.json
@@ -261,15 +360,37 @@ jobs:
           mv /tmp/update-nano.json update-nano.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
 
-          TAG="${{ github.ref_name }}"
+          TAG="$RELEASE_TAG"
           CLEAN_VERSION="${TAG#v}"
           sed -i "s/^version = \".*\"/version = \"${CLEAN_VERSION}\"/" Cargo.toml
 
-          cargo update
+          # Refresh only the workspace package metadata in Cargo.lock, then
+          # verify that the resulting lockfile is self-consistent.
+          cargo check -p hybrid-mount --all-features
+          cargo check --locked -p hybrid-mount --all-features
 
           git add update.json update-lite.json update-nano.json changelog.md Cargo.toml Cargo.lock
 
           if ! git diff --staged --quiet; then
-            git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
+            git commit -m "chore(release): sync version $RELEASE_TAG"
             git push origin main
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Notify Telegram album
+        if: github.event_name == 'push' && steps.sync_main.outputs.changed == 'true'
+        env:
+          HYBRID_MOUNT_NOTIFY: "1"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
+          rm -rf "$NOTIFY_DIR"
+          mkdir -p "$NOTIFY_DIR"
+          cp "${{ steps.paths.outputs.lite_zip }}" "$NOTIFY_DIR/"
+          cp "${{ steps.paths.outputs.nano_zip }}" "$NOTIFY_DIR/"
+          cargo xtask notify \
+            --output "$NOTIFY_DIR" \
+            --label "丰收 (Harvest) [lite+nano] - $RELEASE_TAG" \
+            --topic-id 6

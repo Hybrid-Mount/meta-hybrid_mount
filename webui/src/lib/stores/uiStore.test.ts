@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import enUS from "../../locales/en-US.json";
-import { validateLocaleShape } from "./uiStore";
+import { resolveStoredLocale, validateLocaleShape } from "./uiStore";
 
 const locales = import.meta.glob<{ default: unknown }>("../../locales/*.json", {
   eager: true,
@@ -30,4 +30,13 @@ describe("locale contracts", () => {
       ).not.toThrow();
     });
   }
+
+  it("falls back when a persisted locale is missing or unsupported", () => {
+    expect(resolveStoredLocale(null)).toBe("en-US");
+    expect(resolveStoredLocale("xx-XX")).toBe("en-US");
+  });
+
+  it("preserves supported persisted locales", () => {
+    expect(resolveStoredLocale("zh-CN")).toBe("zh-CN");
+  });
 });

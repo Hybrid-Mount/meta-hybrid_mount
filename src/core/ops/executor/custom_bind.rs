@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
+use std::path::PathBuf;
+
 use anyhow::Result;
 
 use crate::{
@@ -12,7 +14,7 @@ use crate::{
 
 pub(super) fn mount_custom_binds(
     config: &config::Config,
-) -> Result<(Vec<String>, MountStatistics)> {
+) -> Result<(Vec<PathBuf>, MountStatistics)> {
     let mut stats = MountStatistics::default();
 
     if config.custom_mounts.is_empty() {
@@ -39,7 +41,7 @@ pub(super) fn mount_custom_binds(
 
     let targets = mounted
         .into_iter()
-        .map(|mount| mount.target.display().to_string())
+        .map(|mount| mount.target)
         .collect::<Vec<_>>();
 
     crate::scoped_log!(

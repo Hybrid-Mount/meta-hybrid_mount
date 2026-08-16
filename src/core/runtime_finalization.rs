@@ -14,13 +14,13 @@ use crate::{
     },
 };
 
-pub fn finalize(
+pub fn build_state(
     config: &Config,
     storage_mode: StorageMode,
     mount_point: &Path,
     result: &ExecutionResult,
     inventory: &InventorySummary,
-) -> Result<()> {
+) -> Result<RuntimeState> {
     crate::scoped_log!(
         info,
         "runtime_finalization",
@@ -35,6 +35,11 @@ pub fn finalize(
     let state =
         RuntimeState::build_from_execution(config, storage_mode, mount_point, result, inventory)?;
     build_timer.finish();
+
+    Ok(state)
+}
+
+pub fn save_state(state: &RuntimeState) -> Result<()> {
     let save_timer = crate::utils::StageTimer::start("runtime_finalization", "state_save");
     state.save()?;
     save_timer.finish();

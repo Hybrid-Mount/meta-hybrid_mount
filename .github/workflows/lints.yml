@@ -6,15 +6,21 @@ name: lints-check
 on:
   pull_request:
     branches:
-      - '**'
+      - 'main'
+      - 'dev'
   push:
     branches:
-      - '**'
+      - 'main'
+      - 'dev'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
-  checks: write
   contents: read
+  packages: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -23,22 +29,21 @@ jobs:
   lints-check:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     permissions:
-      checks: write
       contents: read
       packages: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           filter: 'tree:0'
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
       - name: Format codes
         run: cargo fmt --all -- --check
       - name: Clippy code
@@ -49,11 +54,13 @@ jobs:
         run: cargo test -p hybrid-mount --no-default-features --features control-plane --lib
       - name: Check nano feature set
         run: cargo test -p hybrid-mount --no-default-features --lib
+      - name: Check installer compatibility
+        run: bash tests/installer_compat.sh
 
   webui-lints:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci@sha256:7331b8850e117a6d534de2fc9c9bdb6d6845fd6f280aa9b3ffbbd6fc5d7c31a1
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
@@ -64,7 +71,7 @@ jobs:
       run:
         working-directory: webui
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           filter: 'tree:0'
       - name: Resolve pnpm store path
@@ -76,7 +83,7 @@ jobs:
           mkdir -p "$STORE_PATH"
           echo "path=$STORE_PATH" >> "$GITHUB_OUTPUT"
       - name: Cache pnpm store
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
@@ -95,8 +102,9 @@ jobs:
             BINARY: "/data/adb/modules/hybrid_mount/hybrid-mount",
           } as const;
           EOF
-          pnpm generate:info-tab-data
       - name: Run lint
         run: pnpm lint
       - name: Run test
         run: pnpm test
+      - name: Audit production dependencies
+        run: pnpm audit --audit-level high

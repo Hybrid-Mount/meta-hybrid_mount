@@ -5,18 +5,32 @@
 name: Manage License Headers
 
 on:
+  pull_request:
+    branches:
+      - 'main'
+      - 'dev'
+  push:
+    branches:
+      - 'main'
+      - 'dev'
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   license-check:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           filter: 'tree:0'
 
       - name: Run HawkEye License Check
-        uses: korandoru/hawkeye@v6
+        uses: korandoru/hawkeye@32ec486c6e6a8fe3bc4178d4f4296d4a0333686c # v6

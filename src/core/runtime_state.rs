@@ -113,6 +113,8 @@ pub struct RuntimeState {
     pub timestamp: u64,
     pub pid: u32,
     pub storage_mode: String,
+    /// Observable storage base after finalization. A temporary mount workspace
+    /// is only retained here when cleanup is explicitly disabled.
     pub mount_point: PathBuf,
     /// True once a mount run has completed. Daemons that start without
     /// persisted state serve an idle state with this set to false.
@@ -120,6 +122,12 @@ pub struct RuntimeState {
     pub mounted: bool,
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
+    /// Exact mount targets created by Magic Mount during the successful run.
+    /// Late-load cleanup uses these instead of inferring ownership from a
+    /// shared KernelSU/APatch mount source.
+    #[serde(default)]
+    pub magic_mount_targets: Vec<String>,
+    #[serde(default)]
     pub custom_mounts: Vec<String>,
     pub skip_mount_modules: Vec<String>,
     pub blacklisted_modules: Vec<String>,
@@ -135,6 +143,33 @@ pub struct RuntimeState {
 
 fn default_mounted() -> bool {
     true
+}
+
+fn runtime_mount_point_after_finalize(config: &Config, staging_path: &Path) -> PathBuf {
+    if config.disable_umount || !crate::utils::is_mount_workspace_path(staging_path) {
+        staging_path.to_path_buf()
+    } else {
+        Path::new(defs::CONFIG_FILE)
+            .parent()
+            .expect("config file must live below the persistent data root")
+            .to_path_buf()
+    }
+}
+
+#[cfg(feature = "control-plane")]
+fn tmpfs_xattr_support_for_status(probe: Result<bool>) -> bool {
+    match probe {
+        Ok(supported) => supported,
+        Err(error) => {
+            crate::scoped_log!(
+                warn,
+                "runtime_state:xattr",
+                "probe failed, reporting unsupported: error={:#}",
+                error
+            );
+            false
+        }
+    }
 }
 
 impl RuntimeState {
@@ -161,6 +196,7 @@ impl RuntimeState {
         mount_point: PathBuf,
         overlay_modules: Vec<String>,
         magic_modules: Vec<String>,
+        magic_mount_targets: Vec<String>,
         custom_mounts: Vec<String>,
         active_mounts: Vec<String>,
         mount_stats: MountStatistics,
@@ -176,7 +212,8 @@ impl RuntimeState {
         let pid = std::process::id();
 
         #[cfg(feature = "control-plane")]
-        let tmpfs_xattr_supported = xattr::is_overlay_xattr_supported()?;
+        let tmpfs_xattr_supported =
+            tmpfs_xattr_support_for_status(xattr::is_overlay_xattr_supported());
 
         let state = Self {
             timestamp,
@@ -186,6 +223,7 @@ impl RuntimeState {
             mounted: true,
             overlay_modules,
             magic_modules,
+            magic_mount_targets,
             custom_mounts,
             skip_mount_modules: Vec::new(),
             blacklisted_modules: Vec::new(),
@@ -278,7 +316,7 @@ impl RuntimeState {
     }
 
     pub fn build_from_execution(
-        _config: &Config,
+        config: &Config,
         storage_mode: crate::core::storage::StorageMode,
         mount_point: &Path,
         result: &ExecutionResult,
@@ -294,11 +332,13 @@ impl RuntimeState {
             result.magic_module_ids.len()
         );
 
+        let runtime_mount_point = runtime_mount_point_after_finalize(config, mount_point);
         let mut state = Self::new(
             storage_mode.as_str().to_owned(),
-            mount_point.to_path_buf(),
+            runtime_mount_point,
             result.overlay_module_ids.clone(),
             result.magic_module_ids.clone(),
+            result.magic_mount_targets.clone(),
             result.custom_mount_targets.clone(),
             collect_active_mounts(result),
             result.mount_stats.clone(),
@@ -393,7 +433,31 @@ fn collect_active_mounts(result: &ExecutionResult) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::RuntimeState;
+    #[cfg(feature = "control-plane")]
+    use super::tmpfs_xattr_support_for_status;
+    use super::{MountStatistics, RuntimeState};
+
+    fn empty_execution_result() -> crate::core::ops::executor::ExecutionResult {
+        crate::core::ops::executor::ExecutionResult {
+            overlay_module_ids: Vec::new(),
+            overlay_partitions: Vec::new(),
+            magic_module_ids: Vec::new(),
+            magic_mount_targets: Vec::new(),
+            custom_mount_targets: Vec::new(),
+            mount_stats: MountStatistics::default(),
+            rollback_targets: Vec::new(),
+        }
+    }
+
+    #[cfg(feature = "control-plane")]
+    #[test]
+    fn xattr_probe_failure_is_reported_as_unsupported() {
+        assert!(tmpfs_xattr_support_for_status(Ok(true)));
+        assert!(!tmpfs_xattr_support_for_status(Ok(false)));
+        assert!(!tmpfs_xattr_support_for_status(Err(anyhow::anyhow!(
+            "probe failed"
+        ))));
+    }
 
     #[test]
     fn serialized_runtime_state_round_trips() {
@@ -430,5 +494,99 @@ mod tests {
         let state = serde_json::from_value::<RuntimeState>(value).unwrap();
 
         assert!(state.mounted);
+    }
+
+    #[test]
+    fn legacy_state_without_mount_target_fields_defaults_to_empty() {
+        let mut value = serde_json::to_value(RuntimeState::default()).unwrap();
+        let object = value.as_object_mut().unwrap();
+        object.remove("magic_mount_targets");
+        object.remove("custom_mounts");
+
+        let state = serde_json::from_value::<RuntimeState>(value).unwrap();
+
+        assert!(state.magic_mount_targets.is_empty());
+        assert!(state.custom_mounts.is_empty());
+    }
+
+    #[test]
+    fn finalized_state_persists_exact_magic_mount_targets() {
+        let mut result = empty_execution_result();
+        result.magic_mount_targets = vec![
+            "/system/etc/hosts".to_string(),
+            "/vendor/etc/example.conf".to_string(),
+        ];
+
+        let state = RuntimeState::build_from_execution(
+            &crate::conf::config::Config::default(),
+            crate::core::storage::StorageMode::Ext4,
+            std::path::Path::new("/mnt/hm_a1B2c3D4e5"),
+            &result,
+            &crate::core::inventory::InventorySummary::default(),
+        )
+        .unwrap();
+
+        assert_eq!(state.magic_mount_targets, result.magic_mount_targets);
+    }
+
+    #[test]
+    fn finalized_state_uses_stable_data_root_after_staging_cleanup() {
+        let config = crate::conf::config::Config::default();
+        let staging = std::path::Path::new("/mnt/hm_a1B2c3D4e5");
+
+        let state = RuntimeState::build_from_execution(
+            &config,
+            crate::core::storage::StorageMode::Ext4,
+            staging,
+            &empty_execution_result(),
+            &crate::core::inventory::InventorySummary::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.mount_point,
+            std::path::Path::new(crate::defs::CONFIG_FILE)
+                .parent()
+                .unwrap()
+                .to_path_buf()
+        );
+        assert_ne!(state.mount_point, staging);
+    }
+
+    #[test]
+    fn finalized_state_keeps_staging_path_when_cleanup_is_disabled() {
+        let config = crate::conf::config::Config {
+            disable_umount: true,
+            ..Default::default()
+        };
+        let staging = std::path::Path::new("/debug_ramdisk/hm_a1B2c3D4e5");
+
+        let state = RuntimeState::build_from_execution(
+            &config,
+            crate::core::storage::StorageMode::Ext4,
+            staging,
+            &empty_execution_result(),
+            &crate::core::inventory::InventorySummary::default(),
+        )
+        .unwrap();
+
+        assert_eq!(state.mount_point, staging);
+    }
+
+    #[test]
+    fn finalized_state_keeps_non_temporary_mount_paths() {
+        let config = crate::conf::config::Config::default();
+        let retained = std::path::Path::new("/data/adb/hybrid-mount/custom-storage");
+
+        let state = RuntimeState::build_from_execution(
+            &config,
+            crate::core::storage::StorageMode::Ext4,
+            retained,
+            &empty_execution_result(),
+            &crate::core::inventory::InventorySummary::default(),
+        )
+        .unwrap();
+
+        assert_eq!(state.mount_point, retained);
     }
 }

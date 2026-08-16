@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::{
-    collections::{HashMap, HashSet, btree_map::Entry},
+    collections::{HashSet, btree_map::Entry},
     fs::{self, DirEntry, Metadata, create_dir, create_dir_all, read_link},
     os::unix::fs::{MetadataExt, symlink},
     path::{Path, PathBuf},
@@ -196,10 +196,6 @@ pub fn collect_module_files(
     let module_root = module_dir;
     let mut has_file = HashSet::new();
     let partitions: HashSet<String> = managed_partitions.iter().cloned().collect();
-    let selected_rules: HashMap<&str, &ModuleRules> = magic_modules
-        .iter()
-        .map(|module| (module.id.as_str(), &module.rules))
-        .collect();
 
     crate::scoped_log!(
         debug,
@@ -208,38 +204,47 @@ pub fn collect_module_files(
         module_root.display()
     );
 
-    for entry_result in module_root.read_dir()? {
-        let entry = entry_result?;
-        if !entry.file_type()?.is_dir() {
-            bail!(
-                "module directory contains a non-directory entry: {}",
-                entry.path().display()
-            );
-        }
+    module_root
+        .read_dir()
+        .with_context(|| format!("failed to read module root {}", module_root.display()))?;
 
-        let file_name = entry.file_name();
-        let id = file_name
-            .to_str()
-            .with_context(|| format!("non-UTF-8 module directory under {}", module_root.display()))?
-            .to_owned();
+    // The selected module slice is already ordered by mount priority. Walking
+    // the directory here would make collision handling depend on readdir(3).
+    for module in magic_modules {
+        let id = &module.id;
         crate::scoped_log!(debug, "magic:collect", "module inspect: id={}", id);
 
-        let Some(rules) = selected_rules.get(id.as_str()).copied() else {
+        let module_path = module_root.join(id);
+        let module_metadata = match fs::symlink_metadata(&module_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                crate::scoped_log!(
+                    warn,
+                    "magic:collect",
+                    "module skip: id={}, reason=missing_path",
+                    id
+                );
+                continue;
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to inspect {}", module_path.display()));
+            }
+        };
+        if !module_metadata.file_type().is_dir() {
             crate::scoped_log!(
-                debug,
+                warn,
                 "magic:collect",
-                "module skip: id={}, reason=not_selected",
+                "module skip: id={}, reason=non_directory_entry",
                 id
             );
             continue;
-        };
+        }
 
-        let module_path = entry.path();
         let prop = module_path.join("module.prop");
-        inventory::validate_module_prop_id(&prop, &id)?;
+        inventory::validate_module_prop_id(&prop, id)?;
 
-        if inventory::is_reserved_module_dir(&id)
-            || inventory::has_mount_block_marker(&module_path)?
+        if inventory::is_reserved_module_dir(id) || inventory::has_mount_block_marker(&module_path)?
         {
             crate::scoped_log!(
                 debug,
@@ -275,6 +280,7 @@ pub fn collect_module_files(
             "module collect: path={}",
             module_path.display()
         );
+        let rules = &module.rules;
         let descendant_rule_prefixes = rules.descendant_rule_prefixes();
 
         for p in touched_partitions {
@@ -350,4 +356,75 @@ where
         )
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn magic_module(root: &Path, id: &str, value: &str) -> Module {
+        let module_path = root.join(id);
+        fs::create_dir_all(module_path.join("system")).unwrap();
+        fs::write(module_path.join("module.prop"), format!("id={id}\n")).unwrap();
+        fs::write(module_path.join("system/priority"), value).unwrap();
+        Module {
+            id: id.to_string(),
+            source_path: module_path,
+            rules: ModuleRules {
+                default_mode: MountMode::Magic,
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn collection_ignores_non_directory_entries_in_module_root() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("stray"), b"not a module").unwrap();
+        let selected = magic_module(temp.path(), "selected", "selected");
+
+        let root = collect_module_files(temp.path(), &["system".to_string()], &[selected]).unwrap();
+
+        assert!(root.is_some());
+    }
+
+    #[test]
+    fn collection_uses_selected_module_order_for_collisions() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = magic_module(temp.path(), "first", "first");
+        let second = magic_module(temp.path(), "second", "second");
+
+        let root = collect_module_files(
+            temp.path(),
+            &["system".to_string()],
+            &[second.clone(), first],
+        )
+        .unwrap()
+        .unwrap();
+        let selected_path = root.children["system"].children["priority"]
+            .module_path
+            .as_ref()
+            .unwrap();
+
+        assert!(selected_path.starts_with(&second.source_path));
+    }
+
+    #[test]
+    fn collection_skips_a_selected_entry_that_is_not_a_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_path = temp.path().join("stray");
+        fs::write(&source_path, b"not a module").unwrap();
+        let selected = Module {
+            id: "stray".to_string(),
+            source_path,
+            rules: ModuleRules {
+                default_mode: MountMode::Magic,
+                ..Default::default()
+            },
+        };
+
+        let root = collect_module_files(temp.path(), &["system".to_string()], &[selected]).unwrap();
+
+        assert!(root.is_none());
+    }
 }

@@ -24,6 +24,13 @@ const localeModules = import.meta.glob<{ default: unknown }>(
   "../../locales/*.json",
 );
 
+const DEFAULT_LOCALE = "en-US";
+
+export function resolveStoredLocale(code: string | null): string {
+  if (!code) return DEFAULT_LOCALE;
+  return localeModules[`../../locales/${code}.json`] ? code : DEFAULT_LOCALE;
+}
+
 export function validateLocaleShape(
   reference: unknown,
   candidate: unknown,
@@ -69,7 +76,7 @@ export function validateLocaleShape(
 }
 
 const createUiStore = () => {
-  const [lang, setLangSignal] = createSignal("en-US");
+  const [lang, setLangSignal] = createSignal(DEFAULT_LOCALE);
   const [loadedLocale, setLoadedLocale] = createSignal<Locale>(enUS);
   const [toast, setToast] = createSignal<ToastMessage>({
     id: "init",
@@ -127,10 +134,31 @@ const createUiStore = () => {
   }
 
   async function init() {
-    const savedLang = localStorage.getItem("lang") ?? "en-US";
-    const locale = await loadLocale(savedLang);
-    setLoadedLocale(locale);
-    setLangSignal(savedLang);
+    let savedLang: string | null = null;
+    try {
+      savedLang = localStorage.getItem("lang");
+    } catch (error) {
+      console.warn("Unable to read the saved locale; using en-US", error);
+    }
+
+    const resolvedLang = resolveStoredLocale(savedLang);
+    try {
+      const locale = await loadLocale(resolvedLang);
+      setLoadedLocale(locale);
+      setLangSignal(resolvedLang);
+    } catch (error) {
+      console.warn("Unable to load the saved locale; using en-US", error);
+      setLoadedLocale(enUS);
+      setLangSignal(DEFAULT_LOCALE);
+    }
+
+    if (savedLang && resolvedLang !== savedLang) {
+      try {
+        localStorage.removeItem("lang");
+      } catch (error) {
+        console.warn("Unable to clear the invalid saved locale", error);
+      }
+    }
   }
 
   return {

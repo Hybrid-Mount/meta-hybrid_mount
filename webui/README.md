@@ -112,8 +112,8 @@ Primary schemas (`src/lib/types.ts`):
 
 Requirements:
 
-- Node.js 20+
-- pnpm 9+
+- Node.js 20.19+ or 22.12+
+- pnpm 10.34.5 (see `packageManager` in `package.json`)
 
 Commands:
 

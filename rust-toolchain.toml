@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 [toolchain]
-channel = "nightly"
+channel = "nightly-2026-08-10"
 components = ["rustfmt", "clippy"]
+targets = ["aarch64-linux-android"]
 profile = "minimal"

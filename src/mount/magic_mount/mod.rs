@@ -128,7 +128,7 @@ use crate::{
         magic_mount::utils::{clone_symlink, collect_module_files, mount_mirror},
         node::{Node, NodeFileType},
     },
-    sys::fs::ensure_dir_exists,
+    sys::{fs::ensure_dir_exists, mount::MountRollback},
 };
 
 fn remount_readonly(mount_target: &Path, log_path: &Path) -> Result<()> {
@@ -169,6 +169,7 @@ struct MountContext {
     stats: MountStatistics,
     failed_module_ids: HashSet<String>,
     symlinks_by_module: BTreeMap<String, usize>,
+    rollback: MountRollback,
 }
 
 impl MountContext {
@@ -279,6 +280,10 @@ impl MagicMount {
                 self.work_dir_path.display(),
             )
         })?;
+
+        if !self.has_tmpfs {
+            context.rollback.record(target.to_path_buf());
+        }
 
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if self.umount {
@@ -414,6 +419,7 @@ impl MagicMount {
                     self.path.display()
                 )
             })?;
+            context.rollback.record(self.path.clone());
             mount_change(
                 &self.path,
                 MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
@@ -506,7 +512,7 @@ pub fn magic_mount<P>(
     magic_modules: &[Module],
     #[cfg(any(target_os = "linux", target_os = "android"))] umount: bool,
     #[cfg(not(any(target_os = "linux", target_os = "android")))] _umount: bool,
-) -> Result<(Vec<String>, MountStatistics)>
+) -> Result<(Vec<String>, MountStatistics, Vec<PathBuf>)>
 where
     P: AsRef<Path>,
 {
@@ -527,26 +533,25 @@ where
             None,
         )
         .context("mount tmp")?;
-        mount_change(
-            &tmp_dir,
-            MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
-        )
-        .context("make tmp private")?;
-
         let root_module_ids = infer_module_ids(&root);
-        let ret = MagicMount::new(
-            root,
-            Path::new("/"),
-            tmp_dir.as_path(),
-            false,
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            umount,
-        )
-        .do_mount(&mut context)
-        .map_err(|e| wrap_with_module_ids(e, root_module_ids.clone()));
+        let operation_result = (|| -> Result<()> {
+            mount_change(
+                &tmp_dir,
+                MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
+            )
+            .context("make tmp private")?;
 
-        let mut mounted_module_ids = root_module_ids;
-        mounted_module_ids.retain(|id| !context.failed_module_ids.contains(id));
+            MagicMount::new(
+                root,
+                Path::new("/"),
+                tmp_dir.as_path(),
+                false,
+                #[cfg(any(target_os = "linux", target_os = "android"))]
+                umount,
+            )
+            .do_mount(&mut context)
+            .map_err(|e| wrap_with_module_ids(e, root_module_ids.clone()))
+        })();
 
         let cleanup_result = unmount(&tmp_dir, UnmountFlags::DETACH)
             .with_context(|| format!("failed to unmount temp path {}", tmp_dir.display()))
@@ -554,6 +559,21 @@ where
                 fs::remove_dir(&tmp_dir)
                     .with_context(|| format!("failed to remove temp path {}", tmp_dir.display()))
             });
+
+        let operation_result = match (operation_result, cleanup_result) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+            (Err(operation_error), Err(cleanup_error)) => Err(operation_error.context(format!(
+                "additionally failed to clean magic workspace: {cleanup_error:#}"
+            ))),
+        };
+
+        if let Err(error) = operation_result {
+            return Err(context.rollback.attach_rollback(error));
+        }
+
+        let mut mounted_module_ids = root_module_ids;
+        mounted_module_ids.retain(|id| !context.failed_module_ids.contains(id));
 
         for (module_id, count) in &context.symlinks_by_module {
             crate::scoped_log!(
@@ -576,11 +596,10 @@ where
             context.stats.ignored_entries
         );
 
-        ret?;
-        cleanup_result?;
-        Ok((mounted_module_ids, context.stats))
+        let mount_targets = std::mem::take(&mut context.rollback).into_targets();
+        Ok((mounted_module_ids, context.stats, mount_targets))
     } else {
         crate::scoped_log!(info, "magic", "skip: reason=no_modules_to_mount");
-        Ok((Vec::new(), context.stats))
+        Ok((Vec::new(), context.stats, Vec::new()))
     }
 }

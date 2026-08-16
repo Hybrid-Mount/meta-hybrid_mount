@@ -7,6 +7,8 @@ mod timing;
 pub mod validation;
 
 use std::{
+    fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
     sync::OnceLock,
 };
@@ -28,18 +30,72 @@ macro_rules! scoped_log {
     };
 }
 
-pub fn get_mnt() -> Result<PathBuf> {
-    for _ in 0..100 {
-        let mut name = String::from("hm_");
-        for _ in 0..10 {
-            name.push(fastrand::alphanumeric());
+const MOUNT_WORKSPACE_ROOTS: [&str; 2] = ["/mnt", "/debug_ramdisk"];
+
+fn random_workspace_name() -> String {
+    let mut name = String::from("hm_");
+    for _ in 0..10 {
+        name.push(fastrand::alphanumeric());
+    }
+    name
+}
+
+fn is_workspace_name(name: &str) -> bool {
+    let Some(suffix) = name.strip_prefix("hm_") else {
+        return false;
+    };
+    suffix.len() == 10 && suffix.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
+fn create_mount_workspace_in(roots: &[PathBuf]) -> Result<PathBuf> {
+    let mut failures = Vec::new();
+
+    for root in roots {
+        let mut exhausted_names = true;
+        for _ in 0..100 {
+            let path = root.join(random_workspace_name());
+            match fs::create_dir(&path) {
+                Ok(()) => return Ok(path),
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+                Err(error) => {
+                    failures.push(format!("{}: {error}", root.display()));
+                    exhausted_names = false;
+                    break;
+                }
+            }
         }
-        let path = Path::new("/mnt").join(name);
-        if !path.exists() {
-            return Ok(path);
+
+        if exhausted_names {
+            failures.push(format!(
+                "{}: exhausted unique workspace names",
+                root.display()
+            ));
         }
     }
-    bail!("failed to allocate a unique mount path under /mnt")
+
+    bail!(
+        "failed to create a mount workspace under any candidate root: {}",
+        failures.join("; ")
+    )
+}
+
+pub fn create_mount_workspace() -> Result<PathBuf> {
+    let roots = MOUNT_WORKSPACE_ROOTS.map(PathBuf::from);
+    create_mount_workspace_in(&roots)
+}
+
+pub fn is_mount_workspace_path(path: &Path) -> bool {
+    MOUNT_WORKSPACE_ROOTS.iter().any(|root| {
+        let Ok(relative) = path.strip_prefix(root) else {
+            return false;
+        };
+        let mut components = relative.components();
+        let Some(std::path::Component::Normal(name)) = components.next() else {
+            return false;
+        };
+        name.to_str().is_some_and(is_workspace_name)
+            && components.all(|component| matches!(component, std::path::Component::Normal(_)))
+    })
 }
 
 pub fn init_logging() -> Result<()> {
@@ -119,18 +175,45 @@ fn parse_log_level(value: &str) -> Option<log::LevelFilter> {
 
 #[cfg(test)]
 mod tests {
-    use super::{get_mnt, parse_log_level};
+    use std::{fs, path::Path};
+
+    use super::{create_mount_workspace_in, is_mount_workspace_path, parse_log_level};
 
     #[test]
     fn generated_mount_path_uses_hybrid_prefix() {
-        let path = get_mnt().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let path = create_mount_workspace_in(&[temp.path().to_path_buf()]).unwrap();
         let name = path.file_name().and_then(|name| name.to_str()).unwrap();
 
-        assert_eq!(
-            path.parent().and_then(|parent| parent.to_str()),
-            Some("/mnt")
-        );
+        assert_eq!(path.parent(), Some(temp.path()));
         assert!(name.starts_with("hm_"));
+        assert_eq!(name.len(), 13);
+        assert!(path.is_dir());
+    }
+
+    #[test]
+    fn workspace_creation_falls_back_to_the_next_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let unusable = temp.path().join("not-a-directory");
+        fs::write(&unusable, b"file").unwrap();
+        let fallback = temp.path().join("fallback");
+        fs::create_dir(&fallback).unwrap();
+
+        let path = create_mount_workspace_in(&[unusable, fallback.clone()]).unwrap();
+
+        assert_eq!(path.parent(), Some(fallback.as_path()));
+    }
+
+    #[test]
+    fn workspace_path_match_is_exact_and_supports_fallback_root() {
+        assert!(is_mount_workspace_path(Path::new("/mnt/hm_a1B2c3D4e5")));
+        assert!(is_mount_workspace_path(Path::new(
+            "/debug_ramdisk/hm_a1B2c3D4e5/child"
+        )));
+        assert!(!is_mount_workspace_path(Path::new("/mnt/hm_too_short")));
+        assert!(!is_mount_workspace_path(Path::new(
+            "/data/mnt/hm_a1B2c3D4e5"
+        )));
     }
 
     #[test]

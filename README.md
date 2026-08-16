@@ -393,7 +393,7 @@ module/            Module packaging scripts and static assets
 
 - Rust nightly (from `rust-toolchain.toml`)
 - Android NDK r27+ and `cargo-ndk`
-- Node.js 20+ and pnpm (for WebUI)
+- Node.js 20.19+ or 22.12+, and pnpm 10.34.5 (for WebUI)
 
 ### Commands
 
@@ -456,10 +456,12 @@ bootloader scenarios). Hybrid Mount supports this mode:
   stack.
 - The same cleanup also runs at startup when `KSU_LATE_LOAD=1`.
 
-The cleanup only detaches the mount families Hybrid Mount creates: mounts
-named by `mountsource` (tmpfs/overlay trees), `/mnt/hm_*` backing storage,
-Magic Mount binds sourced from the module directory on managed partitions,
-and configured custom bind targets.
+The cleanup only detaches mounts that can be attributed precisely to Hybrid
+Mount: overlay mounts whose options reference its workspace or data root,
+workspaces matching exactly `/mnt/hm_<10 chars>` or
+`/debug_ramdisk/hm_<10 chars>`, and exact Magic/custom targets persisted by
+the previous run (plus currently configured custom targets). It never trusts
+the shared KernelSU/APatch mount source as proof of ownership.
 
 ---
 

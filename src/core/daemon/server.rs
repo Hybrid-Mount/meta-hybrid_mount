@@ -52,20 +52,7 @@ pub fn serve() -> Result<()> {
         Config::default()
     });
     let mut runtime_state = match RuntimeState::load() {
-        Ok(state) if state.has_valid_mount_identity() => state,
-        Ok(state) => {
-            crate::scoped_log!(
-                warn,
-                "daemon",
-                "runtime state is invalid, starting idle: storage_mode={}, mount_point={}",
-                state.storage_mode,
-                state.mount_point.display()
-            );
-            RuntimeState::idle(
-                config.overlay_mode.as_str(),
-                PathBuf::from(defs::HYBRID_MOUNT_DIR),
-            )
-        }
+        Ok(state) => normalize_runtime_state(state, &config),
         Err(err) if error_is_not_found(&err) => {
             crate::scoped_log!(
                 warn,
@@ -73,10 +60,7 @@ pub fn serve() -> Result<()> {
                 "runtime state missing, starting idle: path={}",
                 defs::STATE_FILE
             );
-            RuntimeState::idle(
-                config.overlay_mode.as_str(),
-                PathBuf::from(defs::HYBRID_MOUNT_DIR),
-            )
+            idle_runtime_state(&config)
         }
         Err(err) => {
             return Err(err).with_context(|| {
@@ -230,6 +214,28 @@ pub fn serve() -> Result<()> {
     );
     runtime_guard.cleanup()?;
     Ok(())
+}
+
+fn idle_runtime_state(config: &Config) -> RuntimeState {
+    RuntimeState::idle(
+        config.overlay_mode.clone().as_str(),
+        PathBuf::from(defs::HYBRID_MOUNT_DIR),
+    )
+}
+
+fn normalize_runtime_state(state: RuntimeState, config: &Config) -> RuntimeState {
+    if state.has_valid_mount_identity() {
+        return state;
+    }
+
+    crate::scoped_log!(
+        warn,
+        "daemon",
+        "runtime state is invalid, starting idle: storage_mode={}, mount_point={}",
+        state.storage_mode,
+        state.mount_point.display()
+    );
+    idle_runtime_state(config)
 }
 
 fn handle_stream(
@@ -467,6 +473,31 @@ impl Drop for DaemonRuntimeGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invalid_runtime_state_is_normalized_for_webui() {
+        let mut config = Config::default();
+        config.overlay_mode = crate::conf::config::OverlayMode::Tmpfs;
+
+        let state = normalize_runtime_state(RuntimeState::default(), &config);
+
+        assert!(state.has_valid_mount_identity());
+        assert_eq!(state.storage_mode, "tmpfs");
+        assert_eq!(state.mount_point, PathBuf::from(defs::HYBRID_MOUNT_DIR));
+        assert!(!state.mounted);
+    }
+
+    #[test]
+    fn valid_fallback_state_preserves_actual_storage_mode() {
+        let mut config = Config::default();
+        config.overlay_mode = crate::conf::config::OverlayMode::Tmpfs;
+        let persisted = RuntimeState::idle("ext4", PathBuf::from("/actual-mount"));
+
+        let state = normalize_runtime_state(persisted, &config);
+
+        assert_eq!(state.storage_mode, "ext4");
+        assert_eq!(state.mount_point, PathBuf::from("/actual-mount"));
+    }
 
     #[test]
     fn missing_runtime_state_error_is_recoverable() {

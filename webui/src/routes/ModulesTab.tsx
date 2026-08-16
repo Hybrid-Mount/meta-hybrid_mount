@@ -45,22 +45,32 @@ export default function ModulesTab() {
   const [showUnmounted, setShowUnmounted] = createSignal(false);
   const [expandedId, setExpandedId] = createSignal<string | null>(null);
   const [visibleCount, setVisibleCount] = createSignal(BATCH_SIZE);
-  let observerTarget: HTMLDivElement | undefined;
+  let observer: IntersectionObserver | undefined;
+
+  function observePaginationTarget(target: HTMLDivElement) {
+    // Solid invokes `ref` before inserting the element into its parent, so
+    // defer root discovery until `.closest()` can see the page scroller.
+    queueMicrotask(() => {
+      if (!target.isConnected) return;
+      observer?.disconnect();
+      const observerRoot = target.closest(".page-scroller");
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            setVisibleCount((count) => count + BATCH_SIZE);
+          }
+        },
+        { root: observerRoot, rootMargin: "200px" },
+      );
+      observer.observe(target);
+    });
+  }
 
   onMount(() => {
     load();
-    const observerRoot = observerTarget?.closest(".page-scroller") ?? undefined;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleCount((count) => count + BATCH_SIZE);
-        }
-      },
-      { root: observerRoot, rootMargin: "200px" },
-    );
-    if (observerTarget) observer.observe(observerTarget);
-    onCleanup(() => observer.disconnect());
   });
+
+  onCleanup(() => observer?.disconnect());
 
   createEffect(() => {
     searchQuery();
@@ -362,7 +372,10 @@ export default function ModulesTab() {
                   );
                 }}
               </For>
-              <div ref={observerTarget} class="observer-sentinel"></div>
+              <div
+                ref={observePaginationTarget}
+                class="observer-sentinel"
+              ></div>
             </Show>
           </Show>
         </div>

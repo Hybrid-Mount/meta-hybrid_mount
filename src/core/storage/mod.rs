@@ -9,8 +9,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[cfg(feature = "control-plane")]
-use anyhow::bail;
 use anyhow::{Context, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount as umount};
@@ -92,8 +90,7 @@ pub fn setup_with_sources(
     detach_existing_mount(mnt_base)?;
 
     #[cfg(feature = "control-plane")]
-    if !force_ext4 {
-        setup_tmpfs(mnt_base, mount_source)?;
+    if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
         crate::scoped_log!(trace, "storage", "backend select: mode=tmpfs");
         finalize_mount_setup(mnt_base, disable_umount)?;
         return Ok(StorageHandle::new(mnt_base, StorageMode::Tmpfs));
@@ -196,20 +193,62 @@ fn finalize_mount_setup(path: &Path, disable_umount: bool) -> Result<()> {
 }
 
 #[cfg(feature = "control-plane")]
-fn setup_tmpfs(target: &Path, mount_source: &str) -> Result<()> {
-    crate::sys::mount::mount_tmpfs(target, mount_source)?;
-    match crate::sys::fs::is_overlay_xattr_supported() {
-        Ok(true) => Ok(()),
-        Ok(false) => {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TmpfsProbeDecision {
+    UseTmpfs,
+    FallbackUnsupported,
+    FallbackProbeFailed,
+}
+
+#[cfg(feature = "control-plane")]
+fn decide_tmpfs_probe(probe: &Result<bool>) -> TmpfsProbeDecision {
+    match probe {
+        Ok(true) => TmpfsProbeDecision::UseTmpfs,
+        Ok(false) => TmpfsProbeDecision::FallbackUnsupported,
+        Err(_) => TmpfsProbeDecision::FallbackProbeFailed,
+    }
+}
+
+#[cfg(feature = "control-plane")]
+fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
+    if let Err(err) = crate::sys::mount::mount_tmpfs(target, mount_source) {
+        detach_existing_mount(target)
+            .context("failed to clean up tmpfs after mount setup failure")?;
+        crate::scoped_log!(
+            warn,
+            "storage",
+            "tmpfs fallback: path={}, source={}, reason=mount_failed, fallback=ext4, error={:#}",
+            target.display(),
+            mount_source,
+            err
+        );
+        return Ok(false);
+    }
+
+    let probe = crate::sys::fs::is_overlay_xattr_supported();
+    match decide_tmpfs_probe(&probe) {
+        TmpfsProbeDecision::UseTmpfs => Ok(true),
+        TmpfsProbeDecision::FallbackUnsupported => {
             detach_existing_mount(target)?;
-            bail!(
-                "tmpfs at {} does not support OverlayFS xattrs",
+            crate::scoped_log!(
+                warn,
+                "storage",
+                "tmpfs fallback: path={}, reason=overlay_xattr_unsupported, fallback=ext4",
                 target.display()
-            )
+            );
+            Ok(false)
         }
-        Err(err) => {
+        TmpfsProbeDecision::FallbackProbeFailed => {
             detach_existing_mount(target)?;
-            Err(err).context("failed to probe tmpfs OverlayFS xattr support")
+            let err = probe.expect_err("probe decision must preserve the probe error");
+            crate::scoped_log!(
+                warn,
+                "storage",
+                "tmpfs fallback: path={}, reason=overlay_xattr_probe_failed, fallback=ext4, error={:#}",
+                target.display(),
+                err
+            );
+            Ok(false)
         }
     }
 }
@@ -217,6 +256,8 @@ fn setup_tmpfs(target: &Path, mount_source: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{StorageMode, should_cleanup_image};
+    #[cfg(feature = "control-plane")]
+    use super::{TmpfsProbeDecision, decide_tmpfs_probe};
 
     #[test]
     fn storage_mode_as_str_matches_expected_values() {
@@ -230,5 +271,19 @@ mod tests {
         #[cfg(feature = "control-plane")]
         assert!(!should_cleanup_image(StorageMode::Tmpfs));
         assert!(should_cleanup_image(StorageMode::Ext4));
+    }
+
+    #[cfg(feature = "control-plane")]
+    #[test]
+    fn tmpfs_probe_uses_tmpfs_only_when_xattrs_are_supported() {
+        assert_eq!(decide_tmpfs_probe(&Ok(true)), TmpfsProbeDecision::UseTmpfs);
+        assert_eq!(
+            decide_tmpfs_probe(&Ok(false)),
+            TmpfsProbeDecision::FallbackUnsupported
+        );
+        assert_eq!(
+            decide_tmpfs_probe(&Err(anyhow::anyhow!("probe failed"))),
+            TmpfsProbeDecision::FallbackProbeFailed
+        );
     }
 }

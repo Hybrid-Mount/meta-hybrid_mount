@@ -6,12 +6,13 @@ mod custom_bind;
 mod magic;
 mod overlay;
 
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail};
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::mount::umount_mgr;
 use crate::{
     conf::config,
     core::{
@@ -20,6 +21,7 @@ use crate::{
         ops::plan::{MountPlan, OverlayOperation},
         runtime_state::MountStatistics,
     },
+    sys::mount::MountRollback,
     utils,
 };
 
@@ -27,8 +29,10 @@ pub struct ExecutionResult {
     pub overlay_module_ids: Vec<String>,
     pub overlay_partitions: Vec<String>,
     pub magic_module_ids: Vec<String>,
+    pub magic_mount_targets: Vec<String>,
     pub custom_mount_targets: Vec<String>,
     pub mount_stats: MountStatistics,
+    pub(crate) rollback_targets: Vec<PathBuf>,
 }
 
 pub struct Executor;
@@ -43,6 +47,23 @@ impl Executor {
     where
         P: AsRef<Path>,
     {
+        let mut rollback = MountRollback::default();
+        match Self::execute_inner(plan, modules, config, tempdir.as_ref(), &mut rollback) {
+            Ok(mut result) => {
+                result.rollback_targets = rollback.into_targets();
+                Ok(result)
+            }
+            Err(error) => Err(rollback.attach_rollback(error)),
+        }
+    }
+
+    fn execute_inner(
+        plan: &mut MountPlan,
+        modules: &[Module],
+        config: &config::Config,
+        tempdir: &Path,
+        rollback: &mut MountRollback,
+    ) -> Result<ExecutionResult> {
         let total_timer = crate::utils::StageTimer::start("executor", "execute_total");
         crate::scoped_log!(
             info,
@@ -56,12 +77,16 @@ impl Executor {
         let mut final_overlay_partitions: BTreeSet<String> = BTreeSet::new();
         let mut mount_stats = MountStatistics::default();
 
-        let overlay_probe_timer =
-            crate::utils::StageTimer::start("executor", "overlay_support_probe");
-        let overlay_supported = Self::is_supported()?;
-        overlay_probe_timer.finish();
         let overlay_apply_timer = crate::utils::StageTimer::start("executor", "overlay_apply");
-        if overlay_supported {
+        if should_probe_overlay(plan) {
+            let overlay_probe_timer =
+                crate::utils::StageTimer::start("executor", "overlay_support_probe");
+            let overlay_supported = Self::is_supported()?;
+            overlay_probe_timer.finish();
+            if !overlay_supported {
+                bail!("[executor] overlayfs unsupported and overlay operations are pending");
+            }
+
             crate::scoped_log!(info, "executor", "overlayfs: supported=true");
             for op in &plan.overlay_ops {
                 crate::scoped_log!(
@@ -76,7 +101,7 @@ impl Executor {
                 let overlay_result = overlay::mount_overlay(op, config);
 
                 match overlay_result {
-                    Ok(ids) => {
+                    Ok((ids, overlay_mount_targets)) => {
                         crate::scoped_log!(
                             debug,
                             "executor",
@@ -87,6 +112,7 @@ impl Executor {
                         final_overlay_partitions.insert(op.partition_name.clone());
                         final_overlay_ids.extend(ids);
                         mount_stats.record_overlay_mount();
+                        rollback.extend(overlay_mount_targets);
                     }
                     Err(err) => {
                         let involved_modules = collect_involved_modules(op);
@@ -115,18 +141,16 @@ impl Executor {
                 }
             }
         } else {
-            if !plan.overlay_ops.is_empty() {
-                bail!("[executor] overlayfs unsupported and overlay operations are pending");
-            }
             crate::scoped_log!(
                 info,
                 "executor",
-                "overlayfs: supported=false, pending_overlay_ops=0"
+                "overlayfs probe skipped: pending_overlay_ops=0"
             );
         }
         overlay_apply_timer.finish();
 
         let magic_need_list: Vec<String> = final_magic_ids.iter().cloned().collect();
+        let mut persisted_magic_mount_targets = Vec::new();
 
         let magic_timer = crate::utils::StageTimer::start("executor", "magic_apply");
         if !magic_need_list.is_empty() {
@@ -136,20 +160,25 @@ impl Executor {
                 "magic apply: modules={}",
                 magic_need_list.join(", ")
             );
-            let (mounted_ids, magic_stats) =
-                magic::mount_magic(modules, &magic_need_list, config, tempdir.as_ref()).map_err(
-                    |err| {
-                        ModuleStageFailure::new(
-                            FailureStage::Execute,
-                            magic_need_list.clone(),
-                            anyhow::anyhow!(
-                                "Failed to mount Magic Mount modules [{}]: {:#}",
-                                magic_need_list.join(", "),
-                                err
-                            ),
-                        )
-                    },
-                )?;
+            let (mounted_ids, magic_stats, magic_mount_targets) =
+                magic::mount_magic(modules, &magic_need_list, config, tempdir).map_err(|err| {
+                    ModuleStageFailure::new(
+                        FailureStage::Execute,
+                        magic_need_list.clone(),
+                        anyhow::anyhow!(
+                            "Failed to mount Magic Mount modules [{}]: {:#}",
+                            magic_need_list.join(", "),
+                            err
+                        ),
+                    )
+                })?;
+            persisted_magic_mount_targets = magic_mount_targets
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect();
+            persisted_magic_mount_targets.sort();
+            persisted_magic_mount_targets.dedup();
+            rollback.extend(magic_mount_targets);
             mount_stats.merge(&magic_stats);
             let mounted_ids: BTreeSet<String> = mounted_ids.into_iter().collect();
             final_magic_ids.retain(|id| mounted_ids.contains(id));
@@ -163,20 +192,18 @@ impl Executor {
         magic_timer.finish();
 
         let custom_bind_timer = crate::utils::StageTimer::start("executor", "custom_bind_apply");
-        let (custom_mount_targets, custom_stats) = custom_bind::mount_custom_binds(config)
+        let (custom_mount_paths, custom_stats) = custom_bind::mount_custom_binds(config)
             .context("Failed to apply custom bind mounts")?;
+        rollback.extend(custom_mount_paths.iter().cloned());
         mount_stats.merge(&custom_stats);
         custom_bind_timer.finish();
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        if !config.disable_umount {
-            let timer = crate::utils::StageTimer::start("executor", "umount_commit");
-            umount_mgr::commit().context("Failed to commit umountable mount list")?;
-            timer.finish();
-        }
-
         let result_overlay: Vec<String> = final_overlay_ids.into_iter().collect();
         let result_magic: Vec<String> = final_magic_ids.into_iter().collect();
+        let custom_mount_targets = custom_mount_paths
+            .into_iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>();
         total_timer.finish();
 
         crate::scoped_log!(
@@ -192,14 +219,20 @@ impl Executor {
             overlay_module_ids: result_overlay,
             overlay_partitions: final_overlay_partitions.into_iter().collect(),
             magic_module_ids: result_magic,
+            magic_mount_targets: persisted_magic_mount_targets,
             custom_mount_targets,
             mount_stats,
+            rollback_targets: Vec::new(),
         })
     }
 
     fn is_supported() -> Result<bool> {
         crate::mount::overlayfs::utils::is_overlay_supported()
     }
+}
+
+fn should_probe_overlay(plan: &MountPlan) -> bool {
+    !plan.overlay_ops.is_empty()
 }
 
 fn is_symlink_loop_error(err: &anyhow::Error) -> bool {
@@ -223,4 +256,30 @@ fn collect_involved_modules(op: &OverlayOperation) -> Vec<String> {
     involved_modules.sort();
     involved_modules.dedup();
     involved_modules
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use super::*;
+
+    #[test]
+    fn overlay_probe_is_only_needed_for_overlay_operations() {
+        let magic_only = MountPlan {
+            magic_module_ids: vec!["magic".to_string()],
+            ..Default::default()
+        };
+        assert!(!should_probe_overlay(&magic_only));
+
+        let with_overlay = MountPlan {
+            overlay_ops: vec![OverlayOperation {
+                partition_name: "system".to_string(),
+                target: "/system".to_string(),
+                lowerdirs: vec![PathBuf::from("/mnt/hm_test/module/system")],
+            }],
+            ..Default::default()
+        };
+        assert!(should_probe_overlay(&with_overlay));
+    }
 }

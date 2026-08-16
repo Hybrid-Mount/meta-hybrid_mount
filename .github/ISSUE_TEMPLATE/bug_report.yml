@@ -67,7 +67,7 @@ body:
     id: daemon_version
     attributes:
       label: Hybrid Mount Daemon Version / 模块守护进程版本 (if available)
-      description: WebUI footer or module package version
+      description: WebUI footer, or run `/data/adb/modules/hybrid_mount/hybrid-mount --version` in a root shell
       placeholder: v1.0.2-r1
     validations:
       required: false

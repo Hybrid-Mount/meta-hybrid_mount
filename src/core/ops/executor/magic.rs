@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::{collections::HashSet, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 
@@ -18,7 +21,7 @@ pub(super) fn mount_magic(
     ids: &[String],
     config: &config::Config,
     tempdir: &Path,
-) -> Result<(Vec<String>, MountStatistics)> {
+) -> Result<(Vec<String>, MountStatistics, Vec<PathBuf>)> {
     let magic_ws_path = tempdir.join("magic_workspace");
 
     crate::scoped_log!(
@@ -32,15 +35,19 @@ pub(super) fn mount_magic(
         std::fs::create_dir_all(&magic_ws_path)?;
     }
 
-    let module_ids: HashSet<String> = ids.iter().cloned().collect();
-    let selected_modules: Vec<Module> = modules
+    let module_ids: HashSet<&str> = ids.iter().map(String::as_str).collect();
+    let modules_by_id: HashMap<&str, &Module> = modules
         .iter()
-        .filter(|module| module_ids.contains(&module.id))
-        .cloned()
+        .filter(|module| module_ids.contains(module.id.as_str()))
+        .map(|module| (module.id.as_str(), module))
+        .collect();
+    let selected_modules: Vec<Module> = ids
+        .iter()
+        .filter_map(|id| modules_by_id.get(id.as_str()).copied().cloned())
         .collect();
     let managed_partitions = partitions::managed_partition_names();
 
-    let (mounted_ids, stats) = magic_mount::magic_mount(
+    let (mounted_ids, stats, mount_targets) = magic_mount::magic_mount(
         &magic_ws_path,
         &config.moduledir,
         MagicMountOptions {
@@ -59,5 +66,5 @@ pub(super) fn mount_magic(
         mounted_ids.len()
     );
 
-    Ok((mounted_ids, stats))
+    Ok((mounted_ids, stats, mount_targets))
 }

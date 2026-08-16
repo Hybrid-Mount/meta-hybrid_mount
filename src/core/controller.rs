@@ -26,6 +26,8 @@ use crate::{
         runtime_finalization,
         storage::StorageHandle,
     },
+    defs,
+    sys::mount::{MountRollback, detach_mount},
 };
 
 pub struct Init;
@@ -179,29 +181,122 @@ impl MountController<Planned> {
 }
 
 impl MountController<Executed> {
-    pub fn finalize(self) -> Result<()> {
+    pub fn finalize(mut self) -> Result<()> {
         let timer = crate::utils::StageTimer::start("controller", "finalize_total");
         crate::scoped_log!(info, "controller:finalize", "start");
-        runtime_finalization::finalize(
-            &self.config,
-            self.state.handle.mode(),
-            self.state.handle.mount_point(),
-            &self.state.result,
-            &self.state.inventory_summary,
-        )?;
+        let rollback_targets = std::mem::take(&mut self.state.result.rollback_targets);
+        let mut recovery_state = None;
+        let finalize_result = finalize_transaction_with(
+            rollback_targets,
+            || {
+                let runtime_state = runtime_finalization::build_state(
+                    &self.config,
+                    self.state.handle.mode(),
+                    self.state.handle.mount_point(),
+                    &self.state.result,
+                    &self.state.inventory_summary,
+                )?;
+                recovery_state = Some(runtime_state);
 
-        let cleanup_timer = crate::utils::StageTimer::start("controller", "cleanup");
-        clean_up(
-            &self.tempdir,
-            self.state.handle.mode(),
-            self.config.disable_umount,
-        )?;
-        cleanup_timer.finish();
+                let cleanup_timer = crate::utils::StageTimer::start("controller", "cleanup");
+                clean_up(
+                    &self.tempdir,
+                    self.state.handle.mode(),
+                    self.config.disable_umount,
+                )?;
+                cleanup_timer.finish();
+                runtime_finalization::save_state(
+                    recovery_state
+                        .as_ref()
+                        .expect("runtime state must exist after a successful build"),
+                )?;
+                Ok(())
+            },
+            detach_mount,
+        );
+
+        if let Err(failure) = finalize_result {
+            let recovery_result = if failure.rollback_complete {
+                clear_failed_runtime_state()
+                    .context("failed to clear runtime state after a complete rollback")
+            } else if let Some(state) = recovery_state.as_ref() {
+                state
+                    .save()
+                    .context("failed to persist recovery state after an incomplete rollback")
+            } else {
+                crate::scoped_log!(
+                    warn,
+                    "controller:rollback",
+                    "rollback incomplete before runtime state could be built; preserving existing state"
+                );
+                Ok(())
+            };
+
+            return Err(match recovery_result {
+                Ok(()) => failure.error,
+                Err(recovery_error) => failure.error.context(format!("{recovery_error:#}")),
+            });
+        }
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if !self.config.disable_umount {
+            // This must remain the final fallible operation. KernelSU's locked
+            // userspace API cannot safely remove one committed try-umount
+            // entry, so rolling VFS mounts back after a partial commit would
+            // leave entries capable of resolving to an underlying mount.
+            crate::mount::umount_mgr::commit()
+                .context("Failed to commit KernelSU try-umount entries")?;
+        }
+
         timer.finish();
 
         crate::scoped_log!(info, "controller:finalize", "complete");
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct FinalizeTransactionFailure {
+    error: anyhow::Error,
+    rollback_complete: bool,
+}
+
+fn finalize_transaction_with<F, D>(
+    rollback_targets: Vec<PathBuf>,
+    finalize: F,
+    mut detach: D,
+) -> std::result::Result<(), FinalizeTransactionFailure>
+where
+    F: FnOnce() -> Result<()>,
+    D: FnMut(&Path) -> Result<()>,
+{
+    let Err(error) = finalize() else {
+        return Ok(());
+    };
+
+    let mut rollback = MountRollback::default();
+    rollback.extend(rollback_targets);
+    match rollback.rollback_with(&mut detach) {
+        Ok(()) => Err(FinalizeTransactionFailure {
+            error,
+            rollback_complete: true,
+        }),
+        Err(rollback_error) => Err(FinalizeTransactionFailure {
+            error: error.context(format!(
+                "additionally failed to roll back finalized mount targets: {rollback_error:#}"
+            )),
+            rollback_complete: false,
+        }),
+    }
+}
+
+fn clear_failed_runtime_state() -> Result<()> {
+    match fs::remove_file(defs::STATE_FILE) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error)
+            .with_context(|| format!("failed to remove runtime state {}", defs::STATE_FILE)),
     }
 }
 
@@ -220,11 +315,11 @@ fn clean_up(
         return Ok(());
     }
 
-    if !tempdir.starts_with("/mnt") {
+    if !crate::utils::is_mount_workspace_path(tempdir) {
         crate::scoped_log!(
             debug,
             "controller:finalize",
-            "cleanup skipped: path={}, reason=outside_mnt",
+            "cleanup skipped: path={}, reason=not_owned_workspace",
             tempdir.display()
         );
         return Ok(());
@@ -245,6 +340,24 @@ fn clean_up_path(tempdir: &Path, storage_mode: crate::core::storage::StorageMode
 
     crate::core::storage::cleanup_artifacts(storage_mode)?;
     Ok(())
+}
+
+pub(crate) fn clean_up_failed_workspace(tempdir: &Path) -> Result<()> {
+    if !crate::utils::is_mount_workspace_path(tempdir) {
+        anyhow::bail!(
+            "refusing to clean a path outside the Hybrid Mount workspace roots: {}",
+            tempdir.display()
+        );
+    }
+
+    crate::scoped_log!(
+        warn,
+        "controller:rollback",
+        "cleaning failed workspace: path={}",
+        tempdir.display()
+    );
+    detach_tempdir_mount(tempdir)?;
+    remove_path(tempdir)
 }
 
 fn detach_tempdir_mount(tempdir: &Path) -> Result<()> {
@@ -302,4 +415,72 @@ fn remove_path(path: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finalize_failure_rolls_back_all_targets_in_reverse_order() {
+        let targets = vec![
+            PathBuf::from("/system"),
+            PathBuf::from("/system/etc/hosts"),
+            PathBuf::from("/vendor"),
+        ];
+        let mut detached = Vec::new();
+
+        let failure = finalize_transaction_with(
+            targets,
+            || anyhow::bail!("runtime state save failed"),
+            |path| {
+                detached.push(path.to_path_buf());
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert!(format!("{:#}", failure.error).contains("runtime state save failed"));
+        assert!(failure.rollback_complete);
+        assert_eq!(
+            detached,
+            vec![
+                PathBuf::from("/vendor"),
+                PathBuf::from("/system/etc/hosts"),
+                PathBuf::from("/system"),
+            ]
+        );
+    }
+
+    #[test]
+    fn successful_finalize_disarms_without_detaching() {
+        let mut detached = Vec::new();
+
+        finalize_transaction_with(
+            vec![PathBuf::from("/system")],
+            || Ok(()),
+            |path| {
+                detached.push(path.to_path_buf());
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert!(detached.is_empty());
+    }
+
+    #[test]
+    fn rollback_failure_keeps_recovery_state_eligible() {
+        let failure = finalize_transaction_with(
+            vec![PathBuf::from("/system")],
+            || anyhow::bail!("state save failed"),
+            |_| anyhow::bail!("detach failed"),
+        )
+        .unwrap_err();
+
+        assert!(!failure.rollback_complete);
+        let chain = format!("{:#}", failure.error);
+        assert!(chain.contains("state save failed"));
+        assert!(chain.contains("detach failed"));
+    }
 }

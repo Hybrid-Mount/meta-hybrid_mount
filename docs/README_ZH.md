@@ -389,7 +389,7 @@ module/            模块打包脚本与静态资源
 
 - Rust nightly（参见 `rust-toolchain.toml`）
 - Android NDK r27+ 和 `cargo-ndk`
-- Node.js 20+ 和 pnpm（用于 WebUI）
+- Node.js 20.19+ 或 22.12+，以及 pnpm 10.34.5（用于 WebUI）
 
 ### 命令
 
@@ -446,7 +446,7 @@ KernelSU 可以在开机后延迟加载（late-load / 越狱模式，适用于�
 - KernelSU 模拟软重启时会调用 `module/emulated-soft-reboot.sh`，执行 `hybrid-mount emulated-soft-reboot`，先拆除上一次运行留下的挂载，再重新挂载，避免叠挂。
 - 启动时检测到 `KSU_LATE_LOAD=1` 也会先执行同样的清理。
 
-清理范围与 Hybrid Mount 自身创建的挂载严格对应：`mountsource` 命名的 tmpfs/overlay 挂载树、`/mnt/hm_*` 存储目录、来自模块目录且落在受管分区上的 Magic Mount bind，以及配置中自定义 bind 的目标路径。
+清理只处理能够精确归属于 Hybrid Mount 的挂载：挂载参数引用本项目工作区或数据目录的 overlay、严格匹配 `/mnt/hm_<10 个字符>` 或 `/debug_ramdisk/hm_<10 个字符>` 的工作区，以及上一次运行持久化的 Magic/custom 精确目标（另加当前配置中的 custom 目标）。共享的 KernelSU/APatch `mountsource` 不再作为归属依据。
 
 ---
 

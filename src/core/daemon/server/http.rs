@@ -447,6 +447,24 @@ fn allocate_request_body(content_length: usize) -> Result<Vec<u8>> {
     Ok(vec![0; content_length])
 }
 
+fn request_matches_route(request_line: &str, method: &str, path: &str) -> bool {
+    let mut parts = request_line.split_whitespace();
+    let Some(request_method) = parts.next() else {
+        return false;
+    };
+    let Some(request_target) = parts.next() else {
+        return false;
+    };
+    let Some(http_version) = parts.next() else {
+        return false;
+    };
+
+    request_method == method
+        && request_target.split('?').next() == Some(path)
+        && http_version.starts_with("HTTP/")
+        && parts.next().is_none()
+}
+
 fn handle_http_request(
     config_access: &super::commands::RuntimeConfigAccess,
     state: &Arc<Mutex<RuntimeState>>,
@@ -467,7 +485,7 @@ fn handle_http_request(
         write_http_response(stream, 204, "No Content", b"", connection_action)?;
         return Ok(ConnectionAction::Close);
     }
-    if request.request_line.starts_with("GET /events ") {
+    if request_matches_route(&request.request_line, "GET", "/events") {
         return handle_sse_endpoint(
             state,
             shutdown,
@@ -759,6 +777,72 @@ mod tests {
     fn read_test_request(input: String) -> Result<Option<WebuiHttpRequest>> {
         let mut reader = std::io::BufReader::new(std::io::Cursor::new(input.into_bytes()));
         read_http_request(&mut reader, &test_webui_session())
+    }
+
+    #[test]
+    fn eventsource_query_request_reaches_sse_http_endpoint() {
+        let webui = test_webui_session();
+        let state = Arc::new(Mutex::new(RuntimeState::idle(
+            "ext4",
+            std::path::PathBuf::from("/data/adb/hybrid-mount"),
+        )));
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let sse_clients = SseClientRegistry::shared();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let mut client = TcpStream::connect(addr).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let server = listener.accept().unwrap().0;
+
+        let server_state = state.clone();
+        let server_shutdown = shutdown.clone();
+        let server_webui = webui.clone();
+        let server_sse_clients = sse_clients.clone();
+        let server_thread = std::thread::spawn(move || {
+            let config_access = super::super::commands::RuntimeConfigAccess::new();
+            handle_http_connection(
+                &config_access,
+                &server_state,
+                &server_shutdown,
+                &server_webui,
+                server_sse_clients,
+                server,
+            )
+        });
+
+        client
+            .write_all(
+                b"GET /events?token=secret HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+            )
+            .unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+
+        let mut response = String::new();
+        client.read_to_string(&mut response).unwrap();
+        server_thread.join().unwrap().unwrap();
+
+        assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+        assert!(response.contains("Content-Type: text/event-stream"));
+        assert!(response.contains("event: state_update"));
+        assert!(response.contains("\"kind\":\"runtime_snapshot\""));
+        assert_eq!(sse_clients.len().unwrap(), 0);
+    }
+
+    #[test]
+    fn route_matcher_handles_query_without_accepting_prefixes() {
+        assert!(request_matches_route(
+            "GET /events?token=secret HTTP/1.1\r\n",
+            "GET",
+            "/events"
+        ));
+        assert!(!request_matches_route(
+            "GET /events-extra?token=secret HTTP/1.1\r\n",
+            "GET",
+            "/events"
+        ));
     }
 
     #[test]

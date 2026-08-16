@@ -17,7 +17,7 @@
 import { createSignal, Show, For, onMount } from "solid-js";
 import { uiStore } from "../lib/stores/uiStore";
 import { sysStore } from "../lib/stores/sysStore";
-import { openLink } from "../lib/api/services/systemService";
+import { API } from "../lib/api";
 import { getErrorMessage } from "../lib/api/core/error";
 import { ICONS } from "../lib/constants";
 import { IS_RELEASE } from "../lib/constants_gen";
@@ -55,7 +55,7 @@ export default function InfoTab() {
   function handleLink(e: MouseEvent, url: string) {
     e.preventDefault();
 
-    void openLink(url).catch((error: unknown) => {
+    void API.openLink(url).catch((error: unknown) => {
       uiStore.showToast(getErrorMessage(error, "Failed to open link"), "error");
     });
   }

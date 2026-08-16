@@ -12,7 +12,7 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const body = context.payload.issue.body || "";
@@ -36,9 +36,11 @@ jobs:
               if (hasBugLabel) {
                 const attachmentsMatch = body.match(/### Upload Area \/ 上传区域\s*\n+([\s\S]*?)(?=\n###|$)/);
                 const attachmentsContent = attachmentsMatch ? attachmentsMatch[1].trim() : "";
-                const hasLogFile = /\.(txt|log|old|logcat|dmesg|dump|crash|trace|bugreport|tar|gz|tgz|bz2|xz|lz4|zst|zip|7z|rar)(\b|[)\s])/i.test(attachmentsContent) || /https?:\/\//i.test(attachmentsContent);
+                // GitHub uploads are represented by an URL. A bare filename such as
+                // "Failed to upload bugreport.tar.gz" is not evidence of an upload.
+                const hasUploadedAttachment = /https?:\/\/\S+/i.test(attachmentsContent);
 
-                if (!attachmentsContent || (!hasLogFile && attachmentsContent.length <= 50)) {
+                if (!hasUploadedAttachment) {
                   const closeMessage = "由于 Issue 中未在 Upload Area / 上传区域 中提供有效的日志或附件（如 KernelSU bugreport），自动关闭此 Issue。请上传 KernelSU 调试报告后再重新创建 Issue。\nThis issue is automatically closed because no valid logs or attachments (e.g., KernelSU bugreport) were provided in the Upload Area. Please upload the KernelSU debug report and create a new issue.";
                   await github.rest.issues.createComment({
                     owner: context.repo.owner,

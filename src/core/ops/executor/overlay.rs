@@ -2,24 +2,28 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::mount::umount_mgr;
 use crate::{conf::config, core::ops::plan::OverlayOperation, defs, mount::overlayfs};
 
-pub(super) fn mount_overlay(op: &OverlayOperation, config: &config::Config) -> Result<Vec<String>> {
+pub(super) fn mount_overlay(
+    op: &OverlayOperation,
+    config: &config::Config,
+) -> Result<(Vec<String>, Vec<PathBuf>)> {
     mount_overlay_inner(op, config)
 }
 
-fn mount_overlay_inner(op: &OverlayOperation, config: &config::Config) -> Result<Vec<String>> {
-    mount_overlay_base(op, config)?;
-    Ok(super::collect_involved_modules(op))
+fn mount_overlay_inner(
+    op: &OverlayOperation,
+    config: &config::Config,
+) -> Result<(Vec<String>, Vec<PathBuf>)> {
+    let mount_targets = mount_overlay_base(op, config)?;
+    Ok((super::collect_involved_modules(op), mount_targets))
 }
 
-fn mount_overlay_base(op: &OverlayOperation, config: &config::Config) -> Result<()> {
+fn mount_overlay_base(op: &OverlayOperation, config: &config::Config) -> Result<Vec<PathBuf>> {
     let involved_modules = super::collect_involved_modules(op);
 
     crate::scoped_log!(
@@ -55,12 +59,13 @@ fn mount_overlay_base(op: &OverlayOperation, config: &config::Config) -> Result<
         ),
     };
 
-    overlayfs::overlayfs::mount_overlay(
+    let mount_targets = overlayfs::overlayfs::mount_overlay(
         &op.target,
         &lowerdir_strings,
         work_opt,
         upper_opt,
         &config.mountsource,
+        !config.disable_umount,
     )?;
 
     crate::scoped_log!(
@@ -71,10 +76,5 @@ fn mount_overlay_base(op: &OverlayOperation, config: &config::Config) -> Result<
         config.mountsource
     );
 
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    if !config.disable_umount {
-        umount_mgr::send_umountable(&op.target)?;
-    }
-
-    Ok(())
+    Ok(mount_targets)
 }
