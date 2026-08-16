@@ -5,6 +5,18 @@
 
 - Removed the Kasumi backend (code, LKM packaging, CLI/daemon commands, WebUI references, build flavor, docs). Lite is now the default release; Nano is unchanged. Legacy configs using `kasumi` mount modes are folded into `magic` on load.
 
+- Runtime config patches are now explicit about their reboot requirement: the daemon reports `applied`/`reboot_required`, the WebUI surfaces "saved, reboot required", and the deprecated `--apply-runtime` flag is documented as a compatibility no-op.
+
+- Cleaned up orphaned post-Kasumi source files (`src/mount/kasumi`, `src/core/ops/mirror_sync.rs`, empty `src/core/inventory/listing.rs`).
+
+- Hardened the WebUI HTTP parser: strict `/rpc` route matching, rejection of duplicate or missing `Content-Length`, digit-only length parsing, and rejection of unsupported `Transfer-Encoding`.
+
+- Uninstall now best-effort stops the daemon, detaches Hybrid Mount-owned mounts, and falls back to killing the recorded daemon PID before removing `/data/adb/hybrid-mount`.
+
+- Documentation and WebUI locales now list all 11 supported languages, document ext4 as a per-boot staging image, and include an Indonesian README translation.
+
+- CI supply chain gates: ShellCheck for module/installer scripts, scheduled `cargo audit` and `pnpm audit`, ZIP content verification for both flavors, and SHA256SUMS attached to GitHub and KernelSU-Repo releases. Prerelease tags no longer overwrite `update.json` on `main`.
+
 
 ## v4.2.0
 
