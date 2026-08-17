@@ -1,0 +1,19 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+.page {
+  padding-bottom: 12px;
+}
+
+.card {
+  margin: 0 12px 12px;
+}
+
+.card-row {
+  display: flex;
+  gap: 12px;
+  margin: 0 12px 12px;
+}
+
+.field {
+  margin: 0 12px 12px;
+}

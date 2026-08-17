@@ -1,0 +1,194 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+.md3-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f6f5f2;
+  color: #1c1b1a;
+}
+
+.md3-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  z-index: 5;
+}
+
+.md3-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.md3-icon-button {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.md3-icon-button:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.md3-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.md3-bottom {
+  display: flex;
+  background: #ffffff;
+  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.md3-nav-item {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 0 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  color: #5f5b57;
+  cursor: pointer;
+}
+
+.md3-nav-item.active {
+  color: #6750a4;
+}
+
+.md3-nav-icon {
+  font-size: 20px;
+}
+
+.md3-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin: 10px 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.md3-card h4 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.md3-card p {
+  margin: 0;
+  color: #5f5b57;
+  font-size: 13px;
+}
+
+.md3-row {
+  display: flex;
+  gap: 10px;
+  margin: 10px 12px;
+}
+
+.md3-row .md3-card {
+  flex: 1;
+  margin: 0;
+}
+
+.md3-button {
+  border: 1px solid #b9b3ad;
+  background: #ffffff;
+  color: #6750a4;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.md3-button-primary {
+  background: #6750a4;
+  color: #ffffff;
+  border-color: #6750a4;
+}
+
+.md3-button:active {
+  filter: brightness(0.96);
+}
+
+.md3-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.md3-field label {
+  font-size: 13px;
+  color: #5f5b57;
+}
+
+.md3-input,
+.md3-select {
+  border: 1px solid #b9b3ad;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: #ffffff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.md3-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.md3-dialog-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+
+.md3-dialog {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 20px;
+  width: min(86vw, 360px);
+}
+
+.md3-dialog h3 {
+  margin: 0 0 8px;
+}
+
+.md3-dialog p {
+  margin: 0 0 16px;
+  color: #5f5b57;
+}
+
+.md3-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
