@@ -27,10 +27,14 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   cargo-audit:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     container:
       image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
       credentials:
