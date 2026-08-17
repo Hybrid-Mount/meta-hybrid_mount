@@ -11,15 +11,23 @@ if [ -z "$APATCH" ] && [ -z "$KSU" ]; then
 fi
 
 case "$ARCH" in
-arm64) ;;
+arm64)
+  BIN_FILE="hybrid-mount-arm64"
+  ;;
+arm)
+  BIN_FILE="hybrid-mount-armv7"
+  ;;
+x64)
+  BIN_FILE="hybrid-mount-x86_64"
+  ;;
 *)
-  abort "! Unsupported architecture: $ARCH (ReHybrid-Mount supports arm64 only)"
+  abort "! Unsupported architecture: $ARCH (supported: arm64, armv7, x86_64)"
   ;;
 esac
 
 ui_print "- Device Architecture: $ARCH"
 
-BIN_SOURCE="$MODPATH/binaries/hybrid-mount"
+BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
 BIN_TARGET="$MODPATH/hybrid-mount"
 if [ ! -f "$BIN_SOURCE" ]; then
   abort "! Binary not found in this zip!"

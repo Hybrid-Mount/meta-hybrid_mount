@@ -50,8 +50,17 @@ jobs:
       - name: Unit tests
         run: cargo test --workspace
 
-      - name: Android target check
-        run: cargo check -p hybrid-mount --target aarch64-linux-android
+      - name: Android target checks
+        run: |
+          set -euo pipefail
+          rustup target add \
+            aarch64-linux-android \
+            armv7-linux-androideabi \
+            x86_64-linux-android \
+            --toolchain nightly
+          for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
+            cargo check -p hybrid-mount --target "$target"
+          done
 
       - name: Gate banned symbols
         run: |

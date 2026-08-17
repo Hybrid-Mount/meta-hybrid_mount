@@ -156,31 +156,77 @@ fn build_webui() -> Result<()> {
     Ok(())
 }
 
-fn compile_binary(release: bool) -> Result<PathBuf> {
+struct AndroidArch {
+    ndk_abi: &'static str,
+    rust_target: &'static str,
+    suffix: &'static str,
+}
+
+/// 支持的三架构:cargo-ndk ABI、Rust target、zip 内文件名后缀。
+const ANDROID_ARCHS: &[AndroidArch] = &[
+    AndroidArch {
+        ndk_abi: "arm64-v8a",
+        rust_target: "aarch64-linux-android",
+        suffix: "arm64",
+    },
+    AndroidArch {
+        ndk_abi: "armeabi-v7a",
+        rust_target: "armv7-linux-androideabi",
+        suffix: "armv7",
+    },
+    AndroidArch {
+        ndk_abi: "x86_64",
+        rust_target: "x86_64-linux-android",
+        suffix: "x86_64",
+    },
+];
+
+fn ensure_android_target(arch: &AndroidArch) -> Result<()> {
     let root = workspace_root()?;
-    let mut args = vec![
-        "+nightly",
-        "ndk",
-        "-t",
-        "arm64-v8a",
-        "--platform",
-        "26",
-        "build",
-        "--bin",
-        "hybrid-mount",
-    ];
-    if release {
-        args.push("--release");
+    run_command(
+        "rustup",
+        &["target", "add", arch.rust_target, "--toolchain", "nightly"],
+        &root,
+    )
+}
+
+fn compile_binaries(release: bool) -> Result<Vec<(String, PathBuf)>> {
+    let root = workspace_root()?;
+    let profile = if release { "release" } else { "debug" };
+    let mut binaries = Vec::new();
+
+    for arch in ANDROID_ARCHS {
+        ensure_android_target(arch)?;
+
+        let mut args = vec![
+            "+nightly",
+            "ndk",
+            "-t",
+            arch.ndk_abi,
+            "--platform",
+            "26",
+            "build",
+            "--bin",
+            "hybrid-mount",
+        ];
+        if release {
+            args.push("--release");
+        }
+
+        run_command("cargo", &args, &root)?;
+
+        let binary = root
+            .join("target")
+            .join(arch.rust_target)
+            .join(profile)
+            .join("hybrid-mount");
+        if !binary.exists() {
+            bail!("binary not found at {}", binary.display());
+        }
+        binaries.push((arch.suffix.to_string(), binary));
     }
 
-    run_command("cargo", &args, &root)?;
-
-    let profile = if release { "release" } else { "debug" };
-    Ok(root
-        .join("target")
-        .join("aarch64-linux-android")
-        .join(profile)
-        .join("hybrid-mount"))
+    Ok(binaries)
 }
 
 fn render_module_prop(version: &str, version_code: u64) -> String {
@@ -203,10 +249,7 @@ fn build(release: bool) -> Result<()> {
     let commit_count = git_commit_count()?;
 
     build_webui()?;
-    let binary = compile_binary(release)?;
-    if !binary.exists() {
-        bail!("binary not found at {}", binary.display());
-    }
+    let binaries = compile_binaries(release)?;
 
     let stage = root.join("output").join("stage");
     let _ = fs::remove_dir_all(&stage);
@@ -219,8 +262,12 @@ fn build(release: bool) -> Result<()> {
     )
     .context("failed to stage module files")?;
 
-    let staged_binary = stage.join("binaries").join("hybrid-mount");
-    fs::copy(&binary, &staged_binary)?;
+    for (suffix, binary) in binaries {
+        let staged_binary = stage
+            .join("binaries")
+            .join(format!("hybrid-mount-{suffix}"));
+        fs::copy(&binary, &staged_binary)?;
+    }
 
     let prop = render_module_prop(&version, version_code);
     fs::write(stage.join("module.prop"), prop)?;
