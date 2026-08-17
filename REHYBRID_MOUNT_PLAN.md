@@ -1,8 +1,31 @@
 # ReHybrid-Mount 重构计划
 
 > 目标位置：**同一仓库 `Hybrid-Mount/meta-hybrid_mount`，新建空白 orphan branch（默认名 `rehybrid-mount`）**
-> 状态：**执行中** — Stage 0 已完成（orphan 分支 `rehybrid-mount` + 初始骨架已推送）；后续按 Stage 1 → 9 实施
+> 状态：**执行中** — Stage 0-5 已完成并提交；Stage 6（WebUI）未开始；后续按 Stage 6 → 9 实施
 > 原则：**完全从 0 开始**；旧历史与参考项目只作为行为规范与资料，不作为代码基线。
+
+---
+
+## 0. 实施进度（本会话同步）
+
+| Stage | 状态 | 提交 | 交付内容 |
+|---|---|---|---|
+| 0 | ✅ 完成 | `d3194290`、`ab5cb765` | orphan 分支 `rehybrid-mount`、初始骨架、实施计划 |
+| 1 | ✅ 完成 | `9899577b` | Rust 工程骨架；`defs` / `errors` / 日志 + panic hook / `config.rs` TOML schema 与单测 |
+| 2 | ✅ 完成 | `b27f9e2b` | magic mount：Node 树、只读扫描、`disable/remove/skip_mount`、分区提升、挂载语义、`.replace`、tmpfs skeleton / mirror / 只读 remount、KSU try-umount 集成、planner 选择扩展点 |
+| 3 | ✅ 完成 | `841f03f6` | overlayfs（fsopen + fallback、>64 层 staging、mountinfo 子挂载处理）+ storage（tmpfs / ext4 loop 镜像）+ sys 辅助 |
+| 4 | ✅ 完成 | `330d9978` | 只读模块清单扫描 + 混合 planner（路径规则 > 模块 default_mode > 全局 default_mode；单后端冲突显式报错；overlay 按分区聚合；magic 选择输出） |
+| 5 | ✅ 完成 | `03b53936` | CLI（手工参数解析、hex payload 合并保存、全部命令契约）+ 无参数完整流水线 + `scan.ret` / `run/state.json` |
+| 6 | ⏳ 未开始 | — | WebUI（Vue 3 双 UI：Miuix 默认 + MD3） |
+| 7 | ⏳ 未开始 | — | 语言文件提交找回与对齐 |
+| 8 | ⏳ 未开始 | — | module 脚本 / xtask / CI 与 Release |
+| 9 | ⏳ 未开始 | — | 主机侧与 Android 实机验证 |
+
+### 已知待补事项（Stage 5 之后）
+
+1. **parser / bind 自定义列表**：计划启动流程中的“bind mount 自定义列表（参考项目行为）”尚未接入；`ignore_sources` 参数已预留。
+2. **storage staging 未在流水线启用**：`storage::setup`（tmpfs/ext4 镜像）已实现但流水线尚未调用；当前 overlay 只读 lowerdir 直接指向模块源目录，文件级规则使用运行目录 shallow staging。
+3. `Cargo.toml` 版本暂用 `6.0.0`（v6 大版本线），最终 tag 与 `updateJson` 切换待 Stage 8 确认。
 
 ---
 
