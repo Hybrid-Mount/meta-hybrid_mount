@@ -73,6 +73,7 @@
     "pathPlaceholder": "system/etc/hosts",
     "mode": "模式",
     "inherit": "继承全局",
+    "reset": "重置",
     "save": "保存配置",
     "saveSuccess": "配置保存成功",
     "saveFailed": "保存配置失败",

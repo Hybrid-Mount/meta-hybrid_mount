@@ -73,6 +73,7 @@
     "pathPlaceholder": "system/etc/hosts",
     "mode": "Mode",
     "inherit": "Inherit global",
+    "reset": "Reset",
     "save": "Save Config",
     "saveSuccess": "Configuration saved",
     "saveFailed": "Failed to save configuration",
