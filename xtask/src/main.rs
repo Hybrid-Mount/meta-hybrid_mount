@@ -156,9 +156,19 @@ fn build_webui() -> Result<()> {
     Ok(())
 }
 
-fn compile_binary(release: bool, target: &str) -> Result<PathBuf> {
+fn compile_binary(release: bool) -> Result<PathBuf> {
     let root = workspace_root()?;
-    let mut args = vec!["build", "--bin", "hybrid-mount", "--target", target];
+    let mut args = vec![
+        "+nightly",
+        "ndk",
+        "-t",
+        "arm64-v8a",
+        "--platform",
+        "26",
+        "build",
+        "--bin",
+        "hybrid-mount",
+    ];
     if release {
         args.push("--release");
     }
@@ -168,7 +178,7 @@ fn compile_binary(release: bool, target: &str) -> Result<PathBuf> {
     let profile = if release { "release" } else { "debug" };
     Ok(root
         .join("target")
-        .join(target)
+        .join("aarch64-linux-android")
         .join(profile)
         .join("hybrid-mount"))
 }
