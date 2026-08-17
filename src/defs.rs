@@ -25,6 +25,9 @@ pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
 pub const SCAN_RET_PATH: &str = "/data/adb/hybrid-mount/scan.ret";
 pub const STATE_PATH: &str = "/data/adb/hybrid-mount/run/state.json";
 
+/// 文件级 overlay 规则的 shallow staging 目录(只写运行目录)。
+pub const SHALLOW_STAGING_DIR: &str = "/data/adb/hybrid-mount/run/shallow";
+
 /// ext4 staging 镜像(v4.2.0 行为)。
 pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
 
@@ -47,6 +50,7 @@ pub const MODULE_PROP_FILE_NAME: &str = "module.prop";
 pub const DISABLE_FILE_NAME: &str = "disable";
 pub const REMOVE_FILE_NAME: &str = "remove";
 pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
+pub const MOUNT_ERROR_FILE_NAME: &str = "mount_error";
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 
 /// 扩展属性名(目录替换标记与 SELinux 上下文)。

@@ -33,7 +33,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::defs;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 
 /// 单个路径/模块可选的挂载后端。
 #[derive(
@@ -47,6 +47,16 @@ pub enum Mode {
     Ignore,
 }
 
+impl Mode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Overlay => "overlay",
+            Self::Magic => "magic",
+            Self::Ignore => "ignore",
+        }
+    }
+}
+
 /// overlayfs staging 后端(v4.2.0 语义)。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -54,6 +64,15 @@ pub enum OverlayMode {
     Tmpfs,
     #[default]
     Ext4,
+}
+
+impl OverlayMode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tmpfs => "tmpfs",
+            Self::Ext4 => "ext4",
+        }
+    }
 }
 
 /// 单个模块的规则:模块级默认后端 + 路径级覆盖。
@@ -125,6 +144,17 @@ impl Config {
         Self::from_toml(&text)
     }
 
+    /// 读取配置;失败或不存在时回退默认值(参考项目行为)。
+    pub fn load_or_default(path: &Path) -> Self {
+        match Self::load(path) {
+            Ok(config) => config,
+            Err(err) => {
+                log::warn!("failed to load config, using default: {err}");
+                Self::default()
+            }
+        }
+    }
+
     /// 持久化配置;父目录不存在时自动创建。
     pub fn save(&self, path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
@@ -140,6 +170,154 @@ impl Config {
         config.save(path)?;
         Ok(config)
     }
+
+    /// 合并配置 patch:未出现的字段保留,`rules` 按模块合并。
+    pub fn apply_patch(&mut self, patch: ConfigPatch) {
+        if let Some(moduledir) = patch.moduledir {
+            self.moduledir = moduledir;
+        }
+        if let Some(mountsource) = patch.mountsource {
+            self.mountsource = mountsource;
+        }
+        if let Some(overlay_mode) = patch.overlay_mode {
+            self.overlay_mode = overlay_mode;
+        }
+        if let Some(disable_umount) = patch.disable_umount {
+            self.disable_umount = disable_umount;
+        }
+        if let Some(default_mode) = patch.default_mode {
+            self.default_mode = default_mode;
+        }
+
+        if let Some(rules) = patch.rules {
+            for (module_id, rule_patch) in rules {
+                let rule = self.rules.entry(module_id).or_default();
+                if let Some(default_mode) = rule_patch.default_mode {
+                    rule.default_mode = default_mode;
+                }
+                if let Some(paths) = rule_patch.paths {
+                    rule.paths = paths;
+                }
+            }
+        }
+    }
+}
+
+/// `save-config --payload <hex>` 的部分配置 patch:缺省字段保留。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConfigPatch {
+    #[serde(default)]
+    pub moduledir: Option<PathBuf>,
+
+    #[serde(default)]
+    pub mountsource: Option<String>,
+
+    #[serde(default)]
+    pub overlay_mode: Option<OverlayMode>,
+
+    #[serde(default)]
+    pub disable_umount: Option<bool>,
+
+    #[serde(default)]
+    pub default_mode: Option<Mode>,
+
+    #[serde(default)]
+    pub rules: Option<BTreeMap<String, ModuleRulePatch>>,
+}
+
+/// 模块规则 patch:`default_mode: null` 表示清除模块级模式,
+/// `paths` 出现时全量替换该模块路径规则。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModuleRulePatch {
+    #[serde(default, deserialize_with = "deserialize_optional_mode_clear")]
+    pub default_mode: Option<Option<Mode>>,
+
+    #[serde(default)]
+    pub paths: Option<BTreeMap<String, Mode>>,
+}
+
+/// 区分字段缺失(`None`)与显式 null(`Some(None)`),后者清除模块级模式。
+/// 字段缺失时 serde 不会调用本函数;字段出现且为 null 时走 `visit_none`。
+fn deserialize_optional_mode_clear<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<Option<Mode>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct OptionalModeClearVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for OptionalModeClearVisitor {
+        type Value = Option<Option<Mode>>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an overlay/magic/ignore mode or null")
+        }
+
+        fn visit_none<E>(self) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(Some(None))
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> std::result::Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            Mode::deserialize(deserializer).map(|mode| Some(Some(mode)))
+        }
+    }
+
+    deserializer.deserialize_option(OptionalModeClearVisitor)
+}
+
+/// 从 `["--payload", "<hex>", ...]` 中取出 payload(参考项目方式)。
+pub fn parse_payload_arg(args: &[String]) -> Result<&str> {
+    args.windows(2)
+        .find_map(|window| (window[0] == "--payload").then_some(window[1].as_str()))
+        .ok_or_else(|| Error::msg("missing required --payload argument"))
+}
+
+/// hex payload -> UTF-8 JSON 文本。
+pub fn decode_payload_arg(payload_hex: &str) -> Result<String> {
+    let bytes =
+        hex::decode(payload_hex).map_err(|err| Error::msg(format!("decode payload hex: {err}")))?;
+    String::from_utf8(bytes).map_err(|err| Error::msg(format!("payload is not valid UTF-8: {err}")))
+}
+
+/// 解析 payload 并合并/持久化到指定路径。
+pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
+    let payload_json = decode_payload_arg(payload_hex)?;
+    let patch: ConfigPatch = serde_json::from_str(&payload_json)
+        .map_err(|err| Error::msg(format!("parse config payload json: {err}")))?;
+
+    let mut config = Config::load_or_default(path);
+    config.apply_patch(patch);
+    config.save(path)
+}
+
+/// `show-config`:输出 JSON 配置。
+pub fn handle_show_config() -> Result<()> {
+    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+    println!("{}", config.to_json()?);
+    Ok(())
+}
+
+/// `save-config --payload <hex>`:合并/持久化配置,返回 `{ok:true}`。
+pub fn handle_save_config(args: &[String]) -> Result<()> {
+    let payload = parse_payload_arg(args)?;
+    save_config_payload(Path::new(defs::CONFIG_PATH), payload)?;
+    println!("{}", serde_json::json!({ "ok": true }));
+    Ok(())
+}
+
+/// `gen-config`:重置默认配置,返回 `{ok:true}`。
+pub fn handle_gen_config() -> Result<()> {
+    Config::write_default(Path::new(defs::CONFIG_PATH))?;
+    println!("{}", serde_json::json!({ "ok": true }));
+    Ok(())
 }
 
 fn default_moduledir() -> PathBuf {
@@ -306,6 +484,91 @@ unknown_option = "overlay"
         assert_eq!(written, Config::default());
         assert_eq!(Config::load(&path).unwrap(), Config::default());
         cleanup(&dir);
+    }
+
+    #[test]
+    fn load_or_default_falls_back_on_missing_file() {
+        let dir = test_dir("load-or-default");
+        let missing = dir.join("missing.toml");
+
+        let config = Config::load_or_default(&missing);
+        assert_eq!(config, Config::default());
+
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn patch_merges_while_preserving_untouched_fields() {
+        let mut config = Config {
+            default_mode: Mode::Magic,
+            ..Config::default()
+        };
+        config.rules.insert(
+            "keep".to_owned(),
+            ModuleRule {
+                default_mode: Some(Mode::Ignore),
+                paths: BTreeMap::from([("system/etc/a".to_owned(), Mode::Overlay)]),
+            },
+        );
+
+        let patch: ConfigPatch = serde_json::from_str(
+            r#"{"disable_umount":true,"rules":{"new":{"default_mode":"overlay","paths":{"system/etc/hosts":"magic"}}}}"#,
+        )
+        .unwrap();
+        config.apply_patch(patch);
+
+        assert!(config.disable_umount);
+        assert_eq!(config.default_mode, Mode::Magic);
+        assert_eq!(config.rules["keep"].default_mode, Some(Mode::Ignore));
+        assert_eq!(config.rules["keep"].paths["system/etc/a"], Mode::Overlay);
+        assert_eq!(config.rules["new"].default_mode, Some(Mode::Overlay));
+        assert_eq!(config.rules["new"].paths["system/etc/hosts"], Mode::Magic);
+    }
+
+    #[test]
+    fn patch_null_clears_module_default_mode() {
+        let mut config = Config::default();
+        config.rules.insert(
+            "m".to_owned(),
+            ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+
+        let patch: ConfigPatch =
+            serde_json::from_str(r#"{"rules":{"m":{"default_mode":null}}}"#).unwrap();
+        config.apply_patch(patch);
+
+        assert_eq!(config.rules["m"].default_mode, None);
+    }
+
+    #[test]
+    fn payload_hex_roundtrips_through_save() {
+        let dir = test_dir("payload");
+        let path = dir.join("config.toml");
+
+        let json = r#"{"default_mode":"magic","disable_umount":true}"#;
+        let payload_hex = hex::encode(json);
+        save_config_payload(&path, &payload_hex).unwrap();
+
+        let saved = Config::load(&path).unwrap();
+        assert_eq!(saved.default_mode, Mode::Magic);
+        assert!(saved.disable_umount);
+        assert_eq!(saved.moduledir, PathBuf::from("/data/adb/modules"));
+
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn payload_arg_requires_marker_and_rejects_invalid_hex() {
+        assert_eq!(
+            parse_payload_arg(&["--payload".to_owned(), "7b7d".to_owned()]).unwrap(),
+            "7b7d"
+        );
+        assert!(parse_payload_arg(&["x".to_owned()]).is_err());
+        assert!(decode_payload_arg("zz").is_err());
+        assert_eq!(decode_payload_arg("7b7d").unwrap(), "{}");
     }
 
     fn test_dir(tag: &str) -> PathBuf {

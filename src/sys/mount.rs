@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::Command;
 
 use procfs::process::Process;
-use rustix::mount::{MountFlags, mount};
+use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
 
 use crate::errors::{Error, Result};
 use crate::utils::ensure_dir_exists;
@@ -83,4 +83,27 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
         ))),
         Some(_) => Ok(()),
     }
+}
+
+/// `emulated-soft-reboot`:立即卸载 mountinfo 中 source 为指定值的所有挂载点
+/// (参考项目行为,用于模拟软重启前的挂载清理)。
+pub fn emulated_soft_reboot(source: &str) -> Result<()> {
+    let process =
+        Process::myself().map_err(|err| Error::msg(format!("get self process: {err}")))?;
+    let mountinfo = process
+        .mountinfo()
+        .map_err(|err| Error::msg(format!("get mountinfo: {err}")))?;
+
+    for entry in mountinfo.into_iter() {
+        if entry.mount_source.as_deref() == Some(source) {
+            log::debug!("unmounting {source} in emulated-soft-reboot");
+            unmount(&entry.mount_point, UnmountFlags::DETACH).map_err(|err| {
+                Error::msg(format!(
+                    "unmount {}: {err}",
+                    entry.mount_point.to_string_lossy()
+                ))
+            })?;
+        }
+    }
+    Ok(())
 }

@@ -310,16 +310,24 @@ impl MagicMount {
     }
 }
 
+/// magic mount 一次执行的统计(供 `run/state.json` 快照)。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MagicMountStats {
+    pub mounted_files: u32,
+    pub mounted_symlinks: u32,
+    pub ignored_files: u32,
+}
+
 /// 完整 magic mount 入口:扫描 → 建 staging tmpfs → 执行 → 汇总。
 pub fn magic_mount(
     module_dir: &Path,
     mount_source: &str,
     options: &ScanOptions<'_>,
     umount: bool,
-) -> Result<()> {
+) -> Result<MagicMountStats> {
     let Some(root) = collect_module_files(module_dir, options)? else {
         log::info!("no modules selected for magic mount, skipping");
-        return Ok(());
+        return Ok(MagicMountStats::default());
     };
 
     log::debug!("collected: {root:?}");
@@ -344,7 +352,12 @@ pub fn magic_mount(
     let files = MOUNTED_FILES.load(Ordering::Relaxed);
     let symlinks = MOUNTED_SYMLINKS.load(Ordering::Relaxed);
     log::info!("mounted files: {files}, mounted symlinks: {symlinks}");
-    Ok(())
+
+    Ok(MagicMountStats {
+        mounted_files: files,
+        mounted_symlinks: symlinks,
+        ignored_files: IGNORED_FILES.load(Ordering::Relaxed),
+    })
 }
 
 /// 按真实路径(存在时)或模块源路径复制 mode/uid/gid/SELinux 到 staging。

@@ -13,6 +13,7 @@ publish = false
 
 [dependencies]
 flate2 = "1"
+hex = "0.4"
 libc = "0.2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }

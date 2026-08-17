@@ -232,6 +232,7 @@ dependencies = [
  "android_logger",
  "extattr",
  "flate2",
+ "hex",
  "ksu",
  "libc",
  "log",
