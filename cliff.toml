@@ -1,0 +1,48 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+[changelog]
+header = ""
+body = """
+## {{ version | default(value="Unreleased") }}
+
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {% if commit.scope %}`{{ commit.scope }}` {% endif %}{{ commit.message | upper_first }}
+{% endfor %}
+
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+protect_breaking_commits = true
+tag_pattern = "v[0-9].*"
+skip_tags = ""
+ignore_tags = ""
+topo_order = false
+sort_commits = "oldest"
+
+commit_preprocessors = [
+  { pattern = "\\[skip ci\\]", replace = "" },
+  { pattern = "^modified:\\s+", replace = "" },
+  { pattern = "\\s+", replace = " " },
+  { pattern = "\\s+$", replace = "" },
+]
+
+commit_parsers = [
+  { message = "^chore\\(release\\):", skip = true },
+  { message = "^chore\\(deps", skip = true },
+  { message = "^BREAKING CHANGE:", group = "<!-- 0 --> Breaking Changes" },
+  { message = "^feat(\\(.+\\))?:", group = "<!-- 1 --> Features" },
+  { message = "^fix(\\(.+\\))?:", group = "<!-- 2 --> Fixes" },
+  { message = "^docs(\\(.+\\))?:", group = "<!-- 3 --> Documentation" },
+  { message = "^test(\\(.+\\))?:", group = "<!-- 4 --> Tests" },
+  { message = "^.*", group = "<!-- 5 --> Miscellaneous" },
+]

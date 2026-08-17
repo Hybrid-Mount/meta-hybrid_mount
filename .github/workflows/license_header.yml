@@ -1,0 +1,22 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Manage License Headers
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"
+
+jobs:
+  license-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          filter: "tree:0"
+
+      - name: Run HawkEye License Check
+        uses: korandoru/hawkeye@v6

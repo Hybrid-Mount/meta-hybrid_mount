@@ -1,0 +1,223 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Release ReHybrid-Mount
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: "tree:0"
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+
+      - name: Build release package
+        env:
+          HYBRID_MOUNT_SIGN_KEY: ${{ secrets.SIGNING_KEY }}
+          HYBRID_MOUNT_SIGN_CERT: ${{ secrets.SIGNING_CERT }}
+        run: |
+          set -euo pipefail
+          rm -rf output
+          cargo xtask build --release
+
+          ZIP_PATH="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
+          test -n "$ZIP_PATH"
+          ZIP_FILENAME="$(basename "$ZIP_PATH")"
+          STAGED_ZIP="/tmp/$ZIP_FILENAME"
+          cp "$ZIP_PATH" "$STAGED_ZIP"
+          echo "STAGED_ZIP=$STAGED_ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: ${{ env.STAGED_ZIP }}
+          compression-level: 0
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Detect release type
+        id: release_type
+        run: |
+          set -euo pipefail
+          tag="${{ github.ref_name }}"
+          version="${tag#v}"
+          prerelease=true
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            if [[ "${version##*.}" == "0" ]]; then
+              prerelease=false
+            fi
+          fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v8
+        with:
+          path: packages
+          pattern: package
+          merge-multiple: true
+
+      - name: Resolve package path
+        id: paths
+        run: |
+          set -euo pipefail
+          ZIP="$(find packages -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
+          test -n "$ZIP" && test -s "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
+
+      - name: Notify Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          NOTIFY_DIR="/tmp/rehybrid-release-notify"
+          rm -rf "$NOTIFY_DIR"
+          mkdir -p "$NOTIFY_DIR"
+          cp "${{ steps.paths.outputs.zip }}" "$NOTIFY_DIR/"
+          cargo xtask notify \
+            --output "$NOTIFY_DIR" \
+            --label "丰收 (Harvest) - ${{ github.ref_name }}" \
+            --topic-id 6
+
+      - name: Prepare release metadata
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
+          CLEAN_VERSION="${TAG#v}"
+          VERSION_CODE=$(awk -F. '{print $1 * 100000 + $2 * 1000 + $3}' <<< "$CLEAN_VERSION")
+          ZIP_NAME="${{ steps.paths.outputs.name }}"
+          ZIP_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
+          CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/rehybrid-mount/changelog.md"
+
+          cat <<EOF > /tmp/update.json
+          {
+            "version": "$TAG",
+            "versionCode": $VERSION_CODE,
+            "zipUrl": "$ZIP_DOWNLOAD_URL",
+            "changelog": "$CHANGELOG_URL"
+          }
+          EOF
+
+      - name: Generate changelog
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --current
+          github_token: ${{ github.token }}
+        env:
+          OUTPUT: /tmp/changelog.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Create local release
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: false
+          prerelease: ${{ steps.release_type.outputs.prerelease }}
+          files: ${{ steps.paths.outputs.zip }}
+          body_path: /tmp/changelog.md
+
+      - name: Create remote release (KernelSU-Modules-Repo)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          repo="KernelSU-Modules-Repo/hybrid_mount"
+          tag="${{ github.ref_name }}"
+
+          prerelease_flag=""
+          if [[ "${{ steps.release_type.outputs.prerelease }}" == "true" ]]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          gh release create "$tag" \
+            --repo "$repo" \
+            --draft \
+            $prerelease_flag \
+            --title "$tag" \
+            --notes-file /tmp/changelog.md \
+            "${{ steps.paths.outputs.zip }}"
+
+          gh release edit "$tag" \
+            --repo "$repo" \
+            --draft=false
+
+      - name: Sync version back to rehybrid-mount
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin rehybrid-mount
+          git checkout rehybrid-mount
+
+          mv /tmp/update.json update.json
+          cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
+
+          TAG="${{ github.ref_name }}"
+          CLEAN_VERSION="${TAG#v}"
+          sed -i "s/^version = \".*\"/version = \"${CLEAN_VERSION}\"/" Cargo.toml
+          cargo update
+
+          git add update.json changelog.md Cargo.toml Cargo.lock
+
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
+            git push origin rehybrid-mount
+          fi

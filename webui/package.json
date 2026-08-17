@@ -15,6 +15,7 @@
     "lint": "eslint . && prettier --check .",
     "lint:fix": "eslint . --fix && prettier --write .",
     "preview": "vite preview",
+    "test": "vue-tsc -b",
     "typecheck": "vue-tsc -b"
   },
   "dependencies": {

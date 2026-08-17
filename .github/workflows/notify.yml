@@ -1,0 +1,61 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Notify crate
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+      - "tools/notify/**"
+      - ".github/workflows/notify.yml"
+  push:
+    branches: ["**"]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
+      - "tools/notify/**"
+      - ".github/workflows/notify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  notify:
+    name: Notify crate
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          filter: "tree:0"
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format notify crate
+        run: cargo fmt --manifest-path tools/notify/Cargo.toml -- --check
+
+      - name: Clippy notify crate
+        run: cargo clippy --locked -p notify --all-targets -- -D warnings
+
+      - name: Test notify crate
+        run: cargo test --locked -p notify --all-targets

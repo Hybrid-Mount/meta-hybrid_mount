@@ -1,0 +1,72 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Dependency Audit
+
+on:
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "webui/pnpm-lock.yaml"
+      - "webui/package.json"
+      - "xtask/Cargo.toml"
+      - "tools/notify/Cargo.toml"
+  push:
+    branches: ["**"]
+    paths:
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "webui/pnpm-lock.yaml"
+      - "webui/package.json"
+      - "xtask/Cargo.toml"
+      - "tools/notify/Cargo.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-audit:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          filter: "tree:0"
+
+      - name: Run cargo audit
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  pnpm-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webui
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          filter: "tree:0"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: webui/pnpm-lock.yaml
+
+      - name: Install and audit
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm audit --prod
