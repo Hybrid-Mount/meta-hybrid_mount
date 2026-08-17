@@ -45,9 +45,6 @@ enum Commands {
         /// CI 模式(等价 release)
         #[arg(long)]
         ci: bool,
-        /// Rust 目标架构
-        #[arg(long, default_value = "aarch64-linux-android")]
-        target: String,
     },
     /// 发送 output 目录 zip 到 Telegram(topic 6=release,37=dev)
     Notify {
@@ -74,11 +71,7 @@ enum Commands {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Build {
-            release,
-            ci,
-            target,
-        } => build(release || ci, &target),
+        Commands::Build { release, ci } => build(release || ci),
         Commands::Notify {
             output,
             label,
@@ -193,14 +186,14 @@ fn render_module_prop(version: &str, version_code: u64) -> String {
     )
 }
 
-fn build(release: bool, target: &str) -> Result<()> {
+fn build(release: bool) -> Result<()> {
     let root = workspace_root()?;
     let version = package_version()?;
     let version_code = version_code(&version)?;
     let commit_count = git_commit_count()?;
 
     build_webui()?;
-    let binary = compile_binary(release, target)?;
+    let binary = compile_binary(release)?;
     if !binary.exists() {
         bail!("binary not found at {}", binary.display());
     }

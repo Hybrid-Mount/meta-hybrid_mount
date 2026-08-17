@@ -68,6 +68,11 @@ jobs:
       - name: ShellCheck module scripts
         run: |
           set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            apt-get update
+            apt-get install -y --no-install-recommends shellcheck
+            rm -rf /var/lib/apt/lists/*
+          fi
           shellcheck module/*.sh
 
   webui-lints:
