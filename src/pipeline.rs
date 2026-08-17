@@ -115,7 +115,8 @@ fn run_mount_pipeline_impl() -> Result<()> {
 
     cleanup_tmp_root();
 
-    let app_modules = app_modules(&modules, &config, &plan);
+    let mount_error_modules = crate::state::collect_mount_error_modules(&config.moduledir);
+    let app_modules = app_modules(&modules, &config, &plan, &mount_error_modules);
     write_scan_ret(&app_modules)?;
 
     let skip_mount_modules = modules
@@ -123,7 +124,6 @@ fn run_mount_pipeline_impl() -> Result<()> {
         .filter(|module| module.skip_mount)
         .map(|module| module.id.clone())
         .collect::<Vec<_>>();
-    let mount_error_modules = crate::state::collect_mount_error_modules(&config.moduledir);
     let mount_error_reasons = mount_error_modules
         .iter()
         .map(|module| (module.clone(), "mount_error marker present".to_owned()))

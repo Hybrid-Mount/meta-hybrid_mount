@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Bahasa Indonesia"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Menyimpan...",
+    "cancel": "Batal",
+    "close": "Batal",
+    "reboot": "Mulai Ulang",
+    "rebootTitle": "Mulai Ulang Sistem?",
+    "rebootConfirm": "Apakah Anda yakin ingin memulai ulang perangkat?",
+    "language": "Bahasa",
+    "enabled": "Aktif",
+    "disabled": "Nonaktif"
+  },
+  "tabs": {
+    "status": "Status",
+    "config": "Pengaturan",
+    "modules": "Modul",
+    "info": "Info"
+  },
+  "status": {
+    "backendTitle": "Penyimpanan",
+    "sysInfoTitle": "Informasi Sistem",
+    "moduleActive": "Modul Aktif",
+    "kernelLabel": "Kernel",
+    "selinuxLabel": "SELinux",
+    "loadError": "Gagal memuat status sistem"
+  },
+  "config": {
+    "moduledir": "Direktori Modul",
+    "moduledirDesc": "Atur direktori tempat modul disimpan",
+    "mountSource": "Sumber Mount",
+    "mountSourceDesc": "Namespace sumber mount global (contoh: KSU)",
+    "overlayMode": "Mode Overlay",
+    "overlayModeDesc": "Pilih strategi penyimpanan pendukung",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Nonaktifkan Unmount",
+    "moduleDefault": "Strategi Default",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Abaikan",
+    "save": "Simpan",
+    "reset": "Reset Pengaturan",
+    "saveSuccess": "Tersimpan",
+    "loadError": "Gagal memuat pengaturan",
+    "saveFailed": "Gagal menyimpan",
+    "resetSuccess": "Pengaturan berhasil direset"
+  },
+  "modules": {
+    "reload": "Muat Ulang",
+    "save": "Simpan Mode",
+    "empty": "Tidak ada modul ditemukan.",
+    "scanError": "Gagal memindai modul",
+    "saveSuccess": "Mode berhasil disimpan",
+    "saveFailed": "Gagal menyimpan mode",
+    "searchPlaceholder": "Cari modul...",
+    "filterLabel": "Filter:",
+    "filterAll": "Semua",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Abaikan",
+    "clearErrors": "Hapus Kesalahan Mount",
+    "clearErrorsSuccess": "Kesalahan mount berhasil dihapus",
+    "mountError": "Kesalahan Mount",
+    "suggestIgnore": "Modul ini berisi perintah mount di file .sh-nya. Pertimbangkan untuk mengatur modenya ke \"Ignore\"."
+  },
+  "info": {
+    "projectLink": "Repositori",
+    "contributors": "Kontributor",
+    "loadFail": "Gagal memuat (Batas API)",
+    "noBio": "Bio tidak tersedia"
+  }
+}

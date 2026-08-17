@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Türkçe"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Kaydediliyor...",
+    "cancel": "İptal",
+    "close": "İptal",
+    "reboot": "Yeniden Başlat",
+    "rebootTitle": "Sistemi Yeniden Başlat?",
+    "rebootConfirm": "Cihazı yeniden başlatmak istediğinize emin misiniz?",
+    "language": "Dil",
+    "enabled": "Etkin",
+    "disabled": "Devre Dışı"
+  },
+  "tabs": {
+    "status": "Durum",
+    "config": "Yapılandırma",
+    "modules": "Modüller",
+    "info": "Bilgi"
+  },
+  "status": {
+    "backendTitle": "Depolama",
+    "sysInfoTitle": "Sistem Bilgisi",
+    "moduleActive": "Aktif Modüller",
+    "kernelLabel": "Çekirdek",
+    "selinuxLabel": "SELinux",
+    "loadError": "Sistem durumu yüklenemedi"
+  },
+  "config": {
+    "moduledir": "Modül Dizini",
+    "moduledirDesc": "Modüllerin saklandığı dizini ayarlayın",
+    "mountSource": "Bağlama Kaynağı",
+    "mountSourceDesc": "Genel bağlama kaynağı ad alanı (örn. KSU)",
+    "overlayMode": "Katman Modu",
+    "overlayModeDesc": "Arka plan depolama stratejisini seçin",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Bağlantıyı Kesmeyi Devre Dışı Bırak",
+    "moduleDefault": "Varsayılan Strateji",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Yoksay",
+    "save": "Kaydet",
+    "reset": "Yapılandırmayı Sıfırla",
+    "saveSuccess": "Kaydedildi",
+    "loadError": "Yapılandırma yüklenemedi",
+    "saveFailed": "Kaydedilemedi",
+    "resetSuccess": "Yapılandırma varsayılana sıfırlandı"
+  },
+  "modules": {
+    "reload": "Yenile",
+    "save": "Modları Kaydet",
+    "empty": "Modül bulunamadı.",
+    "scanError": "Modüller taranamadı",
+    "saveSuccess": "Modlar kaydedildi",
+    "saveFailed": "Modlar kaydedilemedi",
+    "searchPlaceholder": "Modülleri ara...",
+    "filterLabel": "Filtrele:",
+    "filterAll": "Tümü",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Yoksay",
+    "clearErrors": "Bağlama Hatalarını Temizle",
+    "clearErrorsSuccess": "Bağlama hataları temizlendi",
+    "mountError": "Bağlama Hatası",
+    "suggestIgnore": "Bu modül, .sh dosyalarında bağlama ile ilgili komutlar içeriyor. Modunu 'Yoksay' olarak ayarlamayı düşünebilirsiniz."
+  },
+  "info": {
+    "projectLink": "Depo",
+    "contributors": "Katkıda Bulunanlar",
+    "loadFail": "Yüklenemedi (API İstek Sınırı)",
+    "noBio": "Biyografi bulunmuyor"
+  }
+}

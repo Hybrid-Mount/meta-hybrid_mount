@@ -36,6 +36,8 @@ pub struct AppModule {
     pub is_mounted: bool,
     pub enabled: bool,
     pub source_path: String,
+    pub mount_error: Option<String>,
+    pub suggest_ignore: bool,
     pub rules: AppModuleRules,
 }
 
@@ -168,7 +170,12 @@ pub fn build_install_state(
 }
 
 /// 由模块清单 + 配置 + 计划生成 `scan.ret` 条目。
-pub fn app_modules(modules: &[ModuleRecord], config: &Config, plan: &MountPlan) -> Vec<AppModule> {
+pub fn app_modules(
+    modules: &[ModuleRecord],
+    config: &Config,
+    plan: &MountPlan,
+    mount_errors: &[String],
+) -> Vec<AppModule> {
     modules
         .iter()
         .map(|module| {
@@ -193,6 +200,11 @@ pub fn app_modules(modules: &[ModuleRecord], config: &Config, plan: &MountPlan) 
                 })
                 .unwrap_or_default();
 
+            let mount_error = mount_errors
+                .iter()
+                .any(|id| id == &module.id)
+                .then(|| "mount_error marker present".to_owned());
+
             AppModule {
                 id: module.id.clone(),
                 name: module.name.clone(),
@@ -203,6 +215,8 @@ pub fn app_modules(modules: &[ModuleRecord], config: &Config, plan: &MountPlan) 
                 is_mounted: module.mountable() && mode != Mode::Ignore,
                 enabled: !module.disabled,
                 source_path: module.source_path.to_string_lossy().into_owned(),
+                suggest_ignore: mount_error.is_some(),
+                mount_error,
                 rules: AppModuleRules {
                     default_mode: default_mode.as_str().to_owned(),
                     paths,
@@ -386,7 +400,7 @@ mod tests {
             },
         );
 
-        let list = app_modules(&modules, &config, &test_plan());
+        let list = app_modules(&modules, &config, &test_plan(), &[]);
 
         assert_eq!(list[0].mode, "overlay");
         assert!(list[0].is_mounted);
@@ -395,6 +409,21 @@ mod tests {
         assert_eq!(list[1].rules.paths["system/etc/hosts"], "overlay");
         assert_eq!(list[2].mode, "ignore");
         assert!(!list[2].is_mounted);
+    }
+
+    #[test]
+    fn app_modules_surface_mount_error_markers() {
+        let modules = [record("bad_mod")];
+        let config = Config::default();
+        let plan = MountPlan::default();
+
+        let list = app_modules(&modules, &config, &plan, &["bad_mod".to_owned()]);
+
+        assert_eq!(
+            list[0].mount_error,
+            Some("mount_error marker present".to_owned())
+        );
+        assert!(list[0].suggest_ignore);
     }
 
     #[test]

@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Español"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Guardando...",
+    "cancel": "Cancelar",
+    "close": "Cancelar",
+    "reboot": "Reiniciar",
+    "rebootTitle": "Reiniciar?",
+    "rebootConfirm": "¿Está seguro de que desea reiniciar?",
+    "language": "Idioma",
+    "enabled": "Activado",
+    "disabled": "Desactivado"
+  },
+  "tabs": {
+    "status": "Estado",
+    "config": "Configuración",
+    "modules": "Módulos",
+    "info": "Información"
+  },
+  "status": {
+    "backendTitle": "Almacenamiento",
+    "sysInfoTitle": "Información del sistema",
+    "moduleActive": "Activos",
+    "kernelLabel": "Núcleo",
+    "selinuxLabel": "SELinux",
+    "loadError": "Error al cargar el estado del sistema"
+  },
+  "config": {
+    "moduledir": "Dir. Módulos",
+    "moduledirDesc": "Establece el directorio donde se almacenan los módulos",
+    "mountSource": "Fuente Montaje",
+    "mountSourceDesc": "Espacio de nombres global (p. ej. KSU)",
+    "overlayMode": "Modo overlay",
+    "overlayModeDesc": "Selecciona la estrategia de almacenamiento de respaldo",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Desactivar Umount",
+    "moduleDefault": "Estrategia",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Ignorar",
+    "save": "Guardar",
+    "reset": "Restablecer Config",
+    "saveSuccess": "Guardado",
+    "loadError": "Error al cargar config",
+    "saveFailed": "Error al guardar",
+    "resetSuccess": "Restablecido"
+  },
+  "modules": {
+    "reload": "Refrescar",
+    "save": "Guardar Modos",
+    "empty": "No se encontraron módulos.",
+    "scanError": "Error al escanear módulos",
+    "saveSuccess": "Modos guardados",
+    "saveFailed": "Error al guardar modos",
+    "searchPlaceholder": "Buscar módulos...",
+    "filterLabel": "Filtro:",
+    "filterAll": "Todos",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Ignorar",
+    "clearErrors": "Limpiar errores",
+    "clearErrorsSuccess": "Errores limpiados",
+    "mountError": "Error de montaje",
+    "suggestIgnore": "Este módulo contiene comandos de montaje en sus archivos .sh. Considere establecer su modo en \"Ignorar\"."
+  },
+  "info": {
+    "projectLink": "Repositorio",
+    "contributors": "Colaboradores",
+    "loadFail": "Error al cargar (Límite de API)",
+    "noBio": "Sin biografía disponible"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Tiếng Việt"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Đang lưu...",
+    "cancel": "Hủy",
+    "close": "Hủy",
+    "reboot": "Khởi động lại",
+    "rebootTitle": "Khởi động lại hệ thống?",
+    "rebootConfirm": "Bạn có chắc muốn khởi động lại thiết bị?",
+    "language": "Ngôn ngữ",
+    "enabled": "Đã bật",
+    "disabled": "Đã tắt"
+  },
+  "tabs": {
+    "status": "Trạng thái",
+    "config": "Cấu hình",
+    "modules": "Mô-đun",
+    "info": "Thông tin"
+  },
+  "status": {
+    "backendTitle": "Bộ nhớ",
+    "sysInfoTitle": "Thông tin Hệ thống",
+    "moduleActive": "Mô-đun Đang h.động",
+    "kernelLabel": "Kernel",
+    "selinuxLabel": "SELinux",
+    "loadError": "Thất bại khi tải trạng thái hệ thống"
+  },
+  "config": {
+    "moduledir": "Thư mục Mô-đun",
+    "moduledirDesc": "Đặt thư mục nơi các mô-đun được lưu trữ",
+    "mountSource": "Nguồn Gắn kết",
+    "mountSourceDesc": "Không gian tên nguồn gắn kết toàn cầu (ví dụ: KSU)",
+    "overlayMode": "Chế độ Overlay",
+    "overlayModeDesc": "Chọn chiến lược lưu trữ sao lưu",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Tắt Umount",
+    "moduleDefault": "Chiến lược Mặc định",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Bỏ qua",
+    "save": "Lưu",
+    "reset": "Đặt lại Cấu hình",
+    "saveSuccess": "Đã lưu",
+    "loadError": "Thất bại khi tải cấu hình",
+    "saveFailed": "Thất bại khi lưu",
+    "resetSuccess": "Cấu hình đã được đặt lại về mặc định"
+  },
+  "modules": {
+    "reload": "Làm mới",
+    "save": "Lưu các chế độ",
+    "empty": "Không có mô-đun nào được tìm thấy.",
+    "scanError": "Thất bại khi quét các mô-đun",
+    "saveSuccess": "Các chế độ đã được lưu",
+    "saveFailed": "Thất bại khi lưu các chế độ",
+    "searchPlaceholder": "Tìm kiếm các mô-đun...",
+    "filterLabel": "Bộ lọc:",
+    "filterAll": "Tất cả",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Bỏ qua",
+    "clearErrors": "Xóa lỗi mount",
+    "clearErrorsSuccess": "Đã xóa lỗi mount",
+    "mountError": "Lỗi mount",
+    "suggestIgnore": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Bỏ qua\"."
+  },
+  "info": {
+    "projectLink": "Kho",
+    "contributors": "Những người đóng góp",
+    "loadFail": "Thất bại khi tải (Giới hạn Tỷ lệ API)",
+    "noBio": "Không có sẵn tiểu sử"
+  }
+}

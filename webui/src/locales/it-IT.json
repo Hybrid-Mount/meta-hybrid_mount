@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Italiano"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Salvataggio...",
+    "cancel": "Annulla",
+    "close": "Annulla",
+    "reboot": "Riavvia",
+    "rebootTitle": "Riavviare il sistema?",
+    "rebootConfirm": "Sei sicuro di voler riavviare il dispositivo?",
+    "language": "Lingua",
+    "enabled": "Abilitato",
+    "disabled": "Disabilitato"
+  },
+  "tabs": {
+    "status": "Stato",
+    "config": "Configurazione",
+    "modules": "Moduli",
+    "info": "Informazioni"
+  },
+  "status": {
+    "backendTitle": "Archiviazione",
+    "sysInfoTitle": "Informazioni di sistema",
+    "moduleActive": "Moduli attivi",
+    "kernelLabel": "Kernel",
+    "selinuxLabel": "SELinux",
+    "loadError": "Impossibile caricare lo stato del sistema"
+  },
+  "config": {
+    "moduledir": "Directory moduli",
+    "moduledirDesc": "Imposta la directory in cui sono archiviati i moduli",
+    "mountSource": "Sorgente di mount",
+    "mountSourceDesc": "Namespace globale della sorgente di mount (es. KSU)",
+    "overlayMode": "Modalita overlay",
+    "overlayModeDesc": "Seleziona la strategia di archiviazione di supporto",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Disabilita Umount",
+    "moduleDefault": "Strategia predefinita",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Ignora",
+    "save": "Salva",
+    "reset": "Reimposta configurazione",
+    "saveSuccess": "Salvato",
+    "loadError": "Impossibile caricare la configurazione",
+    "saveFailed": "Impossibile salvare",
+    "resetSuccess": "Configurazione ripristinata ai valori predefiniti"
+  },
+  "modules": {
+    "reload": "Ricarica",
+    "save": "Salva modalita",
+    "empty": "Nessun modulo trovato.",
+    "scanError": "Impossibile analizzare i moduli",
+    "saveSuccess": "Modalita salvate",
+    "saveFailed": "Impossibile salvare le modalita",
+    "searchPlaceholder": "Cerca moduli...",
+    "filterLabel": "Filtro:",
+    "filterAll": "Tutti",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Ignora",
+    "clearErrors": "Cancella errori",
+    "clearErrorsSuccess": "Errori cancellati",
+    "mountError": "Errore di mount",
+    "suggestIgnore": "Questo modulo contiene comandi di mount nei suoi file .sh. Considera di impostare la modalità su \"Ignora\"."
+  },
+  "info": {
+    "projectLink": "Archivio",
+    "contributors": "Contributori",
+    "loadFail": "Caricamento non riuscito (limite API)",
+    "noBio": "Nessuna biografia disponibile"
+  }
+}

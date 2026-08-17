@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "日本語"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "保存中...",
+    "cancel": "キャンセル",
+    "close": "キャンセル",
+    "reboot": "再起動",
+    "rebootTitle": "システムを再起動しますか？",
+    "rebootConfirm": "デバイスを再起動しますか？",
+    "language": "言語",
+    "enabled": "有効",
+    "disabled": "無効"
+  },
+  "tabs": {
+    "status": "ステータス",
+    "config": "設定",
+    "modules": "モジュール",
+    "info": "情報"
+  },
+  "status": {
+    "backendTitle": "ストレージ",
+    "sysInfoTitle": "システム情報",
+    "moduleActive": "有効なモジュール",
+    "kernelLabel": "カーネル",
+    "selinuxLabel": "SELinux",
+    "loadError": "システムステータスの読み込みに失敗しました"
+  },
+  "config": {
+    "moduledir": "モジュールのディレクトリ",
+    "moduledirDesc": "モジュールを保存するディレクトリを設定します",
+    "mountSource": "マウントソース",
+    "mountSourceDesc": "グローバルマウントソースの名前空間 (例: KSU)",
+    "overlayMode": "オーバーレイモード",
+    "overlayModeDesc": "バックアップ先のストレージを選択してください",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "アンマウントを無効",
+    "moduleDefault": "デフォルト",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "無視",
+    "save": "保存",
+    "reset": "設定をリセット",
+    "saveSuccess": "保存済み",
+    "loadError": "設定の読み込みに失敗しました",
+    "saveFailed": "保存に失敗しました",
+    "resetSuccess": "設定をデフォルトにリセット"
+  },
+  "modules": {
+    "reload": "更新",
+    "save": "モードを保存",
+    "empty": "モジュールが見つかりません。",
+    "scanError": "モジュールのスキャンに失敗しました",
+    "saveSuccess": "モードを保存しました",
+    "saveFailed": "モードの保存に失敗しました",
+    "searchPlaceholder": "モジュールを検索...",
+    "filterLabel": "フィルター:",
+    "filterAll": "すべて",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "無視",
+    "clearErrors": "マウントエラーをクリア",
+    "clearErrorsSuccess": "マウントエラーをクリアしました",
+    "mountError": "マウントエラー",
+    "suggestIgnore": "このモジュールの .sh ファイルにはマウント関連のコマンドが含まれています。モードを「Ignore」に設定することを検討してください。"
+  },
+  "info": {
+    "projectLink": "リポジトリ",
+    "contributors": "貢献者",
+    "loadFail": "読み込みに失敗しました (API 制限)",
+    "noBio": "自己紹介はありません"
+  }
+}

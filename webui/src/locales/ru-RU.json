@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Русский"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Сохранение...",
+    "cancel": "Отмена",
+    "close": "Отмена",
+    "reboot": "Перезагрузить",
+    "rebootTitle": "Перезагрузка",
+    "rebootConfirm": "Вы уверены, что хотите перезагрузить устройство?",
+    "language": "Язык",
+    "enabled": "Включено",
+    "disabled": "Выключено"
+  },
+  "tabs": {
+    "status": "Статус",
+    "config": "Конфиг",
+    "modules": "Модули",
+    "info": "Инфо"
+  },
+  "status": {
+    "backendTitle": "Хранилище",
+    "sysInfoTitle": "Системная информация",
+    "moduleActive": "Активные модули",
+    "kernelLabel": "Ядро",
+    "selinuxLabel": "SELinux",
+    "loadError": "Не удалось загрузить состояние системы"
+  },
+  "config": {
+    "moduledir": "Путь модулей",
+    "moduledirDesc": "Укажите каталог, в котором хранятся модули",
+    "mountSource": "Источник монтирования",
+    "mountSourceDesc": "Глобальное пространство имен (напр. KSU)",
+    "overlayMode": "Режим overlay",
+    "overlayModeDesc": "Выберите стратегию хранилища",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Отключить Umount",
+    "moduleDefault": "Стратегия",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Игнорировать",
+    "save": "Сохранить",
+    "reset": "Сброс конфига",
+    "saveSuccess": "Сохранено",
+    "loadError": "Ошибка загрузки конфига",
+    "saveFailed": "Ошибка сохранения",
+    "resetSuccess": "Настройки сброшены"
+  },
+  "modules": {
+    "reload": "Обновить",
+    "save": "Сохранить",
+    "empty": "Модули не найдены.",
+    "scanError": "Ошибка сканирования модулей",
+    "saveSuccess": "Режимы сохранены",
+    "saveFailed": "Ошибка сохранения режимов",
+    "searchPlaceholder": "Поиск модулей...",
+    "filterLabel": "Фильтр:",
+    "filterAll": "Все",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Игнорировать",
+    "clearErrors": "Очистить ошибки",
+    "clearErrorsSuccess": "Ошибки очищены",
+    "mountError": "Ошибка монтирования",
+    "suggestIgnore": "Этот модуль содержит команды монтирования в своих .sh файлах. Рассмотрите установку режима \"Ignore\"."
+  },
+  "info": {
+    "projectLink": "Репозиторий",
+    "contributors": "Участники",
+    "loadFail": "Ошибка загрузки (Лимит API)",
+    "noBio": "Биография отсутствует"
+  }
+}

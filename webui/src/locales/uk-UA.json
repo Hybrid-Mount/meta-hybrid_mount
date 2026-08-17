@@ -1,0 +1,77 @@
+{
+  "lang": {
+    "display": "Українська"
+  },
+  "common": {
+    "appName": "Hybrid Mount",
+    "brand": "Hybrid Mount",
+    "saving": "Збереження...",
+    "cancel": "Скасувати",
+    "close": "Скасувати",
+    "reboot": "Перезавантажити",
+    "rebootTitle": "Перезавантажити систему?",
+    "rebootConfirm": "Ви впевнені, що хочете перезавантажити пристрій?",
+    "language": "Мова",
+    "enabled": "Увімкнено",
+    "disabled": "Вимкнено"
+  },
+  "tabs": {
+    "status": "Статус",
+    "config": "Конфіг",
+    "modules": "Модулі",
+    "info": "Інфо"
+  },
+  "status": {
+    "backendTitle": "Сховище",
+    "sysInfoTitle": "Інформація про систему",
+    "moduleActive": "Активні модулі",
+    "kernelLabel": "Ядро",
+    "selinuxLabel": "SELinux",
+    "loadError": "Не вдалося завантажити стан системи"
+  },
+  "config": {
+    "moduledir": "Каталог модулів",
+    "moduledirDesc": "Встановіть каталог, де зберігаються модулі",
+    "mountSource": "Джерело монтування",
+    "mountSourceDesc": "Глобальний простір імен (наприклад, KSU)",
+    "overlayMode": "Режим накладання",
+    "overlayModeDesc": "Виберіть стратегію резервного зберігання",
+    "overlayTmpfs": "Tmpfs",
+    "overlayExt4": "Ext4",
+    "disableUmount": "Вимкнути Umount",
+    "moduleDefault": "Стратегія за замовчуванням",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Ігнор",
+    "save": "Зберегти",
+    "reset": "Скинути конфіг",
+    "saveSuccess": "Збережено",
+    "loadError": "Не вдалося завантажити конфігурацію",
+    "saveFailed": "Не вдалося зберегти налаштування",
+    "resetSuccess": "Налаштування скинуто до значень за замовчуванням"
+  },
+  "modules": {
+    "reload": "Оновити",
+    "save": "Зберегти режими",
+    "empty": "Модулів не знайдено.",
+    "scanError": "Не вдалося просканувати модулі",
+    "saveSuccess": "Режими модулів збережено",
+    "saveFailed": "Не вдалося зберегти режими модулів",
+    "searchPlaceholder": "Пошук модулів...",
+    "filterLabel": "Фільтр:",
+    "filterAll": "Усі",
+    "modeOverlay": "OverlayFS",
+    "modeMagic": "Magic Mount",
+    "modeIgnore": "Ігнор",
+    "clearErrors": "Очистити помилки",
+    "clearErrorsSuccess": "Помилки очищено",
+    "mountError": "Помилка монтування",
+    "suggestIgnore": "Цей модуль містить команди монтування у своїх .sh файлах. Розгляньте встановлення режиму \"Ignore\"."
+  },
+  "info": {
+    "projectLink": "Репозиторій проєкту",
+    "contributors": "Контриб'ютори",
+    "loadFail": "Не вдалося завантажити (ліміт API)",
+    "noBio": "Біографія відсутня"
+  }
+}
