@@ -27,6 +27,9 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v6
         with:
@@ -77,6 +80,7 @@ jobs:
     defaults:
       run:
         working-directory: webui
+        shell: bash
     steps:
       - uses: actions/checkout@v6
         with:

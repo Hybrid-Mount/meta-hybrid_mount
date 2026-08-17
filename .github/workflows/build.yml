@@ -10,6 +10,7 @@ on:
     paths:
       - "src/**"
       - "Cargo.*"
+      - ".cargo/**"
       - "module/**"
       - "webui"
       - "webui/**"
@@ -22,6 +23,7 @@ on:
     paths:
       - "src/**"
       - "Cargo.*"
+      - ".cargo/**"
       - "module/**"
       - "webui"
       - "webui/**"
