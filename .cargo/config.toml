@@ -1,0 +1,6 @@
+# ReHybrid-Mount
+#
+# SPDX-License-Identifier: GPL-3.0-only
+
+[alias]
+xtask = "run --package xtask"
