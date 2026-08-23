@@ -37,5 +37,13 @@ export default [
       "vue/html-self-closing": "off",
     },
   },
+  {
+    // Material Web uses the native Web Component `slot` attribute.
+    files: ["src/ui/md3/**/*.vue"],
+    rules: {
+      "vue/no-deprecated-slot-attribute": "off",
+      "vue/multiline-html-element-content-newline": "off",
+    },
+  },
   { rules: tsRules },
 ];

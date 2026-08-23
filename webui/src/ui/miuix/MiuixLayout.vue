@@ -167,6 +167,32 @@ onBeforeUnmount(() => {
   padding-bottom: var(--bottom-inset);
 }
 
+.m-snackbar-host {
+  bottom: calc(var(--m-snackbar-inset-bottom, 0px) + 108px);
+}
+
+.m-snackbar {
+  width: calc(100% - 24px);
+  max-width: 420px;
+  padding: 8px 0 0;
+}
+
+.m-snackbar__inner {
+  min-height: 52px;
+  border: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.12));
+  border-radius: 18px;
+  padding: 13px 16px;
+  background: var(--m-color-surface-container-highest, #e6e0e9);
+  color: var(--m-color-on-surface, #1d1b20);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.2);
+}
+
+.m-snackbar__message {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
 .page-enter-active,
 .page-leave-active {
   transition: opacity 0.18s ease;

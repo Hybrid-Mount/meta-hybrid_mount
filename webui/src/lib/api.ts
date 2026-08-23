@@ -49,7 +49,7 @@ const isMountMode = (value: unknown): value is MountMode =>
 const isOverlayMode = (value: unknown): value is OverlayMode =>
   value === "tmpfs" || value === "ext4";
 
-function normalizeConfigPayload(payload: Record<string, unknown>): AppConfig {
+export function normalizeConfigPayload(payload: Record<string, unknown>): AppConfig {
   const rules: AppConfig["rules"] = {};
 
   if (payload.rules && typeof payload.rules === "object") {
@@ -97,29 +97,30 @@ function normalizeConfigPayload(payload: Record<string, unknown>): AppConfig {
   };
 }
 
-function createConfigPayload(config: AppConfig): Record<string, unknown> {
+export function createConfigPayload(config: AppConfig): Record<string, unknown> {
   return {
     moduledir: config.moduledir,
     mountsource: config.mountsource,
     overlay_mode: config.overlay_mode,
     disable_umount: config.disable_umount,
     default_mode: config.default_mode,
+    replace_rules: true,
     rules: config.rules,
   };
 }
 
-function normalizeModule(raw: Record<string, unknown>): Module {
+export function normalizeModule(raw: Record<string, unknown>): Module {
   const rawRules =
     raw.rules && typeof raw.rules === "object"
       ? (raw.rules as Record<string, unknown>)
       : {};
 
-  const paths: Record<string, string> = {};
+  const paths: Record<string, MountMode> = {};
   if (rawRules.paths && typeof rawRules.paths === "object") {
     for (const [path, mode] of Object.entries(
       rawRules.paths as Record<string, unknown>,
     )) {
-      if (typeof mode === "string") paths[path] = mode;
+      if (isMountMode(mode)) paths[path] = mode;
     }
   }
 
@@ -139,7 +140,7 @@ function normalizeModule(raw: Record<string, unknown>): Module {
         : null,
     suggest_ignore: Boolean(raw.suggest_ignore),
     rules: {
-      default_mode: String(rawRules.default_mode ?? "overlay"),
+      default_mode: isMountMode(rawRules.default_mode) ? rawRules.default_mode : null,
       paths,
     },
   };
@@ -336,11 +337,13 @@ const RealAPI: AppAPI = {
   },
 
   reboot: async () => {
-    const { stdout } = await ksuExec!('ksud debug info | grep "late_load: "');
-    if (stdout.slice(11).trim() === "true") {
-      await ksuExec!("ksud soft-reboot");
-    } else {
-      await ksuExec!("svc power reboot || reboot");
+    const debug = await ksuExec!('ksud debug info | grep "late_load: "');
+    const lateLoad = debug.errno === 0 && debug.stdout.slice(11).trim() === "true";
+    const result = await ksuExec!(
+      lateLoad ? "ksud soft-reboot" : "svc power reboot || reboot",
+    );
+    if (result.errno !== 0) {
+      throw new Error(result.stderr || "reboot command failed");
     }
   },
 };

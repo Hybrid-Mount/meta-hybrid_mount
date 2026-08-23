@@ -13,7 +13,14 @@
     "rebootConfirm": "Apakah Anda yakin ingin memulai ulang perangkat?",
     "language": "Bahasa",
     "enabled": "Aktif",
-    "disabled": "Nonaktif"
+    "disabled": "Nonaktif",
+    "save": "Save",
+    "reset": "Reset",
+    "reload": "Reload",
+    "refresh": "Refresh",
+    "rebootFailed": "Reboot failed",
+    "uiStyle": "UI Style",
+    "styleChanged": "UI style changed"
   },
   "tabs": {
     "status": "Status",
@@ -27,7 +34,22 @@
     "moduleActive": "Modul Aktif",
     "kernelLabel": "Kernel",
     "selinuxLabel": "SELinux",
-    "loadError": "Gagal memuat status sistem"
+    "loadError": "Gagal memuat status sistem",
+    "deviceTitle": "Device Info",
+    "moduleTitle": "Modules",
+    "mountSource": "Mount Source",
+    "storageMode": "Storage Mode",
+    "overlayModules": "Overlay Modules",
+    "magicModules": "Magic Modules",
+    "activeMounts": "Active Mounts",
+    "modelLabel": "Model",
+    "androidLabel": "Android",
+    "notReady": "No startup snapshot yet",
+    "lastStartup": "Last Startup",
+    "installTitle": "Installation",
+    "compatible": "Compatible",
+    "incompatible": "Incompatible",
+    "modeStats": "Statistik"
   },
   "config": {
     "moduledir": "Direktori Modul",
@@ -48,7 +70,21 @@
     "saveSuccess": "Tersimpan",
     "loadError": "Gagal memuat pengaturan",
     "saveFailed": "Gagal menyimpan",
-    "resetSuccess": "Pengaturan berhasil direset"
+    "resetSuccess": "Pengaturan berhasil direset",
+    "title": "Configuration",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
+    "defaultMode": "Default Backend",
+    "defaultModeDesc": "Fallback backend for modules without rules",
+    "rulesTitle": "Path Rules",
+    "rulesDesc": "Per-module default backend and per-path overrides",
+    "paths": "Paths",
+    "addPathRule": "Add path rule",
+    "pathPlaceholder": "system/etc/hosts",
+    "mode": "Mode",
+    "inherit": "Inherit global",
+    "resetFailed": "Failed to reset configuration",
+    "applyHint": "Changes take effect after reboot",
+    "monetTheme": "Enable Monet colors"
   },
   "modules": {
     "reload": "Muat Ulang",
@@ -66,12 +102,39 @@
     "clearErrors": "Hapus Kesalahan Mount",
     "clearErrorsSuccess": "Kesalahan mount berhasil dihapus",
     "mountError": "Kesalahan Mount",
-    "suggestIgnore": "Modul ini berisi perintah mount di file .sh-nya. Pertimbangkan untuk mengatur modenya ke \"Ignore\"."
+    "suggestIgnore": "Modul ini berisi perintah mount di file .sh-nya. Pertimbangkan untuk mengatur modenya ke \"Ignore\".",
+    "title": "Modules",
+    "desc": "Module list from the last startup snapshot.",
+    "scanning": "Scanning...",
+    "modeShortOverlay": "Overlay",
+    "modeShortMagic": "Magic",
+    "modeShortIgnore": "Ignore",
+    "clearedCount": "Removed {count} marker(s)",
+    "authorLabel": "Author",
+    "descriptionLabel": "Description",
+    "unknownLabel": "Unknown",
+    "noDescriptionLabel": "No description",
+    "rulesLabel": "Rules",
+    "expandRules": "Expand",
+    "collapseRules": "Collapse"
   },
   "info": {
     "projectLink": "Repositori",
     "contributors": "Kontributor",
     "loadFail": "Gagal memuat (Batas API)",
-    "noBio": "Bio tidak tersedia"
+    "noBio": "Bio tidak tersedia",
+    "title": "About",
+    "version": "Version",
+    "loading": "Loading contributors...",
+    "installTitle": "Install State",
+    "selfModule": "Module directory",
+    "binary": "CLI binary",
+    "configExists": "Config file",
+    "overlaySupported": "OverlayFS kernel support",
+    "mountSource": "Detected mount source",
+    "license": "License"
+  },
+  "content": {
+    "welcome": "Hybrid Mount"
   }
 }

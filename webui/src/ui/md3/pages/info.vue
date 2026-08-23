@@ -2,36 +2,37 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { REPOSITORY_URL } from "../../../lib/constants";
+import DynamicLogo from "../../../components/DynamicLogo.vue";
+import { REPOSITORY_URL, TELEGRAM_URL } from "../../../lib/constants";
+import {
+  loadGitHubContributors,
+  type GitHubContributor,
+} from "../../../lib/contributors";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { API } from "../../../lib/api";
+import Md3BottomActions from "../components/Md3BottomActions.vue";
+import { ICONS } from "../icons";
 
 const { t } = useI18n();
 
-interface Contributor {
-  login: string;
-  avatar_url: string;
-  html_url: string;
-  bio?: string;
-}
-
-const contributors = ref<Contributor[]>([]);
+const contributors = ref<GitHubContributor[]>([]);
+const loading = ref(false);
 const failed = ref(false);
 
 async function loadContributors(): Promise<void> {
+  loading.value = true;
+  failed.value = false;
   try {
-    const response = await fetch(
-      "https://api.github.com/repos/Hybrid-Mount/meta-hybrid_mount/contributors",
-    );
-    if (!response.ok) throw new Error(String(response.status));
-    contributors.value = ((await response.json()) as Contributor[]).slice(0, 20);
+    contributors.value = await loadGitHubContributors();
   } catch {
     failed.value = true;
+  } finally {
+    loading.value = false;
   }
 }
 
-function openRepository(): void {
-  API.openLink(REPOSITORY_URL);
+function statusText(value: boolean | undefined): string {
+  return value ? "✓" : "—";
 }
 
 onMounted(async () => {
@@ -41,66 +42,106 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page">
-    <div class="md3-card">
-      <h4>{{ t("content.welcome") }}</h4>
-      <p>{{ t("content.tagline") }}</p>
-      <p>
-        <b>{{ t("info.version") }}</b
-        >: {{ sysStore.version }}
-      </p>
-      <p>
-        <b>{{ t("info.license") }}</b
-        >: Core GPL-3.0-only · WebUI Apache-2.0
-      </p>
-      <p>
-        <b>{{ t("status.mountSource") }}</b
-        >:
-        {{ sysStore.installState?.mount_source ?? "-" }}
-      </p>
-      <div class="md3-actions">
-        <button class="md3-button" @click="openRepository">
-          {{ t("info.projectLink") }}
+  <div class="info-container">
+    <section class="project-header">
+      <div class="app-logo" aria-hidden="true">
+        <DynamicLogo />
+      </div>
+      <div class="app-name">{{ t("content.welcome") }}</div>
+      <div class="app-version">v{{ sysStore.version }}</div>
+    </section>
+
+    <section class="config-card">
+      <div class="card-header">
+        <span class="card-icon">
+          <md-icon
+            ><svg viewBox="0 0 24 24"><path :d="ICONS.description" /></svg
+          ></md-icon>
+        </span>
+        <span class="card-text">
+          <span class="card-title">{{ t("info.installTitle") }}</span>
+          <span class="card-desc"
+            >{{ t("info.license") }}: GPL-3.0-only / Apache-2.0</span
+          >
+        </span>
+      </div>
+      <div class="setting-list">
+        <div class="list-item">
+          <span class="list-text"
+            ><span class="list-title">{{ t("info.selfModule") }}</span></span
+          >
+          <strong>{{ statusText(sysStore.installState?.self_module) }}</strong>
+        </div>
+        <div class="item-separator" />
+        <div class="list-item">
+          <span class="list-text"
+            ><span class="list-title">{{ t("info.binary") }}</span></span
+          >
+          <strong>{{ statusText(sysStore.installState?.binary) }}</strong>
+        </div>
+        <div class="item-separator" />
+        <div class="list-item">
+          <span class="list-text"
+            ><span class="list-title">{{ t("info.configExists") }}</span></span
+          >
+          <strong>{{ statusText(sysStore.installState?.config_exists) }}</strong>
+        </div>
+        <div class="item-separator" />
+        <div class="list-item">
+          <span class="list-text"
+            ><span class="list-title">{{ t("info.overlaySupported") }}</span></span
+          >
+          <strong>{{ statusText(sysStore.installState?.overlay_supported) }}</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="contributors-section">
+      <h2 class="section-title">{{ t("info.contributors") }}</h2>
+      <div v-if="loading" class="loading-container">
+        <md-circular-progress indeterminate />
+        <span>{{ t("info.loading") }}</span>
+      </div>
+      <p v-else-if="failed" class="error-message">{{ t("info.loadFail") }}</p>
+      <div v-else class="contributors-list-vue">
+        <button
+          v-for="contributor in contributors"
+          :key="contributor.login"
+          type="button"
+          class="contributor-link-vue"
+          @click="API.openLink(contributor.html_url)"
+        >
+          <img :src="contributor.avatar_url" alt="" loading="lazy" />
+          <span class="contributor-copy-vue">
+            <strong>{{ contributor.name || contributor.login }}</strong>
+            <span
+              >@{{ contributor.login }} · {{ contributor.bio || t("info.noBio") }}</span
+            >
+          </span>
         </button>
       </div>
-    </div>
+    </section>
 
-    <div class="md3-card">
-      <h4>{{ t("info.installTitle") }}</h4>
-      <p>
-        <b>{{ t("info.selfModule") }}</b
-        >:
-        {{ sysStore.installState?.self_module ? "✓" : "✗" }}
-      </p>
-      <p>
-        <b>{{ t("info.binary") }}</b
-        >: {{ sysStore.installState?.binary ? "✓" : "✗" }}
-      </p>
-      <p>
-        <b>{{ t("info.configExists") }}</b
-        >:
-        {{ sysStore.installState?.config_exists ? "✓" : "✗" }}
-      </p>
-      <p>
-        <b>{{ t("info.overlaySupported") }}</b
-        >:
-        {{ sysStore.installState?.overlay_supported ? "✓" : "✗" }}
-      </p>
-      <p>
-        <b>{{ t("status.compatible") }}</b
-        >:
-        {{ sysStore.installState?.compatible ? "✓" : "✗" }}
-      </p>
-    </div>
-
-    <div class="md3-card">
-      <h4>{{ t("info.contributors") }}</h4>
-      <p v-if="failed">
-        {{ t("info.loadFail") }}
-      </p>
-      <p v-for="contributor in contributors" :key="contributor.login">
-        <b>{{ contributor.login }}</b> — {{ contributor.bio || t("info.noBio") }}
-      </p>
-    </div>
+    <Md3BottomActions>
+      <md-filled-tonal-icon-button
+        :title="t('info.projectLink')"
+        :aria-label="t('info.projectLink')"
+        @click="API.openLink(REPOSITORY_URL)"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.github" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
+      <md-filled-tonal-icon-button
+        class="telegram-action"
+        title="Telegram"
+        aria-label="Telegram"
+        @click="API.openLink(TELEGRAM_URL)"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.telegram" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
+    </Md3BottomActions>
   </div>
 </template>

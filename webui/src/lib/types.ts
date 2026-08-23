@@ -19,8 +19,8 @@ export interface AppConfig {
 }
 
 export interface ModuleRulesView {
-  default_mode: string;
-  paths: Record<string, string>;
+  default_mode: MountMode | null;
+  paths: Record<string, MountMode>;
 }
 
 export interface Module {

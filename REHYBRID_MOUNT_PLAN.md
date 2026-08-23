@@ -1,7 +1,7 @@
 # ReHybrid-Mount 重构计划
 
 > 目标位置：**同一仓库 `Hybrid-Mount/meta-hybrid_mount`，新建空白 orphan branch（默认名 `rehybrid-mount`）**
-> 状态：**执行中** — Stage 0-5 已完成并提交；Stage 6（WebUI）未开始；后续按 Stage 6 → 9 实施
+> 状态：**执行中** — Stage 0-5 已完成并提交；Stage 6 已在工作树完成；Stage 7、8 与 Android 实机验证继续推进
 > 原则：**完全从 0 开始**；旧历史与参考项目只作为行为规范与资料，不作为代码基线。
 
 ---
@@ -16,10 +16,10 @@
 | 3 | ✅ 完成 | `841f03f6` | overlayfs（fsopen + fallback、>64 层 staging、mountinfo 子挂载处理）+ storage（tmpfs / ext4 loop 镜像）+ sys 辅助 |
 | 4 | ✅ 完成 | `330d9978` | 只读模块清单扫描 + 混合 planner（路径规则 > 模块 default_mode > 全局 default_mode；单后端冲突显式报错；overlay 按分区聚合；magic 选择输出） |
 | 5 | ✅ 完成 | `03b53936` | CLI（手工参数解析、hex payload 合并保存、全部命令契约）+ 无参数完整流水线 + `scan.ret` / `run/state.json` |
-| 6 | ⏳ 未开始 | — | WebUI（Vue 3 双 UI：Miuix 默认 + MD3） |
-| 7 | ⏳ 未开始 | — | 语言文件提交找回与对齐 |
+| 6 | ✅ 工作树完成 | 待提交 | Vue 3 双 UI：Miuix 默认 + MD3；MD3 对齐 v4.2.0；共享 API/store、配置与模块规则编辑、Monet、响应式与浏览器回归均已完成 |
+| 7 | 🟡 部分完成 | 待提交 | 11 个 locale 已统一为 123 个叶子 key；历史提交找回、README 土耳其语内容与提交历史保留仍待处理 |
 | 8 | ⏳ 未开始 | — | module 脚本 / xtask / CI 与 Release |
-| 9 | ⏳ 未开始 | — | 主机侧与 Android 实机验证 |
+| 9 | 🟡 主机完成 | 待提交 | Rust test/clippy、WebUI lint/test/build、桌面与 390×844 双 UI 浏览器回归通过；Android KSU/APatch 挂载流水线仍待实机验证 |
 
 ### 已知待补事项（Stage 5 之后）
 

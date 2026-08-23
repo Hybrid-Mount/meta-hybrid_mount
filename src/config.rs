@@ -189,6 +189,10 @@ impl Config {
             self.default_mode = default_mode;
         }
 
+        if patch.replace_rules.unwrap_or(false) {
+            self.rules.clear();
+        }
+
         if let Some(rules) = patch.rules {
             for (module_id, rule_patch) in rules {
                 let rule = self.rules.entry(module_id).or_default();
@@ -224,6 +228,10 @@ pub struct ConfigPatch {
 
     #[serde(default)]
     pub rules: Option<BTreeMap<String, ModuleRulePatch>>,
+
+    /// 全量配置保存时先清空旧规则；缺省时保持历史 patch 合并语义。
+    #[serde(default)]
+    pub replace_rules: Option<bool>,
 }
 
 /// 模块规则 patch:`default_mode: null` 表示清除模块级模式,
@@ -541,6 +549,27 @@ unknown_option = "overlay"
         config.apply_patch(patch);
 
         assert_eq!(config.rules["m"].default_mode, None);
+    }
+
+    #[test]
+    fn patch_can_replace_all_rules_for_full_editor_save() {
+        let mut config = Config::default();
+        config
+            .rules
+            .insert("stale".to_owned(), ModuleRule::default());
+        config
+            .rules
+            .insert("keep".to_owned(), ModuleRule::default());
+
+        let patch: ConfigPatch = serde_json::from_str(
+            r#"{"replace_rules":true,"rules":{"keep":{"default_mode":"magic"}}}"#,
+        )
+        .unwrap();
+        config.apply_patch(patch);
+
+        assert!(!config.rules.contains_key("stale"));
+        assert_eq!(config.rules.len(), 1);
+        assert_eq!(config.rules["keep"].default_mode, Some(Mode::Magic));
     }
 
     #[test]

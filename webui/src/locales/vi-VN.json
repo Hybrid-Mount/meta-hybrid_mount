@@ -13,7 +13,14 @@
     "rebootConfirm": "Bạn có chắc muốn khởi động lại thiết bị?",
     "language": "Ngôn ngữ",
     "enabled": "Đã bật",
-    "disabled": "Đã tắt"
+    "disabled": "Đã tắt",
+    "save": "Save",
+    "reset": "Reset",
+    "reload": "Reload",
+    "refresh": "Refresh",
+    "rebootFailed": "Reboot failed",
+    "uiStyle": "UI Style",
+    "styleChanged": "UI style changed"
   },
   "tabs": {
     "status": "Trạng thái",
@@ -27,7 +34,22 @@
     "moduleActive": "Mô-đun Đang h.động",
     "kernelLabel": "Kernel",
     "selinuxLabel": "SELinux",
-    "loadError": "Thất bại khi tải trạng thái hệ thống"
+    "loadError": "Thất bại khi tải trạng thái hệ thống",
+    "deviceTitle": "Device Info",
+    "moduleTitle": "Modules",
+    "mountSource": "Mount Source",
+    "storageMode": "Storage Mode",
+    "overlayModules": "Overlay Modules",
+    "magicModules": "Magic Modules",
+    "activeMounts": "Active Mounts",
+    "modelLabel": "Model",
+    "androidLabel": "Android",
+    "notReady": "No startup snapshot yet",
+    "lastStartup": "Last Startup",
+    "installTitle": "Installation",
+    "compatible": "Compatible",
+    "incompatible": "Incompatible",
+    "modeStats": "Thống kê Chế độ"
   },
   "config": {
     "moduledir": "Thư mục Mô-đun",
@@ -48,7 +70,21 @@
     "saveSuccess": "Đã lưu",
     "loadError": "Thất bại khi tải cấu hình",
     "saveFailed": "Thất bại khi lưu",
-    "resetSuccess": "Cấu hình đã được đặt lại về mặc định"
+    "resetSuccess": "Cấu hình đã được đặt lại về mặc định",
+    "title": "Configuration",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
+    "defaultMode": "Default Backend",
+    "defaultModeDesc": "Fallback backend for modules without rules",
+    "rulesTitle": "Path Rules",
+    "rulesDesc": "Per-module default backend and per-path overrides",
+    "paths": "Paths",
+    "addPathRule": "Add path rule",
+    "pathPlaceholder": "system/etc/hosts",
+    "mode": "Mode",
+    "inherit": "Inherit global",
+    "resetFailed": "Failed to reset configuration",
+    "applyHint": "Changes take effect after reboot",
+    "monetTheme": "Enable Monet colors"
   },
   "modules": {
     "reload": "Làm mới",
@@ -66,12 +102,39 @@
     "clearErrors": "Xóa lỗi mount",
     "clearErrorsSuccess": "Đã xóa lỗi mount",
     "mountError": "Lỗi mount",
-    "suggestIgnore": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Bỏ qua\"."
+    "suggestIgnore": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Bỏ qua\".",
+    "title": "Modules",
+    "desc": "Module list from the last startup snapshot.",
+    "scanning": "Scanning...",
+    "modeShortOverlay": "Overlay",
+    "modeShortMagic": "Magic",
+    "modeShortIgnore": "Ignore",
+    "clearedCount": "Removed {count} marker(s)",
+    "authorLabel": "Author",
+    "descriptionLabel": "Description",
+    "unknownLabel": "Unknown",
+    "noDescriptionLabel": "No description",
+    "rulesLabel": "Rules",
+    "expandRules": "Expand",
+    "collapseRules": "Collapse"
   },
   "info": {
     "projectLink": "Kho",
     "contributors": "Những người đóng góp",
     "loadFail": "Thất bại khi tải (Giới hạn Tỷ lệ API)",
-    "noBio": "Không có sẵn tiểu sử"
+    "noBio": "Không có sẵn tiểu sử",
+    "title": "About",
+    "version": "Version",
+    "loading": "Loading contributors...",
+    "installTitle": "Install State",
+    "selfModule": "Module directory",
+    "binary": "CLI binary",
+    "configExists": "Config file",
+    "overlaySupported": "OverlayFS kernel support",
+    "mountSource": "Detected mount source",
+    "license": "License"
+  },
+  "content": {
+    "welcome": "Hybrid Mount"
   }
 }

@@ -44,7 +44,7 @@ async function saveModuleRules(moduleId: string, rules: ModuleRule): Promise<boo
     const module = modules.value.find((item) => item.id === moduleId);
     if (module) {
       module.rules = {
-        default_mode: rules.default_mode ?? "overlay",
+        default_mode: rules.default_mode,
         paths: Object.fromEntries(
           Object.entries(rules.paths).map(([path, mode]) => [path, mode]),
         ),
@@ -53,6 +53,13 @@ async function saveModuleRules(moduleId: string, rules: ModuleRule): Promise<boo
     return true;
   } catch {
     return false;
+  }
+}
+
+function clearMountErrorFlags(): void {
+  for (const module of modules.value) {
+    module.mount_error = null;
+    module.suggest_ignore = false;
   }
 }
 
@@ -69,4 +76,5 @@ export const moduleStore = {
   ensureModulesLoaded,
   loadModules,
   saveModuleRules,
+  clearMountErrorFlags,
 };

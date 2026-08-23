@@ -25,7 +25,7 @@ use crate::plan::MountPlan;
 use crate::scanner::ModuleRecord;
 
 /// `modules` 命令输出的模块条目(交互契约参考上游 scanner JSON)。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppModule {
     pub id: String,
     pub name: String,
@@ -41,9 +41,10 @@ pub struct AppModule {
     pub rules: AppModuleRules,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppModuleRules {
-    pub default_mode: String,
+    /// `None` 表示继承全局默认模式，不能折叠成当前的有效模式。
+    pub default_mode: Option<String>,
     pub paths: BTreeMap<String, String>,
 }
 
@@ -188,9 +189,7 @@ pub fn app_modules(
             };
 
             let rule = config.rules.get(&module.id);
-            let default_mode = rule
-                .and_then(|rule| rule.default_mode)
-                .unwrap_or(config.default_mode);
+            let default_mode = rule.and_then(|rule| rule.default_mode);
             let paths = rule
                 .map(|rule| {
                     rule.paths
@@ -218,7 +217,7 @@ pub fn app_modules(
                 suggest_ignore: mount_error.is_some(),
                 mount_error,
                 rules: AppModuleRules {
-                    default_mode: default_mode.as_str().to_owned(),
+                    default_mode: default_mode.map(|mode| mode.as_str().to_owned()),
                     paths,
                 },
             }
@@ -353,8 +352,26 @@ pub fn handle_clear_mount_errors() -> Result<()> {
         .collect();
     state.save()?;
 
+    // `modules` 读取的是启动时缓存。同步清理缓存，避免 WebUI 刷新后重新出现旧错误。
+    if let Ok(text) = fs::read_to_string(defs::SCAN_RET_PATH) {
+        match serde_json::from_str::<Vec<AppModule>>(&text) {
+            Ok(mut modules) => {
+                clear_app_module_errors(&mut modules);
+                write_scan_ret(&modules)?;
+            }
+            Err(err) => log::warn!("failed to refresh {}: {err}", defs::SCAN_RET_PATH),
+        }
+    }
+
     println!("{}", serde_json::json!({ "ok": true, "removed": removed }));
     Ok(())
+}
+
+fn clear_app_module_errors(modules: &mut [AppModule]) {
+    for module in modules {
+        module.mount_error = None;
+        module.suggest_ignore = false;
+    }
 }
 
 #[cfg(test)]
@@ -405,7 +422,8 @@ mod tests {
         assert_eq!(list[0].mode, "overlay");
         assert!(list[0].is_mounted);
         assert_eq!(list[1].mode, "magic");
-        assert_eq!(list[1].rules.default_mode, "magic");
+        assert_eq!(list[0].rules.default_mode, None);
+        assert_eq!(list[1].rules.default_mode.as_deref(), Some("magic"));
         assert_eq!(list[1].rules.paths["system/etc/hosts"], "overlay");
         assert_eq!(list[2].mode, "ignore");
         assert!(!list[2].is_mounted);
@@ -424,6 +442,22 @@ mod tests {
             Some("mount_error marker present".to_owned())
         );
         assert!(list[0].suggest_ignore);
+    }
+
+    #[test]
+    fn cached_app_module_errors_can_be_cleared() {
+        let modules = [record("bad_mod")];
+        let mut list = app_modules(
+            &modules,
+            &Config::default(),
+            &MountPlan::default(),
+            &["bad_mod".to_owned()],
+        );
+
+        clear_app_module_errors(&mut list);
+
+        assert_eq!(list[0].mount_error, None);
+        assert!(!list[0].suggest_ignore);
     }
 
     #[test]

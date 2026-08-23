@@ -1,194 +1,300 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-.md3-app {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  background: #f6f5f2;
-  color: #1c1b1a;
+@import url("https://mui.kernelsu.org/internal/insets.css");
+@import url("https://mui.kernelsu.org/internal/colors.css");
+@import "./v420/app.css";
+@import "./v420/layout.css";
+@import "./v420/topbar.css";
+@import "./v420/navbar.css";
+@import "./v420/status.css";
+@import "./v420/config.css";
+@import "./v420/modules.css";
+@import "./v420/info.css";
+
+.md3-active .page-scroller {
+  gap: 16px;
 }
 
-.md3-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  z-index: 5;
+.md3-active .page-scroller > .page {
+  display: contents;
 }
 
-.md3-title {
-  font-size: 20px;
+.md3-active .top-bar {
+  background: var(--md-sys-color-background);
+}
+
+.md3-active .nav-tab {
+  min-width: 72px;
+}
+
+.md3-active .config-card,
+.md3-active .module-card,
+.md3-active .project-header,
+.md3-active .contributors-section {
+  box-shadow: none;
+}
+
+.md3-active .field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.md3-active .field-grid .full-span {
+  grid-column: 1 / -1;
+}
+
+.md3-active .configuration-fields {
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.md3-active .field-label {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
   font-weight: 600;
 }
 
-.md3-icon-button {
-  border: none;
-  background: transparent;
-  font-size: 22px;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-}
-
-.md3-icon-button:active {
-  background: rgba(0, 0, 0, 0.08);
-}
-
-.md3-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.md3-bottom {
-  display: flex;
-  background: #ffffff;
-  box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.12);
-}
-
-.md3-nav-item {
-  flex: 1;
-  border: none;
-  background: transparent;
-  padding: 8px 0 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-size: 12px;
-  color: #5f5b57;
-  cursor: pointer;
-}
-
-.md3-nav-item.active {
-  color: #6750a4;
-}
-
-.md3-nav-icon {
-  font-size: 20px;
-}
-
-.md3-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 14px 16px;
-  margin: 10px 12px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-.md3-card h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
-}
-
-.md3-card p {
-  margin: 0;
-  color: #5f5b57;
-  font-size: 13px;
-}
-
-.md3-row {
-  display: flex;
-  gap: 10px;
-  margin: 10px 12px;
-}
-
-.md3-row .md3-card {
-  flex: 1;
-  margin: 0;
-}
-
-.md3-button {
-  border: 1px solid #b9b3ad;
-  background: #ffffff;
-  color: #6750a4;
-  border-radius: 20px;
-  padding: 8px 16px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.md3-button-primary {
-  background: #6750a4;
-  color: #ffffff;
-  border-color: #6750a4;
-}
-
-.md3-button:active {
-  filter: brightness(0.96);
-}
-
-.md3-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 8px 0;
-}
-
-.md3-field label {
-  font-size: 13px;
-  color: #5f5b57;
-}
-
-.md3-input,
-.md3-select {
-  border: 1px solid #b9b3ad;
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 14px;
-  background: #ffffff;
+.md3-active .md3-select-native,
+.md3-active .md3-input-native {
   width: 100%;
-  box-sizing: border-box;
+  min-height: 48px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--radius-lg);
+  padding: 0 14px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface-container-low);
+  font: inherit;
 }
 
-.md3-actions {
+.md3-active .setting-line,
+.md3-active .rule-toolbar,
+.md3-active .module-actions {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
+}
+
+.md3-active .setting-line {
+  justify-content: space-between;
+  min-height: 52px;
+}
+
+.md3-active .setting-copy {
+  min-width: 0;
+}
+
+.md3-active .setting-copy strong,
+.md3-active .setting-copy span {
+  display: block;
+}
+
+.md3-active .setting-copy span,
+.md3-active .rule-path-label,
+.md3-active .module-description,
+.md3-active .supporting-text {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+}
+
+.md3-active .rule-card {
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.md3-active .rule-card + .rule-card {
   margin-top: 12px;
+}
+
+.md3-active .rule-toolbar {
   flex-wrap: wrap;
 }
 
-.md3-dialog-mask {
+.md3-active .rule-toolbar > :first-child {
+  flex: 1 1 220px;
+}
+
+.md3-active .rule-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 190px) auto;
+  gap: 10px;
+  margin-top: 10px;
+  align-items: center;
+}
+
+.md3-active .rule-path-row > .select-field {
+  width: 100%;
+  min-width: 0;
+  flex-basis: auto;
+}
+
+.md3-active .rule-path-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.md3-active .module-actions {
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 4px;
+}
+
+.md3-active .module-icon-action {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+}
+
+.md3-active .clear-errors-action {
+  margin-left: auto;
+}
+
+.md3-active .error-banner .error-content {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.md3-active .module-card.has-error {
+  outline: 1px solid var(--md-sys-color-error);
+}
+
+.md3-active .module-details {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.md3-active .mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-full);
+  padding: 5px 10px;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.md3-active .status-warning {
+  margin-top: 10px;
+  color: var(--md-sys-color-error);
+  font-size: 13px;
+}
+
+.md3-active .contributors-list-vue {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.md3-active .contributor-link-vue {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  min-height: 76px;
+  padding: 14px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--md-sys-color-surface-container-low);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.md3-active .contributor-link-vue img {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  border-radius: 50%;
+}
+
+.md3-active .contributor-copy-vue {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.md3-active .contributor-copy-vue strong,
+.md3-active .contributor-copy-vue span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.md3-active .contributor-copy-vue strong {
+  color: var(--md-sys-color-on-surface);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.md3-active .contributor-copy-vue span {
+  display: -webkit-box;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  line-height: 18px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.md3-toast {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  left: 50%;
+  bottom: calc(var(--bottom-nav-height) + var(--bottom-inset) + 108px);
+  z-index: 300;
+  width: max-content;
+  max-width: min(calc(100vw - 32px), 520px);
+  min-height: 52px;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 30;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--radius-xl);
+  padding: 13px 18px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  box-shadow: var(--md-sys-elevation-3);
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.md3-dialog {
-  background: #ffffff;
-  border-radius: 20px;
-  padding: 20px;
-  width: min(86vw, 360px);
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
 }
 
-.md3-dialog h3 {
-  margin: 0 0 8px;
-}
-
-.md3-dialog p {
-  margin: 0 0 16px;
-  color: #5f5b57;
-}
-
-.md3-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.15s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
+.toast-enter-from,
+.toast-leave-to {
   opacity: 0;
+  transform: translate(-50%, 8px);
+}
+
+@media (max-width: 560px) {
+  .md3-active .field-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .md3-active .configuration-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .md3-active .rule-path-row {
+    grid-template-columns: minmax(0, 1fr) minmax(116px, 40vw) auto;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 720px) {
+  .md3-active .contributors-list-vue {
+    grid-template-columns: 1fr;
+  }
 }

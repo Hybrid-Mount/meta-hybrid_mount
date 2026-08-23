@@ -4,6 +4,7 @@ import { ref } from "vue";
 import type { DeviceInfo, InstallState, RunState, SystemInfo } from "../types";
 import { API } from "../api";
 import { uiStore } from "./uiStore";
+import { moduleStore } from "./moduleStore";
 
 const device = ref<DeviceInfo>({ model: "-", android: "-", sdk: "-" });
 const version = ref("...");
@@ -65,6 +66,7 @@ async function clearMountErrors(): Promise<number> {
       state.value.mount_error_modules = [];
       state.value.mount_error_reasons = {};
     }
+    moduleStore.clearMountErrorFlags();
     return removed;
   } catch {
     uiStore.showToast("Failed to clear mount errors");

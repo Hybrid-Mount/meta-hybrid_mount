@@ -17,5 +17,13 @@ export default defineConfig({
   define: {
     "import.meta.env.MODULE_ID": JSON.stringify(moduleId),
   },
-  plugins: [vue()],
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag.startsWith("md-"),
+        },
+      },
+    }),
+  ],
 });

@@ -1,96 +1,174 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { configStore } from "../../../lib/stores/configStore";
+import Md3BottomActions from "../components/Md3BottomActions.vue";
+import { ICONS } from "../icons";
 
 const { t } = useI18n();
+const rebootOpen = ref(false);
 
 const mountedCount = computed(
   () => moduleStore.modules.filter((module) => module.is_mounted).length,
 );
+const overlayCount = computed(() => sysStore.state?.mode_stats.overlayfs ?? 0);
+const magicCount = computed(() => sysStore.state?.mode_stats.magicmount ?? 0);
+const modeTotal = computed(() => overlayCount.value + magicCount.value);
+const overlayWidth = computed(() =>
+  modeTotal.value ? `${(overlayCount.value / modeTotal.value) * 100}%` : "0%",
+);
+const magicWidth = computed(() =>
+  modeTotal.value ? `${(magicCount.value / modeTotal.value) * 100}%` : "0%",
+);
+const activeMounts = computed(() => [...new Set(sysStore.state?.active_mounts ?? [])]);
 
-onMounted(async () => {
+async function refresh(): Promise<void> {
   await Promise.all([
     sysStore.loadStatus(),
     moduleStore.loadModules(),
-    configStore.loadConfig(),
+    configStore.ensureConfigLoaded(),
   ]);
-});
+}
+
+async function rebootSystem(): Promise<void> {
+  rebootOpen.value = false;
+  await sysStore.rebootDevice();
+}
+
+onMounted(refresh);
 </script>
 
 <template>
   <div class="page">
-    <div class="md3-card">
-      <h4>{{ t("content.welcome") }}</h4>
-      <p>{{ sysStore.device.model }} · {{ t("content.tagline") }}</p>
-    </div>
+    <div class="dashboard-grid">
+      <section class="hero-card">
+        <div v-if="sysStore.loading" class="skeleton-col">
+          <md-circular-progress indeterminate />
+        </div>
+        <template v-else>
+          <div class="hero-content">
+            <span class="hero-label">{{ t("status.backendTitle") }}</span>
+            <span class="hero-value">
+              {{ (sysStore.state?.storage_mode || "-").toUpperCase() }}
+            </span>
+          </div>
+          <div class="mount-base-chip">
+            <md-icon class="mount-base-icon">
+              <svg viewBox="0 0 24 24"><path :d="ICONS.mount_path" /></svg>
+            </md-icon>
+            <span class="mount-base-text">
+              {{ sysStore.state?.mount_point || t("status.notReady") }}
+            </span>
+          </div>
+        </template>
+      </section>
 
-    <div class="md3-row">
-      <div class="md3-card">
-        <h4>{{ t("status.moduleActive") }}</h4>
-        <p>{{ mountedCount }}</p>
+      <div class="metrics-row">
+        <section class="metric-card">
+          <div class="metric-icon-bg">
+            <svg viewBox="0 0 24 24"><path :d="ICONS.modules" /></svg>
+          </div>
+          <span class="metric-value">{{ mountedCount }}</span>
+          <span class="metric-label">{{ t("status.moduleActive") }}</span>
+        </section>
+        <section class="metric-card">
+          <div class="metric-icon-bg">
+            <svg viewBox="0 0 24 24"><path :d="ICONS.ksu" /></svg>
+          </div>
+          <span class="metric-value">{{ configStore.config.mountsource || "-" }}</span>
+          <span class="metric-label">{{ t("status.mountSource") }}</span>
+        </section>
       </div>
-      <div class="md3-card">
-        <h4>{{ t("status.mountSource") }}</h4>
-        <p>{{ configStore.config.mountsource }}</p>
+
+      <section class="mode-stats-card">
+        <div class="card-title">{{ t("status.modeStats") }}</div>
+        <div class="stats-bar-container" :aria-label="t('status.modeStats')">
+          <div class="bar-segment bar-overlay" :style="{ width: overlayWidth }" />
+          <div class="bar-segment bar-magic" :style="{ width: magicWidth }" />
+        </div>
+        <div class="stats-legend">
+          <div class="legend-item">
+            <span class="legend-dot dot-overlay" />
+            <span>{{ t("config.modeOverlay") }}: {{ overlayCount }}</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot-magic" />
+            <span>{{ t("config.modeMagic") }}: {{ magicCount }}</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="info-card">
+        <div class="card-title">{{ t("status.sysInfoTitle") }}</div>
+        <div class="info-row">
+          <span class="info-key">{{ t("status.modelLabel") }}</span>
+          <span class="info-val">{{ sysStore.device.model || "-" }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">{{ t("status.androidLabel") }}</span>
+          <span class="info-val">{{ sysStore.device.android || "-" }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">{{ t("status.kernelLabel") }}</span>
+          <span class="info-val">{{ sysStore.systemInfo.kernel || "-" }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-key">{{ t("status.selinuxLabel") }}</span>
+          <span class="info-val">{{ sysStore.systemInfo.selinux || "-" }}</span>
+        </div>
+
+        <div class="card-title card-title-spaced">{{ t("status.activeMounts") }}</div>
+        <div class="partition-list">
+          <span v-if="activeMounts.length === 0" class="partition-chip">
+            {{ t("status.notReady") }}
+          </span>
+          <span
+            v-for="mount in activeMounts"
+            v-else
+            :key="mount"
+            class="partition-chip active"
+          >
+            {{ mount }}
+          </span>
+        </div>
+      </section>
+    </div>
+
+    <Md3BottomActions>
+      <md-filled-tonal-icon-button
+        class="destructive-action"
+        :title="t('common.reboot')"
+        :aria-label="t('common.reboot')"
+        @click="rebootOpen = true"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.power" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
+      <md-filled-tonal-icon-button
+        :disabled="sysStore.loading"
+        :title="t('common.refresh')"
+        :aria-label="t('common.refresh')"
+        @click="refresh"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.refresh" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
+    </Md3BottomActions>
+
+    <md-dialog :open="rebootOpen" @closed="rebootOpen = false">
+      <div slot="headline">{{ t("common.rebootTitle") }}</div>
+      <div slot="content">{{ t("common.rebootConfirm") }}</div>
+      <div slot="actions">
+        <md-text-button @click="rebootOpen = false">{{
+          t("common.cancel")
+        }}</md-text-button>
+        <md-text-button @click="rebootSystem">{{ t("common.reboot") }}</md-text-button>
       </div>
-    </div>
-
-    <div class="md3-card">
-      <h4>{{ t("status.backendTitle") }}</h4>
-      <p>
-        <b>{{ t("status.storageMode") }}</b
-        >: {{ sysStore.state?.storage_mode ?? "-" }}
-      </p>
-      <p>
-        <b>{{ t("status.overlayModules") }}</b
-        >: {{ sysStore.state?.overlay_modules.length ?? 0 }}
-      </p>
-      <p>
-        <b>{{ t("status.magicModules") }}</b
-        >: {{ sysStore.state?.magic_modules.length ?? 0 }}
-      </p>
-      <p>
-        <b>{{ t("status.activeMounts") }}</b
-        >: {{ sysStore.state?.active_mounts.join(", ") || t("status.notReady") }}
-      </p>
-    </div>
-
-    <div class="md3-card">
-      <h4>{{ t("status.sysInfoTitle") }}</h4>
-      <p>
-        <b>{{ t("status.modelLabel") }}</b
-        >: {{ sysStore.device.model }}
-      </p>
-      <p>
-        <b>{{ t("status.androidLabel") }}</b
-        >: {{ sysStore.device.android }}
-      </p>
-      <p>
-        <b>{{ t("status.kernelLabel") }}</b
-        >: {{ sysStore.systemInfo.kernel }}
-      </p>
-      <p>
-        <b>{{ t("status.selinuxLabel") }}</b
-        >: {{ sysStore.systemInfo.selinux }}
-      </p>
-    </div>
-
-    <div class="md3-card">
-      <h4>{{ t("status.installTitle") }}</h4>
-      <p v-if="sysStore.installState">
-        <b>{{ t("status.compatible") }}</b
-        >:
-        {{ sysStore.installState.compatible ? "✓" : "✗" }}
-      </p>
-      <div class="md3-actions">
-        <button class="md3-button" @click="sysStore.loadStatus()">
-          {{ t("common.refresh") }}
-        </button>
-      </div>
-    </div>
+    </md-dialog>
   </div>
 </template>

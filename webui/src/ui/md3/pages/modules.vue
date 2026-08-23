@@ -6,52 +6,63 @@ import { moduleStore } from "../../../lib/stores/moduleStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { uiStore } from "../../../lib/stores/uiStore";
 import type { Module, ModuleRule, MountMode } from "../../../lib/types";
+import Md3BottomActions from "../components/Md3BottomActions.vue";
+import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.vue";
+import { ICONS } from "../icons";
 
 const { t } = useI18n();
-
 const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
-const modeLabels = computed(() => [
-  t("config.modeOverlay"),
-  t("config.modeMagic"),
-  t("config.modeIgnore"),
+const modeLabels = computed<Record<MountMode, string>>(() => ({
+  overlay: t("config.modeOverlay"),
+  magic: t("config.modeMagic"),
+  ignore: t("config.modeIgnore"),
+}));
+const modeSelectOptions = computed<SelectOption[]>(() =>
+  modeOptions.map((mode) => ({ value: mode, label: modeLabels.value[mode] })),
+);
+const filterOptions = computed<SelectOption[]>(() => [
+  { value: "all", label: t("modules.filterAll") },
+  ...modeSelectOptions.value,
 ]);
-
 const query = ref("");
 const filter = ref<"all" | MountMode>("all");
+const expanded = ref<Record<string, boolean>>({});
+const editing = ref<Record<string, ModuleRule>>({});
+const newPaths = ref<Record<string, string>>({});
+const newModes = ref<Record<string, MountMode>>({});
+
 const filtered = computed(() =>
   moduleStore.modules.filter((module) => {
     if (filter.value !== "all" && module.mode !== filter.value) return false;
     const needle = query.value.trim().toLowerCase();
     if (!needle) return true;
-    return (
-      module.name.toLowerCase().includes(needle) ||
-      module.id.toLowerCase().includes(needle) ||
-      module.description.toLowerCase().includes(needle)
+    return [module.name, module.id, module.author].some((value) =>
+      value.toLowerCase().includes(needle),
     );
   }),
 );
-
-const expanded = ref<Record<string, boolean>>({});
-const editing = ref<Record<string, ModuleRule>>({});
+const mountErrorCount = computed(
+  () => moduleStore.modules.filter((module) => module.mount_error).length,
+);
 
 function ruleFor(module: Module): ModuleRule {
-  if (!editing.value[module.id]) {
-    const fallback: MountMode | null =
-      module.rules.default_mode === "magic" ||
-      module.rules.default_mode === "ignore" ||
-      module.rules.default_mode === "overlay"
-        ? module.rules.default_mode
-        : null;
-    editing.value[module.id] = {
-      default_mode: fallback,
-      paths: { ...module.rules.paths } as Record<string, MountMode>,
-    };
-  }
+  editing.value[module.id] ??= {
+    default_mode: module.rules.default_mode,
+    paths: { ...module.rules.paths },
+  };
   return editing.value[module.id];
 }
 
+function addPath(module: Module): void {
+  const path = (newPaths.value[module.id] ?? "").trim().replace(/^\/+/, "");
+  if (!path) return;
+  ruleFor(module).paths[path] = newModes.value[module.id] ?? "overlay";
+  newPaths.value[module.id] = "";
+}
+
 async function saveRules(module: Module): Promise<void> {
-  const ok = await moduleStore.saveModuleRules(module.id, ruleFor(module));
+  const rule = JSON.parse(JSON.stringify(ruleFor(module))) as ModuleRule;
+  const ok = await moduleStore.saveModuleRules(module.id, rule);
   uiStore.showToast(ok ? t("modules.saveSuccess") : t("modules.saveFailed"));
 }
 
@@ -60,107 +71,208 @@ async function clearErrors(): Promise<void> {
   uiStore.showToast(t("modules.clearedCount", { count: removed }));
 }
 
-onMounted(async () => {
-  await moduleStore.loadModules();
-});
+onMounted(() => moduleStore.ensureModulesLoaded());
 </script>
 
 <template>
-  <div class="page">
-    <div class="md3-card">
-      <div class="md3-field">
+  <div class="modules-page">
+    <section class="header-section">
+      <div class="search-bar">
+        <svg class="search-icon" viewBox="0 0 24 24"><path :d="ICONS.search" /></svg>
         <input
           v-model="query"
-          class="md3-input"
+          class="search-input"
           :placeholder="t('modules.searchPlaceholder')"
         />
-        <select v-model="filter" class="md3-select">
-          <option value="all">
-            {{ t("modules.filterAll") }}
-          </option>
-          <option v-for="(option, index) in modeOptions" :key="option" :value="option">
-            {{ modeLabels[index] }}
-          </option>
-        </select>
-      </div>
-    </div>
-
-    <div v-for="module in filtered" :key="module.id" class="md3-card">
-      <h4>{{ module.name || module.id }}</h4>
-      <p>
-        {{ module.id }} · v{{ module.version }} · {{ module.author }} ·
-        {{ modeLabels[modeOptions.indexOf(module.mode)] }}
-      </p>
-      <p v-if="module.mount_error">
-        ⚠ {{ t("modules.mountError") }}: {{ module.mount_error }}
-      </p>
-      <p v-if="module.suggest_ignore">⚠ {{ t("modules.suggestIgnore") }}</p>
-      <p>{{ module.description || t("modules.noDescriptionLabel") }}</p>
-
-      <div class="md3-actions">
-        <button class="md3-button" @click="expanded[module.id] = !expanded[module.id]">
-          {{
-            expanded[module.id] ? t("modules.collapseRules") : t("modules.expandRules")
-          }}
-        </button>
-      </div>
-
-      <template v-if="expanded[module.id]">
-        <div class="md3-field">
-          <label>{{ t("config.moduleDefault") }}</label>
-          <select
-            :value="ruleFor(module).default_mode ?? ''"
-            class="md3-select"
-            @change="
-              ruleFor(module).default_mode = ($event.target as HTMLSelectElement).value
-                ? (($event.target as HTMLSelectElement).value as MountMode)
-                : null
-            "
-          >
-            <option value="">
-              {{ t("config.inherit") }}
-            </option>
-            <option v-for="(option, index) in modeOptions" :key="option" :value="option">
-              {{ modeLabels[index] }}
-            </option>
-          </select>
+        <div class="filter-group">
+          <Md3SelectField
+            compact
+            class="filter-select-field"
+            :label="t('modules.filterLabel')"
+            :model-value="filter"
+            :options="filterOptions"
+            @update:model-value="filter = $event as 'all' | MountMode"
+          />
         </div>
-        <div v-for="(mode, path) in ruleFor(module).paths" :key="path" class="md3-field">
-          <label>{{ path }}</label>
-          <select
-            :value="mode"
-            class="md3-select"
-            @change="
-              ruleFor(module).paths[path] = ($event.target as HTMLSelectElement)
-                .value as MountMode
-            "
-          >
-            <option v-for="(option, index) in modeOptions" :key="option" :value="option">
-              {{ modeLabels[index] }}
-            </option>
-          </select>
-        </div>
-        <div class="md3-actions">
-          <button class="md3-button md3-button-primary" @click="saveRules(module)">
-            {{ t("modules.save") }}
-          </button>
-        </div>
-      </template>
-    </div>
-
-    <div v-if="filtered.length === 0" class="md3-card">
-      <p>{{ t("modules.empty") }}</p>
-    </div>
-
-    <div class="md3-card">
-      <div class="md3-actions">
-        <button class="md3-button" @click="clearErrors">
-          {{ t("modules.clearErrors") }}
-        </button>
-        <button class="md3-button" @click="moduleStore.loadModules()">
-          {{ t("modules.reload") }}
-        </button>
       </div>
+    </section>
+
+    <section v-if="mountErrorCount" class="error-banner">
+      <md-icon class="error-icon"
+        ><svg viewBox="0 0 24 24"><path :d="ICONS.bug" /></svg
+      ></md-icon>
+      <div class="error-content">
+        <strong>{{ t("modules.mountError") }}</strong>
+        <span>{{ t("modules.mountErrorSummary", { count: mountErrorCount }) }}</span>
+      </div>
+      <md-filled-tonal-icon-button
+        class="module-icon-action clear-errors-action"
+        :title="t('modules.clearErrors')"
+        :aria-label="t('modules.clearErrors')"
+        @click="clearErrors"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.delete" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
+    </section>
+
+    <section class="modules-list">
+      <article
+        v-for="module in filtered"
+        :key="module.id"
+        class="module-card"
+        :class="{
+          expanded: expanded[module.id],
+          unmounted: !module.is_mounted,
+          'has-error': Boolean(module.mount_error),
+        }"
+      >
+        <button
+          type="button"
+          class="module-header"
+          :aria-expanded="Boolean(expanded[module.id])"
+          @click="expanded[module.id] = !expanded[module.id]"
+        >
+          <span class="mode-indicator" :class="`mode-${module.mode}`" />
+          <span class="module-info">
+            <span class="module-name">{{ module.name || module.id }}</span>
+            <span v-if="expanded[module.id]" class="module-id">{{ module.id }}</span>
+            <span class="module-meta">
+              <span class="version-badge">v{{ module.version || "-" }}</span>
+              <span>{{ module.author || t("modules.unknownLabel") }}</span>
+            </span>
+          </span>
+          <span class="mode-pill">{{ modeLabels[module.mode] }}</span>
+        </button>
+
+        <div v-if="expanded[module.id]" class="module-body-wrapper">
+          <div class="module-body-inner">
+            <div class="module-body-content">
+              <section
+                v-if="module.mount_error || module.suggest_ignore"
+                class="body-section"
+              >
+                <p v-if="module.mount_error" class="status-warning">
+                  {{ t("modules.mountError") }}: {{ module.mount_error }}
+                </p>
+                <p v-if="module.suggest_ignore" class="suggest-ignore-hint">
+                  {{ t("modules.suggestIgnore") }}
+                </p>
+              </section>
+
+              <section class="body-section">
+                <span class="section-label">{{ t("config.moduleDefault") }}</span>
+                <div class="strategy-selector">
+                  <button
+                    type="button"
+                    class="strategy-option"
+                    :class="{ selected: ruleFor(module).default_mode === null }"
+                    @click="ruleFor(module).default_mode = null"
+                  >
+                    <span class="opt-title">{{ t("config.inherit") }}</span>
+                  </button>
+                  <button
+                    v-for="mode in modeOptions"
+                    :key="mode"
+                    type="button"
+                    class="strategy-option"
+                    :class="{ selected: ruleFor(module).default_mode === mode }"
+                    @click="ruleFor(module).default_mode = mode"
+                  >
+                    <span class="opt-title">{{ modeLabels[mode] }}</span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="body-section">
+                <span class="section-label">{{ t("config.paths") }}</span>
+                <div
+                  v-for="(mode, path) in ruleFor(module).paths"
+                  :key="path"
+                  class="rule-path-row module-path-row"
+                >
+                  <span class="rule-path-label">{{ path }}</span>
+                  <Md3SelectField
+                    compact
+                    :label="String(path)"
+                    :model-value="mode"
+                    :options="modeSelectOptions"
+                    @update:model-value="
+                      ruleFor(module).paths[path] = $event as MountMode
+                    "
+                  />
+                  <md-icon-button
+                    :aria-label="t('common.close')"
+                    @click="delete ruleFor(module).paths[path]"
+                  >
+                    <md-icon
+                      ><svg viewBox="0 0 24 24"><path :d="ICONS.delete" /></svg
+                    ></md-icon>
+                  </md-icon-button>
+                </div>
+                <div class="rule-path-row module-path-row new-path-row">
+                  <input
+                    v-model="newPaths[module.id]"
+                    class="md3-input-native"
+                    :placeholder="t('config.pathPlaceholder')"
+                  />
+                  <Md3SelectField
+                    compact
+                    :label="t('config.defaultMode')"
+                    :model-value="newModes[module.id] ?? 'overlay'"
+                    :options="modeSelectOptions"
+                    @update:model-value="newModes[module.id] = $event as MountMode"
+                  />
+                  <md-filled-tonal-icon-button
+                    :title="t('config.addPathRule')"
+                    :aria-label="t('config.addPathRule')"
+                    @click="addPath(module)"
+                  >
+                    <md-icon
+                      ><svg viewBox="0 0 24 24"><path :d="ICONS.add" /></svg
+                    ></md-icon>
+                  </md-filled-tonal-icon-button>
+                </div>
+              </section>
+
+              <div class="module-actions">
+                <md-filled-tonal-icon-button
+                  class="module-icon-action save-module-action"
+                  :title="t('modules.save')"
+                  :aria-label="t('modules.save')"
+                  @click="saveRules(module)"
+                >
+                  <md-icon
+                    ><svg viewBox="0 0 24 24"><path :d="ICONS.save" /></svg
+                  ></md-icon>
+                </md-filled-tonal-icon-button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <div v-if="moduleStore.loading" class="loading-container">
+      <md-circular-progress indeterminate />
     </div>
+    <div v-else-if="filtered.length === 0" class="empty-state">
+      <svg class="empty-icon" viewBox="0 0 24 24"><path :d="ICONS.modules" /></svg>
+      <strong>{{ t("modules.empty") }}</strong>
+      <span class="empty-state-hint">{{ t("modules.desc") }}</span>
+    </div>
+
+    <Md3BottomActions>
+      <md-filled-tonal-icon-button
+        :title="t('modules.reload')"
+        :aria-label="t('modules.reload')"
+        @click="moduleStore.loadModules()"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.refresh" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
+    </Md3BottomActions>
   </div>
 </template>

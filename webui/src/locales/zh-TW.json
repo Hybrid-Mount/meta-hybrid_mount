@@ -13,7 +13,14 @@
     "rebootConfirm": "你確定你想重啟系統嗎？",
     "language": "語言",
     "enabled": "已啟用",
-    "disabled": "已關閉"
+    "disabled": "已關閉",
+    "save": "Save",
+    "reset": "Reset",
+    "reload": "Reload",
+    "refresh": "Refresh",
+    "rebootFailed": "Reboot failed",
+    "uiStyle": "UI Style",
+    "styleChanged": "UI style changed"
   },
   "tabs": {
     "status": "狀態",
@@ -27,7 +34,22 @@
     "moduleActive": "活躍模組",
     "kernelLabel": "核心版本",
     "selinuxLabel": "SELinux",
-    "loadError": "系統狀態載入失敗"
+    "loadError": "系統狀態載入失敗",
+    "deviceTitle": "Device Info",
+    "moduleTitle": "Modules",
+    "mountSource": "Mount Source",
+    "storageMode": "Storage Mode",
+    "overlayModules": "Overlay Modules",
+    "magicModules": "Magic Modules",
+    "activeMounts": "Active Mounts",
+    "modelLabel": "Model",
+    "androidLabel": "Android",
+    "notReady": "No startup snapshot yet",
+    "lastStartup": "Last Startup",
+    "installTitle": "Installation",
+    "compatible": "Compatible",
+    "incompatible": "Incompatible",
+    "modeStats": "模式統計"
   },
   "config": {
     "moduledir": "模組路徑",
@@ -48,7 +70,22 @@
     "saveSuccess": "已儲存",
     "loadError": "載入失敗",
     "saveFailed": "儲存失敗",
-    "resetSuccess": "設定已重置為預設"
+    "resetSuccess": "設定已重置為預設",
+    "title": "Configuration",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
+    "defaultMode": "Default Backend",
+    "defaultModeDesc": "Fallback backend for modules without rules",
+    "rulesTitle": "Path Rules",
+    "rulesDesc": "Per-module default backend and per-path overrides",
+    "paths": "Paths",
+    "addPathRule": "Add path rule",
+    "pathPlaceholder": "system/etc/hosts",
+    "mode": "Mode",
+    "inherit": "Inherit global",
+    "resetFailed": "Failed to reset configuration",
+    "resetConfirm": "要將全部設定與路徑規則重設為預設值嗎？",
+    "applyHint": "Changes take effect after reboot",
+    "monetTheme": "Enable Monet colors"
   },
   "modules": {
     "reload": "重新整理",
@@ -66,12 +103,40 @@
     "clearErrors": "清除掛載錯誤",
     "clearErrorsSuccess": "掛載錯誤已清除",
     "mountError": "掛載錯誤",
-    "suggestIgnore": "該模組的 .sh 檔案中包含掛載相關指令，建議將其模式設定為 \"Ignore\"（忽略）。"
+    "mountErrorSummary": "受影響模組：{count}",
+    "suggestIgnore": "該模組的 .sh 檔案中包含掛載相關指令，建議將其模式設定為 \"Ignore\"（忽略）。",
+    "title": "Modules",
+    "desc": "Module list from the last startup snapshot.",
+    "scanning": "Scanning...",
+    "modeShortOverlay": "Overlay",
+    "modeShortMagic": "Magic",
+    "modeShortIgnore": "Ignore",
+    "clearedCount": "Removed {count} marker(s)",
+    "authorLabel": "Author",
+    "descriptionLabel": "Description",
+    "unknownLabel": "Unknown",
+    "noDescriptionLabel": "No description",
+    "rulesLabel": "Rules",
+    "expandRules": "Expand",
+    "collapseRules": "Collapse"
   },
   "info": {
     "projectLink": "專案地址",
     "contributors": "貢獻者",
     "loadFail": "載入失敗 (可能觸發 API 限制)",
-    "noBio": "這位開發者很懶，什麼都沒寫"
+    "noBio": "這位開發者很懶，什麼都沒寫",
+    "title": "About",
+    "version": "Version",
+    "loading": "Loading contributors...",
+    "installTitle": "Install State",
+    "selfModule": "Module directory",
+    "binary": "CLI binary",
+    "configExists": "Config file",
+    "overlaySupported": "OverlayFS kernel support",
+    "mountSource": "Detected mount source",
+    "license": "License"
+  },
+  "content": {
+    "welcome": "Hybrid Mount"
   }
 }

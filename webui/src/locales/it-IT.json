@@ -13,7 +13,14 @@
     "rebootConfirm": "Sei sicuro di voler riavviare il dispositivo?",
     "language": "Lingua",
     "enabled": "Abilitato",
-    "disabled": "Disabilitato"
+    "disabled": "Disabilitato",
+    "save": "Save",
+    "reset": "Reset",
+    "reload": "Reload",
+    "refresh": "Refresh",
+    "rebootFailed": "Reboot failed",
+    "uiStyle": "UI Style",
+    "styleChanged": "UI style changed"
   },
   "tabs": {
     "status": "Stato",
@@ -27,7 +34,22 @@
     "moduleActive": "Moduli attivi",
     "kernelLabel": "Kernel",
     "selinuxLabel": "SELinux",
-    "loadError": "Impossibile caricare lo stato del sistema"
+    "loadError": "Impossibile caricare lo stato del sistema",
+    "deviceTitle": "Device Info",
+    "moduleTitle": "Modules",
+    "mountSource": "Mount Source",
+    "storageMode": "Storage Mode",
+    "overlayModules": "Overlay Modules",
+    "magicModules": "Magic Modules",
+    "activeMounts": "Active Mounts",
+    "modelLabel": "Model",
+    "androidLabel": "Android",
+    "notReady": "No startup snapshot yet",
+    "lastStartup": "Last Startup",
+    "installTitle": "Installation",
+    "compatible": "Compatible",
+    "incompatible": "Incompatible",
+    "modeStats": "Statistiche modalita"
   },
   "config": {
     "moduledir": "Directory moduli",
@@ -48,7 +70,21 @@
     "saveSuccess": "Salvato",
     "loadError": "Impossibile caricare la configurazione",
     "saveFailed": "Impossibile salvare",
-    "resetSuccess": "Configurazione ripristinata ai valori predefiniti"
+    "resetSuccess": "Configurazione ripristinata ai valori predefiniti",
+    "title": "Configuration",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
+    "defaultMode": "Default Backend",
+    "defaultModeDesc": "Fallback backend for modules without rules",
+    "rulesTitle": "Path Rules",
+    "rulesDesc": "Per-module default backend and per-path overrides",
+    "paths": "Paths",
+    "addPathRule": "Add path rule",
+    "pathPlaceholder": "system/etc/hosts",
+    "mode": "Mode",
+    "inherit": "Inherit global",
+    "resetFailed": "Failed to reset configuration",
+    "applyHint": "Changes take effect after reboot",
+    "monetTheme": "Enable Monet colors"
   },
   "modules": {
     "reload": "Ricarica",
@@ -66,12 +102,39 @@
     "clearErrors": "Cancella errori",
     "clearErrorsSuccess": "Errori cancellati",
     "mountError": "Errore di mount",
-    "suggestIgnore": "Questo modulo contiene comandi di mount nei suoi file .sh. Considera di impostare la modalità su \"Ignora\"."
+    "suggestIgnore": "Questo modulo contiene comandi di mount nei suoi file .sh. Considera di impostare la modalità su \"Ignora\".",
+    "title": "Modules",
+    "desc": "Module list from the last startup snapshot.",
+    "scanning": "Scanning...",
+    "modeShortOverlay": "Overlay",
+    "modeShortMagic": "Magic",
+    "modeShortIgnore": "Ignore",
+    "clearedCount": "Removed {count} marker(s)",
+    "authorLabel": "Author",
+    "descriptionLabel": "Description",
+    "unknownLabel": "Unknown",
+    "noDescriptionLabel": "No description",
+    "rulesLabel": "Rules",
+    "expandRules": "Expand",
+    "collapseRules": "Collapse"
   },
   "info": {
     "projectLink": "Archivio",
     "contributors": "Contributori",
     "loadFail": "Caricamento non riuscito (limite API)",
-    "noBio": "Nessuna biografia disponibile"
+    "noBio": "Nessuna biografia disponibile",
+    "title": "About",
+    "version": "Version",
+    "loading": "Loading contributors...",
+    "installTitle": "Install State",
+    "selfModule": "Module directory",
+    "binary": "CLI binary",
+    "configExists": "Config file",
+    "overlaySupported": "OverlayFS kernel support",
+    "mountSource": "Detected mount source",
+    "license": "License"
+  },
+  "content": {
+    "welcome": "Hybrid Mount"
   }
 }

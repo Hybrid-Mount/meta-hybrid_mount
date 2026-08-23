@@ -1,0 +1,341 @@
+/*
+ * Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.info-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 32px;
+}
+.project-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 0;
+  background-color: var(--md-sys-color-surface-container);
+  border-radius: var(--radius-4xl);
+  box-shadow: none;
+  user-select: none;
+}
+.app-logo {
+  width: 120px;
+  height: 120px;
+  background: transparent;
+  color: var(--md-sys-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.app-logo svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.app-name {
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+  margin-top: 8px;
+  letter-spacing: -0.5px;
+}
+.app-version {
+  font-family: var(--md-ref-typeface-mono);
+  font-size: 14px;
+  background: var(--md-sys-color-surface-container-high);
+  padding: 8px 20px;
+  border-radius: var(--radius-full);
+  color: var(--md-sys-color-primary);
+  font-weight: 500;
+}
+.telegram-action {
+  --md-filled-tonal-icon-button-container-color: var(--md-sys-color-tertiary-container);
+  --md-filled-tonal-icon-button-icon-color: var(--md-sys-color-on-tertiary-container);
+  --md-filled-tonal-icon-button-hover-state-layer-color: var(
+    --md-sys-color-on-tertiary-container
+  );
+}
+.contributors-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.contributors-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.contributor-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.group-header {
+  margin: 0 var(--md-sys-shape-corner-large);
+}
+.group-link {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.group-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+}
+.group-subtitle {
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  word-break: break-all;
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 var(--md-sys-shape-corner-large);
+  color: var(--md-sys-color-primary);
+}
+.list-wrapper {
+  background-color: var(--md-sys-color-surface-container-low);
+  border-radius: var(--radius-2xl);
+  overflow: hidden;
+}
+.contributors-list {
+  background: transparent;
+  padding: 8px 0;
+}
+
+.contributor-link {
+  cursor: pointer;
+}
+.c-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-round);
+  background-color: var(--md-sys-color-surface-variant);
+  object-fit: cover;
+}
+.skeleton-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+}
+.skeleton-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+.error-message {
+  text-align: center;
+  padding: 24px;
+  opacity: 0.7;
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+  border-radius: var(--radius-2xl);
+  margin: 0 12px;
+}
+
+@keyframes logo-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes logo-spin-ccw {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes logo-pulse-fast {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+}
+
+.logo-base-track {
+  fill: none;
+  stroke: var(--md-sys-color-surface-variant);
+  opacity: 0.3;
+  stroke-width: 1;
+}
+
+.logo-arc {
+  fill: none;
+  stroke-linecap: round;
+  transform-origin: center;
+}
+
+.logo-arc-outer {
+  stroke: var(--md-sys-color-tertiary);
+  stroke-width: 4;
+  animation: logo-spin-cw 12s linear infinite;
+}
+
+.logo-arc-mid {
+  stroke: var(--md-sys-color-secondary);
+  stroke-width: 5;
+  animation: logo-spin-ccw 8s ease-in-out infinite;
+}
+
+.logo-arc-inner {
+  stroke: var(--md-sys-color-primary);
+  stroke-width: 6;
+  animation: logo-spin-cw 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.dev-logo-outer-group,
+.dev-logo-mid-group,
+.dev-logo-inner-group {
+  transform-origin: center;
+}
+
+.dev-logo-outer-group {
+  transform: rotate(-45deg);
+}
+
+.dev-logo-mid-group {
+  transform: rotate(135deg);
+}
+
+.dev-logo-inner-group {
+  transform: rotate(270deg);
+}
+
+.logo-core {
+  fill: var(--md-sys-color-primary);
+  transform-origin: center;
+  animation: logo-pulse-fast 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px var(--md-sys-color-primary-container));
+}
+md-icon svg {
+  fill: currentColor;
+  width: 24px;
+  height: 24px;
+}
+
+.dev-logo .logo-base-track {
+  stroke-width: 8px;
+  opacity: 0.1;
+}
+
+.dev-logo .logo-arc {
+  stroke-width: 8px;
+}
+
+.dev-logo .logo-arc-error {
+  stroke: var(--md-sys-color-error);
+  stroke-dasharray: 10 14;
+}
+
+.dev-logo .logo-arc-inner {
+  stroke: var(--md-sys-color-outline);
+}
+
+/* Donate Dialog Styles */
+.donate-dialog {
+  --md-dialog-container-color: var(--md-sys-color-surface-container-high);
+  min-width: 320px;
+  max-width: 90vw;
+}
+
+.donate-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 10px;
+}
+
+.donate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.author-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-sys-color-primary);
+  opacity: 0.8;
+  margin-left: 4px;
+}
+
+.donate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.donate-divider {
+  height: 1px;
+  background-color: var(--md-sys-color-outline-variant);
+  width: 100%;
+  opacity: 0.5;
+}
+
+/* QR Code Viewer Dialog Styles */
+.qr-dialog {
+  --md-dialog-container-color: transparent;
+  --md-dialog-container-shape: var(--radius-lg);
+  box-shadow: none;
+}
+
+.qr-content-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  min-width: 200px;
+  min-height: 200px;
+}
+
+.qr-content-wrapper img {
+  max-width: 85vw;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+  background-color: white;
+  padding: 8px;
+}
+
+@media (max-width: 400px) {
+  .donate-grid {
+    grid-template-columns: 1fr;
+  }
+}

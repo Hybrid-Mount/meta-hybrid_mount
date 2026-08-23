@@ -22,3 +22,4 @@ export const MOUNT_MODES = ["overlay", "magic", "ignore"] as const;
 export const BUILTIN_PARTITIONS = ["vendor", "system_ext", "product", "odm"] as const;
 
 export const REPOSITORY_URL = "https://github.com/Hybrid-Mount/meta-hybrid_mount";
+export const TELEGRAM_URL = "https://t.me/hybridmountchat";

@@ -13,7 +13,14 @@
     "rebootConfirm": "Ви впевнені, що хочете перезавантажити пристрій?",
     "language": "Мова",
     "enabled": "Увімкнено",
-    "disabled": "Вимкнено"
+    "disabled": "Вимкнено",
+    "save": "Save",
+    "reset": "Reset",
+    "reload": "Reload",
+    "refresh": "Refresh",
+    "rebootFailed": "Reboot failed",
+    "uiStyle": "UI Style",
+    "styleChanged": "UI style changed"
   },
   "tabs": {
     "status": "Статус",
@@ -27,7 +34,22 @@
     "moduleActive": "Активні модулі",
     "kernelLabel": "Ядро",
     "selinuxLabel": "SELinux",
-    "loadError": "Не вдалося завантажити стан системи"
+    "loadError": "Не вдалося завантажити стан системи",
+    "deviceTitle": "Device Info",
+    "moduleTitle": "Modules",
+    "mountSource": "Mount Source",
+    "storageMode": "Storage Mode",
+    "overlayModules": "Overlay Modules",
+    "magicModules": "Magic Modules",
+    "activeMounts": "Active Mounts",
+    "modelLabel": "Model",
+    "androidLabel": "Android",
+    "notReady": "No startup snapshot yet",
+    "lastStartup": "Last Startup",
+    "installTitle": "Installation",
+    "compatible": "Compatible",
+    "incompatible": "Incompatible",
+    "modeStats": "Статистика режимів"
   },
   "config": {
     "moduledir": "Каталог модулів",
@@ -48,7 +70,21 @@
     "saveSuccess": "Збережено",
     "loadError": "Не вдалося завантажити конфігурацію",
     "saveFailed": "Не вдалося зберегти налаштування",
-    "resetSuccess": "Налаштування скинуто до значень за замовчуванням"
+    "resetSuccess": "Налаштування скинуто до значень за замовчуванням",
+    "title": "Configuration",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
+    "defaultMode": "Default Backend",
+    "defaultModeDesc": "Fallback backend for modules without rules",
+    "rulesTitle": "Path Rules",
+    "rulesDesc": "Per-module default backend and per-path overrides",
+    "paths": "Paths",
+    "addPathRule": "Add path rule",
+    "pathPlaceholder": "system/etc/hosts",
+    "mode": "Mode",
+    "inherit": "Inherit global",
+    "resetFailed": "Failed to reset configuration",
+    "applyHint": "Changes take effect after reboot",
+    "monetTheme": "Enable Monet colors"
   },
   "modules": {
     "reload": "Оновити",
@@ -66,12 +102,39 @@
     "clearErrors": "Очистити помилки",
     "clearErrorsSuccess": "Помилки очищено",
     "mountError": "Помилка монтування",
-    "suggestIgnore": "Цей модуль містить команди монтування у своїх .sh файлах. Розгляньте встановлення режиму \"Ignore\"."
+    "suggestIgnore": "Цей модуль містить команди монтування у своїх .sh файлах. Розгляньте встановлення режиму \"Ignore\".",
+    "title": "Modules",
+    "desc": "Module list from the last startup snapshot.",
+    "scanning": "Scanning...",
+    "modeShortOverlay": "Overlay",
+    "modeShortMagic": "Magic",
+    "modeShortIgnore": "Ignore",
+    "clearedCount": "Removed {count} marker(s)",
+    "authorLabel": "Author",
+    "descriptionLabel": "Description",
+    "unknownLabel": "Unknown",
+    "noDescriptionLabel": "No description",
+    "rulesLabel": "Rules",
+    "expandRules": "Expand",
+    "collapseRules": "Collapse"
   },
   "info": {
     "projectLink": "Репозиторій проєкту",
     "contributors": "Контриб'ютори",
     "loadFail": "Не вдалося завантажити (ліміт API)",
-    "noBio": "Біографія відсутня"
+    "noBio": "Біографія відсутня",
+    "title": "About",
+    "version": "Version",
+    "loading": "Loading contributors...",
+    "installTitle": "Install State",
+    "selfModule": "Module directory",
+    "binary": "CLI binary",
+    "configExists": "Config file",
+    "overlaySupported": "OverlayFS kernel support",
+    "mountSource": "Detected mount source",
+    "license": "License"
+  },
+  "content": {
+    "welcome": "Hybrid Mount"
   }
 }

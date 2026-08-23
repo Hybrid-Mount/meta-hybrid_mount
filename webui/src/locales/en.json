@@ -1,5 +1,7 @@
 {
-  "lang": { "display": "English" },
+  "lang": {
+    "display": "English"
+  },
   "common": {
     "appName": "Hybrid Mount",
     "brand": "ReHybrid-Mount",
@@ -46,7 +48,8 @@
     "lastStartup": "Last Startup",
     "installTitle": "Installation",
     "compatible": "Compatible",
-    "incompatible": "Incompatible"
+    "incompatible": "Incompatible",
+    "modeStats": "Mode Statistics"
   },
   "config": {
     "title": "Configuration",
@@ -59,7 +62,7 @@
     "overlayTmpfs": "Tmpfs",
     "overlayExt4": "Ext4 image",
     "disableUmount": "Disable Umount Registration",
-    "disableUmountDesc": "Do not register mounts in the KernelSU try-umount list",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
     "defaultMode": "Default Backend",
     "defaultModeDesc": "Fallback backend for modules without rules",
     "modeOverlay": "OverlayFS",
@@ -79,6 +82,7 @@
     "saveFailed": "Failed to save configuration",
     "resetSuccess": "Configuration reset to defaults",
     "resetFailed": "Failed to reset configuration",
+    "resetConfirm": "Reset all configuration values and path rules to defaults?",
     "loadError": "Failed to load config",
     "applyHint": "Changes take effect after reboot",
     "monetTheme": "Enable Monet colors"
@@ -106,6 +110,7 @@
     "clearErrorsSuccess": "Mount errors cleared",
     "clearedCount": "Removed {count} marker(s)",
     "mountError": "Mount error",
+    "mountErrorSummary": "Affected modules: {count}",
     "suggestIgnore": "Suggest ignoring this module",
     "authorLabel": "Author",
     "descriptionLabel": "Description",
@@ -132,7 +137,6 @@
     "license": "License"
   },
   "content": {
-    "welcome": "Hybrid Mount",
-    "tagline": "Mixed overlayfs + magic mount for KernelSU"
+    "welcome": "Hybrid Mount"
   }
 }

@@ -13,7 +13,14 @@
     "rebootConfirm": "Вы уверены, что хотите перезагрузить устройство?",
     "language": "Язык",
     "enabled": "Включено",
-    "disabled": "Выключено"
+    "disabled": "Выключено",
+    "save": "Save",
+    "reset": "Reset",
+    "reload": "Reload",
+    "refresh": "Refresh",
+    "rebootFailed": "Reboot failed",
+    "uiStyle": "UI Style",
+    "styleChanged": "UI style changed"
   },
   "tabs": {
     "status": "Статус",
@@ -27,7 +34,22 @@
     "moduleActive": "Активные модули",
     "kernelLabel": "Ядро",
     "selinuxLabel": "SELinux",
-    "loadError": "Не удалось загрузить состояние системы"
+    "loadError": "Не удалось загрузить состояние системы",
+    "deviceTitle": "Device Info",
+    "moduleTitle": "Modules",
+    "mountSource": "Mount Source",
+    "storageMode": "Storage Mode",
+    "overlayModules": "Overlay Modules",
+    "magicModules": "Magic Modules",
+    "activeMounts": "Active Mounts",
+    "modelLabel": "Model",
+    "androidLabel": "Android",
+    "notReady": "No startup snapshot yet",
+    "lastStartup": "Last Startup",
+    "installTitle": "Installation",
+    "compatible": "Compatible",
+    "incompatible": "Incompatible",
+    "modeStats": "Статистика"
   },
   "config": {
     "moduledir": "Путь модулей",
@@ -48,7 +70,21 @@
     "saveSuccess": "Сохранено",
     "loadError": "Ошибка загрузки конфига",
     "saveFailed": "Ошибка сохранения",
-    "resetSuccess": "Настройки сброшены"
+    "resetSuccess": "Настройки сброшены",
+    "title": "Configuration",
+    "disableUmountDesc": "Do not register mounts in the KernelSU try‑umount list",
+    "defaultMode": "Default Backend",
+    "defaultModeDesc": "Fallback backend for modules without rules",
+    "rulesTitle": "Path Rules",
+    "rulesDesc": "Per-module default backend and per-path overrides",
+    "paths": "Paths",
+    "addPathRule": "Add path rule",
+    "pathPlaceholder": "system/etc/hosts",
+    "mode": "Mode",
+    "inherit": "Inherit global",
+    "resetFailed": "Failed to reset configuration",
+    "applyHint": "Changes take effect after reboot",
+    "monetTheme": "Enable Monet colors"
   },
   "modules": {
     "reload": "Обновить",
@@ -66,12 +102,39 @@
     "clearErrors": "Очистить ошибки",
     "clearErrorsSuccess": "Ошибки очищены",
     "mountError": "Ошибка монтирования",
-    "suggestIgnore": "Этот модуль содержит команды монтирования в своих .sh файлах. Рассмотрите установку режима \"Ignore\"."
+    "suggestIgnore": "Этот модуль содержит команды монтирования в своих .sh файлах. Рассмотрите установку режима \"Ignore\".",
+    "title": "Modules",
+    "desc": "Module list from the last startup snapshot.",
+    "scanning": "Scanning...",
+    "modeShortOverlay": "Overlay",
+    "modeShortMagic": "Magic",
+    "modeShortIgnore": "Ignore",
+    "clearedCount": "Removed {count} marker(s)",
+    "authorLabel": "Author",
+    "descriptionLabel": "Description",
+    "unknownLabel": "Unknown",
+    "noDescriptionLabel": "No description",
+    "rulesLabel": "Rules",
+    "expandRules": "Expand",
+    "collapseRules": "Collapse"
   },
   "info": {
     "projectLink": "Репозиторий",
     "contributors": "Участники",
     "loadFail": "Ошибка загрузки (Лимит API)",
-    "noBio": "Биография отсутствует"
+    "noBio": "Биография отсутствует",
+    "title": "About",
+    "version": "Version",
+    "loading": "Loading contributors...",
+    "installTitle": "Install State",
+    "selfModule": "Module directory",
+    "binary": "CLI binary",
+    "configExists": "Config file",
+    "overlaySupported": "OverlayFS kernel support",
+    "mountSource": "Detected mount source",
+    "license": "License"
+  },
+  "content": {
+    "welcome": "Hybrid Mount"
   }
 }

@@ -8,40 +8,61 @@ import {
   MiuixText,
   MiuixBasicComponent,
   MiuixProgressIndicator,
-  MiuixButton,
-  MiuixDropdownPreference,
+  MiuixIcon,
+  MiuixIconButton,
+  IconCheck,
 } from "miuix-vue";
+import { Delete, ExpandLess, ExpandMore, Refresh } from "miuix-vue/icons";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import type { Module, ModuleRule, MountMode } from "../../../lib/types";
+import MiuixSelectField, {
+  type MiuixSelectOption,
+} from "../components/MiuixSelectField.vue";
 
 const { t } = useI18n();
 
 const searchQuery = ref("");
-const filterIndex = ref(0);
-const filterModes: (MountMode | "all")[] = ["all", "overlay", "magic", "ignore"];
+const filter = ref<MountMode | "all">("all");
 const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
 const modeLabels = computed(() => [
   t("config.modeOverlay"),
   t("config.modeMagic"),
   t("config.modeIgnore"),
 ]);
-const filterLabels = computed(() => [t("modules.filterAll"), ...modeLabels.value]);
+const filterOptions = computed<MiuixSelectOption[]>(() => [
+  { value: "all", label: t("modules.filterAll") },
+  ...modeOptions.map((mode, index) => ({
+    value: mode,
+    label: modeLabels.value[index],
+  })),
+]);
+const ruleModeOptions = computed<MiuixSelectOption[]>(() =>
+  modeOptions.map((mode, index) => ({
+    value: mode,
+    label: modeLabels.value[index],
+  })),
+);
+const defaultModeOptions = computed<MiuixSelectOption[]>(() => [
+  { value: "", label: t("config.inherit") },
+  ...ruleModeOptions.value,
+]);
 
 const filteredModules = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
-  const filter = filterModes[filterIndex.value] ?? "all";
+  const activeFilter = filter.value;
   return moduleStore.modules.filter((module) => {
-    if (filter !== "all" && module.mode !== filter) return false;
+    if (activeFilter !== "all" && module.mode !== activeFilter) return false;
     if (!query) return true;
     return (
-      module.name.toLowerCase().includes(query) ||
-      module.description.toLowerCase().includes(query) ||
-      module.id.toLowerCase().includes(query)
+      module.name.toLowerCase().includes(query) || module.id.toLowerCase().includes(query)
     );
   });
 });
+const mountErrorCount = computed(
+  () => moduleStore.modules.filter((module) => module.mount_error).length,
+);
 
 const expanded = ref<Record<string, boolean>>({});
 const editingRules = ref<Record<string, ModuleRule>>({});
@@ -79,108 +100,130 @@ function modeLabel(mode: MountMode): string {
   return modeLabels.value[modeOptions.indexOf(mode)];
 }
 
-onMounted(async () => {
-  await moduleStore.loadModules();
-});
+function toggleModule(moduleId: string): void {
+  expanded.value[moduleId] = !expanded.value[moduleId];
+}
+
+onMounted(() => moduleStore.ensureModulesLoaded());
 </script>
 
 <template>
   <div class="page">
-    <MiuixSearchBar v-model="searchQuery" :placeholder="t('modules.searchPlaceholder')" />
-    <MiuixDropdownPreference
-      v-model="filterIndex"
-      :title="t('modules.filterLabel')"
-      :items="filterLabels"
-    />
+    <div class="modules-toolbar">
+      <MiuixSearchBar
+        v-model="searchQuery"
+        class="module-search"
+        :placeholder="t('modules.searchPlaceholder')"
+      />
+      <MiuixSelectField
+        compact
+        class="filter-select"
+        :label="t('modules.filterLabel')"
+        :model-value="filter"
+        :options="filterOptions"
+        @update:model-value="filter = $event as MountMode | 'all'"
+      />
+    </div>
 
     <MiuixProgressIndicator v-if="moduleStore.loading" indeterminate />
+
+    <MiuixCard v-if="mountErrorCount" class="card module-error-card">
+      <div class="module-error-notice">
+        <span class="module-error-copy">
+          <strong>{{ t("modules.mountError") }}</strong>
+          <span>{{ t("modules.mountErrorSummary", { count: mountErrorCount }) }}</span>
+        </span>
+        <MiuixIconButton
+          class="module-icon-action clear-errors-button"
+          :title="t('modules.clearErrors')"
+          :aria-label="t('modules.clearErrors')"
+          @click="clearErrors"
+        >
+          <MiuixIcon :icon="Delete" :size="22" />
+        </MiuixIconButton>
+      </div>
+    </MiuixCard>
 
     <template v-for="module in filteredModules" :key="module.id">
       <MiuixCard class="card">
         <MiuixBasicComponent
+          class="module-header"
           :title="module.name || module.id"
           :summary="`${module.id} · v${module.version} · ${module.author}`"
+          clickable
+          role="button"
+          tabindex="0"
+          :aria-expanded="Boolean(expanded[module.id])"
+          @click="toggleModule(module.id)"
+          @keydown.enter="toggleModule(module.id)"
+          @keydown.space.prevent="toggleModule(module.id)"
         >
           <template #end>
-            <MiuixText :color="module.mode === 'ignore' ? 'error' : 'success'">
-              {{ modeLabel(module.mode) }}
-            </MiuixText>
+            <span class="module-header-end">
+              <MiuixText :color="module.mode === 'ignore' ? 'error' : 'success'">
+                {{ modeLabel(module.mode) }}
+              </MiuixText>
+              <MiuixIcon
+                :icon="expanded[module.id] ? ExpandLess : ExpandMore"
+                :size="20"
+                aria-hidden="true"
+              />
+            </span>
           </template>
         </MiuixBasicComponent>
 
-        <MiuixBasicComponent
-          v-if="module.mount_error"
-          :title="t('modules.mountError')"
-          :summary="module.mount_error"
-        />
-        <MiuixBasicComponent
-          v-if="module.suggest_ignore"
-          :title="t('modules.suggestIgnore')"
-        />
-
-        <MiuixBasicComponent
-          :title="t('modules.descriptionLabel')"
-          :summary="module.description || t('modules.noDescriptionLabel')"
-        />
-
-        <div class="actions">
-          <MiuixButton @click="expanded[module.id] = !expanded[module.id]">
-            {{
-              expanded[module.id] ? t("modules.collapseRules") : t("modules.expandRules")
-            }}
-          </MiuixButton>
-        </div>
-
-        <template v-if="expanded[module.id]">
-          <div class="rule-row">
-            <span>{{ t("config.moduleDefault") }}</span>
-            <select
-              :value="ruleFor(module).default_mode ?? ''"
-              class="select"
-              @change="
-                ruleFor(module).default_mode = ($event.target as HTMLSelectElement).value
-                  ? (($event.target as HTMLSelectElement).value as MountMode)
-                  : null
-              "
+        <Transition name="module-details">
+          <div v-if="expanded[module.id]" class="module-details">
+            <MiuixBasicComponent
+              v-if="module.mount_error"
+              :title="t('modules.mountError')"
+              :summary="module.mount_error"
+            />
+            <MiuixBasicComponent
+              v-if="module.suggest_ignore"
+              :title="t('modules.suggestIgnore')"
+            />
+            <div class="rule-row">
+              <span>{{ t("config.moduleDefault") }}</span>
+              <MiuixSelectField
+                compact
+                class="rule-mode-select"
+                :label="t('config.moduleDefault')"
+                :model-value="ruleFor(module).default_mode ?? ''"
+                :options="defaultModeOptions"
+                @update:model-value="
+                  ruleFor(module).default_mode = $event ? ($event as MountMode) : null
+                "
+              />
+            </div>
+            <div
+              v-for="(mode, path) in ruleFor(module).paths"
+              :key="path"
+              class="rule-row"
             >
-              <option value="">
-                {{ t("config.inherit") }}
-              </option>
-              <option
-                v-for="(option, index) in modeOptions"
-                :key="option"
-                :value="option"
+              <span class="path">{{ path }}</span>
+              <MiuixSelectField
+                compact
+                class="rule-mode-select"
+                :label="String(path)"
+                :model-value="mode"
+                :options="ruleModeOptions"
+                @update:model-value="ruleFor(module).paths[path] = $event as MountMode"
+              />
+            </div>
+            <div class="module-actions">
+              <MiuixIconButton
+                class="module-icon-action save-module-button"
+                :title="t('modules.save')"
+                :aria-label="t('modules.save')"
+                :disabled="savingModule === module.id"
+                @click="saveModuleRules(module)"
               >
-                {{ modeLabels[index] }}
-              </option>
-            </select>
+                <IconCheck class="check-icon" />
+              </MiuixIconButton>
+            </div>
           </div>
-          <div v-for="(mode, path) in ruleFor(module).paths" :key="path" class="rule-row">
-            <span class="path">{{ path }}</span>
-            <select
-              :value="mode"
-              class="select"
-              @change="
-                ruleFor(module).paths[path] = ($event.target as HTMLSelectElement)
-                  .value as MountMode
-              "
-            >
-              <option
-                v-for="(option, index) in modeOptions"
-                :key="option"
-                :value="option"
-              >
-                {{ modeLabels[index] }}
-              </option>
-            </select>
-          </div>
-          <MiuixButton
-            :disabled="savingModule === module.id"
-            @click="saveModuleRules(module)"
-          >
-            {{ t("modules.save") }}
-          </MiuixButton>
-        </template>
+        </Transition>
       </MiuixCard>
     </template>
 
@@ -189,31 +232,96 @@ onMounted(async () => {
       :title="t('modules.empty')"
     />
 
-    <MiuixCard class="card">
-      <div class="actions">
-        <MiuixButton @click="clearErrors">
-          {{ t("modules.clearErrors") }}
-        </MiuixButton>
-        <MiuixButton @click="moduleStore.loadModules()">
-          {{ t("modules.reload") }}
-        </MiuixButton>
-      </div>
-    </MiuixCard>
+    <div class="actions">
+      <MiuixIconButton
+        class="module-icon-action reload-modules-button"
+        :title="t('modules.reload')"
+        :aria-label="t('modules.reload')"
+        @click="moduleStore.loadModules()"
+      >
+        <MiuixIcon :icon="Refresh" :size="22" />
+      </MiuixIconButton>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.module-header {
+  cursor: pointer;
+  border-radius: 18px;
+}
+
+.module-header :deep(.m-basic-component__row) {
+  width: 100%;
+  min-width: 0;
+}
+
+.modules-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 190px);
+  gap: 12px;
+  align-items: center;
+}
+
+.module-search,
+.filter-select {
+  min-width: 0;
+}
+
+.module-error-notice {
+  min-height: 48px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.module-error-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.module-error-copy strong {
+  color: var(--m-color-error, #ba1a1a);
+}
+
+.module-error-copy span {
+  color: var(--m-color-on-surface-variant, rgba(0, 0, 0, 0.6));
+  font-size: 13px;
+}
+
+.module-header:focus-visible {
+  outline: 2px solid var(--m-color-primary, #6750a4);
+  outline-offset: -2px;
+}
+
+.module-header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.module-details {
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.08));
+}
+
 .actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  margin: 8px 0;
+  margin: 12px 0;
 }
 
 .rule-row {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
-  margin: 6px 0;
+  min-height: 48px;
 }
 
 .rule-row .path {
@@ -223,11 +331,73 @@ onMounted(async () => {
   white-space: nowrap;
 }
 
-.select {
-  min-width: 0;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.2));
-  background: var(--m-color-surface, #fff);
+.rule-mode-select {
+  margin-left: auto;
+}
+
+.module-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 4px;
+}
+
+.module-icon-action {
+  --m-icon-button-min-width: 44px;
+  --m-icon-button-min-height: 44px;
+  --m-icon-button-radius: 15px;
+}
+
+.save-module-button,
+.reload-modules-button {
+  --m-icon-button-bg: var(--m-color-primary, #6750a4);
+  color: var(--m-color-on-primary, #fff);
+}
+
+.clear-errors-button {
+  --m-icon-button-bg: var(--m-color-error-container, rgba(186, 26, 26, 0.12));
+  color: var(--m-color-on-error-container, #410002);
+  flex: 0 0 auto;
+}
+
+.check-icon {
+  width: 22px;
+  height: 22px;
+  color: currentColor;
+}
+
+.module-details-enter-active,
+.module-details-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.module-details-enter-from,
+.module-details-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (max-width: 560px) {
+  .modules-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 38vw);
+    gap: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .module-header :deep(.m-basic-component__row) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .module-header :deep(.m-basic-component__center) {
+    flex-basis: 100%;
+  }
+
+  .module-header :deep(.m-basic-component__end) {
+    margin-left: auto;
+  }
 }
 </style>

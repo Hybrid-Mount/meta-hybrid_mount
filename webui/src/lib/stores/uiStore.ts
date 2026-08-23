@@ -2,10 +2,10 @@
 
 import { ref } from "vue";
 import { toast } from "kernelsu";
-import { getSupportedLocales, loadLocale, switchLocale } from "../../locales";
+import { getSupportedLocales, normalizeLocaleCode, switchLocale } from "../../locales";
 import type { UiStyle } from "../types";
 
-const lang = ref("en");
+const lang = ref("en-US");
 const isReady = ref(false);
 const uiStyle = ref<UiStyle>("miuix");
 const monetEnabled = ref(false);
@@ -27,8 +27,9 @@ function setToastHandler(handler?: (text: string) => void): void {
 }
 
 async function setLang(code: string): Promise<void> {
-  lang.value = code;
-  await switchLocale(code);
+  const normalizedCode = normalizeLocaleCode(code);
+  lang.value = normalizedCode;
+  await switchLocale(normalizedCode);
 }
 
 function setUiStyle(style: UiStyle): void {
@@ -47,18 +48,22 @@ function setNavindex(index: number): void {
 function setMonetEnabled(enabled: boolean): void {
   monetEnabled.value = enabled;
   localStorage.setItem("monetEnabled", enabled ? "1" : "0");
-  if (enabled) {
-    document.documentElement.classList.add("miuix-monet");
-  } else {
-    document.documentElement.classList.remove("miuix-monet");
-  }
+  document.documentElement.classList.toggle(
+    "miuix-monet",
+    enabled && uiStyle.value === "miuix",
+  );
 }
 
 async function init(): Promise<void> {
-  const savedLang = localStorage.getItem("locale") ?? "en";
-  await loadLocale(savedLang);
-  lang.value = savedLang;
   await fetchAvailableLanguages();
+  const requestedLang = normalizeLocaleCode(localStorage.getItem("locale") ?? "en-US");
+  const savedLang = availableLanguages.value.some(
+    (language) => language.code === requestedLang,
+  )
+    ? requestedLang
+    : (availableLanguages.value[0]?.code ?? "en-US");
+  await switchLocale(savedLang);
+  lang.value = savedLang;
 
   const savedStyle = localStorage.getItem("uiStyle");
   if (savedStyle === "miuix" || savedStyle === "md3") {

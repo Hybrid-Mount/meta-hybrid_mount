@@ -1,5 +1,7 @@
 {
-  "lang": { "display": "简体中文" },
+  "lang": {
+    "display": "简体中文"
+  },
   "common": {
     "appName": "Hybrid Mount",
     "brand": "ReHybrid-Mount",
@@ -46,7 +48,8 @@
     "lastStartup": "上次启动",
     "installTitle": "安装状态",
     "compatible": "兼容",
-    "incompatible": "不兼容"
+    "incompatible": "不兼容",
+    "modeStats": "模式统计"
   },
   "config": {
     "title": "配置",
@@ -79,6 +82,7 @@
     "saveFailed": "保存配置失败",
     "resetSuccess": "配置已重置为默认",
     "resetFailed": "重置配置失败",
+    "resetConfirm": "将全部配置和路径规则重置为默认值？",
     "loadError": "加载配置失败",
     "applyHint": "配置将在重启后生效",
     "monetTheme": "启用 Monet 颜色"
@@ -106,6 +110,7 @@
     "clearErrorsSuccess": "挂载错误已清空",
     "clearedCount": "已移除 {count} 个标记",
     "mountError": "挂载错误",
+    "mountErrorSummary": "受影响模块：{count}",
     "suggestIgnore": "建议忽略此模块",
     "authorLabel": "作者",
     "descriptionLabel": "描述",
@@ -132,7 +137,6 @@
     "license": "许可证"
   },
   "content": {
-    "welcome": "Hybrid Mount",
-    "tagline": "KernelSU 的 overlayfs + magic mount 混合挂载"
+    "welcome": "Hybrid Mount"
   }
 }

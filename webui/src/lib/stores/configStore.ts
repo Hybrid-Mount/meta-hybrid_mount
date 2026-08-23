@@ -9,26 +9,40 @@ import { uiStore } from "./uiStore";
 const config = ref<AppConfig>({ ...DEFAULT_CONFIG });
 const loading = ref(false);
 const saving = ref(false);
+let pendingLoad: Promise<void> | null = null;
+let hasLoaded = false;
 
 function setConfig(next: AppConfig): void {
   config.value = { ...next };
 }
 
 async function loadConfig(): Promise<void> {
+  if (pendingLoad) return pendingLoad;
   loading.value = true;
-  try {
-    const data = await API.loadConfig();
-    config.value = { ...data };
-  } catch {
-    uiStore.showToast("Failed to load config");
-  }
-  loading.value = false;
+  pendingLoad = (async () => {
+    try {
+      const data = await API.loadConfig();
+      config.value = structuredClone(data);
+      hasLoaded = true;
+    } catch {
+      uiStore.showToast("Failed to load config");
+    } finally {
+      loading.value = false;
+      pendingLoad = null;
+    }
+  })();
+  return pendingLoad;
+}
+
+function ensureConfigLoaded(): Promise<void> {
+  return hasLoaded ? Promise.resolve() : loadConfig();
 }
 
 async function saveConfig(): Promise<boolean> {
   saving.value = true;
   try {
     await API.saveConfig(config.value);
+    hasLoaded = true;
     return true;
   } catch {
     return false;
@@ -41,7 +55,8 @@ async function resetConfig(): Promise<boolean> {
   saving.value = true;
   try {
     await API.genConfig();
-    config.value = { ...DEFAULT_CONFIG };
+    config.value = structuredClone(DEFAULT_CONFIG);
+    hasLoaded = true;
     return true;
   } catch {
     return false;
@@ -61,7 +76,11 @@ export const configStore = {
   get saving() {
     return saving.value;
   },
+  get hasLoaded() {
+    return hasLoaded;
+  },
   loadConfig,
+  ensureConfigLoaded,
   saveConfig,
   resetConfig,
 };

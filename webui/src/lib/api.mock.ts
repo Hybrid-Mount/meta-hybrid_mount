@@ -160,6 +160,5 @@ export const MockAPI: AppAPI = {
 
   reboot: async () => {
     console.log("[MockAPI] reboot");
-    alert("Reboot requested (Mock)");
   },
 };

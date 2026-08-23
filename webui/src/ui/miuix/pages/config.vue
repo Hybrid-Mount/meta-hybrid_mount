@@ -1,53 +1,64 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   MiuixCard,
   MiuixSmallTitle,
   MiuixSwitch,
   MiuixButton,
-  MiuixDropdownPreference,
-  MiuixInput,
   MiuixBasicComponent,
+  MiuixDialog,
+  MiuixIcon,
+  MiuixIconButton,
+  IconCheck,
 } from "miuix-vue";
+import { Reset } from "miuix-vue/icons";
 import { getSupportedLocales } from "../../../locales";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
-import { moduleStore } from "../../../lib/stores/moduleStore";
-import type { ModuleRule, MountMode } from "../../../lib/types";
+import type { MountMode } from "../../../lib/types";
+import MiuixSelectField, {
+  type MiuixSelectOption,
+} from "../components/MiuixSelectField.vue";
 
 const { t } = useI18n();
 
-const styleOptions = ["MiuiX", "Material Design 3"];
-const styleCodes: ("miuix" | "md3")[] = ["miuix", "md3"];
+const styleOptions: MiuixSelectOption[] = [
+  { value: "miuix", label: "MiuiX" },
+  { value: "md3", label: "Material Design 3" },
+];
 const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
 const modeLabels = computed(() => [
   t("config.modeOverlay"),
   t("config.modeMagic"),
   t("config.modeIgnore"),
 ]);
-const overlayOptions = [t("config.overlayTmpfs"), t("config.overlayExt4")];
-const overlayCodes: ("tmpfs" | "ext4")[] = ["tmpfs", "ext4"];
+const modeSelectOptions = computed<MiuixSelectOption[]>(() =>
+  modeOptions.map((mode, index) => ({
+    value: mode,
+    label: modeLabels.value[index],
+  })),
+);
+const overlayOptions = computed<MiuixSelectOption[]>(() => [
+  { value: "tmpfs", label: t("config.overlayTmpfs") },
+  { value: "ext4", label: t("config.overlayExt4") },
+]);
 
-const languageDisplay = ref<string[]>([]);
-const languageCodes = ref<string[]>([]);
-const currentLangIndex = ref(0);
+const languageOptions = ref<MiuixSelectOption[]>([]);
+const resetRequested = ref(false);
 
-const uiStyleIndex = computed({
-  get: () => styleCodes.indexOf(uiStore.uiStyle),
-  set: (value: number) => {
-    uiStore.setUiStyle(styleCodes[value]);
+const uiStyleValue = computed({
+  get: () => uiStore.uiStyle,
+  set: (value: string) => {
+    uiStore.setUiStyle(value as "miuix" | "md3");
     uiStore.showToast(t("common.styleChanged"));
   },
 });
 
-const languageIndex = computed({
-  get: () => currentLangIndex.value,
-  set: async (value: number) => {
-    currentLangIndex.value = value;
-    await uiStore.setLang(languageCodes.value[value]);
-  },
+const languageValue = computed({
+  get: () => uiStore.lang,
+  set: (value: string) => uiStore.setLang(value),
 });
 
 const monetTheme = computed({
@@ -70,98 +81,56 @@ const disableUmount = computed({
   set: (value: boolean) =>
     configStore.setConfig({ ...configStore.config, disable_umount: value }),
 });
-const overlayModeIndex = computed({
-  get: () => overlayCodes.indexOf(configStore.config.overlay_mode),
-  set: (value: number) =>
+const overlayModeValue = computed({
+  get: () => configStore.config.overlay_mode,
+  set: (value: string) =>
     configStore.setConfig({
       ...configStore.config,
-      overlay_mode: overlayCodes[value],
+      overlay_mode: value as "tmpfs" | "ext4",
     }),
 });
-const defaultModeIndex = computed({
-  get: () => modeOptions.indexOf(configStore.config.default_mode),
-  set: (value: number) =>
+const defaultModeValue = computed({
+  get: () => configStore.config.default_mode,
+  set: (value: string) =>
     configStore.setConfig({
       ...configStore.config,
-      default_mode: modeOptions[value],
+      default_mode: value as MountMode,
     }),
 });
-
-const rules = ref<Record<string, ModuleRule>>({});
-watch(
-  () => configStore.config.rules,
-  (next) => {
-    rules.value = JSON.parse(JSON.stringify(next)) as Record<string, ModuleRule>;
-  },
-  { immediate: true, deep: true },
-);
-
-const selectedModule = ref("");
-const newRulePath = ref("");
-const newRuleMode = ref<MountMode>("overlay");
-
-function ensureRule(moduleId: string): ModuleRule {
-  if (!rules.value[moduleId]) {
-    rules.value[moduleId] = { default_mode: null, paths: {} };
-  }
-  return rules.value[moduleId];
-}
-
-function addModuleRule(): void {
-  if (!selectedModule.value) return;
-  ensureRule(selectedModule.value);
-}
-
-function addPathRule(moduleId: string): void {
-  const path = newRulePath.value.trim();
-  if (!path) return;
-  ensureRule(moduleId).paths[path] = newRuleMode.value;
-  newRulePath.value = "";
-}
-
-function removePathRule(moduleId: string, path: string): void {
-  const rule = rules.value[moduleId];
-  if (!rule) return;
-  delete rule.paths[path];
-}
-
-function removeModuleRule(moduleId: string): void {
-  delete rules.value[moduleId];
-}
 
 async function save(): Promise<void> {
-  configStore.setConfig({ ...configStore.config, rules: rules.value });
   const ok = await configStore.saveConfig();
   uiStore.showToast(ok ? t("config.saveSuccess") : t("config.saveFailed"));
 }
 
 async function reset(): Promise<void> {
+  resetRequested.value = false;
   const ok = await configStore.resetConfig();
-  rules.value = {};
   uiStore.showToast(ok ? t("config.resetSuccess") : t("config.resetFailed"));
 }
 
 onMounted(async () => {
-  await Promise.all([configStore.loadConfig(), moduleStore.ensureModulesLoaded()]);
+  await configStore.ensureConfigLoaded();
   const locales = await getSupportedLocales();
-  languageDisplay.value = locales.map((locale) => locale.display);
-  languageCodes.value = locales.map((locale) => locale.code);
-  currentLangIndex.value = languageCodes.value.indexOf(uiStore.lang);
+  languageOptions.value = locales.map((locale) => ({
+    value: locale.code,
+    label: locale.display,
+  }));
 });
 </script>
 
 <template>
   <div class="page">
     <MiuixCard class="card">
-      <MiuixDropdownPreference
-        v-model="languageIndex"
-        :title="t('common.language')"
-        :items="languageDisplay"
+      <MiuixSelectField
+        v-model="languageValue"
+        :label="t('common.language')"
+        :options="languageOptions"
       />
-      <MiuixDropdownPreference
-        v-model="uiStyleIndex"
-        :title="t('config.uiStyle')"
-        :items="styleOptions"
+      <MiuixSelectField
+        v-model="uiStyleValue"
+        :label="t('common.uiStyle')"
+        :options="styleOptions"
       />
       <MiuixBasicComponent :title="t('config.monetTheme')">
         <template #end>
@@ -172,19 +141,47 @@ onMounted(async () => {
 
     <MiuixSmallTitle :text="t('config.title')" />
     <MiuixCard class="card">
-      <MiuixInput v-model="moduledir" :label="t('config.moduledir')" single-line />
-      <MiuixInput v-model="mountSource" :label="t('config.mountSource')" single-line />
-      <MiuixDropdownPreference
-        v-model="overlayModeIndex"
-        :title="t('config.overlayMode')"
+      <MiuixBasicComponent
+        class="text-preference"
+        :title="t('config.moduledir')"
+        :summary="t('config.moduledirDesc')"
+      >
+        <template #end>
+          <input
+            v-model="moduledir"
+            class="preference-input"
+            :aria-label="t('config.moduledir')"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </template>
+      </MiuixBasicComponent>
+      <MiuixBasicComponent
+        class="text-preference"
+        :title="t('config.mountSource')"
+        :summary="t('config.mountSourceDesc')"
+      >
+        <template #end>
+          <input
+            v-model="mountSource"
+            class="preference-input"
+            :aria-label="t('config.mountSource')"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </template>
+      </MiuixBasicComponent>
+      <MiuixSelectField
+        v-model="overlayModeValue"
+        :label="t('config.overlayMode')"
         :summary="t('config.overlayModeDesc')"
-        :items="overlayOptions"
+        :options="overlayOptions"
       />
-      <MiuixDropdownPreference
-        v-model="defaultModeIndex"
-        :title="t('config.defaultMode')"
+      <MiuixSelectField
+        v-model="defaultModeValue"
+        :label="t('config.defaultMode')"
         :summary="t('config.defaultModeDesc')"
-        :items="modeLabels"
+        :options="modeSelectOptions"
       />
       <MiuixBasicComponent
         :title="t('config.disableUmount')"
@@ -196,145 +193,147 @@ onMounted(async () => {
       </MiuixBasicComponent>
     </MiuixCard>
 
-    <MiuixSmallTitle :text="t('config.rulesTitle')" />
-    <MiuixCard class="card">
-      <div class="rule-add">
-        <select v-model="selectedModule" class="select">
-          <option value="" disabled>
-            {{ t("config.moduleDefault") }}
-          </option>
-          <option
-            v-for="module in moduleStore.modules"
-            :key="module.id"
-            :value="module.id"
+    <MiuixCard class="card action-card">
+      <div class="config-action-bar">
+        <span class="action-hint">{{ t("config.applyHint") }}</span>
+        <div class="icon-actions" role="group" :aria-label="t('config.title')">
+          <MiuixIconButton
+            class="save-action"
+            :title="t('config.save')"
+            :aria-label="t('config.save')"
+            @click="save"
           >
-            {{ module.name || module.id }}
-          </option>
-        </select>
-        <MiuixButton @click="addModuleRule">
-          {{ t("config.addPathRule") }}
-        </MiuixButton>
+            <IconCheck class="check-icon" />
+          </MiuixIconButton>
+          <MiuixIconButton
+            class="reset-action"
+            :title="t('common.reset')"
+            :aria-label="t('common.reset')"
+            @click="resetRequested = true"
+          >
+            <MiuixIcon :icon="Reset" :size="22" />
+          </MiuixIconButton>
+        </div>
       </div>
+    </MiuixCard>
 
-      <div v-for="moduleId in Object.keys(rules)" :key="moduleId" class="rule-block">
-        <div class="rule-header">
-          <strong>{{ moduleId }}</strong>
-          <MiuixButton @click="removeModuleRule(moduleId)">
+    <MiuixDialog
+      v-model="resetRequested"
+      :title="t('common.reset')"
+      :summary="t('config.resetConfirm')"
+      @close="resetRequested = false"
+    >
+      <template #default="{ close }">
+        <div class="reset-dialog-actions">
+          <MiuixButton class="grow" @click="close">
+            {{ t("common.cancel") }}
+          </MiuixButton>
+          <MiuixButton class="grow" type="primary" @click="reset">
             {{ t("common.reset") }}
           </MiuixButton>
         </div>
-        <label class="rule-field">
-          {{ t("config.moduleDefault") }}
-          <select
-            :value="rules[moduleId].default_mode ?? ''"
-            class="select"
-            @change="
-              rules[moduleId].default_mode = ($event.target as HTMLSelectElement).value
-                ? (($event.target as HTMLSelectElement).value as MountMode)
-                : null
-            "
-          >
-            <option value="">{{ t("config.inherit") }}</option>
-            <option v-for="(mode, index) in modeOptions" :key="mode" :value="mode">
-              {{ modeLabels[index] }}
-            </option>
-          </select>
-        </label>
-        <div v-for="(mode, path) in rules[moduleId].paths" :key="path" class="rule-field">
-          <span class="rule-path">{{ path }}</span>
-          <select
-            :value="mode"
-            class="select"
-            @change="
-              rules[moduleId].paths[path] = ($event.target as HTMLSelectElement)
-                .value as MountMode
-            "
-          >
-            <option v-for="(option, index) in modeOptions" :key="option" :value="option">
-              {{ modeLabels[index] }}
-            </option>
-          </select>
-          <MiuixButton @click="removePathRule(moduleId, path)">
-            {{ t("common.close") }}
-          </MiuixButton>
-        </div>
-        <div class="rule-add">
-          <MiuixInput
-            v-model="newRulePath"
-            :label="t('config.pathPlaceholder')"
-            single-line
-          />
-          <select v-model="newRuleMode" class="select">
-            <option v-for="(option, index) in modeOptions" :key="option" :value="option">
-              {{ modeLabels[index] }}
-            </option>
-          </select>
-          <MiuixButton @click="addPathRule(moduleId)">
-            {{ t("common.save") }}
-          </MiuixButton>
-        </div>
-      </div>
-    </MiuixCard>
-
-    <MiuixCard class="card">
-      <div class="actions">
-        <MiuixButton @click="save">
-          {{ t("config.save") }}
-        </MiuixButton>
-        <MiuixButton @click="reset">
-          {{ t("common.reset") }}
-        </MiuixButton>
-      </div>
-      <MiuixBasicComponent :summary="t('config.applyHint')" />
-    </MiuixCard>
+      </template>
+    </MiuixDialog>
   </div>
 </template>
 
 <style scoped>
-.rule-add {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin: 8px 0;
-}
-
-.rule-block {
-  border-top: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.08));
-  padding: 8px 0;
-}
-
-.rule-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.rule-field {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin: 6px 0;
-}
-
-.rule-path {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.select {
+.preference-input {
+  width: min(280px, 46vw);
   min-width: 0;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.2));
-  background: var(--m-color-surface, #fff);
+  min-height: 40px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  padding: 0 12px;
+  color: var(--m-color-on-surface, #1d1b20);
+  background: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
+  font: inherit;
+  text-align: end;
 }
 
-.actions {
+.preference-input:hover {
+  border-color: var(--m-color-outline-variant, rgba(0, 0, 0, 0.18));
+}
+
+.preference-input:focus-visible {
+  outline: 2px solid var(--m-color-primary, #6750a4);
+  outline-offset: 2px;
+}
+
+.action-card {
+  overflow: visible;
+}
+
+.config-action-bar {
+  min-height: 64px;
+  padding: 8px 12px 8px 16px;
   display: flex;
-  gap: 12px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 16px;
+}
+
+.action-hint {
+  min-width: 0;
+  flex: 1;
+  color: var(--m-color-on-surface-variant-summary, rgba(0, 0, 0, 0.6));
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.icon-actions,
+.reset-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.save-action,
+.reset-action {
+  --m-icon-button-min-width: 44px;
+  --m-icon-button-min-height: 44px;
+  --m-icon-button-radius: 15px;
+}
+
+.save-action {
+  --m-icon-button-bg: var(--m-color-primary, #6750a4);
+  color: var(--m-color-on-primary, #fff);
+}
+
+.reset-action {
+  --m-icon-button-bg: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
+}
+
+.check-icon {
+  width: 22px;
+  height: 22px;
+  color: currentColor;
+}
+
+.reset-dialog-actions .grow {
+  flex: 1;
+}
+
+@media (max-width: 520px) {
+  .preference-input {
+    width: min(180px, 43vw);
+  }
+}
+
+@media (max-width: 420px) {
+  .text-preference :deep(.m-basic-component__row) {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .text-preference :deep(.m-basic-component__end),
+  .preference-input {
+    width: 100%;
+  }
+
+  .preference-input {
+    text-align: start;
+  }
 }
 </style>

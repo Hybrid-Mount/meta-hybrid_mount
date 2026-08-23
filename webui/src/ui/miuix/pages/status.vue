@@ -29,7 +29,7 @@ onMounted(async () => {
   await Promise.all([
     sysStore.loadStatus(),
     moduleStore.loadModules(),
-    configStore.loadConfig(),
+    configStore.ensureConfigLoaded(),
   ]);
 });
 </script>
@@ -37,11 +37,10 @@ onMounted(async () => {
 <template>
   <div class="page">
     <MiuixCard class="card">
-      <MiuixBasicComponent :title="t('content.welcome')" :summary="t('content.tagline')">
-        <template #end>
-          <MiuixText>{{ sysStore.device.model }}</MiuixText>
-        </template>
-      </MiuixBasicComponent>
+      <MiuixBasicComponent
+        :title="t('status.modelLabel')"
+        :summary="sysStore.device.model || '-'"
+      />
     </MiuixCard>
 
     <div class="card-row">

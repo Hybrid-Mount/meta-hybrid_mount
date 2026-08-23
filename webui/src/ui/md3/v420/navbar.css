@@ -1,0 +1,82 @@
+/*
+ * Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.bottom-nav {
+  position: fixed;
+  width: 100%;
+  bottom: 0;
+  display: flex;
+  background-color: var(--md-sys-color-surface-container-high);
+  height: calc(var(--bottom-nav-height) + var(--bottom-inset));
+  align-items: center;
+  box-sizing: border-box;
+  padding-bottom: var(--bottom-inset);
+  z-index: 100;
+}
+
+.nav-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-sys-color-on-surface-variant);
+  background: transparent;
+  border: none;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+.icon-container {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    width 0.2s ease,
+    background-color 0.2s ease;
+  pointer-events: none;
+}
+md-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  transition:
+    fill 0.2s,
+    transform 0.2s;
+}
+md-icon svg path {
+  transition: none !important;
+}
+.nav-tab.active .icon-container {
+  background-color: var(--md-sys-color-secondary-container);
+  width: 56px;
+}
+.nav-tab.active {
+  color: var(--md-sys-color-on-surface);
+}
+.nav-tab.active md-icon svg {
+  fill: var(--md-sys-color-on-secondary-container);
+}
+.nav-tab.active .label {
+  font-weight: 600;
+}

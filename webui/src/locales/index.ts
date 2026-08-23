@@ -6,30 +6,40 @@ type LocaleModule = { default: Record<string, unknown> };
 
 const localeModules = import.meta.glob("./*.json", { eager: false });
 
+const LEGACY_LOCALE_ALIASES: Record<string, string> = {
+  en: "en-US",
+  zh: "zh-CN",
+};
+
+const LOCALE_FILE_ALIASES: Record<string, string> = {
+  "en-US": "en",
+  "zh-CN": "zh",
+};
+
 let cachedLocales: { code: string; display: string }[] | null = null;
 
 const i18n = createI18n({
   legacy: false,
-  locale: "en",
-  fallbackLocale: "en",
+  locale: "en-US",
+  fallbackLocale: "en-US",
   messages: {},
 });
+
+export function normalizeLocaleCode(locale: string): string {
+  return LEGACY_LOCALE_ALIASES[locale] ?? locale;
+}
 
 export async function getSupportedLocales(): Promise<
   { code: string; display: string }[]
 > {
   if (cachedLocales) return cachedLocales;
 
-  const results = await Promise.all(
-    Object.entries(localeModules).map(async ([path, loader]) => {
-      const match = path.match(/\.\/(.+)\.json$/);
-      if (!match) return null;
-      const code = match[1];
-      const mod = (await loader()) as LocaleModule;
-      const messages = mod.default as { lang?: { display?: string } };
-      return { code, display: messages.lang?.display || code };
-    }),
-  );
+  const results = Object.keys(localeModules).map((path) => {
+    const match = path.match(/\.\/(.+)\.json$/);
+    if (!match) return null;
+    const code = normalizeLocaleCode(match[1]);
+    return { code, display: code };
+  });
 
   cachedLocales = results
     .filter((item): item is { code: string; display: string } => item !== null)
@@ -38,28 +48,31 @@ export async function getSupportedLocales(): Promise<
 }
 
 export async function loadLocale(locale: string): Promise<void> {
-  if (i18n.global.availableLocales.includes(locale)) return;
+  const normalizedLocale = normalizeLocaleCode(locale);
+  if (i18n.global.availableLocales.includes(normalizedLocale)) return;
 
-  const path = `./${locale}.json`;
+  const fileCode = LOCALE_FILE_ALIASES[normalizedLocale] ?? normalizedLocale;
+  const path = `./${fileCode}.json`;
   const loader = localeModules[path];
   if (!loader) {
-    console.error(`Locale "${locale}" not found`);
+    console.error(`Locale "${normalizedLocale}" not found`);
     return;
   }
 
   const module = (await loader()) as LocaleModule;
-  i18n.global.setLocaleMessage(locale, module.default);
+  i18n.global.setLocaleMessage(normalizedLocale, module.default);
 }
 
 export async function preloadFallbackLocale(): Promise<void> {
-  await loadLocale("en");
+  await loadLocale("en-US");
 }
 
 export async function switchLocale(locale: string): Promise<void> {
+  const normalizedLocale = normalizeLocaleCode(locale);
   await preloadFallbackLocale();
-  await loadLocale(locale);
-  i18n.global.locale.value = locale;
-  localStorage.setItem("locale", locale);
+  await loadLocale(normalizedLocale);
+  i18n.global.locale.value = normalizedLocale;
+  localStorage.setItem("locale", normalizedLocale);
 }
 
 export async function initI18n(preferred?: string): Promise<void> {
@@ -72,7 +85,7 @@ export async function initI18n(preferred?: string): Promise<void> {
   await preloadFallbackLocale();
 
   const savedLocale = localStorage.getItem("locale");
-  let defaultLocale = preferred || savedLocale || locales[0].code;
+  let defaultLocale = normalizeLocaleCode(preferred || savedLocale || locales[0].code);
 
   if (!locales.some((item) => item.code === defaultLocale)) {
     defaultLocale = locales[0].code;
@@ -80,6 +93,7 @@ export async function initI18n(preferred?: string): Promise<void> {
 
   await loadLocale(defaultLocale);
   i18n.global.locale.value = defaultLocale;
+  localStorage.setItem("locale", defaultLocale);
 }
 
 export default i18n;
