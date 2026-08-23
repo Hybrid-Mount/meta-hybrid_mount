@@ -30,6 +30,7 @@ const emit = defineEmits<{
 }>();
 
 const rebootRequested = ref(false);
+const pageTransition = ref("page-forward");
 const navIcons = [ScreenMirroring, Settings, Folder, Info];
 
 interface Scroller {
@@ -41,7 +42,8 @@ const scrollPositions = new Map<number, number>();
 
 watch(
   () => props.navindex,
-  (_next, previous) => {
+  (next, previous) => {
+    pageTransition.value = next > previous ? "page-forward" : "page-back";
     scrollPositions.set(previous, scrollerRef.value?.getScrollTop() ?? 0);
   },
   { flush: "pre" },
@@ -96,7 +98,7 @@ onBeforeUnmount(() => {
         </template>
       </MiuixTopAppBar>
 
-      <Transition name="page" mode="out-in" @enter="onPageEnter">
+      <Transition :name="pageTransition" mode="out-in" @enter="onPageEnter">
         <KeepAlive>
           <component :is="activepage" v-if="activepage" :key="navindex" />
         </KeepAlive>
@@ -193,14 +195,41 @@ onBeforeUnmount(() => {
   line-height: 20px;
 }
 
-.page-enter-active,
-.page-leave-active {
-  transition: opacity 0.18s ease;
+.page-forward-enter-active,
+.page-forward-leave-active,
+.page-back-enter-active,
+.page-back-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.page-enter-from,
-.page-leave-to {
+.page-forward-enter-from,
+.page-back-leave-to {
   opacity: 0;
+  transform: translateX(20px);
+}
+
+.page-forward-leave-to,
+.page-back-enter-from {
+  opacity: 0;
+  transform: translateX(-14px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-forward-enter-active,
+  .page-forward-leave-active,
+  .page-back-enter-active,
+  .page-back-leave-active {
+    transition: opacity 0.01ms linear;
+  }
+
+  .page-forward-enter-from,
+  .page-forward-leave-to,
+  .page-back-enter-from,
+  .page-back-leave-to {
+    transform: none;
+  }
 }
 
 .dialog-actions {

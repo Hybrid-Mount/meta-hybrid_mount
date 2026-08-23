@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import "./material";
 import "./theme.css";
-import { nextTick, onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { uiStore } from "../../lib/stores/uiStore";
 import { sysStore } from "../../lib/stores/sysStore";
@@ -20,9 +20,10 @@ const emit = defineEmits<{
   (event: "update:navindex", value: number): void;
 }>();
 
-const mainRef = ref<HTMLElement | null>(null);
+const pageScrollerRef = ref<HTMLElement | null>(null);
 const rebootOpen = ref(false);
 const toastText = ref("");
+const pageTransition = ref("page-forward");
 const scrollPositions = new Map<number, number>();
 const navIconKeys = ["home", "settings", "modules", "info"] as const;
 let toastTimer = 0;
@@ -70,16 +71,19 @@ async function rebootSystem(): Promise<void> {
 
 watch(
   () => props.navindex,
-  async (_next, previous) => {
-    scrollPositions.set(previous, mainRef.value?.scrollTop ?? 0);
-    await nextTick();
-    mainRef.value?.scrollTo({
-      top: scrollPositions.get(props.navindex) ?? 0,
-      behavior: "instant" as ScrollBehavior,
-    });
+  (next, previous) => {
+    pageTransition.value = next > previous ? "page-forward" : "page-back";
+    scrollPositions.set(previous, pageScrollerRef.value?.scrollTop ?? 0);
   },
   { flush: "pre" },
 );
+
+function onPageEnter(): void {
+  pageScrollerRef.value?.scrollTo({
+    top: scrollPositions.get(props.navindex) ?? 0,
+    behavior: "instant" as ScrollBehavior,
+  });
+}
 
 onMounted(() => {
   document.documentElement.classList.add("md3-active");
@@ -102,17 +106,18 @@ onBeforeUnmount(() => {
     </header>
 
     <main
-      ref="mainRef"
       class="main-content"
       @touchstart.passive="onTouchStart"
       @touchend.passive="onTouchEnd"
     >
       <div class="swipe-page">
-        <div class="page-scroller">
-          <KeepAlive>
-            <component :is="activepage" v-if="activepage" :key="navindex" />
-          </KeepAlive>
-        </div>
+        <Transition :name="pageTransition" mode="out-in" @enter="onPageEnter">
+          <div ref="pageScrollerRef" :key="navindex" class="page-scroller">
+            <KeepAlive>
+              <component :is="activepage" v-if="activepage" />
+            </KeepAlive>
+          </div>
+        </Transition>
       </div>
     </main>
 

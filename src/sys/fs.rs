@@ -10,10 +10,74 @@
 
 use std::path::Path;
 
+#[cfg(unix)]
+use std::fs::{self, OpenOptions};
+#[cfg(unix)]
+use std::io::Write;
+#[cfg(unix)]
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::errors::Result;
+
+#[cfg(unix)]
+static ATOMIC_WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Replace a file without exposing a truncated intermediate state.
+#[cfg(unix)]
+pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("file");
+    let sequence = ATOMIC_WRITE_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
+    let temporary = parent.join(format!(
+        ".{file_name}.{}.{}.tmp",
+        std::process::id(),
+        sequence
+    ));
+
+    let result = (|| -> Result<()> {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary)?;
+        file.write_all(content)?;
+        file.sync_all()?;
+
+        if let Ok(metadata) = fs::metadata(path) {
+            fs::set_permissions(&temporary, metadata.permissions())?;
+        }
+
+        fs::rename(&temporary, path)?;
+        if let Ok(parent_dir) = fs::File::open(parent) {
+            let _ = parent_dir.sync_all();
+        }
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+#[cfg(not(unix))]
+pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, content)?;
+    Ok(())
+}
 
 /// 删除路径:目录递归删除,非目录直接删除,不存在视为成功。
 pub fn remove_path(path: &Path) -> Result<()> {

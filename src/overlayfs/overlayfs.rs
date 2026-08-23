@@ -181,6 +181,7 @@ pub fn mount_overlayfs(
     workdir: Option<PathBuf>,
     dest: &Path,
     mount_source: &str,
+    register_unmountable: bool,
 ) -> Result<()> {
     let mut current_layers = lower_dirs.to_vec();
     current_layers.push(lowest.to_owned());
@@ -201,7 +202,9 @@ pub fn mount_overlayfs(
             chunk.layers.len()
         );
 
-        send_unmountable(&staging_dir);
+        if register_unmountable {
+            send_unmountable(&staging_dir);
+        }
         current_layers = current_layers[..chunk.remaining_layers].to_vec();
         current_layers.push(staging_dir.to_string_lossy().into_owned());
     }
@@ -269,6 +272,7 @@ fn mount_overlay_child(
     module_roots: &[String],
     stock_root: &str,
     mount_source: &str,
+    register_unmountable: bool,
 ) -> Result<()> {
     if !module_roots
         .iter()
@@ -303,13 +307,16 @@ fn mount_overlay_child(
         None,
         Path::new(mount_point),
         mount_source,
+        register_unmountable,
     )
     .map_err(|err| {
         Error::msg(format!(
             "child overlay failed: mount_point={mount_point}: {err}"
         ))
     })?;
-    send_unmountable(Path::new(mount_point));
+    if register_unmountable {
+        send_unmountable(Path::new(mount_point));
+    }
     Ok(())
 }
 
@@ -321,6 +328,7 @@ pub fn mount_overlay(
     workdir: Option<PathBuf>,
     upperdir: Option<PathBuf>,
     mount_source: &str,
+    register_unmountable: bool,
 ) -> Result<()> {
     log::info!("overlay mount root: target={root}");
 
@@ -338,6 +346,7 @@ pub fn mount_overlay(
         workdir,
         root_path,
         mount_source,
+        register_unmountable,
     );
 
     if let Err(err) = root_result {
@@ -364,6 +373,7 @@ pub fn mount_overlay(
             module_roots,
             &stock_root,
             mount_source,
+            register_unmountable,
         ) {
             log::warn!(
                 "child mount failed, reverting root: mount_point={mount_point}, error={err}"

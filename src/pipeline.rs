@@ -152,6 +152,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
     state.mount_error_reasons = mount_error_reasons;
     state.save()?;
 
+    crate::module_status::update_description(
+        config.overlay_mode,
+        plan.overlay_module_ids.len(),
+        plan.magic_module_ids.len(),
+    );
+
     log::info!("mount pipeline completed");
     Ok(())
 }
@@ -209,20 +215,32 @@ fn mount_overlay_phase(plan: &MountPlan, config: &Config) -> Result<(usize, usiz
             .map(|path| path.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
 
-        mount_overlay(&op.target, &lowerdirs, None, None, &config.mountsource).map_err(|err| {
+        let mount_source = overlay_mount_source(&op.target, &config.mountsource);
+        let register_unmountable = !config.disable_umount;
+        mount_overlay(
+            &op.target,
+            &lowerdirs,
+            None,
+            None,
+            mount_source,
+            register_unmountable,
+        )
+        .map_err(|err| {
             Error::msg(format!(
                 "overlay mount failed: partition={}, target={}: {err}",
                 op.partition, op.target
             ))
         })?;
-        utils::ksu::send_unmountable(Path::new(&op.target));
+        if register_unmountable {
+            utils::ksu::send_unmountable(Path::new(&op.target));
+        }
         active_mounts.push(op.target.clone());
         overlay_dir_mounts += 1;
     }
 
     if !plan.overlay_files.is_empty() {
         shallow_layer_mounts =
-            mount_overlay_files(&plan.overlay_files, &config.mountsource, &mut active_mounts)?;
+            mount_overlay_files(&plan.overlay_files, config, &mut active_mounts)?;
     }
 
     active_mounts.sort();
@@ -233,7 +251,7 @@ fn mount_overlay_phase(plan: &MountPlan, config: &Config) -> Result<(usize, usiz
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_overlay_files(
     files: &BTreeMap<String, Vec<PathBuf>>,
-    mount_source: &str,
+    config: &Config,
     active_mounts: &mut Vec<String>,
 ) -> Result<usize> {
     use crate::overlayfs::overlayfs::mount_overlay;
@@ -263,17 +281,40 @@ fn mount_overlay_files(
             lowerdirs.push(layer_dir.to_string_lossy().into_owned());
         }
 
-        mount_overlay(target, &lowerdirs, None, None, mount_source).map_err(|err| {
+        let mount_source = overlay_mount_source(target, &config.mountsource);
+        let register_unmountable = !config.disable_umount;
+        mount_overlay(
+            target,
+            &lowerdirs,
+            None,
+            None,
+            mount_source,
+            register_unmountable,
+        )
+        .map_err(|err| {
             Error::msg(format!(
                 "shallow overlay mount failed: target={target}: {err}"
             ))
         })?;
-        utils::ksu::send_unmountable(Path::new(target));
+        if register_unmountable {
+            utils::ksu::send_unmountable(Path::new(target));
+        }
         active_mounts.push(target.clone());
         layer_mounts += lowerdirs.len();
     }
 
     Ok(layer_mounts)
+}
+
+fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
+    if defs::IGNORE_UNMOUNT_PARTITIONS
+        .iter()
+        .any(|ignored| ignored.trim() == target.trim())
+    {
+        "overlay"
+    } else {
+        configured
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -386,6 +427,18 @@ mod tests {
             PathBuf::from("/data/adb/hybrid-mount/run/shallow/system_etc_1")
         );
         assert_ne!(first, other);
+    }
+
+    #[test]
+    fn ignored_overlay_partition_uses_neutral_mount_source() {
+        assert_eq!(overlay_mount_source("/system/lib", "KSU"), "overlay");
+        assert_eq!(overlay_mount_source("/vendor/lib64", "APatch"), "overlay");
+    }
+
+    #[test]
+    fn regular_overlay_partition_keeps_configured_mount_source() {
+        assert_eq!(overlay_mount_source("/system", "KSU"), "KSU");
+        assert_eq!(overlay_mount_source("/product", "APatch"), "APatch");
     }
 
     #[test]

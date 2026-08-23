@@ -8,6 +8,8 @@ mod defs;
 mod errors;
 mod logging;
 mod magic_mount;
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+mod module_status;
 mod overlayfs;
 mod pipeline;
 mod plan;

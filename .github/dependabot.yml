@@ -10,8 +10,9 @@ updates:
       interval: "weekly"
     target-branch: "dev"
     groups:
-      crates:
+      crates-patch:
         patterns: ["*"]
+        update-types: ["patch"]
 
   - package-ecosystem: "npm"
     directory: "/webui"
@@ -19,8 +20,13 @@ updates:
       interval: "weekly"
     target-branch: "dev"
     groups:
-      webui-deps:
+      webui-compatible:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # TypeScript 7 currently aborts typescript-eslint before linting starts.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

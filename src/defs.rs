@@ -18,6 +18,7 @@ pub const MODULE_NAME: &str = "Hybrid Mount";
 pub const ADB_DIR: &str = "/data/adb";
 pub const DEFAULT_MODULE_DIR: &str = "/data/adb/modules";
 pub const SELF_MODULE_DIR: &str = "/data/adb/modules/hybrid_mount";
+pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
 pub const RUN_DIR: &str = "/data/adb/hybrid-mount";
 pub const STATE_DIR: &str = "/data/adb/hybrid-mount/run";
 

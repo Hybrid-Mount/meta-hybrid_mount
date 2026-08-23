@@ -131,13 +131,13 @@ impl NotificationContext<'_> {
             self.chat_id.to_owned(),
             InputFile::path(artifact.path.clone()).await?,
         )
-        .with_caption_parse_mode(ParseMode::Html);
+        .with_caption((caption.clone(), ParseMode::Html));
 
         if let Some(topic_id) = self.request.topic_id {
             action = action.with_message_thread_id(topic_id);
         }
 
-        self.bot.execute(action.with_caption(&caption)).await?;
+        self.bot.execute(action).await?;
         Ok(())
     }
 
@@ -176,17 +176,16 @@ impl NotificationContext<'_> {
 
         for artifact in &artifacts[..artifacts.len() - 1] {
             let file = InputFile::path(artifact.path.clone()).await?;
-            let info = InputMediaDocument::default().with_disable_content_type_detection(true);
-            items.push(MediaGroupItem::for_document(file, info));
+            let info = InputMediaDocument::from(file).with_disable_content_type_detection(true);
+            items.push(MediaGroupItem::from(info));
         }
 
-        items.push(MediaGroupItem::for_document(
+        let final_document = InputMediaDocument::from(
             InputFile::path(artifacts.last().unwrap().path.clone()).await?,
-            InputMediaDocument::default()
-                .with_disable_content_type_detection(true)
-                .with_caption_parse_mode(ParseMode::Html)
-                .with_caption(caption.to_owned()),
-        ));
+        )
+        .with_disable_content_type_detection(true)
+        .with_caption((caption.to_owned(), ParseMode::Html));
+        items.push(MediaGroupItem::from(final_document));
         Ok(items)
     }
 
