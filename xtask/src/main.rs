@@ -26,7 +26,7 @@ const MODULE_NAME: &str = "Hybrid Mount";
 const MODULE_AUTHOR: &str = "Hybrid Mount Developers";
 const MODULE_DESCRIPTION: &str = "ReHybrid-Mount: mixed overlayfs + magic mount for KernelSU";
 const UPDATE_JSON_URL: &str =
-    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/rehybrid-mount/update.json";
+    "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/update.json";
 
 #[derive(Parser)]
 #[command(name = "xtask", about = "ReHybrid-Mount build automation")]
@@ -62,7 +62,7 @@ enum Commands {
         zip_url: String,
         #[arg(
             long,
-            default_value = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/rehybrid-mount/changelog.md"
+            default_value = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/changelog.md"
         )]
         changelog: String,
     },

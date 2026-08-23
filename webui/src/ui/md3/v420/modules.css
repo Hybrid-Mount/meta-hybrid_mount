@@ -274,11 +274,6 @@
   color: var(--md-sys-color-on-tertiary-container);
 }
 
-.mode-kasumi {
-  background-color: var(--md-sys-color-primary-container);
-  color: var(--md-sys-color-on-primary-container);
-}
-
 .mode-ignore {
   background-color: var(--md-sys-color-surface-variant);
   color: var(--md-sys-color-on-surface-variant);

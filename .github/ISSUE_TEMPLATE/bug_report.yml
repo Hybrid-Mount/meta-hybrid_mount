@@ -1,0 +1,102 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bug Report / 错误报告
+description: Report a reproducible Hybrid Mount problem / 报告可复现的 Hybrid Mount 问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues and test the latest `dev` build before reporting.
+        报告前请先搜索已有 Issue，并使用最新 `dev` 构建复现。
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version / 设备与 Android 版本
+      placeholder: Pixel 8 Pro, Android 16
+    validations:
+      required: true
+
+  - type: input
+    id: kernel
+    attributes:
+      label: Kernel version / 内核版本
+      description: Output of `uname -r` / `uname -r` 的输出
+    validations:
+      required: true
+
+  - type: dropdown
+    id: root_manager
+    attributes:
+      label: Root implementation / Root 实现
+      options:
+        - KernelSU
+        - KernelSU Next
+        - APatch
+        - Other / 其他
+    validations:
+      required: true
+
+  - type: input
+    id: module_version
+    attributes:
+      label: Hybrid Mount version / Hybrid Mount 版本
+      placeholder: v6.0.0 or commit hash / v6.0.0 或 commit hash
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ui_style
+    attributes:
+      label: WebUI style / WebUI 样式
+      options:
+        - Not related to WebUI / 与 WebUI 无关
+        - Miuix
+        - Material Design 3
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Actual behavior / 实际行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected behavior / 期望行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce_steps
+    attributes:
+      label: Reproduction steps / 复现步骤
+      placeholder: |
+        1. Install or enable ...
+        2. Reboot ...
+        3. Open ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: other_modules
+    attributes:
+      label: Other enabled modules / 其他已启用模块
+      description: Include modules that alter mounts or files under `/system`.
+    validations:
+      required: false
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Upload Area / 上传区域
+      description: Upload the KernelSU/APatch bugreport, relevant logs, screenshots, and a problematic module sample when possible. Remove private data first. / 请上传 KernelSU/APatch bugreport、相关日志、截图及可公开的问题模块样本，并先移除隐私数据。
+    validations:
+      required: true

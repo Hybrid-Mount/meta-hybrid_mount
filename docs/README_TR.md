@@ -8,13 +8,21 @@ ReHybrid-Mount, Hybrid Mount'un sıfırdan yeniden inşasıdır ve şu davranı�
 - **Ön uç / arka uç etkileşimi**: `kernelsu.exec` doğrudan CLI çağrısı yapar; arka plan hizmeti / HTTP / SSE yoktur.
 - **Modül dizini kuralı**: `/data/adb/modules/<id>/system/**` hiçbir aşamada taşınmamalı, birleştirilmemeli veya silinmemelidir.
 
-> Güncel `rehybrid-mount` dalı bir orphan daldır ve sıfırdan yeniden inşa edilmektedir.
-> Eski uygulama orijinal `main` / `dev` / `archive/*` dallarında korunmaktadır.
+> v6.0.0'dan itibaren `dev`, sıfırdan yeniden oluşturulan geliştirme hattıdır.
+> v4.2.0 ve önceki uygulamalar sürüm etiketleri, `archive/*` dalları ve tam Git geçmişi üzerinden erişilebilir; güncel kaynak ağacına geri taşınmaz.
 
 ## Diller / Languages
 
-- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/rehybrid-mount/README.md)
-- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/rehybrid-mount/docs/README_TR.md)
+- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
+- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_TR.md)
+
+## Geçmiş ve Katkıda Bulunanlar
+
+Yeni `dev` kaynak ağacı eski daemon, Kasumi, Lite/Nano flavor ve React WebUI kodunu içermez.
+Buna rağmen eski geliştirme hattı Git geçmişine bağlanır; önceki commit'ler, yazarlar ve katkılar
+izlenebilir kalır. WebUI katkıda bulunanlar listesi de botları hariç tutarak depo geçmişinden dinamik olarak oluşturulur.
+
+Kurulumdan ve hata bildiriminden önce [`USAGE_NOTICE.md`](../USAGE_NOTICE.md) dosyasını okuyun.
 
 ## Lisans
 
@@ -23,4 +31,4 @@ ReHybrid-Mount, Hybrid Mount'un sıfırdan yeniden inşasıdır ve şu davranı�
 
 ## Planlama
 
-Uygulama planının tamamı için `REHYBRID_MOUNT_PLAN.md` dosyasına bakın.
+Mimari kararlar ve özgün uygulama planı için `REHYBRID_MOUNT_PLAN.md` dosyasına bakın.

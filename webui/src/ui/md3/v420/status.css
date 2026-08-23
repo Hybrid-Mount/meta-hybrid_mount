@@ -185,10 +185,6 @@
   background-color: var(--md-sys-color-tertiary-container);
 }
 
-.bar-kasumi {
-  background-color: var(--md-sys-color-primary-container);
-}
-
 .stats-legend {
   display: flex;
   flex-wrap: wrap;
@@ -218,10 +214,6 @@
 
 .dot-magic {
   background-color: var(--md-sys-color-tertiary-container);
-}
-
-.dot-kasumi {
-  background-color: var(--md-sys-color-primary-container);
 }
 
 .info-card {

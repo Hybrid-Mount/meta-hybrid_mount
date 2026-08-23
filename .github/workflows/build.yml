@@ -6,7 +6,7 @@ name: Build ReHybrid-Mount
 
 on:
   push:
-    branches: ["rehybrid-mount"]
+    branches: ["dev"]
     paths:
       - "src/**"
       - "Cargo.*"
@@ -19,7 +19,7 @@ on:
       - "tools/notify/**"
       - ".github/workflows/build.yml"
   pull_request:
-    branches: ["rehybrid-mount"]
+    branches: ["dev"]
     paths:
       - "src/**"
       - "Cargo.*"

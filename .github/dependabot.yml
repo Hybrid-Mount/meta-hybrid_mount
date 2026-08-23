@@ -1,0 +1,32 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+    groups:
+      crates:
+        patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/webui"
+    schedule:
+      interval: "weekly"
+    target-branch: "dev"
+    groups:
+      webui-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    target-branch: "dev"
+    groups:
+      actions:
+        patterns: ["*"]

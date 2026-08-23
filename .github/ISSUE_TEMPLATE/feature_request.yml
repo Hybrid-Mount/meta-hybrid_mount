@@ -1,0 +1,36 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Feature Request / 功能建议
+description: Suggest an improvement for Hybrid Mount / 建议 Hybrid Mount 的改进
+title: "[Feat]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case / 问题或使用场景
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution / 建议方案
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered / 考虑过的替代方案
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context / 补充信息
+    validations:
+      required: false

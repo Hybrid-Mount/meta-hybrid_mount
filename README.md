@@ -9,13 +9,21 @@ ReHybrid-Mount 是 Hybrid Mount 的从零重建版本，基于以下行为参考
 - **模块目录铁律**：任何阶段不得移动、合并或删除
   `/data/adb/modules/<id>/system/**`。
 
-> 当前分支 `rehybrid-mount` 是 orphan 分支，正在从零重建。旧实现保留在原
-> `main` / `dev` / `archive/*` 分支中。
+> 从 v6.0.0 起，`dev` 是从零重建后的开发主线。v4.2.0 及更早实现仍可通过
+> release tag、`archive/*` 分支和完整 Git 历史查阅，但不再混入当前代码树。
 
 ## 语言 / Languages
 
-- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/rehybrid-mount/README.md)
-- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/rehybrid-mount/docs/README_TR.md)
+- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
+- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_TR.md)
+
+## 历史与贡献者
+
+新的 `dev` 代码树不再携带旧 daemon、Kasumi、Lite/Nano flavor 和 React WebUI，
+但通过 Git 历史保留合并连接旧开发线。因此，以前的提交、作者和贡献记录仍然
+完整可追溯；WebUI 的贡献者列表也继续从仓库贡献历史动态生成并排除机器人。
+
+安装和反馈问题前请阅读 [`USAGE_NOTICE.md`](USAGE_NOTICE.md)。
 
 ## 许可证
 
@@ -24,4 +32,4 @@ ReHybrid-Mount 是 Hybrid Mount 的从零重建版本，基于以下行为参考
 
 ## 规划
 
-完整实施计划见本仓库 `REHYBRID_MOUNT_PLAN.md`。
+架构决策和原始实施计划见本仓库 `REHYBRID_MOUNT_PLAN.md`。

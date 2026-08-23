@@ -1,25 +1,26 @@
 # ReHybrid-Mount 重构计划
 
-> 目标位置：**同一仓库 `Hybrid-Mount/meta-hybrid_mount`，新建空白 orphan branch（默认名 `rehybrid-mount`）**
-> 状态：**执行中** — Stage 0-5 已完成并提交；Stage 6 已在工作树完成；Stage 7、8 与 Android 实机验证继续推进
+> 历史说明：本文记录 v6 从空白 orphan branch `rehybrid-mount` 开始实施时的原始计划。
+> 该实现现已晋升为新的 `dev` 开发主线；下文中的旧分支名保留为历史记录，不再是当前操作指引。
+> 状态：**历史归档** — 代码实现已进入 `dev`；本文不再作为当前进度跟踪器，Android 实机验证仍需在发布前完成。
 > 原则：**完全从 0 开始**；旧历史与参考项目只作为行为规范与资料，不作为代码基线。
 
 ---
 
 ## 0. 实施进度（本会话同步）
 
-| Stage | 状态 | 提交 | 交付内容 |
-|---|---|---|---|
-| 0 | ✅ 完成 | `d3194290`、`ab5cb765` | orphan 分支 `rehybrid-mount`、初始骨架、实施计划 |
-| 1 | ✅ 完成 | `9899577b` | Rust 工程骨架；`defs` / `errors` / 日志 + panic hook / `config.rs` TOML schema 与单测 |
-| 2 | ✅ 完成 | `b27f9e2b` | magic mount：Node 树、只读扫描、`disable/remove/skip_mount`、分区提升、挂载语义、`.replace`、tmpfs skeleton / mirror / 只读 remount、KSU try-umount 集成、planner 选择扩展点 |
-| 3 | ✅ 完成 | `841f03f6` | overlayfs（fsopen + fallback、>64 层 staging、mountinfo 子挂载处理）+ storage（tmpfs / ext4 loop 镜像）+ sys 辅助 |
-| 4 | ✅ 完成 | `330d9978` | 只读模块清单扫描 + 混合 planner（路径规则 > 模块 default_mode > 全局 default_mode；单后端冲突显式报错；overlay 按分区聚合；magic 选择输出） |
-| 5 | ✅ 完成 | `03b53936` | CLI（手工参数解析、hex payload 合并保存、全部命令契约）+ 无参数完整流水线 + `scan.ret` / `run/state.json` |
-| 6 | ✅ 工作树完成 | 待提交 | Vue 3 双 UI：Miuix 默认 + MD3；MD3 对齐 v4.2.0；共享 API/store、配置与模块规则编辑、Monet、响应式与浏览器回归均已完成 |
-| 7 | 🟡 部分完成 | 待提交 | 11 个 locale 已统一为 123 个叶子 key；历史提交找回、README 土耳其语内容与提交历史保留仍待处理 |
-| 8 | ⏳ 未开始 | — | module 脚本 / xtask / CI 与 Release |
-| 9 | 🟡 主机完成 | 待提交 | Rust test/clippy、WebUI lint/test/build、桌面与 390×844 双 UI 浏览器回归通过；Android KSU/APatch 挂载流水线仍待实机验证 |
+| Stage | 状态          | 提交                   | 交付内容                                                                                                                                                                     |
+| ----- | ------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | ✅ 完成       | `d3194290`、`ab5cb765` | orphan 分支 `rehybrid-mount`、初始骨架、实施计划                                                                                                                             |
+| 1     | ✅ 完成       | `9899577b`             | Rust 工程骨架；`defs` / `errors` / 日志 + panic hook / `config.rs` TOML schema 与单测                                                                                        |
+| 2     | ✅ 完成       | `b27f9e2b`             | magic mount：Node 树、只读扫描、`disable/remove/skip_mount`、分区提升、挂载语义、`.replace`、tmpfs skeleton / mirror / 只读 remount、KSU try-umount 集成、planner 选择扩展点 |
+| 3     | ✅ 完成       | `841f03f6`             | overlayfs（fsopen + fallback、>64 层 staging、mountinfo 子挂载处理）+ storage（tmpfs / ext4 loop 镜像）+ sys 辅助                                                            |
+| 4     | ✅ 完成       | `330d9978`             | 只读模块清单扫描 + 混合 planner（路径规则 > 模块 default_mode > 全局 default_mode；单后端冲突显式报错；overlay 按分区聚合；magic 选择输出）                                  |
+| 5     | ✅ 完成       | `03b53936`             | CLI（手工参数解析、hex payload 合并保存、全部命令契约）+ 无参数完整流水线 + `scan.ret` / `run/state.json`                                                                    |
+| 6     | ✅ 工作树完成 | 待提交                 | Vue 3 双 UI：Miuix 默认 + MD3；MD3 对齐 v4.2.0；共享 API/store、配置与模块规则编辑、Monet、响应式与浏览器回归均已完成                                                        |
+| 7     | 🟡 部分完成   | 待提交                 | 11 个 locale 已统一为 123 个叶子 key；历史提交找回、README 土耳其语内容与提交历史保留仍待处理                                                                                |
+| 8     | ⏳ 未开始     | —                      | module 脚本 / xtask / CI 与 Release                                                                                                                                          |
+| 9     | 🟡 主机完成   | 待提交                 | Rust test/clippy、WebUI lint/test/build、桌面与 390×844 双 UI 浏览器回归通过；Android KSU/APatch 挂载流水线仍待实机验证                                                      |
 
 ### 已知待补事项（Stage 5 之后）
 
@@ -31,18 +32,18 @@
 
 ## 0. 已确定的关键决定
 
-| # | 事项 | 决定 |
-|---|---|---|
-| 1 | 仓库起点 | 同一仓库内的**空白 orphan branch**，所有实现代码从 0 新写；旧分支不动 |
-| 2 | 前端-后端交互 | 彻底移除 daemon/HTTP/SSE，使用 `kernelsu.exec` 直调 CLI |
-| 3 | Magic Mount | 算法/行为参考 `meta-magic_mount-rs` master `8b85c9e`，代码新写；**上游 PR #152 暂不采纳** |
-| 4 | OverlayFS | 行为参考 **v4.2.0 tag `e20f9c19`**，代码新写 |
-| 5 | 混合策略 | 保留模块级模式 + 路径规则：`overlay / magic / ignore` |
-| 6 | Kasumi | 全仓 0 引用（源码、WebUI、module、locale、docs、CI 全部无 Kasumi） |
-| 7 | 模块目录铁律 | 任何阶段不得移动/合并/删除 `/data/adb/modules/<id>/system/**` |
-| 8 | WebUI | **Vue 3 双 UI：Miuix 默认 + MD3 可选**；MD3 模式复刻现有界面体验；代码全新编写 |
-| 9 | CI / Release | **唯一例外**：按现有行为重新实现并连线，含 KSU 模块仓库与 TG 群组 |
-| 10 | 语言提交 | 从备份分支找回原始提交（唯一允许的历史内容取回） |
+| #   | 事项          | 决定                                                                                      |
+| --- | ------------- | ----------------------------------------------------------------------------------------- |
+| 1   | 仓库起点      | 同一仓库内的**空白 orphan branch**，所有实现代码从 0 新写；旧分支不动                     |
+| 2   | 前端-后端交互 | 彻底移除 daemon/HTTP/SSE，使用 `kernelsu.exec` 直调 CLI                                   |
+| 3   | Magic Mount   | 算法/行为参考 `meta-magic_mount-rs` master `8b85c9e`，代码新写；**上游 PR #152 暂不采纳** |
+| 4   | OverlayFS     | 行为参考 **v4.2.0 tag `e20f9c19`**，代码新写                                              |
+| 5   | 混合策略      | 保留模块级模式 + 路径规则：`overlay / magic / ignore`                                     |
+| 6   | Kasumi        | 全仓 0 引用（源码、WebUI、module、locale、docs、CI 全部无 Kasumi）                        |
+| 7   | 模块目录铁律  | 任何阶段不得移动/合并/删除 `/data/adb/modules/<id>/system/**`                             |
+| 8   | WebUI         | **Vue 3 双 UI：Miuix 默认 + MD3 可选**；MD3 模式复刻现有界面体验；代码全新编写            |
+| 9   | CI / Release  | **唯一例外**：按现有行为重新实现并连线，含 KSU 模块仓库与 TG 群组                         |
+| 10  | 语言提交      | 从备份分支找回原始提交（唯一允许的历史内容取回）                                          |
 
 ---
 
@@ -140,18 +141,18 @@ default_mode = "magic"
 
 ### 4.2 CLI 契约（参考项目式）
 
-| 命令 | 行为 | WebUI 使用 |
-|---|---|---|
-| （无参数） | 完整挂载流水线 | `metamount.sh` |
-| `show-config` | 输出 JSON 配置 | `loadConfig` |
+| 命令                          | 行为                              | WebUI 使用                  |
+| ----------------------------- | --------------------------------- | --------------------------- |
+| （无参数）                    | 完整挂载流水线                    | `metamount.sh`              |
+| `show-config`                 | 输出 JSON 配置                    | `loadConfig`                |
 | `save-config --payload <hex>` | 合并/持久化配置，返回 `{ok:true}` | `saveConfig` / 模块规则保存 |
-| `gen-config` | 重置默认配置 | `resetConfig` |
-| `modules` | 输出启动时缓存的 `scan.ret` | `scanModules` |
-| `status` | 输出 `run/state.json` | `getStorageUsage` |
-| `version` | 输出 `{"version": "..."}` | `getVersion` |
-| `install-state` | 安装兼容性状态 | 启动门 / 干净重装提示 |
-| `clear-mount-errors` | 清除模块 `mount_error` 标记 | 模块页按钮 |
-| `emulated-soft-reboot` | 软重启处理 | 参考项目行为 |
+| `gen-config`                  | 重置默认配置                      | `resetConfig`               |
+| `modules`                     | 输出启动时缓存的 `scan.ret`       | `scanModules`               |
+| `status`                      | 输出 `run/state.json`             | `getStorageUsage`           |
+| `version`                     | 输出 `{"version": "..."}`         | `getVersion`                |
+| `install-state`               | 安装兼容性状态                    | 启动门 / 干净重装提示       |
+| `clear-mount-errors`          | 清除模块 `mount_error` 标记       | 模块页按钮                  |
+| `emulated-soft-reboot`        | 软重启处理                        | 参考项目行为                |
 
 ### 4.3 模块目录不可变原则（硬性门禁）
 
@@ -174,6 +175,7 @@ default_mode = "magic"
 ## 5. 实施阶段
 
 ### Stage 0 — 同仓库空白 orphan branch 与工程骨架
+
 - 在当前仓库直接创建空白分支（旧分支完全不动）：
   ```bash
   git remote add upstream https://github.com/Tools-cx-app/meta-magic_mount-rs.git
@@ -191,10 +193,12 @@ default_mode = "magic"
 - 默认分支暂保持旧 `main`；`rehybrid-mount` 为唯一开发分支，稳定后按第 7 节做分支晋升。
 
 ### Stage 1 — 核心基础（新写）
+
 - `defs.rs`、`errors.rs`、日志初始化、panic hook。
 - `config.rs` TOML schema + 默认值 + 单元测试。
 
 ### Stage 2 — magic mount（新写，行为参考 `8b85c9e`）
+
 - Node 树、`RegularFile / Directory / Symlink / Whiteout`。
 - `module.prop`、`disable / remove / skip_mount`、`system` 目录、内建分区提升规则。
 - 目录/文件/符号链接/whiteout 挂载语义、`.replace` xattr、tmpfs skeleton、mirror、只读 remount。
@@ -202,23 +206,27 @@ default_mode = "magic"
 - KernelSU unmount 列表集成。
 
 ### Stage 3 — overlayfs + storage（新写，行为参考 v4.2.0 `e20f9c19`）
+
 - fsopen(`overlay`) 主路径 + 传统 `mount` fallback。
 - lowerdir 转义、>64 层 staging、`/proc/self/mountinfo` 子挂载处理。
 - tmpfs / ext4 loop image staging，`mkfs.ext4` / `e2fsck`、SELinux context。
 - 单元测试：lowerdir 转义、层数拆分、子挂载路径计算。
 
 ### Stage 4 — 混合 planner（新写）
+
 - 规则优先级：路径规则 > 模块 default_mode > 全局 default_mode。
 - 同一路径只进入一个后端；冲突启动时显式报错。
 - overlay lowerdirs 按目标分区聚合；magic 模块 id 列表传给 Stage 2。
 - 模块目录不可变回归测试。
 
 ### Stage 5 — CLI（新写，参考项目交互契约）
+
 - 手工参数解析，无 clap 运行时依赖。
 - `--payload` 使用 hex 编码 JSON，完全按参考项目方式。
 - `scan.ret` / `run/state.json` 生成与读取。
 
 ### Stage 6 — WebUI（Vue 3 双 UI：Miuix 默认 + MD3 保留）
+
 - 技术栈：**Vue 3 + Vite + vue-i18n + `miuix-vue`（Miuix）/ 自定义 MD3 组件 + `@material/web`（MD3，按需）**。
 - 架构完全采用上游已验证的双 UI 模式：
   ```
@@ -262,6 +270,7 @@ default_mode = "magic"
   - 两套 UI 共享同一数据层，禁止分叉 API/stores。
 
 ### Stage 7 — 找回备份分支的语言文件提交
+
 1. 旧历史已在本仓库对象库中，直接按顺序 cherry-pick：
    - `d70c151e` → `webui/src/locales/tr-TR.json`（PR #379）
    - `da28a721` → `docs/README_TR.md`（PR #380）
@@ -274,12 +283,14 @@ default_mode = "magic"
 4. 校验：`git log --follow` 保留原提交；locale 结构与 `en-US` 一致。
 
 ### Stage 8 — module 脚本 / xtask / CI（见第 6 节详细方案）
+
 - `metainstall.sh`：symlink-only 分区处理。
 - `customize.sh` / `metamount.sh` / `uninstall.sh` 新写。
 - `xtask`：构建、Vue WebUI 构建与 `MODULE_ID` 注入、zip 打包、update.json、notify。
 - CI / Release：完整继承现有连线。
 
 ### Stage 9 — 验证
+
 1. 主机侧：
    - Rust 单元测试：parser / config / scanner / planner / overlay / magic 树 / 布局不可变
    - WebUI：`pnpm lint`、`pnpm test`、`pnpm build`；双 UI 共用逻辑单元测试
@@ -301,34 +312,36 @@ default_mode = "magic"
 
 ### 6.1 Secrets / 权限（全部沿用，不新增）
 
-| Secret / 设置 | 用途 | 说明 |
-|---|---|---|
-| `RELEASE_TOKEN` | 在 `KernelSU-Modules-Repo/hybrid_mount` 创建 release | 老仓库已有 |
-| `TELEGRAM_BOT_TOKEN` | TG 通知 | 老仓库已有 |
-| `TELEGRAM_CHAT_ID` | TG 通知 | 老仓库已有 |
-| `SIGNING_KEY` / `SIGNING_CERT` | release 签名（可选） | 老仓库已有，未配置则跳过 |
-| `GITHUB_TOKEN` | 本地 release / GHCR 包读取 | 自动提供 |
-| Actions 权限 | `contents: write`、`packages: read` | 老仓库已有 |
+| Secret / 设置                  | 用途                                                 | 说明                     |
+| ------------------------------ | ---------------------------------------------------- | ------------------------ |
+| `RELEASE_TOKEN`                | 在 `KernelSU-Modules-Repo/hybrid_mount` 创建 release | 老仓库已有               |
+| `TELEGRAM_BOT_TOKEN`           | TG 通知                                              | 老仓库已有               |
+| `TELEGRAM_CHAT_ID`             | TG 通知                                              | 老仓库已有               |
+| `SIGNING_KEY` / `SIGNING_CERT` | release 签名（可选）                                 | 老仓库已有，未配置则跳过 |
+| `GITHUB_TOKEN`                 | 本地 release / GHCR 包读取                           | 自动提供                 |
+| Actions 权限                   | `contents: write`、`packages: read`                  | 老仓库已有               |
 
 ### 6.2 GitHub Actions 清单（新写，行为继承）
 
-| Workflow | 触发 | 行为 |
-|---|---|---|
-| `build.yml` | push/PR 到 `rehybrid-mount`、workflow_dispatch | 构建 arm64 包 + artifact + **TG 每日/构建通知（topic 37）** |
-| `release.yml` | tag `v*.*.*`、workflow_dispatch | 构建 release 包 → 校验 SHA256 → **TG release 通知（topic 6）** → 本地 GitHub Release → **KSU 模块仓库远程 Release** → sync 版本回 `rehybrid-mount` |
-| `lints.yml` | push/PR | Rust fmt/clippy/test（含 Android NDK 目标）+ pnpm lint/test/build |
-| `notify.yml` | tools/notify 相关变更 | notify crate fmt/clippy/test |
-| `license_header.yml` | schedule | HawkEye license 检查 |
-| `ci-image.yml` | 如需修改镜像再启用 | 现阶段直接复用现有 `meta-hybrid_mount-ci` 镜像 |
-| `auto-label.yml` | issue 事件 | 自动打标签 / 关闭无日志 issue |
-| `auto-blacklist-pr.yml` | issue 事件 | 黑名单请求自动 PR（base 改为 `rehybrid-mount`） |
-| `dependency-audit.yml` | 依赖变更 | 依赖审计 |
+| Workflow                | 触发                                           | 行为                                                                                                                                               |
+| ----------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `build.yml`             | push/PR 到 `rehybrid-mount`、workflow_dispatch | 构建 arm64 包 + artifact + **TG 每日/构建通知（topic 37）**                                                                                        |
+| `release.yml`           | tag `v*.*.*`、workflow_dispatch                | 构建 release 包 → 校验 SHA256 → **TG release 通知（topic 6）** → 本地 GitHub Release → **KSU 模块仓库远程 Release** → sync 版本回 `rehybrid-mount` |
+| `lints.yml`             | push/PR                                        | Rust fmt/clippy/test（含 Android NDK 目标）+ pnpm lint/test/build                                                                                  |
+| `notify.yml`            | tools/notify 相关变更                          | notify crate fmt/clippy/test                                                                                                                       |
+| `license_header.yml`    | schedule                                       | HawkEye license 检查                                                                                                                               |
+| `ci-image.yml`          | 如需修改镜像再启用                             | 现阶段直接复用现有 `meta-hybrid_mount-ci` 镜像                                                                                                     |
+| `auto-label.yml`        | issue 事件                                     | 自动打标签 / 关闭无日志 issue                                                                                                                      |
+| `auto-blacklist-pr.yml` | issue 事件                                     | 黑名单请求自动 PR（base 改为 `rehybrid-mount`）                                                                                                    |
+| `dependency-audit.yml`  | 依赖变更                                       | 依赖审计                                                                                                                                           |
 
 ### 6.3 CI 镜像
+
 - 直接复用现有 `ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest`，同仓库内权限已通，无需任何配置。
 - 若后续 Vue 双 UI / 依赖要求变更镜像，再在同一仓库新增 `ci-image.yml` 并更新 tag。
 
 ### 6.4 KSU 模块仓库连线（保持现状）
+
 - 目标仓库：**`KernelSU-Modules-Repo/hybrid_mount`**（不变）。
 - Release 流程与现状一致：
   1. 在本仓库 `Hybrid-Mount/meta-hybrid_mount`（ReHybrid 分支/tag）创建正式 GitHub Release。
@@ -344,6 +357,7 @@ default_mode = "magic"
 - release 成功后同步 `update.json`、`changelog.md`、`Cargo.toml`、`Cargo.lock` 回 `rehybrid-mount`；pre-release 不写 `update.json`（沿用现状防版本号碰撞）。
 
 ### 6.5 Telegram 群组连线（保持现状）
+
 - 保留 `tools/notify` crate，接口与现有 `xtask notify` 一致：
   - `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
   - 支持 `--topic-id` 消息线程
@@ -354,6 +368,7 @@ default_mode = "magic"
 - 本地构建无 secrets 时跳过通知并打印提示（行为与现状一致）。
 
 ### 6.6 门禁（在 `lints.yml` / 打包校验中执行）
+
 - 全仓 `kasumi`（大小写不敏感）= 0。
 - 禁止模块布局归一化逻辑（黑名单检查 `normalize_symlinked_partition_layout`、`normalize_module_layout` 等）。
 - 模块目录不可变回归测试必须通过。
@@ -379,16 +394,16 @@ default_mode = "magic"
 
 ## 8. 风险与对策
 
-| 风险 | 对策 |
-|---|---|
-| 混合模式 magic 与 overlay 争抢路径 | planner 先决策后执行；冲突显式报错 |
-| 从 0 重写导致行为回归 | 以参考行为写单元测试 + Android 实机场景清单 |
-| 移除 daemon 后无实时状态 | 状态显示“上次启动快照 + shell 实时系统信息” |
-| 语言提交与最终 locale 冲突 | 先 cherry-pick 原提交，再单独对齐，不 squash |
-| orphan 分支上的 workflow 触发/默认分支差异 | YAML 明确触发 `rehybrid-mount`；晋升 main 时一次性替换 |
-| Release tag 与旧历史 tag 冲突 | ReHybrid 使用独立大版本线（建议 `v6.x.x`） |
-| `miuix-vue` / Vue 双 UI 在 WebView 中的兼容性 | 锁版本 + 真机 WebView 验证；MD3 作为回退 UI |
-| 模块目录再次被归一化 | CI 黑名单 + 布局不可变回归测试双保险 |
+| 风险                                          | 对策                                                   |
+| --------------------------------------------- | ------------------------------------------------------ |
+| 混合模式 magic 与 overlay 争抢路径            | planner 先决策后执行；冲突显式报错                     |
+| 从 0 重写导致行为回归                         | 以参考行为写单元测试 + Android 实机场景清单            |
+| 移除 daemon 后无实时状态                      | 状态显示“上次启动快照 + shell 实时系统信息”            |
+| 语言提交与最终 locale 冲突                    | 先 cherry-pick 原提交，再单独对齐，不 squash           |
+| orphan 分支上的 workflow 触发/默认分支差异    | YAML 明确触发 `rehybrid-mount`；晋升 main 时一次性替换 |
+| Release tag 与旧历史 tag 冲突                 | ReHybrid 使用独立大版本线（建议 `v6.x.x`）             |
+| `miuix-vue` / Vue 双 UI 在 WebView 中的兼容性 | 锁版本 + 真机 WebView 验证；MD3 作为回退 UI            |
+| 模块目录再次被归一化                          | CI 黑名单 + 布局不可变回归测试双保险                   |
 
 ---
 

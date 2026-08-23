@@ -1,0 +1,9 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+blank_issues_enabled: false
+contact_links:
+  - name: Telegram community / Telegram 社群
+    url: https://t.me/hybridmountchat
+    about: General discussion and usage help / 常规讨论与使用帮助

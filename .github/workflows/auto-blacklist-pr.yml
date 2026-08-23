@@ -82,6 +82,6 @@ jobs:
             --body "Closes #${ISSUE_NUM}
 
           Auto-generated from blacklist request. / 由黑名单申请自动生成。" \
-            --base rehybrid-mount)
+            --base dev)
 
           gh issue comment "$ISSUE_NUM" --body "✅ PR created: ${PR_URL} / 已创建 PR: ${PR_URL}"

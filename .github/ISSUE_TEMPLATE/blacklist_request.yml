@@ -1,0 +1,40 @@
+# Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Module Blacklist Request / 模块黑名单申请
+description: Request a module be added to the default blacklist / 申请将模块加入默认黑名单
+title: "[Blacklist]: "
+labels: ["blacklist-request"]
+body:
+  - type: input
+    id: module_id
+    attributes:
+      label: Module ID / 模块 ID
+      placeholder: example_module
+    validations:
+      required: true
+
+  - type: input
+    id: module_sample_url
+    attributes:
+      label: Module sample URL / 模块样本链接
+      description: Provide a direct, publicly accessible module ZIP URL. / 提供可公开访问的模块 ZIP 直链。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: Reason for blacklisting / 申请原因
+      description: Explain the mount conflict, boot issue, or self-mount behavior and include reproduction details. / 说明挂载冲突、启动问题或模块自挂载行为，并提供复现信息。
+    validations:
+      required: true
+
+  - type: textarea
+    id: attachments
+    attributes:
+      label: Upload Area / 上传区域
+      description: Upload the KernelSU/APatch bugreport and relevant logs. / 上传 KernelSU/APatch bugreport 与相关日志。
+    validations:
+      required: true
