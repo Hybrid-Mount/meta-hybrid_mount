@@ -13,6 +13,10 @@ updates:
       crates-patch:
         patterns: ["*"]
         update-types: ["patch"]
+    ignore:
+      # tgbot 0.47 serializes flattened multipart captions incorrectly at runtime.
+      - dependency-name: "tgbot"
+        versions: ["0.47.x"]
 
   - package-ecosystem: "npm"
     directory: "/webui"

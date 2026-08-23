@@ -1831,7 +1831,7 @@ version = "1.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
 dependencies = [
- "errno 0.2.8",
+ "errno 0.3.14",
  "libc",
 ]
 
@@ -1954,15 +1954,14 @@ dependencies = [
 
 [[package]]
 name = "tgbot"
-version = "0.47.0"
+version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b047e40ba42fe65411bb1bb78cb066ed03e91da4775d6e5cb006a407e8485a38"
+checksum = "dc05e21aac7632767ffd5ef7d9573473ede11f77d7f68aa06b64cee747171433"
 dependencies = [
  "async-stream",
  "bytes",
  "derive_more",
  "futures-util",
- "itoa",
  "log",
  "mime",
  "mime_guess",
@@ -1973,7 +1972,6 @@ dependencies = [
  "shellwords",
  "tokio",
  "tokio-util",
- "zmij",
 ]
 
 [[package]]
