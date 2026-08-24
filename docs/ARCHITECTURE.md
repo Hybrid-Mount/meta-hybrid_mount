@@ -6,7 +6,7 @@
 
 - `/data/adb/modules/<id>/system/**` 始终是只读输入，安装、扫描、规划和执行阶段都不得移动、合并或删除其中内容。
 - v4.2.0 中经过长期实机验证的必要设计可作为回归修复的实现基线；直接移植时必须保留关键语义、许可证和原贡献者归属。
-- Magic Mount 行为继续与上游 `meta-magic_mount-rs` 的既定契约核对；混合 planner 负责保证同一路径只进入一个后端。
+- Magic Mount 行为继续与上游 `meta-magic_mount-rs` 的既定契约核对；混合 planner 允许两个后端共享普通结构目录，同时保证同一实际文件只进入一个后端。
 - 配置字段、CLI 输出和下列稳定路径是 module 脚本与 WebUI 之间的兼容接口，不能只为品牌整理而改名。
 - 仓库保留完整 Git 历史和作者信息；完成后的阶段计划可以删除，但不能据此压平或重写贡献记录。
 
@@ -77,7 +77,7 @@ WebUI 不持有第二套业务协议：配置与状态请求都映射到以上�
 
 ## 共享节点树契约
 
-scanner 对每个模块源节点只读记录类型、源路径和 `.replace` 标记；planner 将其映射到真实目标路径并标注 `overlay`、`magic` 或 `ignore`。同一目标可以保留多个同后端模块贡献，用于 OverlayFS lowerdir 优先级；跨后端同目标仍在规划阶段报错。
+scanner 对每个模块源节点只读记录类型、源路径和 `.replace` 标记；planner 将其映射到真实目标路径并标注 `overlay`、`magic` 或 `ignore`。同一目标可以保留多个同后端模块贡献，用于 OverlayFS lowerdir 优先级；跨后端的普通目录可作为共享结构节点，文件、类型或 `.replace` 冲突仍在规划阶段报错。
 
 OverlayFS staging 只物化树中标注为 `overlay` 的节点，因此同模块内的 magic/ignore 子树不会被整目录复制进 lowerdir，Overlay 目录可以安全包含后续由 Magic 处理的子路径。目录 `.replace` 转换为 `trusted.overlay.opaque=y`，whiteout 保留为设备节点，符号链接不跟随。Magic Mount 在 OverlayFS 完成后遍历同一棵树的 `magic` 分支；未被选中但承载选中后代的目录只作为结构父链，不会改变后端归属。由于执行顺序固定为 OverlayFS → Magic Mount，Magic `.replace` 目录若包含 Overlay 后代会在规划阶段报冲突，避免后执行的目录替换遮住先前挂载。
 

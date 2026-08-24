@@ -3,7 +3,7 @@
 //! 混合挂载 planner。
 //!
 //! 规则优先级:路径规则 > 模块 `default_mode` > 全局 `default_mode`。
-//! 同一路径只进入一个后端;冲突在启动时显式报错。
+//! 同一文件路径只进入一个后端;普通结构目录可由两个后端共享，真实冲突在启动时显式报错。
 //! 输出:
 //! - overlay 操作按目标分区聚合(目录规则直接作为 lowerdir,
 //!   文件规则交给执行层做 shallow 层,v4.2.0 prepare 语义);
@@ -45,7 +45,7 @@ pub struct PlanInput<'a> {
     pub promoted_partitions: &'a BTreeSet<String>,
 }
 
-/// 构建挂载计划;任何同一路径跨后端冲突都会返回错误。
+/// 构建挂载计划;跨后端文件、类型与 `.replace` 冲突都会返回错误。
 pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     let mut modules: Vec<&ModuleRecord> = input.modules.iter().collect();
     modules.sort_by(|left, right| left.id.cmp(&right.id));
@@ -126,8 +126,15 @@ struct PlanBuilder {
     overlay_files_by_target: BTreeMap<String, BTreeMap<String, PathBuf>>,
     overlay_module_ids: BTreeSet<String>,
     magic_module_ids: BTreeSet<String>,
-    /// 跨模块分配表:target -> (backend, 来源描述),用于冲突检测。
-    assignments: BTreeMap<String, (Mode, String)>,
+    /// 跨模块分配表:target -> 已分配的节点,用于冲突检测。
+    assignments: BTreeMap<String, Vec<TargetAssignment>>,
+}
+
+struct TargetAssignment {
+    mode: Mode,
+    source: String,
+    file_type: NodeFileType,
+    replace: bool,
 }
 
 impl PlanBuilder {
@@ -137,25 +144,35 @@ impl PlanBuilder {
         mode: Mode,
         module_id: &str,
         relative: &str,
+        file_type: NodeFileType,
+        replace: bool,
     ) -> Result<()> {
-        let source = format!("{module_id}:{relative}");
-        match self.assignments.entry(target.to_owned()) {
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert((mode, source));
-            }
-            std::collections::btree_map::Entry::Occupied(entry) => {
-                let (existing_mode, existing_source) = entry.get();
-                if *existing_mode != mode {
-                    return Err(Error::PlanConflict {
-                        target: target.to_owned(),
-                        first_backend: mode_name(*existing_mode).to_owned(),
-                        first_source: existing_source.clone(),
-                        second_backend: mode_name(mode).to_owned(),
-                        second_source: source,
-                    });
-                }
+        let source = format!(
+            "{module_id}:{relative}{}",
+            if replace { " (.replace)" } else { "" }
+        );
+        let assignments = self.assignments.entry(target.to_owned()).or_default();
+        for existing in assignments.iter() {
+            let shareable_directories = existing.file_type == NodeFileType::Directory
+                && file_type == NodeFileType::Directory
+                && !existing.replace
+                && !replace;
+            if existing.mode != mode && !shareable_directories {
+                return Err(Error::PlanConflict {
+                    target: target.to_owned(),
+                    first_backend: mode_name(existing.mode).to_owned(),
+                    first_source: existing.source.clone(),
+                    second_backend: mode_name(mode).to_owned(),
+                    second_source: source,
+                });
             }
         }
+        assignments.push(TargetAssignment {
+            mode,
+            source,
+            file_type,
+            replace,
+        });
         Ok(())
     }
 
@@ -224,13 +241,14 @@ fn process_module(
     let decisions: Vec<EntryDecision> = module
         .entries
         .iter()
+        .filter(|entry| !is_promoted_partition_alias(entry, promoted))
         .map(|entry| EntryDecision {
             entry,
             mode: rules.resolve_mode(&entry.relative),
         })
         .collect();
 
-    // 1. 跨模块冲突:同一目标路径只能出现一个后端。
+    // 1. 跨模块冲突:普通目录可以共享，文件、类型与 `.replace` 必须唯一。
     for decision in &decisions {
         let (_, target) = map_target(&decision.entry.relative, promoted);
         builder.tree.insert(
@@ -245,7 +263,14 @@ fn process_module(
             },
         );
         if decision.mode != Mode::Ignore {
-            builder.register(&target, decision.mode, &module.id, &decision.entry.relative)?;
+            builder.register(
+                &target,
+                decision.mode,
+                &module.id,
+                &decision.entry.relative,
+                decision.entry.file_type,
+                decision.entry.replace,
+            )?;
         }
     }
 
@@ -442,6 +467,24 @@ fn first_descendant_source(node: &MountNode, backend: Mode) -> Option<&MountSour
 
 fn normalize_rule_path(key: &str) -> String {
     key.trim().trim_start_matches('/').to_owned()
+}
+
+/// Magisk-style modules commonly carry `system/vendor -> ../vendor` (and the
+/// equivalent links for other dynamic partitions) next to the real top-level
+/// partition subtree. Once that partition is promoted, the link is layout
+/// metadata rather than a mount contribution; mapping it onto `/vendor` would
+/// turn a real directory into a symlink in the shared tree.
+fn is_promoted_partition_alias(entry: &ModuleEntry, promoted: &BTreeSet<String>) -> bool {
+    if entry.file_type != NodeFileType::Symlink {
+        return false;
+    }
+
+    let mut components = entry.relative.split('/');
+    components.next() == Some("system")
+        && components
+            .next()
+            .is_some_and(|partition| promoted.contains(partition))
+        && components.next().is_none()
 }
 
 /// 相对路径 -> (分区, 目标挂载点)。
@@ -807,6 +850,133 @@ mod tests {
 
         let err = plan_err(&modules, &config);
         assert!(err.to_string().contains("plan conflict"), "{err}");
+    }
+
+    #[test]
+    fn normal_directories_can_be_shared_by_overlay_and_magic() {
+        let mut rules = no_rules();
+        rules.insert(
+            "magic_mod".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+        let config = config(Mode::Overlay, rules);
+        let modules = [
+            record(
+                "overlay_mod",
+                &[("system/etc", true), ("system/etc/overlay.conf", false)],
+            ),
+            record(
+                "magic_mod",
+                &[("system/etc", true), ("system/etc/magic.conf", false)],
+            ),
+        ];
+
+        let result = plan(&modules, &config, &[]);
+        let etc = result.tree.find("/system/etc").unwrap();
+
+        assert_eq!(result.overlay_module_ids, vec!["overlay_mod"]);
+        assert_eq!(result.magic_module_ids, vec!["magic_mod"]);
+        assert!(etc.source_for(Mode::Overlay).is_some());
+        assert!(etc.source_for(Mode::Magic).is_some());
+    }
+
+    #[test]
+    fn replace_directory_still_conflicts_with_other_backend_at_same_target() {
+        let mut rules = no_rules();
+        rules.insert(
+            "magic_mod".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+        let overlay = record("overlay_mod", &[("system/etc", true)]);
+        let mut magic = record("magic_mod", &[("system/etc", true)]);
+        magic.entries[0].replace = true;
+
+        let err = plan_err(&[overlay, magic], &config(Mode::Overlay, rules));
+        assert!(err.to_string().contains(".replace"), "{err}");
+    }
+
+    #[test]
+    fn promoted_layout_aliases_do_not_break_mixed_partition_modules() {
+        let mut adreno = record(
+            "adreno",
+            &[
+                ("system/vendor", false),
+                ("vendor/etc", true),
+                ("vendor/etc/permissions", true),
+                ("vendor/etc/permissions/gpu.xml", false),
+            ],
+        );
+        adreno.entries[0].file_type = NodeFileType::Symlink;
+
+        let mut extreme = record(
+            "extreme",
+            &[
+                ("system/vendor", false),
+                ("vendor/etc", true),
+                ("vendor/etc/perf", true),
+                ("vendor/etc/perf/thermal.conf", false),
+            ],
+        );
+        extreme.entries[0].file_type = NodeFileType::Symlink;
+
+        let mut haptics = record(
+            "haptics",
+            &[
+                ("system/odm", false),
+                ("odm/lib64", true),
+                ("odm/lib64/libhaptic.so", false),
+            ],
+        );
+        haptics.entries[0].file_type = NodeFileType::Symlink;
+
+        let rules = BTreeMap::from([
+            (
+                "extreme".to_owned(),
+                crate::config::ModuleRule {
+                    default_mode: Some(Mode::Magic),
+                    paths: BTreeMap::new(),
+                },
+            ),
+            (
+                "haptics".to_owned(),
+                crate::config::ModuleRule {
+                    default_mode: Some(Mode::Magic),
+                    paths: BTreeMap::new(),
+                },
+            ),
+        ]);
+
+        let result = plan(
+            &[adreno, extreme, haptics],
+            &config(Mode::Overlay, rules),
+            &["vendor", "odm"],
+        );
+
+        assert_eq!(result.overlay_module_ids, vec!["adreno"]);
+        assert_eq!(result.magic_module_ids, vec!["extreme", "haptics"]);
+        assert!(result.tree.find("/vendor").unwrap().sources.is_empty());
+        assert!(result.tree.find("/odm").unwrap().sources.is_empty());
+        assert_eq!(
+            result
+                .tree
+                .find("/vendor")
+                .unwrap()
+                .file_type_for(Mode::Magic),
+            Some(NodeFileType::Directory)
+        );
+        assert_eq!(
+            result.tree.find("/odm").unwrap().file_type_for(Mode::Magic),
+            Some(NodeFileType::Directory)
+        );
+        let vendor_etc = result.tree.find("/vendor/etc").unwrap();
+        assert!(vendor_etc.source_for(Mode::Overlay).is_some());
+        assert!(vendor_etc.source_for(Mode::Magic).is_some());
     }
 
     #[test]
