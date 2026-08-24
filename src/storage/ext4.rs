@@ -1,15 +1,9 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! ext4 loop 镜像 staging(行为对齐 v4.2.0):
 //! 按源目录占用估算镜像大小(硬链接去重、符号链接跳过),
 //! 使用纯 Rust formatter 创建并审计新镜像，外部 `e2fsck` 仅作挂载失败后的兼容 fallback,
 //! loop 挂载失败时修复重试，成功后通过 KernelSU nuke 隐藏 ext4 sysfs 信息。
-//!
-//! Stage 3 脚手架:入口在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::collections::HashSet;
 
@@ -45,7 +39,7 @@ const MODULES_IMG_SELINUX_CONTEXT: &str = "u:object_r:ksu_file:s0";
 // 32 MiB, preserving v4.2.0's `-i 4096` inode density while still using the
 // crate's validated multi-group formatter (which requires blocks >= 2 KiB).
 const RUST_EXT4_BLOCK_SIZE: u32 = 2048;
-const RUST_EXT4_LABEL: &str = "ReHybrid-Mount";
+const RUST_EXT4_LABEL: &str = "Hybrid-Mount";
 
 /// 文件大小统计器:`(dev, ino)` 去重避免硬链接重复计数。
 #[derive(Debug, Default)]
@@ -318,7 +312,7 @@ mod tests {
         use std::sync::Arc;
 
         let image = std::env::temp_dir().join(format!(
-            "rehybrid-ext4-format-{}-{}.img",
+            "hybrid-mount-ext4-format-{}-{}.img",
             std::process::id(),
             getrandom::u64().unwrap()
         ));

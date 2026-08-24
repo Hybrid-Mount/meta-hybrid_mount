@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Magic Mount 后端(行为参考 meta-magic_mount-rs master `8b85c9e`,新写实现)。

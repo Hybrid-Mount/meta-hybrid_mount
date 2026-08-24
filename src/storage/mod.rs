@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Overlay 的 staging 后端:tmpfs 或 ext4 loop 镜像(行为对齐 v4.2.0)。
@@ -7,10 +5,6 @@
 //! - 非 ext4 强制时先试 tmpfs,要求内核 `CONFIG_TMPFS_XATTR=y`;
 //! - 否则创建/格式化/校验 ext4 镜像并 loop 挂载;
 //! - 挂载完成后设置 private propagation,并按需注册进 KSU 尝试卸载列表。
-//!
-//! Stage 3 脚手架:入口在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 mod ext4;
 

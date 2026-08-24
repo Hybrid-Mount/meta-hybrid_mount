@@ -1,6 +1,6 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
+
+#![cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]
 
 mod cli;
 mod config;

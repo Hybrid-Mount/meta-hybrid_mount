@@ -1,14 +1,9 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 无参数启动流水线:读配置 → 只读扫描 → planner → overlayfs 执行 →
 //! magic mount 执行 → 提交 KSU 尝试卸载列表 → 写 scan.ret / run/state.json。
 //!
-//! 铁律:挂载与 shallow staging 只写运行目录,模块源目录只读。
-//!
-//! Stage 5 脚手架:执行实现仅在 Linux/Android 编译;纯函数在 host 测试。
-#![allow(dead_code)]
+//! 挂载与 shallow staging 只写运行目录,模块源目录只读。
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::collections::{BTreeMap, BTreeSet};
@@ -42,7 +37,7 @@ use crate::state::{RunState, app_modules, write_scan_ret};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
 
-/// `emulated-soft-reboot` 等命令与无参数流水线的统一入口。
+/// 无参数启动挂载流水线的统一入口。
 pub fn run_mount_pipeline() -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {

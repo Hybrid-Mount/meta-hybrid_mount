@@ -1,5 +1,3 @@
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 # 模块黑名单(由 .github/workflows/auto-blacklist-pr.yml 自动维护)。

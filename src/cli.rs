@@ -1,10 +1,8 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 手工 CLI 参数解析与命令分派(无 clap 运行时依赖)。
 //!
-//! 契约见 REHYBRID_MOUNT_PLAN.md 第 4.2 节;无参数 = 完整挂载流水线。
+//! 无参数执行完整挂载流水线；其余命令为 WebUI 与诊断工具提供结构化数据。
 
 use std::path::Path;
 

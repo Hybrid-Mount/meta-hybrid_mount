@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 构建与发布自动化:WebUI 构建 + MODULE_ID 注入、Rust 交叉编译、
@@ -24,12 +22,13 @@ use crate::zip_ext::zip_create_from_directory_with_options;
 const MODULE_ID: &str = "hybrid_mount";
 const MODULE_NAME: &str = "Hybrid Mount";
 const MODULE_AUTHOR: &str = "Hybrid Mount Developers";
-const MODULE_DESCRIPTION: &str = "ReHybrid-Mount: mixed overlayfs + magic mount for KernelSU";
+const MODULE_DESCRIPTION: &str =
+    "Hybrid Mount: mixed OverlayFS and Magic Mount for KernelSU and APatch";
 const UPDATE_JSON_URL: &str =
     "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/update.json";
 
 #[derive(Parser)]
-#[command(name = "xtask", about = "ReHybrid-Mount build automation")]
+#[command(name = "xtask", about = "Hybrid Mount build automation")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

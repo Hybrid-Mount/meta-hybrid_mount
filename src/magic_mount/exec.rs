@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Magic Mount 挂载执行(仅 Linux/Android)。
@@ -10,10 +8,6 @@
 //!   mirror 原目录的其余条目,最后只读 remount 并 mount-move 到目标;
 //! - whiteout 只记录不挂载;所有写入都发生在私有随机 tmpfs staging,
 //!   模块源目录只读。
-//!
-//! Stage 2 脚手架:入口在 Stage 5 CLI 接入前暂未被调用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::fs::{self, DirEntry};
 use std::os::unix::fs::{MetadataExt, symlink};

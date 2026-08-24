@@ -1,12 +1,10 @@
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 [package]
 name = "notify"
 version = "0.1.0"
 edition = "2024"
-description = "Telegram notification helper for ReHybrid-Mount build artifacts"
+description = "Telegram notification helper for Hybrid Mount build artifacts"
 authors = ["Hybrid Mount Developers"]
 license = "GPL-3.0-only"
 

@@ -1,8 +1,6 @@
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
-name: Build ReHybrid-Mount
+name: Build Hybrid Mount
 
 on:
   push:
@@ -12,10 +10,8 @@ on:
       - "Cargo.*"
       - ".cargo/**"
       - "module/**"
-      - "webui"
       - "webui/**"
       - "xtask/**"
-      - "build.rs"
       - "tools/notify/**"
       - ".github/workflows/build.yml"
   pull_request:
@@ -25,10 +21,8 @@ on:
       - "Cargo.*"
       - ".cargo/**"
       - "module/**"
-      - "webui"
       - "webui/**"
       - "xtask/**"
-      - "build.rs"
       - "tools/notify/**"
       - ".github/workflows/build.yml"
   workflow_dispatch:

@@ -1,7 +1,5 @@
 #!/system/bin/sh
 # shellcheck disable=SC3043
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 # customize.sh — 安装阶段:平台检查、二进制落位、默认配置与初始化向导。

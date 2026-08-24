@@ -1,8 +1,6 @@
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
-name: Release ReHybrid-Mount
+name: Release Hybrid Mount
 
 on:
   push:
@@ -122,7 +120,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
-          NOTIFY_DIR="/tmp/rehybrid-release-notify"
+          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
           rm -rf "$NOTIFY_DIR"
           mkdir -p "$NOTIFY_DIR"
           cp "${{ steps.paths.outputs.zip }}" "$NOTIFY_DIR/"

@@ -1,10 +1,6 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! TOML 配置 schema、默认值与持久化核心。
-//!
-//! 契约见 REHYBRID_MOUNT_PLAN.md 第 4.1 节:
 //!
 //! ```toml
 //! moduledir = "/data/adb/modules"
@@ -21,10 +17,6 @@
 //! ```
 //!
 //! 未知字段会被拒绝,保证配置契约不会被悄悄漂移。
-//!
-//! Stage 1 脚手架:公开 API 在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -633,7 +625,7 @@ unknown_option = "overlay"
     }
 
     fn test_dir(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("rehybrid-mount-{tag}-{}", std::process::id()))
+        std::env::temp_dir().join(format!("hybrid-mount-{tag}-{}", std::process::id()))
     }
 
     fn cleanup(dir: &Path) {

@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! KernelSU 尝试卸载列表集成(注册行为对齐参考项目 `8b85c9e`;

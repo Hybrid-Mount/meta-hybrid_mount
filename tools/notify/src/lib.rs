@@ -1,8 +1,6 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Telegram 产物通知(行为继承现有 notify crate,品牌 ReHybrid-Mount)。
+//! Hybrid Mount 的 Telegram 构建产物通知。
 //! 无 secrets 时由 `maybe_send_output_dir_notification` 静默跳过并打印提示。
 
 use std::{
@@ -262,7 +260,7 @@ fn build_primary_caption(
     commit_link: &str,
 ) -> String {
     format!(
-        "🌾 <b>ReHybrid-Mount: {}</b>\n\n\
+        "🌾 <b>Hybrid Mount: {}</b>\n\n\
         🌿 <b>分支 (Branch):</b> {}\n\n\
         📦 <b>产物 (Artifacts):</b> {}\n\n\
         📝 <b>新性状 (Commit):</b>\n\
@@ -283,7 +281,7 @@ fn build_extra_caption(
     artifact: &Artifact,
 ) -> String {
     format!(
-        "🌾 <b>ReHybrid-Mount: {}</b>\n\n\
+        "🌾 <b>Hybrid Mount: {}</b>\n\n\
         📦 <b>产物 (Artifact):</b> {}/{}\n\n\
         <pre>{}</pre>\n\n\
         ⚖️ <b>重量 (Weight):</b> {:.2} MB",
@@ -411,7 +409,7 @@ mod tests {
                 size_bytes: 1024 * 1024,
             },
         );
-        assert!(caption.contains("ReHybrid-Mount"));
+        assert!(caption.contains("Hybrid Mount"));
         assert!(caption.contains("2/3"));
     }
 

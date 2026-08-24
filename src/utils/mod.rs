@@ -1,12 +1,6 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 通用工具:模块 ID 校验、目录创建、SELinux 上下文读写。
-//!
-//! Stage 1/2 脚手架:部分工具在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::path::Path;
 
@@ -106,7 +100,7 @@ mod tests {
     #[test]
     fn ensure_dir_exists_creates_missing_parents() {
         let dir =
-            std::env::temp_dir().join(format!("rehybrid-mount-ensure-dir-{}", std::process::id()));
+            std::env::temp_dir().join(format!("hybrid-mount-ensure-dir-{}", std::process::id()));
         let nested = dir.join("a").join("b");
 
         ensure_dir_exists(&nested).unwrap();

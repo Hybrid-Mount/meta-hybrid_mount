@@ -1,6 +1,4 @@
 #!/system/bin/sh
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 # uninstall.sh — 卸载清理:移除运行目录。

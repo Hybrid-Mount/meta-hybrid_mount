@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! OverlayFS 后端(行为参考 v4.2.0 tag `e20f9c19`,新写实现)。

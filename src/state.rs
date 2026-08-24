@@ -1,15 +1,9 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 持久化快照:`scan.ret`(模块清单)与 `run/state.json`(启动状态快照),
 //! 以及 install-state / clear-mount-errors 等 CLI 命令实现。
 //!
-//! Stage 5:状态快照替代常驻实时状态(计划第 1 节)。
-//!
-//! Stage 5 脚手架:快照生成入口在 Linux/Android 流水线中调用;
-//! host 构建保留纯逻辑与单测。
-#![allow(dead_code)]
+//! 状态为启动快照而非常驻服务提供的实时状态；host 构建保留纯逻辑与单测。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -581,10 +575,8 @@ mod tests {
 
     #[test]
     fn mount_error_markers_collected_and_cleared_without_touching_system() {
-        let root = std::env::temp_dir().join(format!(
-            "rehybrid-mount-state-errors-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("hybrid-mount-state-errors-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let module = root.join("bad_mod");
         fs::create_dir_all(module.join("system/etc")).unwrap();

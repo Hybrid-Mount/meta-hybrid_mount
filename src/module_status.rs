@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Dynamic module-manager description for the completed mount plan.
@@ -133,7 +131,7 @@ mod tests {
     #[test]
     fn fallback_replaces_only_description_and_keeps_trailing_newline() {
         let dir =
-            std::env::temp_dir().join(format!("rehybrid-mount-description-{}", std::process::id()));
+            std::env::temp_dir().join(format!("hybrid-mount-description-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let prop = dir.join("module.prop");
         fs::write(&prop, "id=hybrid_mount\ndescription=waiting\nversion=6\n").unwrap();

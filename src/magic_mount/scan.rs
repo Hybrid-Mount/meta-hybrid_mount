@@ -1,10 +1,8 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 模块只读扫描:module.prop 判定、状态标记、system 目录收集与分区提升。
 //!
-//! 铁律:这里只 read + 建树,绝不移动/合并/删除模块源目录,也不写回。
+//! 这里只读取并建树,绝不移动、合并、删除或写回模块源目录。
 //! 行为对齐参考项目 `8b85c9e` 的 `collect_module_files`。
 
 use std::collections::BTreeSet;
@@ -38,9 +36,9 @@ pub struct Selection<'a> {
 pub struct ScanOptions<'a> {
     /// 额外分区(参考项目 extra partitions,内建分区之外的提升目标)。
     pub extra_partitions: &'a [String],
-    /// 自定义 ignore 列表(Stage 4 parser 产物;命中路径不挂载)。
+    /// 自定义 ignore 列表(parser 产物;命中路径不挂载)。
     pub ignore_sources: &'a [String],
-    /// 混合 planner 的选择器(Stage 4 注入)。
+    /// 混合 planner 注入的选择器。
     pub selection: Selection<'a>,
 }
 

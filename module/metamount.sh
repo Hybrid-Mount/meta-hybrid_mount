@@ -1,6 +1,4 @@
 #!/system/bin/sh
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 # metamount.sh — 启动期入口:调用唯一二进制执行完整挂载流水线。

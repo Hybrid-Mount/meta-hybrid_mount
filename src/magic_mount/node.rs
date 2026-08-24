@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Magic Mount 的 Node 树:纯数据 + 纯算法,不依赖平台。
@@ -9,10 +7,6 @@
 //! - 目录只有自身 `replace` 或收集到文件时才参与挂载;
 //! - 内建分区(vendor / system_ext / product / odm)按提升规则从
 //!   `/system` 下提升到根,避免 Android 动态分区下的路径错位。
-//!
-//! Stage 1/2 脚手架:树 API 在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -153,14 +147,6 @@ pub fn is_builtin_partition(partition: &str) -> bool {
         .any(|(name, _)| *name == partition)
 }
 
-/// 内建分区是否要求 `/system/<分区>` 为符号链接(参考项目行为)。
-pub fn builtin_partition_requires_symlink(partition: &str) -> Option<bool> {
-    BUILTIN_PARTITIONS
-        .iter()
-        .find(|(name, _)| *name == partition)
-        .map(|(_, require_symlink)| *require_symlink)
-}
-
 /// 把 `/system/<分区>` 下的节点提升到根。路径存在性判断由扫描器完成,
 /// 这里只做纯树操作,便于跨平台测试。
 pub fn promote_partition(root: &mut Node, system: &mut Node, partition: &str) -> bool {
@@ -177,7 +163,7 @@ pub fn is_replaced_path_suffix(path: &str) -> bool {
     path.ends_with(defs::REPLACE_DIR_FILE_NAME)
 }
 
-/// 路径命中自定义 ignore 列表(由 Stage 4 parser/planner 注入)。
+/// 路径命中自定义 ignore 列表(由 parser/planner 注入)。
 pub fn is_ignored_source(path: &str, ignore_sources: &[String]) -> bool {
     ignore_sources.iter().any(|source| source == path)
 }
@@ -272,9 +258,8 @@ mod tests {
         assert!(is_builtin_partition("odm"));
         assert!(!is_builtin_partition("system"));
 
-        assert_eq!(builtin_partition_requires_symlink("vendor"), Some(true));
-        assert_eq!(builtin_partition_requires_symlink("odm"), Some(false));
-        assert_eq!(builtin_partition_requires_symlink("system"), None);
+        assert!(BUILTIN_PARTITIONS.contains(&("vendor", true)));
+        assert!(BUILTIN_PARTITIONS.contains(&("odm", false)));
     }
 
     #[test]

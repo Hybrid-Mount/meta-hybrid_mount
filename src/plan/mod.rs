@@ -1,19 +1,13 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 混合挂载 planner(Stage 4)。
+//! 混合挂载 planner。
 //!
 //! 规则优先级:路径规则 > 模块 `default_mode` > 全局 `default_mode`。
 //! 同一路径只进入一个后端;冲突在启动时显式报错。
 //! 输出:
 //! - overlay 操作按目标分区聚合(目录规则直接作为 lowerdir,
 //!   文件规则交给执行层做 shallow 层,v4.2.0 prepare 语义);
-//! - magic 模块 id 与路径允许集,可直接映射到 Stage 2 的 `Selection`。
-//!
-//! Stage 4 脚手架:入口在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
+//! - magic 模块 id 与路径允许集,可直接映射到执行层的 `Selection`。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -46,7 +40,7 @@ pub struct MountPlan {
 pub struct PlanInput<'a> {
     pub modules: &'a [ModuleRecord],
     pub config: &'a Config,
-    /// 执行层按 Stage 2 内建分区提升规则探测出的提升分区。
+    /// 执行层按内建分区提升规则探测出的提升分区。
     pub promoted_partitions: &'a BTreeSet<String>,
 }
 
@@ -388,7 +382,7 @@ fn collect_magic(
     builder.magic_module_ids.insert(module.id.clone());
 
     // 全部条目都是 magic 时整模块收集,无需允许集;
-    // 有切分时输出精确允许集,供 Stage 2 Selection::path_filter 使用
+    // 有切分时输出精确允许集,供 Selection::path_filter 使用
     // (目录前缀覆盖子树)。
     let whole_magic = magic_rels.len() == decisions.len() && !decisions.is_empty();
     if !whole_magic {
@@ -877,10 +871,8 @@ mod tests {
     fn planning_never_modifies_module_source_fixture() {
         use std::fs;
 
-        let root = std::env::temp_dir().join(format!(
-            "rehybrid-mount-plan-fixture-{}",
-            std::process::id()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("hybrid-mount-plan-fixture-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         let module = root.join("m");
         fs::create_dir_all(module.join("system/etc")).unwrap();

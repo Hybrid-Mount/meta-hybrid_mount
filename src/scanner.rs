@@ -1,16 +1,10 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 模块清单的只读扫描(供 planner 与 Stage 5 CLI 使用)。
+//! 模块清单的只读扫描(供 planner 与 CLI 使用)。
 //!
-//! 铁律:只 read + 记录,绝不写回模块目录。
+//! 只读取并记录,绝不写回模块目录。
 //! 行为参考上游 `scanner.rs`(module.prop 必填字段、disable/remove/skip_mount、
 //! system/额外分区存在性)。
-//!
-//! Stage 4 脚手架:入口在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -197,10 +191,8 @@ mod tests {
     use super::*;
 
     fn module_dir(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "rehybrid-mount-scanner-{tag}-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-scanner-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

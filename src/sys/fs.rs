@@ -1,12 +1,6 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 文件系统辅助:路径清理、内核配置读取、tmpfs xattr 能力探测。
-//!
-//! Stage 3 脚手架:入口在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::path::Path;
 
@@ -329,8 +323,7 @@ mod tests {
 
     #[test]
     fn remove_path_handles_missing_and_files() {
-        let dir =
-            std::env::temp_dir().join(format!("rehybrid-mount-remove-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("hybrid-mount-remove-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("a.txt");
         std::fs::write(&file, "x").unwrap();

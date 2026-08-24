@@ -1,6 +1,4 @@
 #!/system/bin/sh
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 # metainstall.sh — 分区 symlink-only 处理。
@@ -12,7 +10,7 @@ export KSU_METAMODULE="hybrid-mount"
 
 MANAGED_PARTITIONS="odm product system_ext vendor apex mi_ext my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_reserve my_stock oem optics prism"
 
-ui_print "- ReHybrid-Mount metainstall"
+ui_print "- Hybrid Mount metainstall"
 
 install_module
 

@@ -1,5 +1,3 @@
-# ReHybrid-Mount
-#
 # SPDX-License-Identifier: GPL-3.0-only
 
 moduledir = "/data/adb/modules"

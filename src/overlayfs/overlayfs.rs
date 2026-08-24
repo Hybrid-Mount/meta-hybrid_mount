@@ -1,5 +1,3 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! OverlayFS 挂载编排(行为对齐 v4.2.0 `e20f9c19`):
@@ -7,10 +5,6 @@
 //! - lowerdir 超过 64 层时,尾部层先叠成 staging 再作为新层;
 //! - 根挂载后按 `/proc/self/mountinfo` 的子挂载逐个重建 overlay,
 //!   失败时立即 `unmount` 回滚根挂载。
-//!
-//! Stage 3 脚手架:入口在 Stage 5 CLI 接入前暂未被二进制入口使用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;

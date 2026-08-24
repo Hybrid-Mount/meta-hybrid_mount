@@ -1,15 +1,9 @@
-// ReHybrid-Mount
-//
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! OverlayFS 与 ext4 的底层挂载原语(仅 Linux/Android)。
 //!
 //! `umount_dir` 是**立即卸载**(rustix `unmount` 系统调用),
 //! 与 KernelSU try-umount 列表注册严格区分。
-//!
-//! Stage 3 脚手架:部分原语在 Stage 5 CLI 接入前暂未被调用;
-//! 接入完成后移除本豁免,恢复 dead_code 检查。
-#![allow(dead_code)]
 
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;

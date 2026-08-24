@@ -1,5 +1,0 @@
-# ReHybrid-Mount clippy 配置
-#
-# SPDX-License-Identifier: GPL-3.0-only
-
-# Stage 1 暂不启用额外 lint 限制;统一门禁在 CI lints.yml 中执行。
