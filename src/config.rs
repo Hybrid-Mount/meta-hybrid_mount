@@ -87,7 +87,7 @@ pub struct ModuleRule {
 }
 
 /// 持久配置根对象。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "default_moduledir")]
@@ -107,6 +107,13 @@ pub struct Config {
 
     #[serde(default)]
     pub rules: BTreeMap<String, ModuleRule>,
+
+    /// Upgrade-only input from releases that exposed custom bind mounts.
+    /// The backend no longer implements that feature; accepting and omitting
+    /// this field prevents one obsolete empty array from discarding the rest
+    /// of an otherwise valid configuration.
+    #[serde(default, rename = "custom_mounts", skip_serializing)]
+    pub(crate) legacy_custom_mounts: Vec<toml::Value>,
 }
 
 impl Default for Config {
@@ -118,6 +125,7 @@ impl Default for Config {
             disable_umount: false,
             default_mode: Mode::default(),
             rules: BTreeMap::new(),
+            legacy_custom_mounts: Vec::new(),
         }
     }
 }
@@ -147,7 +155,15 @@ impl Config {
     /// 读取配置;失败或不存在时回退默认值(参考项目行为)。
     pub fn load_or_default(path: &Path) -> Self {
         match Self::load(path) {
-            Ok(config) => config,
+            Ok(mut config) => {
+                if !config.legacy_custom_mounts.is_empty() {
+                    log::warn!(
+                        "obsolete custom mount entries are ignored; configure module path rules instead"
+                    );
+                }
+                config.legacy_custom_mounts.clear();
+                config
+            }
             Err(err) => {
                 log::warn!("failed to load config, using default: {err}");
                 Self::default()
@@ -379,6 +395,22 @@ default_mode = "magic"
         let rule = config.rules.get("hosts_redirect").unwrap();
         assert_eq!(rule.default_mode, Some(Mode::Magic));
         assert_eq!(rule.paths.get("system/etc/hosts"), Some(&Mode::Overlay));
+    }
+
+    #[test]
+    fn accepts_and_drops_obsolete_empty_custom_mounts_during_upgrade() {
+        let config = Config::from_toml(
+            r#"
+moduledir = "/data/adb/modules"
+default_mode = "magic"
+custom_mounts = []
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(config.default_mode, Mode::Magic);
+        assert!(config.legacy_custom_mounts.is_empty());
+        assert!(!config.to_toml().unwrap().contains("custom_mounts"));
     }
 
     #[test]
