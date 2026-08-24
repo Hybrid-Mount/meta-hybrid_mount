@@ -21,7 +21,7 @@ fs_ext4 = {
     rev = "d4e01155c2fc6b0dcc143220e8dc7e62d65cff51",
     version = "0.4.0",
 }
-getrandom = "0.3"
+getrandom = "0.4"
 hex = "0.4"
 libc = "0.2"
 log = "0.4"
