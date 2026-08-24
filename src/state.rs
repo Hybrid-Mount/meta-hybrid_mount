@@ -11,7 +11,7 @@
 //! host 构建保留纯逻辑与单测。
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -20,9 +20,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, Mode};
 use crate::defs;
-use crate::errors::{Error, Result};
-use crate::plan::MountPlan;
-use crate::scanner::ModuleRecord;
+use crate::errors::Result;
+use crate::plan::{MountPlan, PlanInput, build_plan};
+use crate::scanner::{ModuleRecord, list_modules};
 
 /// `modules` 命令输出的模块条目(交互契约参考上游 scanner JSON)。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -231,16 +231,64 @@ pub fn write_scan_ret(modules: &[AppModule]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
-    fs::write(path, json)?;
-    Ok(())
+    crate::sys::fs::atomic_write(path, json.as_bytes())
 }
 
 /// `modules`:输出启动时缓存的 `scan.ret`。
 pub fn handle_modules() -> Result<()> {
-    let text = fs::read_to_string(defs::SCAN_RET_PATH)
-        .map_err(|err| Error::msg(format!("failed to read {}: {err}", defs::SCAN_RET_PATH)))?;
-    println!("{text}");
+    match fs::read_to_string(defs::SCAN_RET_PATH) {
+        Ok(text) if serde_json::from_str::<Vec<AppModule>>(&text).is_ok() => {
+            println!("{text}");
+            return Ok(());
+        }
+        Ok(_) => {
+            log::warn!(
+                "failed to parse {}, rebuilding module snapshot",
+                defs::SCAN_RET_PATH
+            );
+        }
+        Err(err) => {
+            log::warn!(
+                "failed to read {}, rebuilding module snapshot: {err}",
+                defs::SCAN_RET_PATH
+            );
+        }
+    }
+
+    let modules = rebuild_module_snapshot();
+    if let Err(write_err) = write_scan_ret(&modules) {
+        log::warn!(
+            "failed to cache rebuilt module snapshot at {}: {write_err}",
+            defs::SCAN_RET_PATH
+        );
+    }
+    println!("{}", serde_json::to_string_pretty(&modules)?);
     Ok(())
+}
+
+fn rebuild_module_snapshot() -> Vec<AppModule> {
+    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+    let modules = list_modules(&config.moduledir, &[]);
+    fallback_app_modules(&modules, &config)
+}
+
+fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
+    let promoted_partitions = BTreeSet::new();
+    let plan = build_plan(&PlanInput {
+        modules,
+        config,
+        promoted_partitions: &promoted_partitions,
+    })
+    .unwrap_or_else(|err| {
+        log::warn!("fallback module plan failed, returning raw module list: {err}");
+        MountPlan::default()
+    });
+    let mount_errors = collect_mount_error_modules(&config.moduledir);
+    let mut snapshot = app_modules(modules, config, &plan, &mount_errors);
+    for module in &mut snapshot {
+        module.is_mounted = false;
+    }
+    snapshot
 }
 
 /// `status`:输出 `run/state.json`(缺失时输出默认快照)。
@@ -442,6 +490,27 @@ mod tests {
             Some("mount_error marker present".to_owned())
         );
         assert!(list[0].suggest_ignore);
+    }
+
+    #[test]
+    fn fallback_snapshot_scans_planned_mode_without_claiming_mount_success() {
+        let mut module = record("fallback_mod");
+        module.entries = vec![
+            crate::scanner::ModuleEntry {
+                relative: "system/etc".to_owned(),
+                is_dir: true,
+            },
+            crate::scanner::ModuleEntry {
+                relative: "system/etc/hosts".to_owned(),
+                is_dir: false,
+            },
+        ];
+
+        let list = fallback_app_modules(&[module], &Config::default());
+
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].mode, "overlay");
+        assert!(!list[0].is_mounted);
     }
 
     #[test]

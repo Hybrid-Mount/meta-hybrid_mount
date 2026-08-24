@@ -259,13 +259,7 @@ fn process_module(
         && (rules.default_mode == Mode::Overlay || rules.has_whole_system_overlay_rule());
 
     if whole_overlay {
-        ensure_no_non_overlay_under(module, &decisions, "system")?;
-        builder.add_overlay_layer(
-            "system",
-            "/system",
-            &module.id,
-            module.source_path.join("system"),
-        );
+        add_whole_overlay_layers(module, &decisions, promoted, builder);
         return Ok(());
     }
 
@@ -317,6 +311,63 @@ fn process_module(
 
     collect_magic(module, &decisions, builder);
     Ok(())
+}
+
+/// Preserve the v4.2 planner's split-at-partition-root behavior.  Mounting a
+/// regular module as one overlay directly on `/system` is both unnecessarily
+/// broad and rejected with EINVAL by kernels seen in the field.  The legacy
+/// planner descended through `/system` (and promoted partition roots such as
+/// `/vendor`) and queued the first real directory below that root instead.
+fn add_whole_overlay_layers(
+    module: &ModuleRecord,
+    decisions: &[EntryDecision<'_>],
+    promoted: &BTreeSet<String>,
+    builder: &mut PlanBuilder,
+) {
+    for decision in decisions {
+        let relative = decision.entry.relative.as_str();
+        let components = relative.split('/').collect::<Vec<_>>();
+        let root_len = partition_root_len(&components, promoted);
+
+        if components.len() > root_len + 1
+            || (decision.entry.is_dir && components.len() == root_len + 1)
+        {
+            let layer_relative = components[..root_len + 1].join("/");
+            let (partition, target) = map_target(&layer_relative, promoted);
+            builder.add_overlay_layer(
+                &partition,
+                &target,
+                &module.id,
+                join_relative(&module.source_path, &layer_relative),
+            );
+            continue;
+        }
+
+        // A file directly under a partition root has no child directory that
+        // can serve as an overlay layer.  Keep the existing shallow-overlay
+        // path for this uncommon, but valid, module layout.
+        if !decision.entry.is_dir && components.len() == root_len + 1 {
+            let parent = components[..root_len].join("/");
+            let (_, target) = map_target(&parent, promoted);
+            builder.add_overlay_file(
+                &target,
+                &module.id,
+                join_relative(&module.source_path, relative),
+            );
+        }
+    }
+}
+
+fn partition_root_len(components: &[&str], promoted: &BTreeSet<String>) -> usize {
+    if components.first() == Some(&"system")
+        && components
+            .get(1)
+            .is_some_and(|partition| promoted.contains(*partition))
+    {
+        2
+    } else {
+        1
+    }
 }
 
 fn collect_magic(
@@ -528,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn whole_overlay_modules_aggregate_by_partition_and_module_order() {
+    fn whole_overlay_modules_split_below_system_root_and_keep_module_order() {
         let config = config(Mode::Overlay, no_rules());
         let modules = [
             record("a", &[("system/etc/a", false)]),
@@ -537,19 +588,63 @@ mod tests {
 
         let result = plan(&modules, &config, &[]);
 
-        assert_eq!(result.overlay_ops.len(), 1);
-        let op = &result.overlay_ops[0];
-        assert_eq!(op.partition, "system");
-        assert_eq!(op.target, "/system");
+        assert_eq!(result.overlay_ops.len(), 2);
+        assert_eq!(result.overlay_ops[0].partition, "system");
+        assert_eq!(result.overlay_ops[0].target, "/system/bin");
         assert_eq!(
-            op.lowerdirs,
-            vec![
-                PathBuf::from("/data/adb/modules/a/system"),
-                PathBuf::from("/data/adb/modules/b/system")
-            ]
+            result.overlay_ops[0].lowerdirs,
+            vec![PathBuf::from("/data/adb/modules/b/system/bin")]
+        );
+        assert_eq!(result.overlay_ops[1].target, "/system/etc");
+        assert_eq!(
+            result.overlay_ops[1].lowerdirs,
+            vec![PathBuf::from("/data/adb/modules/a/system/etc")]
         );
         assert_eq!(result.overlay_module_ids, vec!["a", "b"]);
         assert!(result.magic_module_ids.is_empty());
+    }
+
+    #[test]
+    fn whole_overlay_modules_split_below_promoted_partition_root() {
+        let config = config(Mode::Overlay, no_rules());
+        let module = record(
+            "gpu",
+            &[
+                ("system/vendor", true),
+                ("system/vendor/etc", true),
+                ("system/vendor/etc/gpu.xml", false),
+                ("system/vendor/lib64", true),
+                ("system/vendor/lib64/gpu.so", false),
+            ],
+        );
+
+        let result = plan(&[module], &config, &["vendor"]);
+
+        assert_eq!(result.overlay_ops.len(), 2);
+        assert_eq!(result.overlay_ops[0].partition, "vendor");
+        assert_eq!(result.overlay_ops[0].target, "/vendor/etc");
+        assert_eq!(result.overlay_ops[1].target, "/vendor/lib64");
+        assert!(
+            result
+                .overlay_ops
+                .iter()
+                .all(|operation| operation.target != "/vendor")
+        );
+    }
+
+    #[test]
+    fn whole_overlay_direct_partition_file_uses_shallow_layer() {
+        let config = config(Mode::Overlay, no_rules());
+        let module = record("props", &[("system/build.prop", false)]);
+
+        let result = plan(&[module], &config, &[]);
+
+        assert!(result.overlay_ops.is_empty());
+        assert_eq!(
+            result.overlay_files["/system"],
+            vec![PathBuf::from("/data/adb/modules/props/system/build.prop")]
+        );
+        assert_eq!(result.overlay_module_ids, vec!["props"]);
     }
 
     #[test]
@@ -772,7 +867,10 @@ mod tests {
         let config = config(Mode::Overlay, no_rules());
         let result = plan(&scanned, &config, &[]);
 
-        assert_eq!(result.overlay_ops[0].lowerdirs, vec![module.join("system")]);
+        assert_eq!(
+            result.overlay_ops[0].lowerdirs,
+            vec![module.join("system/etc")]
+        );
         // 源目录结构与内容不变
         assert_eq!(fs::read_to_string(&hosts).unwrap(), "127.0.0.1 localhost");
         assert_eq!(scanned, crate::scanner::list_modules(&root, &[]));

@@ -104,16 +104,40 @@ fn run_mount_pipeline_impl() -> Result<()> {
         plan.magic_module_ids.len()
     );
 
+    // `modules` is a boot-time snapshot, not a proof that every mount already
+    // succeeded.  Persist it before entering the fallible mount phases so the
+    // WebUI can still show the scanned modules and their planned modes when a
+    // device rejects one overlay operation.
+    let initial_mount_errors = crate::state::collect_mount_error_modules(&config.moduledir);
+    let mut initial_app_modules = app_modules(&modules, &config, &plan, &initial_mount_errors);
+    for module in &mut initial_app_modules {
+        module.is_mounted = false;
+    }
+    write_scan_ret(&initial_app_modules)?;
+    log::info!(
+        "module snapshot saved: modules={}",
+        initial_app_modules.len()
+    );
+
     prepare_tmp_root(&config.mountsource)?;
 
-    let (overlay_dir_mounts, shallow_layer_mounts, active_mounts) =
-        mount_overlay_phase(&plan, &config)?;
-    let magic_stats = mount_magic_phase(&config, &modules, &plan)?;
+    let mount_result: Result<_> = (|| {
+        let (overlay_dir_mounts, shallow_layer_mounts, active_mounts) =
+            mount_overlay_phase(&plan, &config)?;
+        let magic_stats = mount_magic_phase(&config, &modules, &plan)?;
 
-    // 提交 KernelSU 尝试卸载列表(注册语义,非立即卸载)。
-    utils::ksu::commit_unmount_list()?;
+        // 提交 KernelSU 尝试卸载列表(注册语义,非立即卸载)。
+        utils::ksu::commit_unmount_list()?;
+        Ok((
+            overlay_dir_mounts,
+            shallow_layer_mounts,
+            active_mounts,
+            magic_stats,
+        ))
+    })();
 
     cleanup_tmp_root();
+    let (overlay_dir_mounts, shallow_layer_mounts, active_mounts, magic_stats) = mount_result?;
 
     let mount_error_modules = crate::state::collect_mount_error_modules(&config.moduledir);
     let app_modules = app_modules(&modules, &config, &plan, &mount_error_modules);
