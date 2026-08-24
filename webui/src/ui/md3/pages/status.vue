@@ -24,6 +24,14 @@ const magicWidth = computed(() =>
   modeTotal.value ? `${(magicCount.value / modeTotal.value) * 100}%` : "0%",
 );
 const activeMounts = computed(() => [...new Set(sysStore.state?.active_mounts ?? [])]);
+const mountPointLabel = computed(() => {
+  const state = sysStore.state;
+  if (state?.mount_point) return state.mount_point;
+  if (state && state.timestamp > 0 && state.mount_stats.failed_mounts === 0) {
+    return t("status.storageReleased");
+  }
+  return t("status.notReady");
+});
 
 async function refresh(): Promise<void> {
   await Promise.all([
@@ -60,7 +68,7 @@ onMounted(refresh);
               <svg viewBox="0 0 24 24"><path :d="ICONS.mount_path" /></svg>
             </md-icon>
             <span class="mount-base-text">
-              {{ sysStore.state?.mount_point || t("status.notReady") }}
+              {{ mountPointLabel }}
             </span>
           </div>
         </template>
@@ -78,7 +86,11 @@ onMounted(refresh);
           <div class="metric-icon-bg">
             <svg viewBox="0 0 24 24"><path :d="ICONS.ksu" /></svg>
           </div>
-          <span class="metric-value">{{ configStore.config.mountsource || "-" }}</span>
+          <span class="metric-value">
+            {{
+              sysStore.installState?.mount_source || configStore.config.mountsource || "-"
+            }}
+          </span>
           <span class="metric-label">{{ t("status.mountSource") }}</span>
         </section>
       </div>

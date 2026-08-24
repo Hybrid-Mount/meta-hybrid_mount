@@ -45,6 +45,7 @@
     "selinuxLabel": "SELinux",
     "loadError": "加载系统状态失败",
     "notReady": "暂无启动快照",
+    "storageReleased": "未保留临时存储",
     "lastStartup": "上次启动",
     "installTitle": "安装状态",
     "compatible": "兼容",

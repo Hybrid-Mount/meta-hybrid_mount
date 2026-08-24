@@ -45,6 +45,7 @@
     "selinuxLabel": "SELinux",
     "loadError": "Failed to load system status",
     "notReady": "No startup snapshot yet",
+    "storageReleased": "No temporary staging retained",
     "lastStartup": "Last Startup",
     "installTitle": "Installation",
     "compatible": "Compatible",

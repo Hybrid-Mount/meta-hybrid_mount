@@ -64,7 +64,9 @@ onMounted(async () => {
           @click="handleSetNav(1)"
         >
           <template #end>
-            <MiuixText>{{ configStore.config.mountsource }}</MiuixText>
+            <MiuixText>
+              {{ sysStore.installState?.mount_source || configStore.config.mountsource }}
+            </MiuixText>
           </template>
         </MiuixBasicComponent>
       </MiuixCard>
