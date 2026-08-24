@@ -35,7 +35,7 @@ use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::{ModuleRecord, list_modules};
 use crate::state::MountStatistics;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::state::{ModeStats, RunState, app_modules, write_scan_ret};
+use crate::state::{RunState, app_modules, write_scan_ret};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
 
@@ -119,6 +119,17 @@ fn run_mount_pipeline_impl() -> Result<()> {
         initial_app_modules.len()
     );
 
+    // State is a boot snapshot, not a daemon-owned live feed.  Save the plan
+    // before any fallible mount operation so `status` and the WebUI can still
+    // report the selected backends when the device rejects a later mount.
+    let mut state = RunState::from_plan(&config, &modules, &plan, initial_mount_errors);
+    state.save()?;
+    log::info!(
+        "planned state saved: overlay_modules={}, magic_modules={}",
+        state.overlay_modules.len(),
+        state.magic_modules.len()
+    );
+
     prepare_tmp_root(&config.mountsource)?;
 
     let mount_result: Result<_> = (|| {
@@ -143,34 +154,18 @@ fn run_mount_pipeline_impl() -> Result<()> {
     let app_modules = app_modules(&modules, &config, &plan, &mount_error_modules);
     write_scan_ret(&app_modules)?;
 
-    let skip_mount_modules = modules
-        .iter()
-        .filter(|module| module.skip_mount)
-        .map(|module| module.id.clone())
-        .collect::<Vec<_>>();
     let mount_error_reasons = mount_error_modules
         .iter()
         .map(|module| (module.clone(), "mount_error marker present".to_owned()))
         .collect();
 
-    let mut state = RunState::new(
-        config.overlay_mode.as_str().to_owned(),
-        PathBuf::from(defs::STATE_DIR),
-        plan.overlay_module_ids.clone(),
-        plan.magic_module_ids.clone(),
-        skip_mount_modules,
-        active_mounts,
-        pipeline_stats(
-            overlay_dir_mounts,
-            shallow_layer_mounts,
-            magic_stats.mounted_files as usize,
-            magic_stats.mounted_symlinks as usize,
-            magic_stats.ignored_files as usize,
-        ),
-        ModeStats {
-            overlayfs: plan.overlay_module_ids.len(),
-            magicmount: plan.magic_module_ids.len(),
-        },
+    state.active_mounts = active_mounts;
+    state.mount_stats = pipeline_stats(
+        overlay_dir_mounts,
+        shallow_layer_mounts,
+        magic_stats.mounted_files as usize,
+        magic_stats.mounted_symlinks as usize,
+        magic_stats.ignored_files as usize,
     );
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;

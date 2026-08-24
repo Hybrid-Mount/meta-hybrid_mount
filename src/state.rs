@@ -89,11 +89,7 @@ impl RunState {
     pub fn save(&self) -> Result<()> {
         let json = serde_json::to_string_pretty(self)?;
         let path = Path::new(defs::STATE_PATH);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(path, json)?;
-        Ok(())
+        crate::sys::fs::atomic_write(path, json.as_bytes())
     }
 
     pub fn load_or_default() -> Self {
@@ -134,6 +130,42 @@ impl RunState {
             mount_stats,
             mode_stats,
         }
+    }
+
+    /// Build the boot snapshot as soon as planning succeeds.  This keeps the
+    /// WebUI contract available even when a later mount operation fails.
+    pub fn from_plan(
+        config: &Config,
+        modules: &[ModuleRecord],
+        plan: &MountPlan,
+        mount_error_modules: Vec<String>,
+    ) -> Self {
+        let skip_mount_modules = modules
+            .iter()
+            .filter(|module| module.skip_mount)
+            .map(|module| module.id.clone())
+            .collect();
+        let mount_error_reasons = mount_error_modules
+            .iter()
+            .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+            .collect();
+
+        let mut state = Self::new(
+            config.overlay_mode.as_str().to_owned(),
+            PathBuf::from(defs::STATE_DIR),
+            plan.overlay_module_ids.clone(),
+            plan.magic_module_ids.clone(),
+            skip_mount_modules,
+            Vec::new(),
+            MountStatistics::default(),
+            ModeStats {
+                overlayfs: plan.overlay_module_ids.len(),
+                magicmount: plan.magic_module_ids.len(),
+            },
+        );
+        state.mount_error_modules = mount_error_modules;
+        state.mount_error_reasons = mount_error_reasons;
+        state
     }
 }
 
@@ -595,5 +627,32 @@ mod tests {
         assert_eq!(parsed.overlay_modules, vec!["a".to_owned()]);
         assert_eq!(parsed.magic_modules, vec!["b".to_owned()]);
         assert_eq!(parsed.storage_mode, "ext4");
+    }
+
+    #[test]
+    fn planned_run_state_exposes_backend_before_mounting() {
+        let mut skipped = record("skipped_mod");
+        skipped.skip_mount = true;
+        let config = Config::default();
+        let plan = test_plan();
+
+        let state = RunState::from_plan(
+            &config,
+            &[record("overlay_mod"), record("magic_mod"), skipped],
+            &plan,
+            vec!["overlay_mod".to_owned()],
+        );
+
+        assert_eq!(state.overlay_modules, vec!["overlay_mod".to_owned()]);
+        assert_eq!(state.magic_modules, vec!["magic_mod".to_owned()]);
+        assert_eq!(state.skip_mount_modules, vec!["skipped_mod".to_owned()]);
+        assert!(state.active_mounts.is_empty());
+        assert_eq!(state.mount_stats, MountStatistics::default());
+        assert_eq!(state.mode_stats.overlayfs, 1);
+        assert_eq!(state.mode_stats.magicmount, 1);
+        assert_eq!(
+            state.mount_error_reasons["overlay_mod"],
+            "mount_error marker present"
+        );
     }
 }
