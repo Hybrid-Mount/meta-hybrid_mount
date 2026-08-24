@@ -10,6 +10,7 @@ mod logging;
 mod magic_mount;
 #[cfg(any(target_os = "linux", target_os = "android", test))]
 mod module_status;
+mod mount_tree;
 mod overlayfs;
 mod pipeline;
 mod plan;

@@ -7,13 +7,14 @@
 //! 输出:
 //! - overlay 操作按目标分区聚合(目录规则直接作为 lowerdir,
 //!   文件规则交给执行层做 shallow 层,v4.2.0 prepare 语义);
-//! - magic 模块 id 与路径允许集,可直接映射到执行层的 `Selection`。
+//! - 同一棵带后端标注的节点树直接交给 OverlayFS 与 Magic Mount 执行层。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::config::{Config, Mode};
 use crate::errors::{Error, Result};
+use crate::mount_tree::{MountNode, MountSource, MountTree, NodeFileType};
 use crate::scanner::{ModuleEntry, ModuleRecord};
 
 /// 一个 overlay 挂载操作(结构与 v4.2.0 `OverlayOperation` 对齐)。
@@ -27,14 +28,14 @@ pub struct OverlayOperation {
 /// 混合挂载计划。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MountPlan {
+    /// scanner 与 planner 共同生成、由两个执行后端共同消费的唯一节点树。
+    pub tree: MountTree,
     /// 目录级 overlay:目标挂载点 -> 有序 lowerdirs(按模块 id 排序)。
     pub overlay_ops: Vec<OverlayOperation>,
     /// 文件级 overlay 规则:父目录目标 -> 文件源(执行层做 shallow 层)。
     pub overlay_files: BTreeMap<String, Vec<PathBuf>>,
     pub overlay_module_ids: Vec<String>,
     pub magic_module_ids: Vec<String>,
-    /// 模块 -> 允许 magic 的源相对路径集合;模块整体 magic 时不出现条目。
-    pub magic_path_rules: BTreeMap<String, BTreeSet<String>>,
 }
 
 pub struct PlanInput<'a> {
@@ -58,6 +59,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
         process_module(module, &rules, input.promoted_partitions, &mut builder)?;
     }
 
+    ensure_replace_backend_consistency(&builder.tree.root, "")?;
     Ok(builder.finish())
 }
 
@@ -117,13 +119,13 @@ impl ModuleRulesView {
 
 #[derive(Default)]
 struct PlanBuilder {
+    tree: MountTree,
     /// target -> (partition, module id -> lowerdir)
     overlay_by_target: BTreeMap<String, (String, BTreeMap<String, PathBuf>)>,
     /// 文件规则:父目录 target -> (module id -> file source)
     overlay_files_by_target: BTreeMap<String, BTreeMap<String, PathBuf>>,
     overlay_module_ids: BTreeSet<String>,
     magic_module_ids: BTreeSet<String>,
-    magic_path_rules: BTreeMap<String, BTreeSet<String>>,
     /// 跨模块分配表:target -> (backend, 来源描述),用于冲突检测。
     assignments: BTreeMap<String, (Mode, String)>,
 }
@@ -198,11 +200,11 @@ impl PlanBuilder {
             .collect();
 
         MountPlan {
+            tree: self.tree,
             overlay_ops,
             overlay_files,
             overlay_module_ids: self.overlay_module_ids.into_iter().collect(),
             magic_module_ids: self.magic_module_ids.into_iter().collect(),
-            magic_path_rules: self.magic_path_rules,
         }
     }
 }
@@ -230,11 +232,21 @@ fn process_module(
 
     // 1. 跨模块冲突:同一目标路径只能出现一个后端。
     for decision in &decisions {
-        if decision.mode == Mode::Ignore {
-            continue;
-        }
         let (_, target) = map_target(&decision.entry.relative, promoted);
-        builder.register(&target, decision.mode, &module.id, &decision.entry.relative)?;
+        builder.tree.insert(
+            &target,
+            MountSource {
+                module_id: module.id.clone(),
+                relative: decision.entry.relative.clone(),
+                source_path: join_relative(&module.source_path, &decision.entry.relative),
+                file_type: decision.entry.file_type,
+                replace: decision.entry.replace,
+                backend: decision.mode,
+            },
+        );
+        if decision.mode != Mode::Ignore {
+            builder.register(&target, decision.mode, &module.id, &decision.entry.relative)?;
+        }
     }
 
     let overlay_count = decisions
@@ -257,8 +269,8 @@ fn process_module(
         return Ok(());
     }
 
-    // 3. 部分 overlay:目录根直接作 lowerdir;先检查目录覆盖范围内没有
-    //    非 overlay 条目(否则同一路径会进入两个后端)。
+    // 3. 部分 overlay:目录根直接作 lowerdir。staging 从共享树按节点物化，
+    //    因此 magic / ignore 后代不会泄漏进该 lowerdir。
     let overlay_rels: BTreeSet<&str> = decisions
         .iter()
         .filter(|decision| decision.mode == Mode::Overlay)
@@ -267,13 +279,14 @@ fn process_module(
 
     let overlay_dir_roots: Vec<&ModuleEntry> = decisions
         .iter()
-        .filter(|decision| decision.mode == Mode::Overlay && decision.entry.is_dir)
+        .filter(|decision| {
+            decision.mode == Mode::Overlay && decision.entry.file_type == NodeFileType::Directory
+        })
         .map(|decision| decision.entry)
         .filter(|entry| !has_overlay_ancestor(&entry.relative, &overlay_rels))
         .collect();
 
     for root in &overlay_dir_roots {
-        ensure_no_non_overlay_under(module, &decisions, &root.relative)?;
         let (partition, target) = map_target(&root.relative, promoted);
         builder.add_overlay_layer(
             &partition,
@@ -286,7 +299,7 @@ fn process_module(
     // 4. 文件/符号链接级 overlay:父目录目标 -> 文件源(执行层 shallow)。
     for decision in &decisions {
         if decision.mode != Mode::Overlay
-            || decision.entry.is_dir
+            || decision.entry.file_type == NodeFileType::Directory
             || has_overlay_ancestor(&decision.entry.relative, &overlay_rels)
         {
             continue;
@@ -324,7 +337,8 @@ fn add_whole_overlay_layers(
         let root_len = partition_root_len(&components, promoted);
 
         if components.len() > root_len + 1
-            || (decision.entry.is_dir && components.len() == root_len + 1)
+            || (decision.entry.file_type == NodeFileType::Directory
+                && components.len() == root_len + 1)
         {
             let layer_relative = components[..root_len + 1].join("/");
             let (partition, target) = map_target(&layer_relative, promoted);
@@ -340,7 +354,7 @@ fn add_whole_overlay_layers(
         // A file directly under a partition root has no child directory that
         // can serve as an overlay layer.  Keep the existing shallow-overlay
         // path for this uncommon, but valid, module layout.
-        if !decision.entry.is_dir && components.len() == root_len + 1 {
+        if decision.entry.file_type != NodeFileType::Directory && components.len() == root_len + 1 {
             let parent = components[..root_len].join("/");
             let (_, target) = map_target(&parent, promoted);
             builder.add_overlay_file(
@@ -369,53 +383,61 @@ fn collect_magic(
     decisions: &[EntryDecision<'_>],
     builder: &mut PlanBuilder,
 ) {
-    let magic_rels: BTreeSet<String> = decisions
+    if !decisions
         .iter()
-        .filter(|decision| decision.mode == Mode::Magic)
-        .map(|decision| decision.entry.relative.clone())
-        .collect();
-
-    if magic_rels.is_empty() {
+        .any(|decision| decision.mode == Mode::Magic)
+    {
         return;
     }
 
     builder.magic_module_ids.insert(module.id.clone());
-
-    // 全部条目都是 magic 时整模块收集,无需允许集;
-    // 有切分时输出精确允许集,供 Selection::path_filter 使用
-    // (目录前缀覆盖子树)。
-    let whole_magic = magic_rels.len() == decisions.len() && !decisions.is_empty();
-    if !whole_magic {
-        builder
-            .magic_path_rules
-            .entry(module.id.clone())
-            .or_default()
-            .extend(magic_rels);
-    }
 }
 
-/// 检查目录根覆盖范围内没有非 overlay 条目。
-fn ensure_no_non_overlay_under(
-    module: &ModuleRecord,
-    decisions: &[EntryDecision<'_>],
-    root: &str,
-) -> Result<()> {
-    for decision in decisions {
-        if decision.mode == Mode::Overlay {
-            continue;
-        }
-        let relative = decision.entry.relative.as_str();
-        if relative == root || relative.starts_with(&format!("{root}/")) {
-            return Err(Error::PlanConflict {
-                target: relative.to_owned(),
-                first_backend: "overlay".to_owned(),
-                first_source: format!("{module_id}:{root}", module_id = module.id),
-                second_backend: mode_name(decision.mode).to_owned(),
-                second_source: format!("{}:{relative}", module.id),
-            });
-        }
+/// Magic `.replace` 在 Overlay 阶段之后替换整个目标目录，因此不能包含已先行
+/// 挂载的 Overlay 后代。Overlay `.replace` 则可由后续 Magic 补入选中子节点。
+fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<()> {
+    let current_target = if node.name.is_empty() {
+        target.to_owned()
+    } else if target.is_empty() {
+        format!("/{}", node.name)
+    } else {
+        format!("{target}/{}", node.name)
+    };
+
+    if let Some(replace_source) = node
+        .sources
+        .iter()
+        .find(|source| source.backend == Mode::Magic && source.replace)
+        && let Some(overlay_source) = first_descendant_source(node, Mode::Overlay)
+    {
+        return Err(Error::PlanConflict {
+            target: current_target,
+            first_backend: "magic".to_owned(),
+            first_source: format!(
+                "{}:{} (.replace)",
+                replace_source.module_id, replace_source.relative
+            ),
+            second_backend: "overlay".to_owned(),
+            second_source: format!("{}:{}", overlay_source.module_id, overlay_source.relative),
+        });
+    }
+
+    for child in node.children.values() {
+        ensure_replace_backend_consistency(child, &current_target)?;
     }
     Ok(())
+}
+
+fn first_descendant_source(node: &MountNode, backend: Mode) -> Option<&MountSource> {
+    for child in node.children.values() {
+        if let Some(source) = child.source_for(backend) {
+            return Some(source);
+        }
+        if let Some(source) = first_descendant_source(child, backend) {
+            return Some(source);
+        }
+    }
+    None
 }
 
 fn normalize_rule_path(key: &str) -> String {
@@ -485,7 +507,12 @@ mod tests {
                 .iter()
                 .map(|(relative, is_dir)| ModuleEntry {
                     relative: (*relative).to_owned(),
-                    is_dir: *is_dir,
+                    file_type: if *is_dir {
+                        NodeFileType::Directory
+                    } else {
+                        NodeFileType::RegularFile
+                    },
+                    replace: false,
                 })
                 .collect(),
         }
@@ -551,9 +578,22 @@ mod tests {
             vec![PathBuf::from("/data/adb/modules/hosts/system/etc/hosts")]
         );
         assert_eq!(result.magic_module_ids, vec!["hosts"]);
-        let allowed = result.magic_path_rules.get("hosts").unwrap();
-        assert!(allowed.contains("system/etc/other"));
-        assert!(!allowed.contains("system/etc/hosts"));
+        assert!(
+            result
+                .tree
+                .find("/system/etc/other")
+                .unwrap()
+                .source_for(Mode::Magic)
+                .is_some()
+        );
+        assert!(
+            result
+                .tree
+                .find("/system/etc/hosts")
+                .unwrap()
+                .source_for(Mode::Magic)
+                .is_none()
+        );
     }
 
     #[test]
@@ -698,10 +738,23 @@ mod tests {
             vec![PathBuf::from("/data/adb/modules/m/system/etc")]
         );
         assert!(result.overlay_files.is_empty());
-        // 其余仍是 magic
-        let allowed = result.magic_path_rules.get("m").unwrap();
-        assert!(allowed.contains("system/bin/x"));
-        assert!(!allowed.contains("system/etc/hosts"));
+        // 其余仍是 magic，后端选择直接保存在共享树上。
+        assert!(
+            result
+                .tree
+                .find("/system/bin/x")
+                .unwrap()
+                .source_for(Mode::Magic)
+                .is_some()
+        );
+        assert!(
+            result
+                .tree
+                .find("/system/etc/hosts")
+                .unwrap()
+                .source_for(Mode::Magic)
+                .is_none()
+        );
     }
 
     #[test]
@@ -757,7 +810,7 @@ mod tests {
     }
 
     #[test]
-    fn module_overlay_with_magic_path_rule_reports_conflict() {
+    fn module_overlay_with_magic_path_rule_shares_filtered_directory_tree() {
         let mut rules = no_rules();
         rules.insert(
             "m".to_owned(),
@@ -769,12 +822,26 @@ mod tests {
         let config = config(Mode::Overlay, rules);
         let module = record("m", &[("system/etc", true), ("system/etc/hosts", false)]);
 
-        let err = plan_err(&[module], &config);
-        assert!(err.to_string().contains("plan conflict"), "{err}");
+        let result = plan(&[module], &config, &[]);
+        assert_eq!(result.overlay_ops[0].target, "/system/etc");
+        assert!(
+            result
+                .tree
+                .find("/system/etc")
+                .unwrap()
+                .has_backend(Mode::Overlay)
+        );
+        assert!(
+            result
+                .tree
+                .find("/system/etc/hosts")
+                .unwrap()
+                .has_backend(Mode::Magic)
+        );
     }
 
     #[test]
-    fn overlay_directory_covering_magic_descendant_reports_conflict() {
+    fn overlay_directory_can_cover_a_magic_descendant_without_staging_it() {
         let mut rules = no_rules();
         rules.insert(
             "m".to_owned(),
@@ -789,24 +856,33 @@ mod tests {
         let config = config(Mode::Ignore, rules);
         let module = record("m", &[("system/etc", true), ("system/etc/hosts", false)]);
 
-        let err = plan_err(&[module], &config);
-        assert!(err.to_string().contains("plan conflict"), "{err}");
+        let result = plan(&[module], &config, &[]);
+        assert_eq!(result.overlay_ops[0].target, "/system/etc");
+        assert_eq!(result.magic_module_ids, vec!["m"]);
+        assert_eq!(
+            result
+                .tree
+                .find("/system/etc/hosts")
+                .unwrap()
+                .file_type_for(Mode::Magic),
+            Some(NodeFileType::RegularFile)
+        );
     }
 
     #[test]
-    fn whole_magic_module_has_id_without_path_rules() {
+    fn whole_magic_module_is_represented_directly_in_shared_tree() {
         let config = config(Mode::Magic, no_rules());
         let module = record("m", &[("system/etc/hosts", false)]);
 
         let result = plan(&[module], &config, &[]);
 
         assert_eq!(result.magic_module_ids, vec!["m"]);
-        assert!(!result.magic_path_rules.contains_key("m"));
+        assert!(result.tree.has_backend(Mode::Magic));
         assert!(result.overlay_ops.is_empty());
     }
 
     #[test]
-    fn ignore_rule_removes_path_from_magic_allowlist() {
+    fn ignore_rule_removes_magic_backend_from_shared_tree_node() {
         let mut rules = no_rules();
         rules.insert(
             "m".to_owned(),
@@ -823,9 +899,106 @@ mod tests {
 
         let result = plan(&[module], &config, &[]);
 
-        let allowed = result.magic_path_rules.get("m").unwrap();
-        assert!(allowed.contains("system/etc/keep"));
-        assert!(!allowed.contains("system/etc/skip"));
+        assert!(
+            result
+                .tree
+                .find("/system/etc/keep")
+                .unwrap()
+                .source_for(Mode::Magic)
+                .is_some()
+        );
+        assert!(
+            result
+                .tree
+                .find("/system/etc/skip")
+                .unwrap()
+                .source_for(Mode::Magic)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn shared_tree_keeps_node_type_replace_and_backend_decision() {
+        let config = config(Mode::Overlay, no_rules());
+        let mut module = record("m", &[("system/etc", true), ("system/etc/link", false)]);
+        module.entries[0].replace = true;
+        module.entries[1].file_type = NodeFileType::Symlink;
+
+        let result = plan(&[module], &config, &[]);
+        let etc = result.tree.find("/system/etc").unwrap();
+        let link = result.tree.find("/system/etc/link").unwrap();
+
+        assert!(etc.replace_for(Mode::Overlay));
+        assert_eq!(
+            link.file_type_for(Mode::Overlay),
+            Some(NodeFileType::Symlink)
+        );
+        assert!(!result.tree.has_backend(Mode::Magic));
+    }
+
+    #[test]
+    fn replace_directory_rejects_descendant_from_other_backend() {
+        let mut rules = no_rules();
+        rules.insert(
+            "m".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::from([("system/etc/link".to_owned(), Mode::Overlay)]),
+            },
+        );
+        let mut module = record("m", &[("system/etc", true), ("system/etc/link", false)]);
+        module.entries[0].replace = true;
+
+        let err = plan_err(&[module], &config(Mode::Ignore, rules));
+        assert!(err.to_string().contains(".replace"), "{err}");
+    }
+
+    #[test]
+    fn overlay_replace_directory_allows_magic_descendant_after_overlay_phase() {
+        let mut rules = no_rules();
+        rules.insert(
+            "m".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Overlay),
+                paths: BTreeMap::from([("system/etc/link".to_owned(), Mode::Magic)]),
+            },
+        );
+        let mut module = record("m", &[("system/etc", true), ("system/etc/link", false)]);
+        module.entries[0].replace = true;
+
+        let result = plan(&[module], &config(Mode::Ignore, rules), &[]);
+        assert!(
+            result
+                .tree
+                .find("/system/etc")
+                .unwrap()
+                .replace_for(Mode::Overlay)
+        );
+        assert!(
+            result
+                .tree
+                .find("/system/etc/link")
+                .unwrap()
+                .has_backend(Mode::Magic)
+        );
+    }
+
+    #[test]
+    fn magic_replace_rejects_overlay_descendant_from_another_module() {
+        let mut rules = no_rules();
+        rules.insert(
+            "magic".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+        let mut magic = record("magic", &[("system/etc", true)]);
+        magic.entries[0].replace = true;
+        let overlay = record("overlay", &[("system/etc/child", false)]);
+
+        let err = plan_err(&[magic, overlay], &config(Mode::Overlay, rules));
+        assert!(err.to_string().contains(".replace"), "{err}");
     }
 
     #[test]

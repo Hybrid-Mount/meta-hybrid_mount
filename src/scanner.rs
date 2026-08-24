@@ -10,7 +10,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
 use crate::defs;
+use crate::mount_tree::NodeFileType;
 use crate::utils::validate_module_id;
 
 /// 模块内一个可挂载条目:`relative` 相对模块根(如 `system/etc/hosts`),
@@ -18,7 +22,8 @@ use crate::utils::validate_module_id;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleEntry {
     pub relative: String,
-    pub is_dir: bool,
+    pub file_type: NodeFileType,
+    pub replace: bool,
 }
 
 /// 只读扫描出的模块记录。
@@ -152,6 +157,9 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
 
         for entry in entries.flatten() {
             let path = entry.path();
+            if entry.file_name() == defs::REPLACE_DIR_FILE_NAME {
+                continue;
+            }
             let Ok(relative) = path.strip_prefix(root) else {
                 continue;
             };
@@ -164,18 +172,20 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
                 continue;
             }
 
-            let Ok(metadata) = fs::symlink_metadata(entry.path()) else {
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
                 continue;
             };
-            let is_dir = metadata.file_type().is_dir();
+            let file_type = classify_file_type(&metadata);
+            let replace = file_type == NodeFileType::Directory && is_replace_dir(&path);
 
             out.push(ModuleEntry {
                 relative: format!("{partition}/{relative}"),
-                is_dir,
+                file_type,
+                replace,
             });
 
-            if is_dir {
-                walk(&entry.path(), root, partition, out);
+            if file_type == NodeFileType::Directory {
+                walk(&path, root, partition, out);
             }
         }
     }
@@ -184,6 +194,26 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
     walk(partition_dir, partition_dir, partition, &mut out);
     out.sort_by(|left, right| left.relative.cmp(&right.relative));
     out
+}
+
+fn classify_file_type(metadata: &fs::Metadata) -> NodeFileType {
+    #[cfg(unix)]
+    if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
+        return NodeFileType::Whiteout;
+    }
+
+    NodeFileType::from(metadata.file_type())
+}
+
+fn is_replace_dir(path: &Path) -> bool {
+    #[cfg(unix)]
+    if extattr::lgetxattr(path, defs::REPLACE_DIR_XATTR)
+        .is_ok_and(|value| String::from_utf8_lossy(&value) == "y")
+    {
+        return true;
+    }
+
+    path.join(defs::REPLACE_DIR_FILE_NAME).exists()
 }
 
 #[cfg(test)]
@@ -228,12 +258,13 @@ mod tests {
             .iter()
             .find(|entry| entry.relative == "system/etc/hosts")
             .unwrap();
-        assert!(!hosts.is_dir);
+        assert_eq!(hosts.file_type, NodeFileType::RegularFile);
         assert!(
             modules[0]
                 .entries
                 .iter()
-                .any(|entry| entry.relative == "system/etc" && entry.is_dir)
+                .any(|entry| entry.relative == "system/etc"
+                    && entry.file_type == NodeFileType::Directory)
         );
 
         fs::remove_dir_all(&root).ok();
@@ -308,6 +339,30 @@ mod tests {
                 .entries
                 .iter()
                 .any(|entry| entry.relative == "product/app/x.apk")
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn replace_marker_is_directory_metadata_not_a_mount_node() {
+        let root = module_dir("replace");
+        let path = write_module(&root, "replace_mod");
+        fs::write(path.join("system/etc/.replace"), "").unwrap();
+
+        let modules = list_modules(&root, &[]);
+        let etc = modules[0]
+            .entries
+            .iter()
+            .find(|entry| entry.relative == "system/etc")
+            .unwrap();
+
+        assert!(etc.replace);
+        assert!(
+            modules[0]
+                .entries
+                .iter()
+                .all(|entry| entry.relative != "system/etc/.replace")
         );
 
         fs::remove_dir_all(&root).ok();

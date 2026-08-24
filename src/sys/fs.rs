@@ -23,8 +23,12 @@ use rustix::fs::{CWD, FileType, Gid, Mode, Uid, chown, mknodat};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::config::Mode as MountMode;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::errors::Error;
 use crate::errors::Result;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::mount_tree::{MountNode, MountTree, NodeFileType};
 
 #[cfg(unix)]
 static ATOMIC_WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -104,15 +108,98 @@ pub struct CopyTreeStats {
     pub bytes: u64,
 }
 
-/// Copy a module tree onto the selected overlay storage without following
-/// symlinks.  `.replace` markers become OverlayFS opaque xattrs, matching the
-/// prepared-tree behavior used by v4.2.0.
+/// 从 planner 的共享节点树物化 OverlayFS 层。只复制标注为 overlay 的贡献，
+/// magic / ignore 子树不会泄漏进 lowerdir；模块源目录始终只读。
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn copy_module_tree(source: &Path, destination: &Path) -> Result<CopyTreeStats> {
-    remove_path(destination)?;
+pub fn stage_overlay_tree(tree: &MountTree, destination: &Path) -> Result<CopyTreeStats> {
+    for module_id in tree.module_ids_for(MountMode::Overlay) {
+        remove_path(&destination.join(module_id))?;
+    }
+
     let mut stats = CopyTreeStats::default();
-    copy_tree_entry(source, destination, &mut stats)?;
+    let mut directory_metadata = Vec::new();
+    stage_overlay_node(&tree.root, destination, &mut stats, &mut directory_metadata)?;
+
+    // 子节点创建完成后再恢复目录元数据，避免 staging 写入改变最终属性。
+    for (source, staged, metadata) in directory_metadata.into_iter().rev() {
+        clone_entry_metadata(&source, &staged, &metadata, false);
+    }
+
     Ok(stats)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn stage_overlay_node(
+    node: &MountNode,
+    destination: &Path,
+    stats: &mut CopyTreeStats,
+    directory_metadata: &mut Vec<(std::path::PathBuf, std::path::PathBuf, fs::Metadata)>,
+) -> Result<()> {
+    for source in node
+        .sources
+        .iter()
+        .filter(|source| source.backend == MountMode::Overlay)
+    {
+        let staged = source
+            .relative
+            .split('/')
+            .fold(destination.join(&source.module_id), |path, component| {
+                path.join(component)
+            });
+        let metadata = fs::symlink_metadata(&source.source_path)?;
+
+        if source.file_type == NodeFileType::Directory {
+            fs::create_dir_all(&staged)?;
+            stats.directories += 1;
+            if source.replace {
+                set_overlay_opaque(&staged)?;
+                stats.opaque_directories += 1;
+            }
+            directory_metadata.push((source.source_path.clone(), staged, metadata));
+            continue;
+        }
+
+        if let Some(parent) = staged.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        match source.file_type {
+            NodeFileType::RegularFile => {
+                fs::copy(&source.source_path, &staged)?;
+                stats.files += 1;
+                stats.bytes = stats.bytes.saturating_add(metadata.len());
+            }
+            NodeFileType::Symlink => {
+                symlink(fs::read_link(&source.source_path)?, &staged)?;
+                stats.symlinks += 1;
+            }
+            NodeFileType::Whiteout => {
+                make_device_node(&staged, &metadata)?;
+                stats.special_entries += 1;
+            }
+            NodeFileType::Directory => unreachable!("directory handled above"),
+        }
+
+        clone_entry_metadata(
+            &source.source_path,
+            &staged,
+            &metadata,
+            source.file_type == NodeFileType::Symlink,
+        );
+    }
+
+    for child in node.children.values() {
+        stage_overlay_node(child, destination, stats, directory_metadata)?;
+    }
+    Ok(())
+}
+
+/// 复制已经物化的单个 Overlay 节点到 shallow layer，保留符号链接、
+/// whiteout 设备节点、权限、所有权和 SELinux 上下文。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn copy_prepared_entry(source: &Path, destination: &Path) -> Result<()> {
+    let mut stats = CopyTreeStats::default();
+    copy_tree_entry(source, destination, &mut stats)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -333,5 +420,80 @@ mod tests {
         assert!(!file.exists());
         remove_path(&dir).unwrap();
         assert!(!dir.exists());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn shared_tree_staging_keeps_overlay_nodes_and_excludes_magic_nodes() {
+        use crate::mount_tree::MountSource;
+
+        let fixture = std::env::temp_dir().join(format!(
+            "hybrid-mount-shared-tree-stage-{}",
+            std::process::id()
+        ));
+        remove_path(&fixture).unwrap();
+        let module = fixture.join("source/m");
+        let etc = module.join("system/etc");
+        fs::create_dir_all(&etc).unwrap();
+        fs::write(etc.join("overlay.conf"), "overlay").unwrap();
+        fs::write(etc.join("magic.conf"), "magic").unwrap();
+        symlink("overlay.conf", etc.join("overlay.link")).unwrap();
+
+        let source = |relative: &str, file_type: NodeFileType, backend: MountMode| MountSource {
+            module_id: "m".to_owned(),
+            relative: relative.to_owned(),
+            source_path: relative
+                .split('/')
+                .fold(module.clone(), |path, component| path.join(component)),
+            file_type,
+            replace: false,
+            backend,
+        };
+        let mut tree = MountTree::default();
+        tree.insert(
+            "/system/etc",
+            source("system/etc", NodeFileType::Directory, MountMode::Overlay),
+        );
+        tree.insert(
+            "/system/etc/overlay.conf",
+            source(
+                "system/etc/overlay.conf",
+                NodeFileType::RegularFile,
+                MountMode::Overlay,
+            ),
+        );
+        tree.insert(
+            "/system/etc/overlay.link",
+            source(
+                "system/etc/overlay.link",
+                NodeFileType::Symlink,
+                MountMode::Overlay,
+            ),
+        );
+        tree.insert(
+            "/system/etc/magic.conf",
+            source(
+                "system/etc/magic.conf",
+                NodeFileType::RegularFile,
+                MountMode::Magic,
+            ),
+        );
+
+        let staging = fixture.join("staging");
+        let stats = stage_overlay_tree(&tree, &staging).unwrap();
+        let staged_etc = staging.join("m/system/etc");
+        assert_eq!(
+            fs::read_to_string(staged_etc.join("overlay.conf")).unwrap(),
+            "overlay"
+        );
+        assert_eq!(
+            fs::read_link(staged_etc.join("overlay.link")).unwrap(),
+            Path::new("overlay.conf")
+        );
+        assert!(!staged_etc.join("magic.conf").exists());
+        assert_eq!(stats.files, 1);
+        assert_eq!(stats.symlinks, 1);
+
+        remove_path(&fixture).unwrap();
     }
 }

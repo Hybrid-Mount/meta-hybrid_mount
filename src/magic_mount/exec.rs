@@ -9,6 +9,7 @@
 //! - whiteout 只记录不挂载;所有写入都发生在私有随机 tmpfs staging,
 //!   模块源目录只读。
 
+use std::collections::BTreeSet;
 use std::fs::{self, DirEntry};
 use std::os::unix::fs::{MetadataExt, symlink};
 use std::path::{Path, PathBuf};
@@ -19,33 +20,33 @@ use rustix::mount::{
     MountFlags, MountPropagationFlags, mount, mount_bind, mount_change, mount_move, mount_remount,
 };
 
+use crate::config::Mode as MountMode;
 use crate::errors::{Error, Result};
-use crate::magic_mount::node::{Node, NodeFileType};
-use crate::magic_mount::scan::{ScanOptions, collect_module_files};
+use crate::mount_tree::{MountNode, MountTree, NodeFileType};
 use crate::utils::{ensure_dir_exists, lgetfilecon, lsetfilecon};
 
 static MOUNTED_FILES: AtomicU32 = AtomicU32::new(0);
 static IGNORED_FILES: AtomicU32 = AtomicU32::new(0);
 static MOUNTED_SYMLINKS: AtomicU32 = AtomicU32::new(0);
 
-pub struct MagicMount {
-    node: Node,
+pub struct MagicMount<'a> {
+    node: &'a MountNode,
     path: PathBuf,
     work_dir_path: PathBuf,
     has_tmpfs: bool,
     umount: bool,
 }
 
-impl MagicMount {
+impl<'a> MagicMount<'a> {
     pub fn new(
-        node: &Node,
+        node: &'a MountNode,
         path: &Path,
         work_dir_path: &Path,
         has_tmpfs: bool,
         umount: bool,
     ) -> Self {
         Self {
-            node: node.clone(),
+            node,
             path: path.join(&node.name),
             work_dir_path: work_dir_path.join(&node.name),
             has_tmpfs,
@@ -54,7 +55,13 @@ impl MagicMount {
     }
 
     pub fn do_mount(&mut self) -> Result<()> {
-        match self.node.file_type {
+        let file_type = self.node.file_type_for(MountMode::Magic).ok_or_else(|| {
+            Error::msg(format!(
+                "magic node has no selected source: {}",
+                self.path.display()
+            ))
+        })?;
+        match file_type {
             NodeFileType::Symlink => self.mount_symlink(),
             NodeFileType::RegularFile => self.mount_regular_file(),
             NodeFileType::Directory => self.mount_directory(),
@@ -66,9 +73,9 @@ impl MagicMount {
     }
 }
 
-impl MagicMount {
+impl MagicMount<'_> {
     fn mount_symlink(&self) -> Result<()> {
-        let Some(module_path) = &self.node.module_path else {
+        let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootSymlink {
                 path: self.path.display().to_string(),
             });
@@ -92,7 +99,7 @@ impl MagicMount {
     }
 
     fn mount_regular_file(&self) -> Result<()> {
-        let Some(module_path) = &self.node.module_path else {
+        let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootFile {
                 path: self.path.display().to_string(),
             });
@@ -132,18 +139,29 @@ impl MagicMount {
     }
 
     fn mount_directory(&mut self) -> Result<()> {
-        let mut tmpfs = !self.has_tmpfs && self.node.replace && self.node.module_path.is_some();
+        let replace = self.node.replace_for(MountMode::Magic);
+        let module_path = self.node.module_path_for(MountMode::Magic);
+        let mut tmpfs = !self.has_tmpfs && replace && module_path.is_some();
+        let mut skipped_children = BTreeSet::new();
 
         if !self.has_tmpfs && !tmpfs {
-            for (name, node) in &mut self.node.children {
+            for (name, node) in self
+                .node
+                .children
+                .iter()
+                .filter(|(_, node)| node.has_backend(MountMode::Magic))
+            {
                 let real_path = self.path.join(name);
-                let need = match node.file_type {
+                let node_type = node
+                    .file_type_for(MountMode::Magic)
+                    .expect("filtered magic child has a type");
+                let need = match node_type {
                     NodeFileType::Symlink => true,
                     NodeFileType::Whiteout => real_path.exists(),
                     _ => {
                         if let Ok(metadata) = real_path.symlink_metadata() {
                             let file_type = NodeFileType::from(metadata.file_type());
-                            file_type != node.file_type || file_type == NodeFileType::Symlink
+                            file_type != node_type || file_type == NodeFileType::Symlink
                         } else {
                             // 实际路径不存在:必须用 tmpfs 承载新文件。
                             true
@@ -152,13 +170,13 @@ impl MagicMount {
                 };
 
                 if need {
-                    if self.node.module_path.is_none() {
+                    if module_path.is_none() {
                         log::error!(
                             "cannot create tmpfs on {}, ignored child: {name}",
                             self.path.display()
                         );
                         IGNORED_FILES.fetch_add(1, Ordering::Relaxed);
-                        node.skip = true;
+                        skipped_children.insert(name.clone());
                         continue;
                     }
                     tmpfs = true;
@@ -169,7 +187,7 @@ impl MagicMount {
         let has_tmpfs = tmpfs || self.has_tmpfs;
 
         if has_tmpfs {
-            tmpfs_skeleton(&self.path, &self.work_dir_path, &self.node)?;
+            tmpfs_skeleton(&self.path, &self.work_dir_path, self.node)?;
         }
 
         if tmpfs {
@@ -183,12 +201,14 @@ impl MagicMount {
             })?;
         }
 
-        if self.path.exists() && !self.node.replace {
-            self.mount_path(has_tmpfs)?;
-        }
+        let processed = if self.path.exists() && !replace {
+            self.mount_path(has_tmpfs, &skipped_children)?
+        } else {
+            BTreeSet::new()
+        };
 
-        if self.node.replace {
-            if self.node.module_path.is_none() {
+        if replace {
+            if module_path.is_none() {
                 return Err(Error::DirDeclared {
                     path: self.path.display().to_string(),
                 });
@@ -196,8 +216,13 @@ impl MagicMount {
             log::debug!("dir {} is replaced", self.path.display());
         }
 
-        for (name, node) in &self.node.children {
-            if node.skip {
+        for (name, node) in self
+            .node
+            .children
+            .iter()
+            .filter(|(_, node)| node.has_backend(MountMode::Magic))
+        {
+            if processed.contains(name) || skipped_children.contains(name) {
                 continue;
             }
 
@@ -263,17 +288,28 @@ impl MagicMount {
 
     /// 处理实际目录中已有的条目:命中收集树的走 magic mount,
     /// 其余条目在 tmpfs 场景下 mirror 进 staging。
-    fn mount_path(&mut self, has_tmpfs: bool) -> Result<()> {
+    fn mount_path(
+        &self,
+        has_tmpfs: bool,
+        skipped_children: &BTreeSet<String>,
+    ) -> Result<BTreeSet<String>> {
+        let mut processed = BTreeSet::new();
         for entry in self.path.read_dir()?.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
 
-            let result = if let Some(node) = self.node.children.remove(&name) {
-                if node.skip {
+            let result = if let Some(node) = self
+                .node
+                .children
+                .get(&name)
+                .filter(|node| node.has_backend(MountMode::Magic))
+            {
+                processed.insert(name.clone());
+                if skipped_children.contains(&name) {
                     continue;
                 }
 
                 MagicMount::new(
-                    &node,
+                    node,
                     &self.path,
                     &self.work_dir_path,
                     has_tmpfs,
@@ -299,7 +335,7 @@ impl MagicMount {
             }
         }
 
-        Ok(())
+        Ok(processed)
     }
 }
 
@@ -311,20 +347,26 @@ pub struct MagicMountStats {
     pub ignored_files: u32,
 }
 
-/// 完整 magic mount 入口:扫描 → 建 staging tmpfs → 执行 → 汇总。
+/// 完整 magic mount 入口:消费共享树 → 建 staging tmpfs → 执行 → 汇总。
 pub fn magic_mount(
-    module_dir: &Path,
+    tree: &MountTree,
     mount_source: &str,
     work_dir: &Path,
-    options: &ScanOptions<'_>,
     umount: bool,
 ) -> Result<MagicMountStats> {
-    let Some(root) = collect_module_files(module_dir, options)? else {
+    if !tree.has_backend(MountMode::Magic) {
         log::info!("no modules selected for magic mount, skipping");
         return Ok(MagicMountStats::default());
-    };
+    }
 
-    log::debug!("collected: {root:?}");
+    MOUNTED_FILES.store(0, Ordering::Relaxed);
+    MOUNTED_SYMLINKS.store(0, Ordering::Relaxed);
+    IGNORED_FILES.store(0, Ordering::Relaxed);
+
+    log::debug!(
+        "shared mount tree selected for magic execution: {:?}",
+        tree.root
+    );
 
     ensure_dir_exists(work_dir)?;
 
@@ -340,7 +382,7 @@ pub fn magic_mount(
     )
     .map_err(|err| Error::msg(format!("make {} private: {err}", work_dir.display())))?;
 
-    MagicMount::new(&root, Path::new("/"), work_dir, false, umount).do_mount()?;
+    MagicMount::new(&tree.root, Path::new("/"), work_dir, false, umount).do_mount()?;
 
     let files = MOUNTED_FILES.load(Ordering::Relaxed);
     let symlinks = MOUNTED_SYMLINKS.load(Ordering::Relaxed);
@@ -354,7 +396,7 @@ pub fn magic_mount(
 }
 
 /// 按真实路径(存在时)或模块源路径复制 mode/uid/gid/SELinux 到 staging。
-fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &Node) -> Result<()> {
+fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result<()> {
     log::debug!(
         "creating tmpfs skeleton for {} at {}",
         path.display(),
@@ -365,8 +407,8 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &Node) -> Result<()> 
 
     let (metadata, reference) = if path.exists() {
         (path.metadata()?, path.to_path_buf())
-    } else if let Some(module_path) = &node.module_path {
-        (module_path.metadata()?, module_path.clone())
+    } else if let Some(module_path) = node.module_path_for(MountMode::Magic) {
+        (module_path.metadata()?, module_path.to_path_buf())
     } else {
         return Err(Error::MountRootFile {
             path: path.display().to_string(),

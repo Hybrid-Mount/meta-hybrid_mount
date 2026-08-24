@@ -529,11 +529,13 @@ mod tests {
         module.entries = vec![
             crate::scanner::ModuleEntry {
                 relative: "system/etc".to_owned(),
-                is_dir: true,
+                file_type: crate::mount_tree::NodeFileType::Directory,
+                replace: false,
             },
             crate::scanner::ModuleEntry {
                 relative: "system/etc/hosts".to_owned(),
-                is_dir: false,
+                file_type: crate::mount_tree::NodeFileType::RegularFile,
+                replace: false,
             },
         ];
 

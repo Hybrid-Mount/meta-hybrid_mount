@@ -15,8 +15,6 @@ use rustix::mount::{
 };
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::fs::symlink;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::config::{Config, OverlayMode};
@@ -24,8 +22,6 @@ use crate::defs;
 use crate::errors::{Error, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::magic_mount::exec;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::magic_mount::scan::{ScanOptions, Selection};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::ModuleRecord;
@@ -262,47 +258,24 @@ fn prepare_overlay_storage(
     plan: &mut MountPlan,
     storage_root: &Path,
 ) -> Result<()> {
-    let overlay_ids: BTreeSet<&str> = plan.overlay_module_ids.iter().map(String::as_str).collect();
-
     log::info!(
         "overlay staging start: root={}, modules={}",
         storage_root.display(),
-        overlay_ids.len()
+        plan.overlay_module_ids.len()
     );
 
-    for module in modules
-        .iter()
-        .filter(|module| overlay_ids.contains(module.id.as_str()))
-    {
-        let destination = storage_root.join(&module.id);
-        log::info!(
-            "overlay staging module: id={}, source={}, source_mount={}, destination={}",
-            module.id,
-            module.source_path.display(),
-            describe_path_mount(&module.source_path),
-            destination.display()
-        );
-        let stats =
-            crate::sys::fs::copy_module_tree(&module.source_path, &destination).map_err(|err| {
-                Error::msg(format!(
-                    "stage overlay module {} from {} to {}: {err}",
-                    module.id,
-                    module.source_path.display(),
-                    destination.display()
-                ))
-            })?;
-        log::info!(
-            "overlay staging module complete: id={}, dirs={}, files={}, symlinks={}, special={}, opaque={}, bytes={}, destination_mount={}",
-            module.id,
-            stats.directories,
-            stats.files,
-            stats.symlinks,
-            stats.special_entries,
-            stats.opaque_directories,
-            stats.bytes,
-            describe_path_mount(&destination)
-        );
-    }
+    let stats = crate::sys::fs::stage_overlay_tree(&plan.tree, storage_root)
+        .map_err(|err| Error::msg(format!("stage shared overlay tree: {err}")))?;
+    log::info!(
+        "overlay staging tree complete: dirs={}, files={}, symlinks={}, whiteouts={}, opaque={}, bytes={}, destination_mount={}",
+        stats.directories,
+        stats.files,
+        stats.symlinks,
+        stats.special_entries,
+        stats.opaque_directories,
+        stats.bytes,
+        describe_path_mount(storage_root)
+    );
 
     for op in &mut plan.overlay_ops {
         for lowerdir in &mut op.lowerdirs {
@@ -500,13 +473,8 @@ fn run_mount_pipeline_impl() -> Result<()> {
             transient_root.as_deref(),
             &mount_source,
         )?;
-        let magic_stats = mount_magic_phase(
-            &config,
-            &modules,
-            &plan,
-            &mount_source,
-            magic_work_dir.as_deref(),
-        )?;
+        let magic_stats =
+            mount_magic_phase(&config, &plan, &mount_source, magic_work_dir.as_deref())?;
 
         // Commit the KernelSU try-unmount list. This registers future cleanup;
         // it does not unmount the entries immediately.
@@ -644,7 +612,7 @@ fn cleanup_tmp_root(tmp_root: &Path) -> Result<()> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn detect_promoted_partitions() -> BTreeSet<String> {
-    use crate::magic_mount::node::BUILTIN_PARTITIONS;
+    use crate::mount_tree::BUILTIN_PARTITIONS;
 
     let builtin_requirements = BUILTIN_PARTITIONS
         .iter()
@@ -869,31 +837,12 @@ fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(source)?;
-    if metadata.file_type().is_symlink() {
-        symlink(fs::read_link(source)?, dest)?;
-    } else {
-        fs::copy(source, dest)?;
-        fs::set_permissions(dest, metadata.permissions())?;
-    }
-
-    if let Ok(context) = utils::lgetfilecon(source)
-        && let Err(err) = utils::lsetfilecon(dest, &context)
-    {
-        log::warn!(
-            "clone selinux context skipped: src={}, dst={}, error={err}",
-            source.display(),
-            dest.display()
-        );
-    }
-
-    Ok(())
+    crate::sys::fs::copy_prepared_entry(source, dest)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_magic_phase(
     config: &Config,
-    modules: &[ModuleRecord],
     plan: &MountPlan,
     mount_source: &str,
     work_dir: Option<&Path>,
@@ -902,58 +851,16 @@ fn mount_magic_phase(
         return Ok(exec::MagicMountStats::default());
     }
 
-    let magic_modules: BTreeSet<String> = plan.magic_module_ids.iter().cloned().collect();
-    let source_by_id: BTreeMap<String, PathBuf> = modules
-        .iter()
-        .map(|module| (module.id.clone(), module.source_path.clone()))
-        .collect();
-    let magic_rules = plan.magic_path_rules.clone();
-
-    let path_filter = move |module_id: &str, path: &Path| -> bool {
-        let Some(allowed) = magic_rules.get(module_id) else {
-            return true;
-        };
-        let Some(root) = source_by_id.get(module_id) else {
-            return true;
-        };
-        let Ok(relative) = path.strip_prefix(root) else {
-            return true;
-        };
-        let relative = relative
-            .components()
-            .filter_map(|component| component.as_os_str().to_str())
-            .collect::<Vec<_>>()
-            .join("/");
-
-        allowed
-            .iter()
-            .any(|allow| relative == *allow || relative.starts_with(&format!("{allow}/")))
-    };
-
-    let selection = Selection {
-        modules: Some(&magic_modules),
-        path_filter: Some(&path_filter),
-    };
-    let extra_partitions = managed_partition_names();
-    let options = ScanOptions {
-        extra_partitions: &extra_partitions,
-        ignore_sources: &[],
-        selection,
-    };
-
     log::info!(
-        "magic mount phase start: modules={}, module_ids={}, managed_partitions={}, path_rule_modules={}, register_unmountable={}",
-        magic_modules.len(),
-        magic_modules.iter().cloned().collect::<Vec<_>>().join(","),
-        extra_partitions.join(","),
-        plan.magic_path_rules.len(),
+        "magic mount phase start: modules={}, module_ids={}, shared_tree=true, register_unmountable={}",
+        plan.magic_module_ids.len(),
+        plan.magic_module_ids.join(","),
         !config.disable_umount
     );
     let stats = exec::magic_mount(
-        &config.moduledir,
+        &plan.tree,
         mount_source,
         work_dir.ok_or_else(|| Error::msg("magic mount work directory is unavailable"))?,
-        &options,
         !config.disable_umount,
     )?;
     log::info!(
