@@ -7,8 +7,10 @@ import {
   MiuixSmallTitle,
   MiuixBasicComponent,
   MiuixText,
-  MiuixButton,
+  MiuixIcon,
+  MiuixIconButton,
 } from "miuix-vue";
+import { Refresh } from "miuix-vue/icons";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
@@ -104,23 +106,23 @@ onMounted(async () => {
       />
     </MiuixCard>
 
-    <MiuixCard class="card">
-      <MiuixBasicComponent
-        :title="t('status.installTitle')"
-        :summary="
-          sysStore.installState
-            ? sysStore.installState.compatible
-              ? t('status.compatible')
-              : t('status.incompatible')
-            : '-'
-        "
+    <div class="actions">
+      <MiuixIconButton
+        :title="t('common.refresh')"
+        :aria-label="t('common.refresh')"
+        :disabled="sysStore.loading"
+        @click="sysStore.loadStatus()"
       >
-        <template #end>
-          <MiuixButton @click="sysStore.loadStatus()">
-            {{ t("common.refresh") }}
-          </MiuixButton>
-        </template>
-      </MiuixBasicComponent>
-    </MiuixCard>
+        <MiuixIcon :icon="Refresh" :size="22" />
+      </MiuixIconButton>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0;
+}
+</style>
