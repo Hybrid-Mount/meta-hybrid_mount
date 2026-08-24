@@ -51,12 +51,12 @@ pub fn run_mount_pipeline() -> Result<()> {
 /// 由执行数字汇总出状态快照统计(纯函数,可跨平台测试)。
 pub fn pipeline_stats(
     overlay_dir_mounts: usize,
-    shallow_layer_mounts: usize,
+    shallow_overlay_mounts: usize,
     magic_files: usize,
     magic_symlinks: usize,
     ignored_entries: usize,
 ) -> MountStatistics {
-    let successful = overlay_dir_mounts + shallow_layer_mounts + magic_files + magic_symlinks;
+    let successful = overlay_dir_mounts + shallow_overlay_mounts + magic_files + magic_symlinks;
 
     MountStatistics {
         total_mounts: successful,
@@ -64,7 +64,7 @@ pub fn pipeline_stats(
         failed_mounts: 0,
         files_mounted: magic_files,
         symlinks_created: magic_symlinks,
-        overlayfs_mounts: overlay_dir_mounts + shallow_layer_mounts,
+        overlayfs_mounts: overlay_dir_mounts + shallow_overlay_mounts,
         ignored_entries,
     }
 }
@@ -464,7 +464,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             .as_ref()
             .map(|staging| crate::sys::temp::create_random_dir(staging.path()))
             .transpose()?;
-        let (overlay_dir_mounts, shallow_layer_mounts, active_mounts) = mount_overlay_phase(
+        let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts) = mount_overlay_phase(
             &plan,
             &config,
             overlay_storage
@@ -507,13 +507,13 @@ fn run_mount_pipeline_impl() -> Result<()> {
 
         Ok((
             overlay_dir_mounts,
-            shallow_layer_mounts,
+            shallow_overlay_mounts,
             active_mounts,
             magic_stats,
         ))
     })();
 
-    let (overlay_dir_mounts, shallow_layer_mounts, active_mounts, magic_stats) =
+    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats) =
         match execution_result {
             Ok(result) => result,
             Err(err) => {
@@ -544,7 +544,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     state.active_mounts = active_mounts;
     state.mount_stats = pipeline_stats(
         overlay_dir_mounts,
-        shallow_layer_mounts,
+        shallow_overlay_mounts,
         magic_stats.mounted_files as usize,
         magic_stats.mounted_symlinks as usize,
         magic_stats.ignored_files as usize,
@@ -652,7 +652,7 @@ fn mount_overlay_phase(
     use crate::overlayfs::overlayfs::mount_overlay;
 
     let mut overlay_dir_mounts = 0;
-    let mut shallow_layer_mounts = 0;
+    let mut shallow_overlay_mounts = 0;
     let mut active_mounts = Vec::new();
 
     for (operation_index, op) in plan.overlay_ops.iter().enumerate() {
@@ -717,7 +717,7 @@ fn mount_overlay_phase(
     if !plan.overlay_files.is_empty() {
         let storage_root = storage_root
             .ok_or_else(|| Error::msg("overlay file rules require prepared overlay storage"))?;
-        shallow_layer_mounts = mount_overlay_files(
+        shallow_overlay_mounts = mount_overlay_files(
             &plan.overlay_files,
             config,
             storage_root,
@@ -731,7 +731,7 @@ fn mount_overlay_phase(
 
     active_mounts.sort();
     active_mounts.dedup();
-    Ok((overlay_dir_mounts, shallow_layer_mounts, active_mounts))
+    Ok((overlay_dir_mounts, shallow_overlay_mounts, active_mounts))
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -747,7 +747,8 @@ fn mount_overlay_files(
 
     let staging_root = crate::sys::temp::create_random_dir(storage_root)?;
 
-    let mut layer_mounts = 0;
+    let mut overlay_mounts = 0;
+    let mut total_layers = 0;
     log::info!(
         "shallow overlay phase start: targets={}, staging_root={}, staging_mount={}",
         files.len(),
@@ -813,15 +814,16 @@ fn mount_overlay_files(
             describe_path_mount(Path::new(target))
         );
         active_mounts.push(target.clone());
-        layer_mounts += lowerdirs.len();
+        total_layers += lowerdirs.len();
+        overlay_mounts += 1;
     }
 
     log::info!(
         "shallow overlay phase complete: targets={}, layers={}",
         files.len(),
-        layer_mounts
+        total_layers
     );
-    Ok(layer_mounts)
+    Ok(overlay_mounts)
 }
 
 fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {

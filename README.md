@@ -8,7 +8,7 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 - 路径规则优先于模块默认值，模块默认值优先于全局默认值。
 - OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
 - Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- WebUI 提供 Miuix（默认）与 MD3 两套界面。
+- WebUI 提供 MD3（默认）与 Miuix 两套界面。
 - 支持 arm64、armv7 与 x86_64，安装脚本会自动选择对应二进制。
 
 ## 安装

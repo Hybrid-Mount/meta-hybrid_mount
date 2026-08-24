@@ -50,7 +50,8 @@
     "installTitle": "Installation",
     "compatible": "Compatible",
     "incompatible": "Incompatible",
-    "modeStats": "Mode Statistics"
+    "modeStats": "Mode Statistics",
+    "mountCount": "{count} mounts"
   },
   "config": {
     "title": "Configuration",

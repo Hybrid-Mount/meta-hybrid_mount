@@ -50,7 +50,8 @@
     "installTitle": "安装状态",
     "compatible": "兼容",
     "incompatible": "不兼容",
-    "modeStats": "模式统计"
+    "modeStats": "模式统计",
+    "mountCount": "{count} 个挂载"
   },
   "config": {
     "title": "配置",

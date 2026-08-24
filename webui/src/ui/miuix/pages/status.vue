@@ -22,6 +22,12 @@ const state = computed(() => sysStore.state);
 const mountedCount = computed(
   () => moduleStore.modules.filter((module) => module.is_mounted).length,
 );
+const overlayMountCount = computed(() => state.value?.mount_stats.overlayfs_mounts ?? 0);
+const magicMountCount = computed(
+  () =>
+    (state.value?.mount_stats.files_mounted ?? 0) +
+    (state.value?.mount_stats.symlinks_created ?? 0),
+);
 
 function handleSetNav(index: number): void {
   if (!sysStore.loading) uiStore.setNavindex(index);
@@ -81,11 +87,23 @@ onMounted(async () => {
       <MiuixBasicComponent
         :title="t('status.overlayModules')"
         :summary="state?.overlay_modules.join(', ') || '0'"
-      />
+      >
+        <template #end>
+          <MiuixText>
+            {{ t("status.mountCount", { count: overlayMountCount }) }}
+          </MiuixText>
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.magicModules')"
         :summary="state?.magic_modules.join(', ') || '0'"
-      />
+      >
+        <template #end>
+          <MiuixText>
+            {{ t("status.mountCount", { count: magicMountCount }) }}
+          </MiuixText>
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.activeMounts')"
         :summary="state?.active_mounts.join(', ') || t('status.notReady')"

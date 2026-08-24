@@ -214,17 +214,6 @@ pub fn app_modules(
                 Mode::Ignore
             };
 
-            let rule = config.rules.get(&module.id);
-            let default_mode = rule.and_then(|rule| rule.default_mode);
-            let paths = rule
-                .map(|rule| {
-                    rule.paths
-                        .iter()
-                        .map(|(path, mode)| (path.clone(), mode.as_str().to_owned()))
-                        .collect()
-                })
-                .unwrap_or_default();
-
             let mount_error = mount_errors
                 .iter()
                 .any(|id| id == &module.id)
@@ -242,13 +231,35 @@ pub fn app_modules(
                 source_path: module.source_path.to_string_lossy().into_owned(),
                 suggest_ignore: mount_error.is_some(),
                 mount_error,
-                rules: AppModuleRules {
-                    default_mode: default_mode.map(|mode| mode.as_str().to_owned()),
-                    paths,
-                },
+                rules: app_module_rules(config, &module.id),
             }
         })
         .collect()
+}
+
+fn app_module_rules(config: &Config, module_id: &str) -> AppModuleRules {
+    let rule = config.rules.get(module_id);
+    AppModuleRules {
+        default_mode: rule
+            .and_then(|rule| rule.default_mode)
+            .map(|mode| mode.as_str().to_owned()),
+        paths: rule
+            .map(|rule| {
+                rule.paths
+                    .iter()
+                    .map(|(path, mode)| (path.clone(), mode.as_str().to_owned()))
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
+}
+
+/// The mount result is a boot snapshot, but rules are editable at runtime. Keep
+/// the mounted backend/status intact while presenting the latest saved rules.
+fn sync_app_module_rules(modules: &mut [AppModule], config: &Config) {
+    for module in modules {
+        module.rules = app_module_rules(config, &module.id);
+    }
 }
 
 pub fn write_scan_ret(modules: &[AppModule]) -> Result<()> {
@@ -264,7 +275,16 @@ pub fn write_scan_ret(modules: &[AppModule]) -> Result<()> {
 pub fn handle_modules() -> Result<()> {
     match fs::read_to_string(defs::SCAN_RET_PATH) {
         Ok(text) if serde_json::from_str::<Vec<AppModule>>(&text).is_ok() => {
-            println!("{text}");
+            let mut modules: Vec<AppModule> = serde_json::from_str(&text)?;
+            let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+            sync_app_module_rules(&mut modules, &config);
+            if let Err(write_err) = write_scan_ret(&modules) {
+                log::warn!(
+                    "failed to refresh rules in {}: {write_err}",
+                    defs::SCAN_RET_PATH
+                );
+            }
+            println!("{}", serde_json::to_string_pretty(&modules)?);
             return Ok(());
         }
         Ok(_) => {
@@ -506,6 +526,31 @@ mod tests {
         assert_eq!(list[1].rules.paths["system/etc/hosts"], "overlay");
         assert_eq!(list[2].mode, "ignore");
         assert!(!list[2].is_mounted);
+    }
+
+    #[test]
+    fn cached_snapshot_keeps_boot_backend_but_refreshes_saved_rules() {
+        let modules = [record("switchable")];
+        let boot_config = Config::default();
+        let plan = MountPlan {
+            overlay_module_ids: vec!["switchable".to_owned()],
+            ..MountPlan::default()
+        };
+        let mut snapshot = app_modules(&modules, &boot_config, &plan, &[]);
+
+        let mut edited_config = Config::default();
+        edited_config.rules.insert(
+            "switchable".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+        sync_app_module_rules(&mut snapshot, &edited_config);
+
+        assert_eq!(snapshot[0].mode, "overlay");
+        assert!(snapshot[0].is_mounted);
+        assert_eq!(snapshot[0].rules.default_mode.as_deref(), Some("magic"));
     }
 
     #[test]

@@ -247,9 +247,20 @@ onMounted(async () => {
   border-radius: 13px;
   padding: 0 12px;
   color: var(--m-color-on-surface, #1d1b20);
-  background: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
+  -webkit-text-fill-color: currentColor;
+  background: var(--m-color-surface-container-highest, #e8e8e8);
+  caret-color: var(--m-color-primary, #6750a4);
+  color-scheme: light dark;
   font: inherit;
   text-align: end;
+}
+
+@media (prefers-color-scheme: dark) {
+  .preference-input {
+    color: var(--m-color-on-surface, #f2f2f2);
+    background: var(--m-color-surface-container-highest, #2d2d2d);
+    border-color: var(--m-color-outline, #404040);
+  }
 }
 
 .preference-input:hover {

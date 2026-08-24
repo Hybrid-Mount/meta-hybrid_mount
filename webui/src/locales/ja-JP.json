@@ -49,7 +49,8 @@
     "installTitle": "Installation",
     "compatible": "Compatible",
     "incompatible": "Incompatible",
-    "modeStats": "モード統計"
+    "modeStats": "モード統計",
+    "mountCount": "{count} マウント"
   },
   "config": {
     "moduledir": "モジュールのディレクトリ",

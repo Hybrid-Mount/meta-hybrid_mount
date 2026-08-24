@@ -49,7 +49,8 @@
     "installTitle": "Installation",
     "compatible": "Compatible",
     "incompatible": "Incompatible",
-    "modeStats": "Statistik"
+    "modeStats": "Statistik",
+    "mountCount": "{count} mount"
   },
   "config": {
     "moduledir": "Direktori Modul",

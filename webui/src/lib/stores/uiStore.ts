@@ -7,7 +7,7 @@ import type { UiStyle } from "../types";
 
 const lang = ref("en-US");
 const isReady = ref(false);
-const uiStyle = ref<UiStyle>("miuix");
+const uiStyle = ref<UiStyle>("md3");
 const monetEnabled = ref(false);
 const navindex = ref(0);
 

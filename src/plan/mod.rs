@@ -882,6 +882,30 @@ mod tests {
     }
 
     #[test]
+    fn rebuilding_a_module_after_backend_switch_drops_the_old_backend() {
+        let module = record(
+            "switchable",
+            &[("system/etc", true), ("system/etc/hosts", false)],
+        );
+
+        let overlay_plan = plan(
+            std::slice::from_ref(&module),
+            &config(Mode::Overlay, no_rules()),
+            &[],
+        );
+        assert_eq!(overlay_plan.overlay_module_ids, vec!["switchable"]);
+        assert!(overlay_plan.magic_module_ids.is_empty());
+        assert!(overlay_plan.tree.has_backend(Mode::Overlay));
+        assert!(!overlay_plan.tree.has_backend(Mode::Magic));
+
+        let magic_plan = plan(&[module], &config(Mode::Magic, no_rules()), &[]);
+        assert!(magic_plan.overlay_module_ids.is_empty());
+        assert_eq!(magic_plan.magic_module_ids, vec!["switchable"]);
+        assert!(!magic_plan.tree.has_backend(Mode::Overlay));
+        assert!(magic_plan.tree.has_backend(Mode::Magic));
+    }
+
+    #[test]
     fn ignore_rule_removes_magic_backend_from_shared_tree_node() {
         let mut rules = no_rules();
         rules.insert(

@@ -16,6 +16,14 @@ const mountedCount = computed(
 );
 const overlayCount = computed(() => sysStore.state?.mode_stats.overlayfs ?? 0);
 const magicCount = computed(() => sysStore.state?.mode_stats.magicmount ?? 0);
+const overlayMountCount = computed(
+  () => sysStore.state?.mount_stats.overlayfs_mounts ?? 0,
+);
+const magicMountCount = computed(
+  () =>
+    (sysStore.state?.mount_stats.files_mounted ?? 0) +
+    (sysStore.state?.mount_stats.symlinks_created ?? 0),
+);
 const modeTotal = computed(() => overlayCount.value + magicCount.value);
 const overlayWidth = computed(() =>
   modeTotal.value ? `${(overlayCount.value / modeTotal.value) * 100}%` : "0%",
@@ -104,11 +112,17 @@ onMounted(refresh);
         <div class="stats-legend">
           <div class="legend-item">
             <span class="legend-dot dot-overlay" />
-            <span>{{ t("config.modeOverlay") }}: {{ overlayCount }}</span>
+            <span>
+              {{ t("config.modeOverlay") }}: {{ overlayCount }} ·
+              {{ t("status.mountCount", { count: overlayMountCount }) }}
+            </span>
           </div>
           <div class="legend-item">
             <span class="legend-dot dot-magic" />
-            <span>{{ t("config.modeMagic") }}: {{ magicCount }}</span>
+            <span>
+              {{ t("config.modeMagic") }}: {{ magicCount }} ·
+              {{ t("status.mountCount", { count: magicMountCount }) }}
+            </span>
           </div>
         </div>
       </section>

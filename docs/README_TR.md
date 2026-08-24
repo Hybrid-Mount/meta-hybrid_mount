@@ -8,7 +8,7 @@ Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Aç�
 - Yol kuralları modül varsayılanından, modül varsayılanı da genel varsayılandan önceliklidir.
 - OverlayFS, tmpfs ve ext4 depolama modlarını destekler.
 - Magic Mount; dosya, dizin, sembolik bağlantı, `.replace` ve whiteout semantiğini destekler.
-- WebUI, Miuix (varsayılan) ve MD3 arayüzlerini sunar.
+- WebUI, MD3 (varsayılan) ve Miuix arayüzlerini sunar.
 - arm64, armv7 ve x86_64 mimarileri desteklenir.
 
 ## Kurulum
