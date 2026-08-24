@@ -60,8 +60,8 @@ importers:
         specifier: ^10.4.1
         version: 10.4.1(eslint@10.8.1)
       vue-tsc:
-        specifier: ^3.3.9
-        version: 3.3.10(typescript@6.0.3)
+        specifier: ^3.3.11
+        version: 3.3.11(typescript@6.0.3)
 
 packages:
   "@babel/helper-string-parser@7.29.7":
@@ -637,10 +637,10 @@ packages:
         integrity: sha512-sGhTPMuXqZ1rVOk32RylztWkfXTRhuS7vgAKv0zjqk8gbsHkJ7xfFf+jbySxt7tWObEJwyKaHMikV/WGDiQm8g==,
       }
 
-  "@vue/language-core@3.3.10":
+  "@vue/language-core@3.3.11":
     resolution:
       {
-        integrity: sha512-CR7ByBbgPHqhxrioKPOcZBqttaozzLNwtkCzXQ+uF8gLPHnUe03srPnGpdtHD3zp+bq5iyVkZ1WNx7W564RPwg==,
+        integrity: sha512-QJmpliwAVpC/OxubIByPAhNzsQPRc8/gxlN2qnVzVfIMjMDz/9RnXRFoetjz5yEgXVXyp4LqhXq3V53PjmNzFw==,
       }
 
   "@vue/reactivity@3.5.41":
@@ -1686,10 +1686,10 @@ packages:
     peerDependencies:
       vue: ^3.0.0
 
-  vue-tsc@3.3.10:
+  vue-tsc@3.3.11:
     resolution:
       {
-        integrity: sha512-YaDVxcW+CGtaOt3pZahMG5jYPx0hsUTxyEoPOTSMebcGUXP9lIBabQ14vfKMORb2CqqK5CxsNo/d1d+4IQwiKg==,
+        integrity: sha512-gOb0B9rtU2+f1dszwPqSH5kAieIF9ReeLhD3kSRNHv5WZZUQz/JdVXW0RTdqhNTMlQkqKzrTTviqKr/4FYZraQ==,
       }
     hasBin: true
     peerDependencies:
@@ -2092,7 +2092,7 @@ snapshots:
 
   "@vue/devtools-api@6.6.4": {}
 
-  "@vue/language-core@3.3.10":
+  "@vue/language-core@3.3.11":
     dependencies:
       "@volar/language-core": 2.4.28
       "@vue/compiler-dom": 3.5.41
@@ -2652,10 +2652,10 @@ snapshots:
       "@vue/devtools-api": 6.6.4
       vue: 3.5.41(typescript@6.0.3)
 
-  vue-tsc@3.3.10(typescript@6.0.3):
+  vue-tsc@3.3.11(typescript@6.0.3):
     dependencies:
       "@volar/typescript": 2.4.28(typescript@6.0.3)
-      "@vue/language-core": 3.3.10
+      "@vue/language-core": 3.3.11
       typescript: 6.0.3
 
   vue@3.5.41(typescript@6.0.3):
