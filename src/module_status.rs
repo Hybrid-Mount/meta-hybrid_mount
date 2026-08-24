@@ -9,13 +9,12 @@ use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::process::Command;
 
-use crate::config::OverlayMode;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::defs;
 use crate::errors::{Error, Result};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn update_description(mode: OverlayMode, overlay_count: usize, magic_count: usize) {
+pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize) {
     let prop_path = Path::new(defs::SELF_MODULE_PROP);
     if !prop_path.exists() {
         log::warn!(
@@ -39,10 +38,10 @@ pub fn update_description(mode: OverlayMode, overlay_count: usize, magic_count: 
     }
 }
 
-fn running_description(mode: OverlayMode, overlay_count: usize, magic_count: usize) -> String {
+fn running_description(mode: &str, overlay_count: usize, magic_count: usize) -> String {
     let (mode_name, mode_icon) = match mode {
-        OverlayMode::Tmpfs => ("Tmpfs", "🐾"),
-        OverlayMode::Ext4 => ("Ext4", "💿"),
+        "tmpfs" => ("Tmpfs", "🐾"),
+        _ => ("Ext4", "💿"),
     };
 
     format!(
@@ -115,7 +114,7 @@ mod tests {
 
     #[test]
     fn running_description_reports_both_backend_counts() {
-        let description = running_description(OverlayMode::Ext4, 2, 3);
+        let description = running_description("ext4", 2, 3);
 
         assert!(description.contains("(Ext4)"));
         assert!(description.contains("OverlayFS: 2"));
@@ -124,7 +123,7 @@ mod tests {
 
     #[test]
     fn running_description_reports_tmpfs_mode() {
-        let description = running_description(OverlayMode::Tmpfs, 0, 1);
+        let description = running_description("tmpfs", 0, 1);
 
         assert!(description.contains("(Tmpfs)"));
         assert!(description.contains("OverlayFS: 0"));

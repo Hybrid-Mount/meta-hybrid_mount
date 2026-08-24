@@ -435,6 +435,11 @@ fn map_target(relative: &str, promoted: &BTreeSet<String>) -> (String, String) {
         let partition = parts[1].to_owned();
         let target = format!("/{}", parts[1..].join("/"));
         (partition, target)
+    } else if parts
+        .first()
+        .is_some_and(|partition| promoted.contains(*partition))
+    {
+        (parts[0].to_owned(), format!("/{relative}"))
     } else {
         ("system".to_owned(), format!("/{relative}"))
     }
@@ -629,6 +634,26 @@ mod tests {
                 .overlay_ops
                 .iter()
                 .all(|operation| operation.target != "/vendor")
+        );
+    }
+
+    #[test]
+    fn top_level_vendor_module_targets_vendor_partition() {
+        let module = record(
+            "nfc",
+            &[("vendor/etc", true), ("vendor/etc/libnfc-nci.conf", false)],
+        );
+        let config = config(Mode::Overlay, no_rules());
+
+        let result = plan(&[module], &config, &["vendor"]);
+
+        assert_eq!(result.overlay_module_ids, vec!["nfc".to_owned()]);
+        assert_eq!(result.overlay_ops.len(), 1);
+        assert_eq!(result.overlay_ops[0].partition, "vendor");
+        assert_eq!(result.overlay_ops[0].target, "/vendor/etc");
+        assert_eq!(
+            result.overlay_ops[0].lowerdirs,
+            vec![PathBuf::from("/data/adb/modules/nfc/vendor/etc")]
         );
     }
 
@@ -841,6 +866,10 @@ mod tests {
         assert_eq!(
             map_target("system/product/app", &promoted),
             ("product".to_owned(), "/product/app".to_owned())
+        );
+        assert_eq!(
+            map_target("vendor/lib/x.so", &promoted),
+            ("vendor".to_owned(), "/vendor/lib/x.so".to_owned())
         );
     }
 

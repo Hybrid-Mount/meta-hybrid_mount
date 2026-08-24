@@ -16,26 +16,62 @@
 use std::ffi::CString;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::path::{Path, PathBuf};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use procfs::process::Process;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fd::AsFd;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::mount::{MountFlags, MoveMountFlags, OpenTreeFlags, mount, move_mount, open_tree};
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::defs;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::errors::{Error, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::overlayfs::utils;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::utils::ensure_dir_exists;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils::ksu::send_unmountable;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use procfs::process::Process;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fd::AsFd;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::mount::{
+    MountFlags, MoveMountFlags, OpenTreeFlags, UnmountFlags, mount, move_mount, open_tree, unmount,
+};
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug, Default)]
+struct StagingMountGuard {
+    paths: Vec<PathBuf>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl StagingMountGuard {
+    fn track(&mut self, path: PathBuf) {
+        self.paths.push(path);
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for StagingMountGuard {
+    fn drop(&mut self) {
+        for path in self.paths.iter().rev() {
+            if crate::sys::mount::is_mounted(path)
+                && let Err(err) = unmount(path, UnmountFlags::DETACH)
+            {
+                log::warn!(
+                    "detach intermediate overlay staging failed: path={}, error={err}",
+                    path.display()
+                );
+                continue;
+            }
+            match std::fs::remove_dir_all(path) {
+                Ok(()) => log::debug!(
+                    "intermediate overlay staging removed: path={}",
+                    path.display()
+                ),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => log::warn!(
+                    "remove intermediate overlay staging failed: path={}, error={err}",
+                    path.display()
+                ),
+            }
+        }
+    }
+}
 
 /// overlayfs 单次挂载最多接受的层数(v4.2.0 行为)。
 pub const MAX_LAYERS: usize = 64;
@@ -116,19 +152,22 @@ fn mount_overlay_core(
     mount_source: &str,
 ) -> Result<()> {
     let lowerdir_config = lower_dirs.join(":");
-
-    log::debug!(
-        "overlay core mount: dest={}, layers={}, source={mount_source}",
-        dest.display(),
-        lower_dirs.len()
-    );
-
     let upperdir_s = upperdir
         .filter(|upper| upper.exists())
         .map(|upper| upper.display().to_string());
     let workdir_s = workdir
         .filter(|work| work.exists())
         .map(|work| work.display().to_string());
+
+    log::info!(
+        "overlay core mount request: dest={}, layers={}, source={}, lowerdirs={}, upperdir={}, workdir={}",
+        dest.display(),
+        lower_dirs.len(),
+        mount_source,
+        lower_dirs.join(" | "),
+        upperdir_s.as_deref().unwrap_or("none"),
+        workdir_s.as_deref().unwrap_or("none")
+    );
 
     if let Err(err) = utils::fsopen_mount(
         upperdir_s.clone(),
@@ -180,21 +219,16 @@ pub fn mount_overlayfs(
     upperdir: Option<PathBuf>,
     workdir: Option<PathBuf>,
     dest: &Path,
+    staging_root: &Path,
     mount_source: &str,
-    register_unmountable: bool,
 ) -> Result<()> {
     let mut current_layers = lower_dirs.to_vec();
     current_layers.push(lowest.to_owned());
+    let mut staging_mounts = StagingMountGuard::default();
 
     for chunk in plan_staging_chunks(&current_layers) {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
-        let staging_dir = Path::new(defs::STATE_DIR)
-            .join(format!("staging_{timestamp}_{}", chunk.remaining_layers));
-
-        ensure_dir_exists(&staging_dir)?;
+        let staging_dir = crate::sys::temp::create_random_dir(staging_root)?;
+        staging_mounts.track(staging_dir.clone());
         mount_overlay_core(&chunk.layers, None, None, &staging_dir, mount_source)?;
         log::debug!(
             "staging layer created: path={}, input_layers={}",
@@ -202,9 +236,6 @@ pub fn mount_overlayfs(
             chunk.layers.len()
         );
 
-        if register_unmountable {
-            send_unmountable(&staging_dir);
-        }
         current_layers = current_layers[..chunk.remaining_layers].to_vec();
         current_layers.push(staging_dir.to_string_lossy().into_owned());
     }
@@ -271,6 +302,7 @@ fn mount_overlay_child(
     relative: &str,
     module_roots: &[String],
     stock_root: &str,
+    staging_root: &Path,
     mount_source: &str,
     register_unmountable: bool,
 ) -> Result<()> {
@@ -306,8 +338,8 @@ fn mount_overlay_child(
         None,
         None,
         Path::new(mount_point),
+        staging_root,
         mount_source,
-        register_unmountable,
     )
     .map_err(|err| {
         Error::msg(format!(
@@ -327,6 +359,7 @@ pub fn mount_overlay(
     module_roots: &[String],
     workdir: Option<PathBuf>,
     upperdir: Option<PathBuf>,
+    staging_root: &Path,
     mount_source: &str,
     register_unmountable: bool,
 ) -> Result<()> {
@@ -345,8 +378,8 @@ pub fn mount_overlay(
         upperdir,
         workdir,
         root_path,
+        staging_root,
         mount_source,
-        register_unmountable,
     );
 
     if let Err(err) = root_result {
@@ -372,6 +405,7 @@ pub fn mount_overlay(
             &relative,
             module_roots,
             &stock_root,
+            staging_root,
             mount_source,
             register_unmountable,
         ) {

@@ -15,14 +15,16 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
+use rustix::mount::{
+    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_change, unmount,
+};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::symlink;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::config::Config;
+use crate::config::{Config, OverlayMode};
 use crate::defs;
 use crate::errors::{Error, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -31,8 +33,9 @@ use crate::magic_mount::exec;
 use crate::magic_mount::scan::{ScanOptions, Selection};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::plan::{MountPlan, PlanInput, build_plan};
+use crate::scanner::ModuleRecord;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::scanner::{ModuleRecord, list_modules};
+use crate::scanner::list_modules;
 use crate::state::MountStatistics;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::state::{RunState, app_modules, write_scan_ret};
@@ -76,9 +79,254 @@ pub fn pipeline_stats(
 }
 
 /// 文件级 overlay 规则的 shallow 目录规划:每个源文件一个独立层目录。
-pub fn shallow_dir_for(target: &str, index: usize) -> PathBuf {
-    let safe_target = target.trim_matches('/').replace('/', "_");
-    Path::new(defs::SHALLOW_STAGING_DIR).join(format!("{safe_target}_{index}"))
+pub fn staged_overlay_path(
+    source: &Path,
+    modules: &[ModuleRecord],
+    storage_root: &Path,
+) -> Result<PathBuf> {
+    let module = modules
+        .iter()
+        .filter(|module| source.starts_with(&module.source_path))
+        .max_by_key(|module| module.source_path.components().count())
+        .ok_or_else(|| {
+            Error::msg(format!(
+                "overlay source is outside every scanned module: {}",
+                source.display()
+            ))
+        })?;
+    let relative = source.strip_prefix(&module.source_path).map_err(|err| {
+        Error::msg(format!(
+            "strip module prefix {} from {}: {err}",
+            module.source_path.display(),
+            source.display()
+        ))
+    })?;
+    Ok(storage_root.join(&module.id).join(relative))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+struct OverlayStorageGuard {
+    handle: crate::storage::StorageHandle,
+    cleanup: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl OverlayStorageGuard {
+    fn new(handle: crate::storage::StorageHandle, cleanup: bool) -> Self {
+        Self { handle, cleanup }
+    }
+
+    fn handle(&self) -> &crate::storage::StorageHandle {
+        &self.handle
+    }
+
+    fn retain(&mut self) {
+        self.cleanup = false;
+    }
+
+    fn teardown(mut self) -> Result<()> {
+        if !self.cleanup {
+            return Ok(());
+        }
+
+        crate::storage::teardown(&self.handle)?;
+        self.cleanup = false;
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for OverlayStorageGuard {
+    fn drop(&mut self) {
+        if !self.cleanup {
+            log::info!(
+                "storage teardown skipped: mode={}, mount_point={}, reason=disable_umount",
+                self.handle.mode().as_str(),
+                self.handle.mount_point().display()
+            );
+            return;
+        }
+        if let Err(err) = crate::storage::teardown(&self.handle) {
+            log::warn!("storage teardown failed: {err}");
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug)]
+struct MagicStagingGuard {
+    path: PathBuf,
+    cleanup: bool,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl MagicStagingGuard {
+    fn mount(path: PathBuf, mount_source: &str) -> Result<Self> {
+        if let Err(err) = prepare_tmp_root(&path, mount_source) {
+            let _ = fs::remove_dir_all(&path);
+            return Err(err);
+        }
+        Ok(Self {
+            path,
+            cleanup: true,
+        })
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn cleanup(mut self) -> Result<()> {
+        self.cleanup_now()
+    }
+
+    fn cleanup_now(&mut self) -> Result<()> {
+        if !self.cleanup {
+            return Ok(());
+        }
+
+        cleanup_tmp_root(&self.path)?;
+        match fs::remove_dir_all(&self.path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(Error::msg(format!(
+                    "remove magic staging directory {}: {err}",
+                    self.path.display()
+                )));
+            }
+        }
+        self.cleanup = false;
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for MagicStagingGuard {
+    fn drop(&mut self) {
+        if let Err(err) = self.cleanup_now() {
+            log::warn!(
+                "magic staging cleanup failed: path={}, error={err}",
+                self.path.display()
+            );
+        }
+    }
+}
+
+pub fn effective_mount_source(configured: &str, ksu_active: bool) -> &str {
+    if !ksu_active && configured == defs::DEFAULT_MOUNT_SOURCE {
+        "APatch"
+    } else {
+        configured
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn describe_path_mount(path: &Path) -> String {
+    use procfs::process::Process;
+
+    let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let Ok(process) = Process::myself() else {
+        return "mountinfo=process_unavailable".to_owned();
+    };
+    let Ok(mountinfo) = process.mountinfo() else {
+        return "mountinfo=unavailable".to_owned();
+    };
+    let Some(entry) = mountinfo
+        .into_iter()
+        .filter(|entry| resolved.starts_with(&entry.mount_point))
+        .max_by_key(|entry| entry.mount_point.components().count())
+    else {
+        return format!("mountinfo=no_match,resolved={}", resolved.display());
+    };
+
+    format!(
+        "fs={},mount={},source={},device={}",
+        entry.fs_type,
+        entry.mount_point.display(),
+        entry.mount_source.as_deref().unwrap_or("none"),
+        entry.majmin
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn log_backend_capabilities() {
+    match crate::overlayfs::utils::is_overlay_supported() {
+        Ok(supported) => log::info!("capability: overlayfs_supported={supported}"),
+        Err(err) => log::warn!("capability probe failed: overlayfs_supported, error={err}"),
+    }
+    match crate::sys::fs::is_overlay_xattr_supported() {
+        Ok(supported) => log::info!("capability: tmpfs_xattr_supported={supported}"),
+        Err(err) => log::warn!("capability probe failed: tmpfs_xattr, error={err}"),
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn prepare_overlay_storage(
+    modules: &[ModuleRecord],
+    plan: &mut MountPlan,
+    storage_root: &Path,
+) -> Result<()> {
+    let overlay_ids: BTreeSet<&str> = plan.overlay_module_ids.iter().map(String::as_str).collect();
+
+    log::info!(
+        "overlay staging start: root={}, modules={}",
+        storage_root.display(),
+        overlay_ids.len()
+    );
+
+    for module in modules
+        .iter()
+        .filter(|module| overlay_ids.contains(module.id.as_str()))
+    {
+        let destination = storage_root.join(&module.id);
+        log::info!(
+            "overlay staging module: id={}, source={}, source_mount={}, destination={}",
+            module.id,
+            module.source_path.display(),
+            describe_path_mount(&module.source_path),
+            destination.display()
+        );
+        let stats =
+            crate::sys::fs::copy_module_tree(&module.source_path, &destination).map_err(|err| {
+                Error::msg(format!(
+                    "stage overlay module {} from {} to {}: {err}",
+                    module.id,
+                    module.source_path.display(),
+                    destination.display()
+                ))
+            })?;
+        log::info!(
+            "overlay staging module complete: id={}, dirs={}, files={}, symlinks={}, special={}, opaque={}, bytes={}, destination_mount={}",
+            module.id,
+            stats.directories,
+            stats.files,
+            stats.symlinks,
+            stats.special_entries,
+            stats.opaque_directories,
+            stats.bytes,
+            describe_path_mount(&destination)
+        );
+    }
+
+    for op in &mut plan.overlay_ops {
+        for lowerdir in &mut op.lowerdirs {
+            *lowerdir = staged_overlay_path(lowerdir, modules, storage_root)?;
+        }
+    }
+    for sources in plan.overlay_files.values_mut() {
+        for source in sources {
+            *source = staged_overlay_path(source, modules, storage_root)?;
+        }
+    }
+
+    log::info!(
+        "overlay staging complete: root={}, operations={}, shallow_targets={}",
+        storage_root.display(),
+        plan.overlay_ops.len(),
+        plan.overlay_files.len()
+    );
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -86,13 +334,50 @@ fn run_mount_pipeline_impl() -> Result<()> {
     utils::ksu::init();
 
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+    let ksu_active = utils::ksu::is_active();
+    let mount_source = effective_mount_source(&config.mountsource, ksu_active).to_owned();
     log::info!("config info: {}", config.to_toml()?);
+    log::info!(
+        "runtime: pid={}, configured_mount_source={}, effective_mount_source={}, ksu_ioctl_active={}",
+        std::process::id(),
+        config.mountsource,
+        mount_source,
+        ksu_active
+    );
+    log_backend_capabilities();
 
-    let modules = list_modules(&config.moduledir, &[]);
+    let managed_partitions = managed_partition_names();
+    let modules = list_modules(&config.moduledir, &managed_partitions);
     log::info!("scanned modules: {}", modules.len());
+    for module in &modules {
+        let entry_roots = module
+            .entries
+            .iter()
+            .filter_map(|entry| entry.relative.split('/').next())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join(",");
+        log::info!(
+            "module scan: id={}, enabled={}, skip_mount={}, mountable={}, entries={}, roots={}, source={}, source_mount={}",
+            module.id,
+            !module.disabled,
+            module.skip_mount,
+            module.mountable(),
+            module.entries.len(),
+            entry_roots,
+            module.source_path.display(),
+            describe_path_mount(&module.source_path)
+        );
+    }
 
     let promoted = detect_promoted_partitions();
-    let plan = build_plan(&PlanInput {
+    log::info!(
+        "partition detection: managed={}, promoted={}",
+        managed_partitions.join(","),
+        promoted.iter().cloned().collect::<Vec<_>>().join(",")
+    );
+    let mut plan = build_plan(&PlanInput {
         modules: &modules,
         config: &config,
         promoted_partitions: &promoted,
@@ -103,6 +388,25 @@ fn run_mount_pipeline_impl() -> Result<()> {
         plan.overlay_module_ids.len(),
         plan.magic_module_ids.len()
     );
+    for (index, op) in plan.overlay_ops.iter().enumerate() {
+        log::info!(
+            "plan overlay operation: index={}, partition={}, target={}, layers={}",
+            index,
+            op.partition,
+            op.target,
+            op.lowerdirs.len()
+        );
+        for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
+            log::info!(
+                "plan overlay lowerdir: operation={}, layer={}, path={}, exists={}, mount={}",
+                index,
+                layer_index,
+                lowerdir.display(),
+                lowerdir.exists(),
+                describe_path_mount(lowerdir)
+            );
+        }
+    }
 
     // `modules` is a boot-time snapshot, not a proof that every mount already
     // succeeded.  Persist it before entering the fallible mount phases so the
@@ -130,15 +434,114 @@ fn run_mount_pipeline_impl() -> Result<()> {
         state.magic_modules.len()
     );
 
-    prepare_tmp_root(&config.mountsource)?;
+    let execution_result: Result<_> = (|| {
+        let needs_runtime_temp = !plan.overlay_ops.is_empty()
+            || !plan.overlay_files.is_empty()
+            || !plan.magic_module_ids.is_empty();
+        let mut runtime_temp = needs_runtime_temp
+            .then(crate::sys::temp::RuntimeTempDir::create)
+            .transpose()?;
+        let transient_root = runtime_temp
+            .as_ref()
+            .map(|session| session.path().to_path_buf());
 
-    let mount_result: Result<_> = (|| {
-        let (overlay_dir_mounts, shallow_layer_mounts, active_mounts) =
-            mount_overlay_phase(&plan, &config)?;
-        let magic_stats = mount_magic_phase(&config, &modules, &plan)?;
+        let mut overlay_storage = if plan.overlay_ops.is_empty() && plan.overlay_files.is_empty() {
+            log::info!("overlay storage skipped: reason=no_overlay_operations");
+            None
+        } else {
+            let session = runtime_temp.as_ref().ok_or_else(|| {
+                Error::msg("overlay storage requires a runtime temporary session")
+            })?;
+            let mount_base = session.allocate_dir()?;
+            let force_ext4 = matches!(config.overlay_mode, OverlayMode::Ext4);
+            let handle = crate::storage::setup(
+                &mount_base,
+                &config.moduledir,
+                force_ext4,
+                &mount_source,
+                config.disable_umount,
+            )
+            .map_err(|err| {
+                Error::msg(format!(
+                    "initialize overlay storage: requested_mode={}, mount_point={}: {err}",
+                    config.overlay_mode.as_str(),
+                    mount_base.display()
+                ))
+            })?;
+            let guard = OverlayStorageGuard::new(handle, true);
+            state.storage_mode = guard.handle().mode().as_str().to_owned();
+            state.mount_point = guard.handle().mount_point().to_path_buf();
+            state.save()?;
+            log::info!(
+                "storage state saved: requested_mode={}, actual_mode={}, mount_point={}",
+                config.overlay_mode.as_str(),
+                state.storage_mode,
+                state.mount_point.display()
+            );
+            prepare_overlay_storage(&modules, &mut plan, guard.handle().mount_point())?;
+            Some(guard)
+        };
 
-        // 提交 KernelSU 尝试卸载列表(注册语义,非立即卸载)。
+        let magic_staging = if plan.magic_module_ids.is_empty() {
+            log::info!("magic staging skipped: reason=no_magic_modules");
+            None
+        } else {
+            let session = runtime_temp
+                .as_ref()
+                .ok_or_else(|| Error::msg("magic mount requires a runtime temporary session"))?;
+            let path = session.allocate_dir()?;
+            Some(MagicStagingGuard::mount(path, &mount_source)?)
+        };
+        let magic_work_dir = magic_staging
+            .as_ref()
+            .map(|staging| crate::sys::temp::create_random_dir(staging.path()))
+            .transpose()?;
+        let (overlay_dir_mounts, shallow_layer_mounts, active_mounts) = mount_overlay_phase(
+            &plan,
+            &config,
+            overlay_storage
+                .as_ref()
+                .map(|storage| storage.handle().mount_point()),
+            transient_root.as_deref(),
+            &mount_source,
+        )?;
+        let magic_stats = mount_magic_phase(
+            &config,
+            &modules,
+            &plan,
+            &mount_source,
+            magic_work_dir.as_deref(),
+        )?;
+
+        // Commit the KernelSU try-unmount list. This registers future cleanup;
+        // it does not unmount the entries immediately.
         utils::ksu::commit_unmount_list()?;
+
+        if let Some(staging) = magic_staging {
+            staging.cleanup()?;
+        }
+
+        let retain_storage = config.disable_umount && overlay_storage.is_some();
+        if retain_storage {
+            if let Some(storage) = overlay_storage.as_mut() {
+                storage.retain();
+            }
+            runtime_temp
+                .as_mut()
+                .expect("overlay requires session")
+                .keep();
+        } else {
+            if let Some(storage) = overlay_storage.take() {
+                storage.teardown()?;
+            }
+            state.mount_point = PathBuf::new();
+            if let Some(session) = runtime_temp.take() {
+                session.cleanup()?;
+            }
+        }
+        drop(overlay_storage);
+        drop(runtime_temp);
+
         Ok((
             overlay_dir_mounts,
             shallow_layer_mounts,
@@ -147,8 +550,24 @@ fn run_mount_pipeline_impl() -> Result<()> {
         ))
     })();
 
-    cleanup_tmp_root();
-    let (overlay_dir_mounts, shallow_layer_mounts, active_mounts, magic_stats) = mount_result?;
+    let (overlay_dir_mounts, shallow_layer_mounts, active_mounts, magic_stats) =
+        match execution_result {
+            Ok(result) => result,
+            Err(err) => {
+                log::error!(
+                    "mount execution failed: error={err}, overlay_modules={}, magic_modules={}",
+                    plan.overlay_module_ids.join(","),
+                    plan.magic_module_ids.join(",")
+                );
+                state.mount_point = PathBuf::new();
+                state.mount_stats.total_mounts = 1;
+                state.mount_stats.failed_mounts = 1;
+                if let Err(state_err) = state.save() {
+                    log::warn!("failed to persist mount failure statistics: {state_err}");
+                }
+                return Err(err);
+            }
+        };
 
     let mount_error_modules = crate::state::collect_mount_error_modules(&config.moduledir);
     let app_modules = app_modules(&modules, &config, &plan, &mount_error_modules);
@@ -172,7 +591,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     state.save()?;
 
     crate::module_status::update_description(
-        config.overlay_mode,
+        &state.storage_mode,
         plan.overlay_module_ids.len(),
         plan.magic_module_ids.len(),
     );
@@ -182,65 +601,134 @@ fn run_mount_pipeline_impl() -> Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn prepare_tmp_root(mount_source: &str) -> Result<()> {
-    let tmp_root = Path::new(defs::TMP_ROOT);
+fn prepare_tmp_root(tmp_root: &Path, mount_source: &str) -> Result<()> {
+    log::info!(
+        "magic staging mount start: source={}, target={}, target_before={}",
+        mount_source,
+        tmp_root.display(),
+        describe_path_mount(tmp_root)
+    );
     utils::ensure_dir_exists(tmp_root)?;
     mount(mount_source, tmp_root, "tmpfs", MountFlags::empty(), None).map_err(|err| {
         Error::msg(format!(
             "mount tmpfs {mount_source} at {}: {err}",
             tmp_root.display()
         ))
-    })
+    })?;
+    if let Err(err) = mount_change(
+        tmp_root,
+        MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
+    ) {
+        let _ = unmount(tmp_root, UnmountFlags::DETACH);
+        return Err(Error::msg(format!(
+            "make magic staging private at {}: {err}",
+            tmp_root.display()
+        )));
+    }
+    log::info!(
+        "magic staging mount complete: target={}, target_after={}",
+        tmp_root.display(),
+        describe_path_mount(tmp_root)
+    );
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn cleanup_tmp_root() {
-    let tmp_root = Path::new(defs::TMP_ROOT);
-    if let Err(err) = unmount(tmp_root, UnmountFlags::DETACH) {
-        log::warn!("unmount {}: {err}", tmp_root.display());
+fn cleanup_tmp_root(tmp_root: &Path) -> Result<()> {
+    if crate::sys::mount::is_mounted(tmp_root) {
+        unmount(tmp_root, UnmountFlags::DETACH).map_err(|err| {
+            Error::msg(format!(
+                "detach magic staging mount {}: {err}",
+                tmp_root.display()
+            ))
+        })?;
+        log::info!("magic staging unmounted: target={}", tmp_root.display());
     }
-    if let Err(err) = fs::remove_dir(tmp_root) {
-        log::warn!("remove {}: {err}", tmp_root.display());
-    }
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn detect_promoted_partitions() -> BTreeSet<String> {
     use crate::magic_mount::node::BUILTIN_PARTITIONS;
 
-    BUILTIN_PARTITIONS
+    let builtin_requirements = BUILTIN_PARTITIONS
         .iter()
-        .filter(|(partition, require_symlink)| {
-            let root_partition = Path::new("/").join(partition);
+        .copied()
+        .collect::<BTreeMap<_, _>>();
+
+    managed_partition_names()
+        .into_iter()
+        .filter(|partition| {
             let system_partition = Path::new("/system").join(partition);
-            root_partition.is_dir() && (!require_symlink || system_partition.is_symlink())
+            let require_symlink = builtin_requirements
+                .get(partition.as_str())
+                .copied()
+                .unwrap_or(true);
+            !require_symlink || system_partition.is_symlink()
         })
-        .map(|(partition, _)| (*partition).to_owned())
         .collect()
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn mount_overlay_phase(plan: &MountPlan, config: &Config) -> Result<(usize, usize, Vec<String>)> {
+fn managed_partition_names() -> Vec<String> {
+    crate::defs::MANAGED_PARTITIONS
+        .iter()
+        .filter(|partition| Path::new("/").join(partition).is_dir())
+        .map(|partition| (*partition).to_owned())
+        .collect()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn mount_overlay_phase(
+    plan: &MountPlan,
+    config: &Config,
+    storage_root: Option<&Path>,
+    transient_root: Option<&Path>,
+    effective_mount_source: &str,
+) -> Result<(usize, usize, Vec<String>)> {
     use crate::overlayfs::overlayfs::mount_overlay;
 
     let mut overlay_dir_mounts = 0;
     let mut shallow_layer_mounts = 0;
     let mut active_mounts = Vec::new();
 
-    for op in &plan.overlay_ops {
+    for (operation_index, op) in plan.overlay_ops.iter().enumerate() {
         let lowerdirs = op
             .lowerdirs
             .iter()
             .map(|path| path.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
 
-        let mount_source = overlay_mount_source(&op.target, &config.mountsource);
+        let staging_root = transient_root
+            .ok_or_else(|| Error::msg("overlay mount requires a runtime temporary session"))?;
+        let mount_source = overlay_mount_source(&op.target, effective_mount_source);
         let register_unmountable = !config.disable_umount;
+        log::info!(
+            "overlay apply start: index={}, partition={}, target={}, source={}, layers={}, register_unmountable={}",
+            operation_index,
+            op.partition,
+            op.target,
+            mount_source,
+            lowerdirs.len(),
+            register_unmountable
+        );
+        for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
+            log::info!(
+                "overlay apply lowerdir: operation={}, layer={}, path={}, exists={}, is_dir={}, mount={}",
+                operation_index,
+                layer_index,
+                lowerdir.display(),
+                lowerdir.exists(),
+                lowerdir.is_dir(),
+                describe_path_mount(lowerdir)
+            );
+        }
         mount_overlay(
             &op.target,
             &lowerdirs,
             None,
             None,
+            staging_root,
             mount_source,
             register_unmountable,
         )
@@ -253,13 +741,29 @@ fn mount_overlay_phase(plan: &MountPlan, config: &Config) -> Result<(usize, usiz
         if register_unmountable {
             utils::ksu::send_unmountable(Path::new(&op.target));
         }
+        log::info!(
+            "overlay apply complete: index={}, target={}, target_mount={}",
+            operation_index,
+            op.target,
+            describe_path_mount(Path::new(&op.target))
+        );
         active_mounts.push(op.target.clone());
         overlay_dir_mounts += 1;
     }
 
     if !plan.overlay_files.is_empty() {
-        shallow_layer_mounts =
-            mount_overlay_files(&plan.overlay_files, config, &mut active_mounts)?;
+        let storage_root = storage_root
+            .ok_or_else(|| Error::msg("overlay file rules require prepared overlay storage"))?;
+        shallow_layer_mounts = mount_overlay_files(
+            &plan.overlay_files,
+            config,
+            storage_root,
+            transient_root.ok_or_else(|| {
+                Error::msg("shallow overlay requires a runtime temporary session")
+            })?,
+            effective_mount_source,
+            &mut active_mounts,
+        )?;
     }
 
     active_mounts.sort();
@@ -271,22 +775,32 @@ fn mount_overlay_phase(plan: &MountPlan, config: &Config) -> Result<(usize, usiz
 fn mount_overlay_files(
     files: &BTreeMap<String, Vec<PathBuf>>,
     config: &Config,
+    storage_root: &Path,
+    transient_root: &Path,
+    effective_mount_source: &str,
     active_mounts: &mut Vec<String>,
 ) -> Result<usize> {
     use crate::overlayfs::overlayfs::mount_overlay;
 
-    // 启动时清空上次的 shallow staging(只写运行目录)。
-    let staging_root = Path::new(defs::SHALLOW_STAGING_DIR);
-    if staging_root.exists() {
-        let _ = crate::sys::fs::remove_path(staging_root);
-    }
+    let staging_root = crate::sys::temp::create_random_dir(storage_root)?;
 
     let mut layer_mounts = 0;
-    for (target, sources) in files {
+    log::info!(
+        "shallow overlay phase start: targets={}, staging_root={}, staging_mount={}",
+        files.len(),
+        staging_root.display(),
+        describe_path_mount(storage_root)
+    );
+    for (target_index, (target, sources)) in files.iter().enumerate() {
+        log::info!(
+            "shallow overlay prepare: index={}, target={}, sources={}",
+            target_index,
+            target,
+            sources.len()
+        );
         let mut lowerdirs = Vec::new();
         for (index, source) in sources.iter().enumerate() {
-            let layer_dir = shallow_dir_for(target, index);
-            fs::create_dir_all(&layer_dir)?;
+            let layer_dir = crate::sys::temp::create_random_dir(&staging_root)?;
 
             let file_name = source.file_name().ok_or_else(|| {
                 Error::msg(format!(
@@ -295,18 +809,28 @@ fn mount_overlay_files(
                 ))
             })?;
             let dest = layer_dir.join(file_name);
+            log::info!(
+                "shallow overlay source: target_index={}, layer={}, source={}, exists={}, source_mount={}, destination={}",
+                target_index,
+                index,
+                source.display(),
+                source.exists(),
+                describe_path_mount(source),
+                dest.display()
+            );
             copy_entry(source, &dest)?;
 
             lowerdirs.push(layer_dir.to_string_lossy().into_owned());
         }
 
-        let mount_source = overlay_mount_source(target, &config.mountsource);
+        let mount_source = overlay_mount_source(target, effective_mount_source);
         let register_unmountable = !config.disable_umount;
         mount_overlay(
             target,
             &lowerdirs,
             None,
             None,
+            transient_root,
             mount_source,
             register_unmountable,
         )
@@ -318,10 +842,22 @@ fn mount_overlay_files(
         if register_unmountable {
             utils::ksu::send_unmountable(Path::new(target));
         }
+        log::info!(
+            "shallow overlay complete: index={}, target={}, layers={}, target_mount={}",
+            target_index,
+            target,
+            lowerdirs.len(),
+            describe_path_mount(Path::new(target))
+        );
         active_mounts.push(target.clone());
         layer_mounts += lowerdirs.len();
     }
 
+    log::info!(
+        "shallow overlay phase complete: targets={}, layers={}",
+        files.len(),
+        layer_mounts
+    );
     Ok(layer_mounts)
 }
 
@@ -364,6 +900,8 @@ fn mount_magic_phase(
     config: &Config,
     modules: &[ModuleRecord],
     plan: &MountPlan,
+    mount_source: &str,
+    work_dir: Option<&Path>,
 ) -> Result<exec::MagicMountStats> {
     if plan.magic_module_ids.is_empty() {
         return Ok(exec::MagicMountStats::default());
@@ -401,18 +939,35 @@ fn mount_magic_phase(
         modules: Some(&magic_modules),
         path_filter: Some(&path_filter),
     };
+    let extra_partitions = managed_partition_names();
     let options = ScanOptions {
-        extra_partitions: &[],
+        extra_partitions: &extra_partitions,
         ignore_sources: &[],
         selection,
     };
 
-    exec::magic_mount(
+    log::info!(
+        "magic mount phase start: modules={}, module_ids={}, managed_partitions={}, path_rule_modules={}, register_unmountable={}",
+        magic_modules.len(),
+        magic_modules.iter().cloned().collect::<Vec<_>>().join(","),
+        extra_partitions.join(","),
+        plan.magic_path_rules.len(),
+        !config.disable_umount
+    );
+    let stats = exec::magic_mount(
         &config.moduledir,
-        &config.mountsource,
+        mount_source,
+        work_dir.ok_or_else(|| Error::msg("magic mount work directory is unavailable"))?,
         &options,
         !config.disable_umount,
-    )
+    )?;
+    log::info!(
+        "magic mount phase complete: files={}, symlinks={}, ignored={}",
+        stats.mounted_files,
+        stats.mounted_symlinks,
+        stats.ignored_files
+    );
+    Ok(stats)
 }
 
 #[cfg(test)]
@@ -432,20 +987,35 @@ mod tests {
     }
 
     #[test]
-    fn shallow_dir_planning_is_stable_and_separated() {
-        let first = shallow_dir_for("/system/etc", 0);
-        let second = shallow_dir_for("/system/etc", 1);
-        let other = shallow_dir_for("/vendor/lib", 0);
+    fn overlay_sources_are_remapped_under_prepared_storage() {
+        let module = ModuleRecord {
+            id: "adb-ndk".to_owned(),
+            name: "ADB".to_owned(),
+            version: "1".to_owned(),
+            author: "a".to_owned(),
+            description: "d".to_owned(),
+            disabled: false,
+            skip_mount: false,
+            has_mount_files: true,
+            source_path: PathBuf::from("/data/adb/modules/adb-ndk"),
+            entries: Vec::new(),
+        };
 
-        assert_eq!(
-            first,
-            PathBuf::from("/data/adb/hybrid-mount/run/shallow/system_etc_0")
-        );
-        assert_eq!(
-            second,
-            PathBuf::from("/data/adb/hybrid-mount/run/shallow/system_etc_1")
-        );
-        assert_ne!(first, other);
+        let staged = staged_overlay_path(
+            Path::new("/data/adb/modules/adb-ndk/system/bin"),
+            &[module],
+            Path::new("/mnt/hm_test"),
+        )
+        .unwrap();
+
+        assert_eq!(staged, PathBuf::from("/mnt/hm_test/adb-ndk/system/bin"));
+    }
+
+    #[test]
+    fn default_mount_source_follows_the_active_root_backend() {
+        assert_eq!(effective_mount_source("KSU", true), "KSU");
+        assert_eq!(effective_mount_source("KSU", false), "APatch");
+        assert_eq!(effective_mount_source("custom", false), "custom");
     }
 
     #[test]

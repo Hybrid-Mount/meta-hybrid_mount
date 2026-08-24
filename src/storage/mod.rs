@@ -94,17 +94,35 @@ pub fn setup_with_sources(
     disable_umount: bool,
     img_path: &Path,
 ) -> Result<StorageHandle> {
+    log::info!(
+        "storage setup start: mount_point={}, requested_mode={}, sources={}, image={}",
+        mnt_base.display(),
+        if force_ext4 { "ext4" } else { "tmpfs" },
+        source_paths.len(),
+        img_path.display()
+    );
     reset_image_files(img_path)?;
     detach_existing_mount(mnt_base);
 
     if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
         log::info!("storage backend select: mode=tmpfs");
         finalize_mount_setup(mnt_base, disable_umount);
-        return Ok(StorageHandle::new(mnt_base, StorageMode::Tmpfs));
+        let handle = StorageHandle::new(mnt_base, StorageMode::Tmpfs);
+        log::info!(
+            "storage setup complete: mode={}, mount_point={}",
+            handle.mode().as_str(),
+            handle.mount_point().display()
+        );
+        return Ok(handle);
     }
 
     let handle = ext4::setup_ext4_image(mnt_base, img_path, source_paths)?;
     finalize_mount_setup(mnt_base, disable_umount);
+    log::info!(
+        "storage setup complete: mode={}, mount_point={}",
+        handle.mode().as_str(),
+        handle.mount_point().display()
+    );
     Ok(handle)
 }
 
@@ -176,6 +194,40 @@ fn finalize_mount_setup(path: &Path, disable_umount: bool) {
     if !disable_umount {
         send_unmountable(path);
     }
+}
+
+/// Detach the temporary prepared-tree filesystem after OverlayFS has acquired
+/// references to its lower layers.  The overlay mounts remain valid, while the
+/// transient mount point and image no longer leak into userspace.
+pub fn teardown(handle: &StorageHandle) -> Result<()> {
+    log::info!(
+        "storage teardown start: mode={}, mount_point={}",
+        handle.mode().as_str(),
+        handle.mount_point().display()
+    );
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if sys::mount::is_mounted(handle.mount_point()) {
+        unmount(handle.mount_point(), UnmountFlags::DETACH).map_err(|err| {
+            crate::errors::Error::msg(format!(
+                "detach storage mount {}: {err}",
+                handle.mount_point().display()
+            ))
+        })?;
+    }
+
+    match fs::remove_dir(handle.mount_point()) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => log::warn!(
+            "storage mount directory cleanup skipped: path={}, error={err}",
+            handle.mount_point().display()
+        ),
+    }
+
+    cleanup_artifacts(handle.mode())?;
+    log::info!("storage teardown complete: mode={}", handle.mode().as_str());
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

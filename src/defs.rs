@@ -27,8 +27,6 @@ pub const SCAN_RET_PATH: &str = "/data/adb/hybrid-mount/scan.ret";
 pub const STATE_PATH: &str = "/data/adb/hybrid-mount/run/state.json";
 
 /// 文件级 overlay 规则的 shallow staging 目录(只写运行目录)。
-pub const SHALLOW_STAGING_DIR: &str = "/data/adb/hybrid-mount/run/shallow";
-
 /// ext4 staging 镜像(v4.2.0 行为)。
 pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
 
@@ -40,12 +38,34 @@ pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
     "/system/lib64",
 ];
 
+/// Partition roots supported by both the installer and the mount pipeline.
+/// Runtime discovery still filters this list to roots that exist on-device.
+pub const MANAGED_PARTITIONS: &[&str] = &[
+    "odm",
+    "product",
+    "system_ext",
+    "vendor",
+    "apex",
+    "mi_ext",
+    "my_bigball",
+    "my_carrier",
+    "my_company",
+    "my_engineering",
+    "my_heytap",
+    "my_manifest",
+    "my_preload",
+    "my_product",
+    "my_region",
+    "my_reserve",
+    "my_stock",
+    "oem",
+    "optics",
+    "prism",
+];
+
 pub const DEFAULT_MOUNT_SOURCE: &str = "KSU";
 
 /// 挂载临时区(参考项目行为:启动期挂在 RAM 上,不触碰模块目录)。
-pub const TMP_ROOT: &str = "/debug_ramdisk";
-pub const TMP_WORK_DIR: &str = "/debug_ramdisk/workdir";
-
 /// 模块状态标记文件名与目录标记文件。
 pub const MODULE_PROP_FILE_NAME: &str = "module.prop";
 pub const DISABLE_FILE_NAME: &str = "disable";

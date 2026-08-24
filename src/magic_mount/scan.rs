@@ -49,6 +49,17 @@ pub fn collect_module_files(module_dir: &Path, options: &ScanOptions<'_>) -> Res
     let mut root = Node::new_root("");
     let mut system = Node::new_root("system");
     let mut has_file = false;
+    let direct_partitions: BTreeSet<String> = BUILTIN_PARTITIONS
+        .iter()
+        .map(|(partition, _)| (*partition).to_owned())
+        .chain(
+            options
+                .extra_partitions
+                .iter()
+                .filter(|partition| partition.as_str() != "system")
+                .cloned(),
+        )
+        .collect();
 
     log::debug!("begin collecting module files: {}", module_dir.display());
 
@@ -92,13 +103,37 @@ pub fn collect_module_files(module_dir: &Path, options: &ScanOptions<'_>) -> Res
         }
 
         let module_system = module_path.join("system");
-        if !module_system.is_dir() {
-            log::debug!("skipped module {id}: no system directory");
-            continue;
+        let mut found_mount_root = false;
+        if module_system.is_dir() {
+            log::debug!("collecting {}", module_system.display());
+            has_file |= collect_dir(&mut system, &module_system, &id, options)?;
+            found_mount_root = true;
         }
 
-        log::debug!("collecting {}", module_path.display());
-        has_file |= collect_dir(&mut system, &module_system, &id, options)?;
+        for partition in &direct_partitions {
+            let partition_path = module_path.join(partition);
+            if !partition_path.is_dir() {
+                continue;
+            }
+            log::debug!(
+                "collecting direct partition: module={id}, partition={partition}, path={}",
+                partition_path.display()
+            );
+            let replace = is_replace_dir(&partition_path);
+            let child = root.insert_child(NodeSource {
+                name: partition.clone(),
+                file_type: NodeFileType::Directory,
+                module_path: Some(partition_path.clone()),
+                replace,
+                skip: false,
+            });
+            has_file |= collect_dir(child, &partition_path, &id, options)? || child.replace;
+            found_mount_root = true;
+        }
+
+        if !found_mount_root {
+            log::debug!("skipped module {id}: no managed partition directory");
+        }
     }
 
     if !has_file {
@@ -106,6 +141,10 @@ pub fn collect_module_files(module_dir: &Path, options: &ScanOptions<'_>) -> Res
     }
 
     for (partition, require_symlink) in BUILTIN_PARTITIONS {
+        if root.children.contains_key(partition) {
+            system.children.remove(partition);
+            continue;
+        }
         let root_partition = Path::new("/").join(partition);
         let system_partition = Path::new("/system").join(partition);
         if root_partition.is_dir() && (!require_symlink || system_partition.is_symlink()) {
@@ -115,6 +154,10 @@ pub fn collect_module_files(module_dir: &Path, options: &ScanOptions<'_>) -> Res
 
     for partition in options.extra_partitions {
         if is_builtin_partition(partition) || partition == "system" {
+            continue;
+        }
+        if root.children.contains_key(partition) {
+            system.children.remove(partition);
             continue;
         }
         if Path::new("/").join(partition).is_dir()

@@ -4,6 +4,8 @@
 > 该实现现已晋升为新的 `dev` 开发主线；下文中的旧分支名保留为历史记录，不再是当前操作指引。
 > 状态：**历史归档** — 代码实现已进入 `dev`；本文不再作为当前进度跟踪器，Android 实机验证仍需在发布前完成。
 > 原则：**完全从 0 开始**；旧历史与参考项目只作为行为规范与资料，不作为代码基线。
+>
+> **当前 `dev` 维护补充原则（优先于下文的历史重写约束）**：v4.2.0 中大量设计已经过长期实机验证，应视为可靠的行为与实现基线。后续发现新版缺失、行为偏差或回归时，可以直接移植 v4.2.0 的必要实现并保留其关键语义、许可证和原贡献者归属；不再为了“从 0 重写”而重复实现已经验证的机制。
 
 ---
 
@@ -209,7 +211,8 @@ default_mode = "magic"
 
 - fsopen(`overlay`) 主路径 + 传统 `mount` fallback。
 - lowerdir 转义、>64 层 staging、`/proc/self/mountinfo` 子挂载处理。
-- tmpfs / ext4 loop image staging，`mkfs.ext4` / `e2fsck`、SELinux context。
+- tmpfs / ext4 loop image staging；新镜像优先由纯 Rust `am-fs-ext4` 格式化与审计，外部 `e2fsck` 只保留为兼容 fallback，并继续设置 SELinux context；KernelSU 下在 ext4 挂载成功后执行 `NukeExt4Sysfs`，失败仅记录而不回滚挂载。
+- 所有临时挂载使用无项目/PID/时间戳特征的内核随机目录，按 `/tmp` → `/tmp/rw` → `/mnt` 回退；正常结束完整清理，仅 `disable_umount` 明确保留的挂载保留真实路径。
 - 单元测试：lowerdir 转义、层数拆分、子挂载路径计算。
 
 ### Stage 4 — 混合 planner（新写）

@@ -99,6 +99,9 @@ if [ ! -f "$BASE_DIR/config.toml" ]; then
   ui_print "- Fresh installation detected"
   ui_print "- Installing default config..."
   cat "$MODPATH/config.toml" >"$BASE_DIR/config.toml"
+  if [ -n "$APATCH" ]; then
+    sed -i 's/^mountsource = .*/mountsource = "APatch"/' "$BASE_DIR/config.toml"
+  fi
   select_default_mode
 else
   ui_print "- Existing config found"

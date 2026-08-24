@@ -152,7 +152,7 @@ impl RunState {
 
         let mut state = Self::new(
             config.overlay_mode.as_str().to_owned(),
-            PathBuf::from(defs::STATE_DIR),
+            PathBuf::new(),
             plan.overlay_module_ids.clone(),
             plan.magic_module_ids.clone(),
             skip_mount_modules,
@@ -300,7 +300,11 @@ pub fn handle_modules() -> Result<()> {
 
 fn rebuild_module_snapshot() -> Vec<AppModule> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
-    let modules = list_modules(&config.moduledir, &[]);
+    let managed_partitions = defs::MANAGED_PARTITIONS
+        .iter()
+        .map(|partition| (*partition).to_owned())
+        .collect::<Vec<_>>();
+    let modules = list_modules(&config.moduledir, &managed_partitions);
     fallback_app_modules(&modules, &config)
 }
 
@@ -341,6 +345,7 @@ pub fn handle_install_state() -> Result<()> {
         use crate::overlayfs::utils::is_overlay_supported;
         use crate::utils::ksu;
 
+        ksu::init();
         let supported = is_overlay_supported().unwrap_or(false);
         let source = if ksu::is_active() { "KSU" } else { "APatch" };
         (supported, source.to_owned())
@@ -646,6 +651,7 @@ mod tests {
         assert_eq!(state.overlay_modules, vec!["overlay_mod".to_owned()]);
         assert_eq!(state.magic_modules, vec!["magic_mod".to_owned()]);
         assert_eq!(state.skip_mount_modules, vec!["skipped_mod".to_owned()]);
+        assert!(state.mount_point.as_os_str().is_empty());
         assert!(state.active_mounts.is_empty());
         assert_eq!(state.mount_stats, MountStatistics::default());
         assert_eq!(state.mode_stats.overlayfs, 1);

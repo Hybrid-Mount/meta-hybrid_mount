@@ -9,6 +9,7 @@
 #![allow(dead_code)]
 
 pub mod fs;
+pub mod temp;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod mount;

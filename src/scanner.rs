@@ -12,7 +12,7 @@
 //! 接入完成后移除本豁免,恢复 dead_code 检查。
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -99,17 +99,24 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Vec<Modul
             || path.join(defs::REMOVE_FILE_NAME).exists();
         let skip_mount = path.join(defs::SKIP_MOUNT_FILE_NAME).exists();
 
-        let system_dir = path.join("system");
-        let mut has_mount_files = system_dir.is_dir();
-        for extra in extra_partitions {
-            has_mount_files |= path.join(extra).is_dir();
+        let mut has_mount_files = false;
+        let mut entries = Vec::new();
+        let mut partitions = BTreeSet::from(["system".to_owned()]);
+        partitions.extend(
+            extra_partitions
+                .iter()
+                .filter(|partition| partition.as_str() != "system")
+                .cloned(),
+        );
+        for partition in partitions {
+            let partition_dir = path.join(&partition);
+            if !partition_dir.is_dir() {
+                continue;
+            }
+            has_mount_files = true;
+            entries.extend(collect_partition_entries(&partition_dir, &partition));
         }
-
-        let entries = if system_dir.is_dir() {
-            collect_system_entries(&system_dir)
-        } else {
-            Vec::new()
-        };
+        entries.sort_by(|left, right| left.relative.cmp(&right.relative));
 
         modules.push(ModuleRecord {
             id: id.clone(),
@@ -143,8 +150,8 @@ fn parse_prop(text: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn collect_system_entries(system_dir: &Path) -> Vec<ModuleEntry> {
-    fn walk(dir: &Path, root: &Path, out: &mut Vec<ModuleEntry>) {
+fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<ModuleEntry> {
+    fn walk(dir: &Path, root: &Path, partition: &str, out: &mut Vec<ModuleEntry>) {
         let Ok(entries) = dir.read_dir() else {
             return;
         };
@@ -169,18 +176,18 @@ fn collect_system_entries(system_dir: &Path) -> Vec<ModuleEntry> {
             let is_dir = metadata.file_type().is_dir();
 
             out.push(ModuleEntry {
-                relative: format!("system/{relative}"),
+                relative: format!("{partition}/{relative}"),
                 is_dir,
             });
 
             if is_dir {
-                walk(&entry.path(), root, out);
+                walk(&entry.path(), root, partition, out);
             }
         }
     }
 
     let mut out = Vec::new();
-    walk(system_dir, system_dir, &mut out);
+    walk(partition_dir, partition_dir, partition, &mut out);
     out.sort_by(|left, right| left.relative.cmp(&right.relative));
     out
 }
@@ -296,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn extra_partitions_do_not_change_system_entries() {
+    fn extra_partitions_are_included_with_their_root_name() {
         let root = module_dir("extra");
         let path = write_module(&root, "x");
         fs::create_dir_all(path.join("product/app")).unwrap();
@@ -305,10 +312,10 @@ mod tests {
         let modules = list_modules(&root, &["product".to_owned()]);
         assert!(modules[0].has_mount_files);
         assert!(
-            !modules[0]
+            modules[0]
                 .entries
                 .iter()
-                .any(|entry| entry.relative.starts_with("product/"))
+                .any(|entry| entry.relative == "product/app/x.apk")
         );
 
         fs::remove_dir_all(&root).ok();

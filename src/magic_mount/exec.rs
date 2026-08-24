@@ -8,7 +8,7 @@
 //! - 文件直接 bind + 只读 remount;符号链接克隆到 staging;
 //! - 目录在需要挂子项或 `replace` 时建立 tmpfs skeleton,
 //!   mirror 原目录的其余条目,最后只读 remount 并 mount-move 到目标;
-//! - whiteout 只记录不挂载;所有写入都发生在 `/debug_ramdisk` staging,
+//! - whiteout 只记录不挂载;所有写入都发生在私有随机 tmpfs staging,
 //!   模块源目录只读。
 //!
 //! Stage 2 脚手架:入口在 Stage 5 CLI 接入前暂未被调用;
@@ -25,7 +25,6 @@ use rustix::mount::{
     MountFlags, MountPropagationFlags, mount, mount_bind, mount_change, mount_move, mount_remount,
 };
 
-use crate::defs;
 use crate::errors::{Error, Result};
 use crate::magic_mount::node::{Node, NodeFileType};
 use crate::magic_mount::scan::{ScanOptions, collect_module_files};
@@ -322,6 +321,7 @@ pub struct MagicMountStats {
 pub fn magic_mount(
     module_dir: &Path,
     mount_source: &str,
+    work_dir: &Path,
     options: &ScanOptions<'_>,
     umount: bool,
 ) -> Result<MagicMountStats> {
@@ -332,7 +332,6 @@ pub fn magic_mount(
 
     log::debug!("collected: {root:?}");
 
-    let work_dir = Path::new(defs::TMP_WORK_DIR);
     ensure_dir_exists(work_dir)?;
 
     mount(mount_source, work_dir, "tmpfs", MountFlags::empty(), None).map_err(|err| {
