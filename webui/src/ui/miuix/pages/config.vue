@@ -17,7 +17,7 @@ import { Reset } from "miuix-vue/icons";
 import { getSupportedLocales } from "../../../locales";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
-import type { MountMode } from "../../../lib/types";
+import type { DefaultMountMode } from "../../../lib/types";
 import MiuixSelectField, {
   type MiuixSelectOption,
 } from "../components/MiuixSelectField.vue";
@@ -28,22 +28,22 @@ const styleOptions: MiuixSelectOption[] = [
   { value: "miuix", label: "MiuiX" },
   { value: "md3", label: "Material Design 3" },
 ];
-const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
-const modeLabels = computed(() => [
-  t("config.modeOverlay"),
-  t("config.modeMagic"),
-  t("config.modeIgnore"),
-]);
+const modeOptions: DefaultMountMode[] = ["overlay", "magic"];
+const modeLabels = computed(() => [t("config.modeOverlay"), t("config.modeMagic")]);
 const modeSelectOptions = computed<MiuixSelectOption[]>(() =>
   modeOptions.map((mode, index) => ({
     value: mode,
     label: modeLabels.value[index],
   })),
 );
-const overlayOptions = computed<MiuixSelectOption[]>(() => [
-  { value: "tmpfs", label: t("config.overlayTmpfs") },
-  { value: "ext4", label: t("config.overlayExt4") },
-]);
+const overlayOptions = computed<MiuixSelectOption[]>(() => {
+  const options: MiuixSelectOption[] = [];
+  if (configStore.config.tmpfs_xattr_supported) {
+    options.push({ value: "tmpfs", label: t("config.overlayTmpfs") });
+  }
+  options.push({ value: "ext4", label: t("config.overlayExt4") });
+  return options;
+});
 
 const languageOptions = ref<MiuixSelectOption[]>([]);
 const resetRequested = ref(false);
@@ -94,7 +94,7 @@ const defaultModeValue = computed({
   set: (value: string) =>
     configStore.setConfig({
       ...configStore.config,
-      default_mode: value as MountMode,
+      default_mode: value as DefaultMountMode,
     }),
 });
 

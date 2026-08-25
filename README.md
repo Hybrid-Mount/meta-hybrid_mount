@@ -24,7 +24,7 @@ moduledir = "/data/adb/modules"
 mountsource = "KSU"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic | ignore
+default_mode = "overlay" # overlay | magic
 
 [rules.example_module]
 default_mode = "magic"
@@ -33,7 +33,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-规则路径相对模块根目录书写。同一文件路径不能同时进入两个挂载后端；普通目录可以作为两个后端共享的结构节点，文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
+规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端只接受 `overlay` 或 `magic`。同一文件路径不能同时进入两个挂载后端；普通目录可以作为两个后端共享的结构节点，文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
 
 ## 反馈
 

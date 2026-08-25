@@ -15,12 +15,6 @@ publish = false
 
 [dependencies]
 flate2 = "1"
-fs_ext4 = {
-    package = "am-fs-ext4",
-    git = "https://github.com/Hybrid-Mount/rust-fs-ext4.git",
-    rev = "d4e01155c2fc6b0dcc143220e8dc7e62d65cff51",
-    version = "0.4.0",
-}
 getrandom = "0.4"
 hex = "0.4"
 libc = "0.2"

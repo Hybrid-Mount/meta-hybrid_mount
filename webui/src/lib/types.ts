@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export type MountMode = "overlay" | "magic" | "ignore";
+export type DefaultMountMode = Exclude<MountMode, "ignore">;
 export type OverlayMode = "tmpfs" | "ext4";
 export type UiStyle = "miuix" | "md3";
 
@@ -13,8 +14,9 @@ export interface AppConfig {
   moduledir: string;
   mountsource: string;
   overlay_mode: OverlayMode;
+  tmpfs_xattr_supported: boolean;
   disable_umount: boolean;
-  default_mode: MountMode;
+  default_mode: DefaultMountMode;
   rules: Record<string, ModuleRule>;
 }
 

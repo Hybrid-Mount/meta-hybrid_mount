@@ -41,7 +41,7 @@ pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
 }
 
 /// 设置路径的 SELinux 上下文。
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
     log::debug!("file: {}, con: {context}", path.display());
     extattr::lsetxattr(path, defs::SELINUX_XATTR, context, extattr::Flags::empty()).map_err(|err| {
@@ -53,7 +53,7 @@ pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
 }
 
 /// 读取路径的 SELinux 上下文。
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lgetfilecon(path: &Path) -> Result<String> {
     let context = extattr::lgetxattr(path, defs::SELINUX_XATTR).map_err(|err| {
         Error::msg(format!(

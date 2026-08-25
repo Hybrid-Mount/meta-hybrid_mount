@@ -29,24 +29,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "am-fs-core"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c00781b62009bed91093230d1cd103d6155b264a574c661876b33154a4fad58"
-
-[[package]]
-name = "am-fs-ext4"
-version = "0.4.0"
-source = "git+https://github.com/Hybrid-Mount/rust-fs-ext4.git?rev=d4e01155c2fc6b0dcc143220e8dc7e62d65cff51#d4e01155c2fc6b0dcc143220e8dc7e62d65cff51"
-dependencies = [
- "am-fs-core",
- "bitflags 2.13.1",
- "caseless",
- "crc32c",
- "unicode-normalization",
-]
-
-[[package]]
 name = "android_log-sys"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -235,15 +217,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "caseless"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b6fd507454086c8edfd769ca6ada439193cdb209c7681712ef6275cccbfe5d8"
-dependencies = [
- "unicode-normalization",
-]
-
-[[package]]
 name = "cc"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -411,15 +384,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "crc32c"
-version = "0.6.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a47af21622d091a8f0fb295b88bc886ac74efcc613efc19f5d0b21de5c89e47"
-dependencies = [
- "rustc_version",
 ]
 
 [[package]]
@@ -808,7 +772,6 @@ dependencies = [
 name = "hybrid-mount"
 version = "6.0.0"
 dependencies = [
- "am-fs-ext4",
  "android_logger",
  "extattr",
  "flate2",
@@ -2261,15 +2224,6 @@ name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
-
-[[package]]
-name = "unicode-normalization"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
-dependencies = [
- "tinyvec",
-]
 
 [[package]]
 name = "untrusted"

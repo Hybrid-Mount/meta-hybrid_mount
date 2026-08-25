@@ -110,7 +110,7 @@ pub fn setup_with_sources(
         return Ok(handle);
     }
 
-    let handle = ext4::setup_ext4_image(mnt_base, img_path, source_paths)?;
+    let handle = ext4::setup_ext4_image(mnt_base, img_path, source_paths, disable_umount)?;
     finalize_mount_setup(mnt_base, disable_umount);
     log::info!(
         "storage setup complete: mode={}, mount_point={}",

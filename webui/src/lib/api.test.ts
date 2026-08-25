@@ -10,6 +10,7 @@ describe("WebUI configuration contract", () => {
       moduledir: "/data/adb/modules",
       mountsource: "KSU",
       overlay_mode: "ext4",
+      tmpfs_xattr_supported: false,
       disable_umount: false,
       default_mode: "overlay",
       rules: {
@@ -54,5 +55,27 @@ describe("WebUI configuration contract", () => {
     expect(config.default_mode).toBe("magic");
     expect(config.rules.inherited.default_mode).toBeNull();
     expect(config.rules.explicit.default_mode).toBe("ignore");
+  });
+
+  it("hides unsupported tmpfs configurations behind the ext4 fallback", () => {
+    const unsupported = normalizeConfigPayload({
+      overlay_mode: "tmpfs",
+      tmpfs_xattr_supported: false,
+    });
+    const supported = normalizeConfigPayload({
+      overlay_mode: "tmpfs",
+      tmpfs_xattr_supported: true,
+    });
+
+    expect(unsupported.overlay_mode).toBe("ext4");
+    expect(unsupported.tmpfs_xattr_supported).toBe(false);
+    expect(supported.overlay_mode).toBe("tmpfs");
+    expect(supported.tmpfs_xattr_supported).toBe(true);
+  });
+
+  it("does not accept ignore as the global default", () => {
+    const config = normalizeConfigPayload({ default_mode: "ignore" });
+
+    expect(config.default_mode).toBe("overlay");
   });
 });

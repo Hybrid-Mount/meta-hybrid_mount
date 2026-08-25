@@ -12,6 +12,7 @@ export const MockAPI: AppAPI = {
     console.log("[MockAPI] loadConfig");
     return {
       ...DEFAULT_CONFIG,
+      tmpfs_xattr_supported: true,
       rules: {
         "youtube-revanced": {
           default_mode: "magic",

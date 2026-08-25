@@ -206,7 +206,7 @@ fn classify_file_type(metadata: &fs::Metadata) -> NodeFileType {
 }
 
 fn is_replace_dir(path: &Path) -> bool {
-    #[cfg(unix)]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     if extattr::lgetxattr(path, defs::REPLACE_DIR_XATTR)
         .is_ok_and(|value| String::from_utf8_lossy(&value) == "y")
     {

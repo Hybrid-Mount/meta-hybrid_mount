@@ -3,6 +3,7 @@
 import type {
   AppAPI,
   AppConfig,
+  DefaultMountMode,
   InstallState,
   Module,
   ModuleRule,
@@ -46,11 +47,18 @@ function stringToHex(str: string): string {
 const isMountMode = (value: unknown): value is MountMode =>
   value === "overlay" || value === "magic" || value === "ignore";
 
+const isDefaultMountMode = (value: unknown): value is DefaultMountMode =>
+  value === "overlay" || value === "magic";
+
 const isOverlayMode = (value: unknown): value is OverlayMode =>
   value === "tmpfs" || value === "ext4";
 
 export function normalizeConfigPayload(payload: Record<string, unknown>): AppConfig {
   const rules: AppConfig["rules"] = {};
+  const tmpfsXattrSupported = payload.tmpfs_xattr_supported === true;
+  const requestedOverlayMode = isOverlayMode(payload.overlay_mode)
+    ? payload.overlay_mode
+    : DEFAULT_CONFIG.overlay_mode;
 
   if (payload.rules && typeof payload.rules === "object") {
     for (const [moduleId, rawRule] of Object.entries(
@@ -83,14 +91,16 @@ export function normalizeConfigPayload(payload: Record<string, unknown>): AppCon
       typeof payload.mountsource === "string"
         ? payload.mountsource
         : DEFAULT_CONFIG.mountsource,
-    overlay_mode: isOverlayMode(payload.overlay_mode)
-      ? payload.overlay_mode
-      : DEFAULT_CONFIG.overlay_mode,
+    overlay_mode:
+      requestedOverlayMode === "tmpfs" && !tmpfsXattrSupported
+        ? "ext4"
+        : requestedOverlayMode,
+    tmpfs_xattr_supported: tmpfsXattrSupported,
     disable_umount:
       typeof payload.disable_umount === "boolean"
         ? payload.disable_umount
         : DEFAULT_CONFIG.disable_umount,
-    default_mode: isMountMode(payload.default_mode)
+    default_mode: isDefaultMountMode(payload.default_mode)
       ? payload.default_mode
       : DEFAULT_CONFIG.default_mode,
     rules,

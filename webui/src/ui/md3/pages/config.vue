@@ -4,18 +4,17 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
-import type { MountMode, OverlayMode, UiStyle } from "../../../lib/types";
+import type { DefaultMountMode, OverlayMode, UiStyle } from "../../../lib/types";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.vue";
 import { ICONS } from "../icons";
 
 const { t } = useI18n();
 const resetOpen = ref(false);
-const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
-const modeLabels = computed<Record<MountMode, string>>(() => ({
+const modeOptions: DefaultMountMode[] = ["overlay", "magic"];
+const modeLabels = computed<Record<DefaultMountMode, string>>(() => ({
   overlay: t("config.modeOverlay"),
   magic: t("config.modeMagic"),
-  ignore: t("config.modeIgnore"),
 }));
 const languageOptions = computed<SelectOption[]>(() =>
   uiStore.availableLanguages.map((language) => ({
@@ -27,10 +26,14 @@ const styleOptions: SelectOption[] = [
   { value: "md3", label: "Material Design 3" },
   { value: "miuix", label: "Miuix" },
 ];
-const overlayOptions = computed<SelectOption[]>(() => [
-  { value: "tmpfs", label: t("config.overlayTmpfs") },
-  { value: "ext4", label: t("config.overlayExt4") },
-]);
+const overlayOptions = computed<SelectOption[]>(() => {
+  const options: SelectOption[] = [];
+  if (configStore.config.tmpfs_xattr_supported) {
+    options.push({ value: "tmpfs", label: t("config.overlayTmpfs") });
+  }
+  options.push({ value: "ext4", label: t("config.overlayExt4") });
+  return options;
+});
 function eventValue(event: Event): string {
   return String((event.target as HTMLInputElement & { value: string }).value ?? "");
 }

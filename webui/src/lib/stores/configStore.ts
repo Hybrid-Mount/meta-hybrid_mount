@@ -55,7 +55,10 @@ async function resetConfig(): Promise<boolean> {
   saving.value = true;
   try {
     await API.genConfig();
-    config.value = structuredClone(DEFAULT_CONFIG);
+    config.value = {
+      ...structuredClone(DEFAULT_CONFIG),
+      tmpfs_xattr_supported: config.value.tmpfs_xattr_supported,
+    };
     hasLoaded = true;
     return true;
   } catch {

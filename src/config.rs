@@ -7,7 +7,7 @@
 //! mountsource = "KSU"
 //! overlay_mode = "ext4"      # tmpfs | ext4
 //! disable_umount = false
-//! default_mode = "overlay"   # overlay | magic | ignore
+//! default_mode = "overlay"   # overlay | magic
 //!
 //! [rules."<module_id>"]
 //! default_mode = "magic"
@@ -125,7 +125,9 @@ impl Default for Config {
 impl Config {
     /// 解析 TOML 文本(空文本等价于全默认)。
     pub fn from_toml(text: &str) -> Result<Self> {
-        Ok(toml::from_str(text)?)
+        let mut config: Self = toml::from_str(text)?;
+        config.normalize_global_default();
+        Ok(config)
     }
 
     /// 序列化为 TOML 文本。
@@ -133,9 +135,19 @@ impl Config {
         Ok(toml::to_string_pretty(self)?)
     }
 
-    /// `show-config` 的 JSON 输出。
-    pub fn to_json(&self) -> Result<String> {
-        Ok(serde_json::to_string_pretty(self)?)
+    /// WebUI 配置响应。运行时能力只用于控制选项可见性，不持久化到 TOML。
+    pub fn to_webui_json(&self, tmpfs_xattr_supported: bool) -> Result<String> {
+        #[derive(Serialize)]
+        struct WebUiConfig<'a> {
+            #[serde(flatten)]
+            config: &'a Config,
+            tmpfs_xattr_supported: bool,
+        }
+
+        Ok(serde_json::to_string_pretty(&WebUiConfig {
+            config: self,
+            tmpfs_xattr_supported,
+        })?)
     }
 
     /// 从磁盘读取配置。
@@ -194,7 +206,11 @@ impl Config {
             self.disable_umount = disable_umount;
         }
         if let Some(default_mode) = patch.default_mode {
-            self.default_mode = default_mode;
+            if default_mode == Mode::Ignore {
+                log::warn!("ignored unsupported global default_mode=ignore patch");
+            } else {
+                self.default_mode = default_mode;
+            }
         }
 
         if patch.replace_rules.unwrap_or(false) {
@@ -211,6 +227,17 @@ impl Config {
                     rule.paths = paths;
                 }
             }
+        }
+
+        self.normalize_global_default();
+    }
+
+    fn normalize_global_default(&mut self) {
+        if self.default_mode == Mode::Ignore {
+            log::warn!(
+                "global default_mode=ignore is no longer supported; falling back to overlay"
+            );
+            self.default_mode = Mode::Overlay;
         }
     }
 }
@@ -317,7 +344,14 @@ pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
 /// `show-config`:输出 JSON 配置。
 pub fn handle_show_config() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
-    println!("{}", config.to_json()?);
+    let tmpfs_xattr_supported = match crate::sys::fs::is_overlay_xattr_supported() {
+        Ok(supported) => supported,
+        Err(err) => {
+            log::warn!("capability probe failed: tmpfs_xattr, error={err}");
+            false
+        }
+    };
+    println!("{}", config.to_webui_json(tmpfs_xattr_supported)?);
     Ok(())
 }
 
@@ -364,6 +398,26 @@ mod tests {
     fn parses_empty_toml_as_defaults() {
         let config = Config::from_toml("").unwrap();
         assert_eq!(config, Config::default());
+    }
+
+    #[test]
+    fn legacy_global_ignore_falls_back_without_changing_rule_ignores() {
+        let config = Config::from_toml(
+            r#"
+default_mode = "ignore"
+
+[rules.demo]
+default_mode = "ignore"
+
+[rules.demo.paths]
+"system/etc/hosts" = "ignore"
+"#,
+        )
+        .unwrap();
+
+        assert_eq!(config.default_mode, Mode::Overlay);
+        assert_eq!(config.rules["demo"].default_mode, Some(Mode::Ignore));
+        assert_eq!(config.rules["demo"].paths["system/etc/hosts"], Mode::Ignore);
     }
 
     #[test]
@@ -466,7 +520,8 @@ unknown_option = "overlay"
     fn json_uses_contract_shape() {
         let config = Config::default();
 
-        let value: serde_json::Value = serde_json::from_str(&config.to_json().unwrap()).unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string_pretty(&config).unwrap()).unwrap();
 
         assert_eq!(value["moduledir"], "/data/adb/modules");
         assert_eq!(value["mountsource"], "KSU");
@@ -474,6 +529,16 @@ unknown_option = "overlay"
         assert_eq!(value["default_mode"], "overlay");
         assert_eq!(value["disable_umount"], false);
         assert_eq!(value["rules"], serde_json::json!({}));
+    }
+
+    #[test]
+    fn webui_json_exposes_tmpfs_capability_without_persisting_it() {
+        let config = Config::default();
+        let value: serde_json::Value =
+            serde_json::from_str(&config.to_webui_json(false).unwrap()).unwrap();
+
+        assert_eq!(value["tmpfs_xattr_supported"], false);
+        assert!(!config.to_toml().unwrap().contains("tmpfs_xattr_supported"));
     }
 
     #[test]
@@ -555,6 +620,19 @@ unknown_option = "overlay"
         assert_eq!(config.rules["keep"].paths["system/etc/a"], Mode::Overlay);
         assert_eq!(config.rules["new"].default_mode, Some(Mode::Overlay));
         assert_eq!(config.rules["new"].paths["system/etc/hosts"], Mode::Magic);
+    }
+
+    #[test]
+    fn patch_cannot_set_ignore_as_global_default() {
+        let mut config = Config {
+            default_mode: Mode::Magic,
+            ..Config::default()
+        };
+        let patch: ConfigPatch = serde_json::from_str(r#"{"default_mode":"ignore"}"#).unwrap();
+
+        config.apply_patch(patch);
+
+        assert_eq!(config.default_mode, Mode::Magic);
     }
 
     #[test]

@@ -12,6 +12,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   moduledir: "/data/adb/modules",
   mountsource: "KSU",
   overlay_mode: "ext4",
+  tmpfs_xattr_supported: false,
   disable_umount: false,
   default_mode: "overlay",
   rules: {},
