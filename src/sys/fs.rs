@@ -355,6 +355,61 @@ fn clone_entry_metadata(
     }
 }
 
+/// Make a synthetic shallow-layer directory behave like the stock directory
+/// it will cover.  Unlike ordinary module-entry staging, every part of this
+/// metadata is required: a private 0700 directory or an unlabeled OverlayFS
+/// root can make an entire Android partition inaccessible after the mount.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(source)?;
+    if !metadata.file_type().is_dir() {
+        return Err(Error::msg(format!(
+            "shallow overlay metadata source is not a directory: {}",
+            source.display()
+        )));
+    }
+
+    chown(
+        destination,
+        Some(Uid::from_raw(metadata.uid())),
+        Some(Gid::from_raw(metadata.gid())),
+    )
+    .map_err(|err| {
+        Error::msg(format!(
+            "copy shallow overlay ownership {} -> {}: {err}",
+            source.display(),
+            destination.display()
+        ))
+    })?;
+    fs::set_permissions(destination, metadata.permissions()).map_err(|err| {
+        Error::msg(format!(
+            "copy shallow overlay permissions {} -> {}: {err}",
+            source.display(),
+            destination.display()
+        ))
+    })?;
+
+    let context = crate::utils::lgetfilecon(source)?;
+    crate::utils::lsetfilecon(destination, &context).map_err(|err| {
+        Error::msg(format!(
+            "copy shallow overlay SELinux context {} -> {}: {err}",
+            source.display(),
+            destination.display()
+        ))
+    })?;
+
+    log::debug!(
+        "shallow overlay directory metadata cloned: src={}, dst={}, mode={:o}, uid={}, gid={}, context={}",
+        source.display(),
+        destination.display(),
+        metadata.permissions().mode() & 0o7777,
+        metadata.uid(),
+        metadata.gid(),
+        context
+    );
+    Ok(())
+}
+
 /// 读取 `/proc/config.gz`,检查 `CONFIG_*` 是否编译为 `y`(v4.2.0 行为)。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn check_kernel_config(key: &str) -> Result<bool> {

@@ -642,6 +642,211 @@ fn managed_partition_names() -> Vec<String> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ShallowOverlaySource {
+    source: PathBuf,
+    destination_relative: PathBuf,
+}
+
+#[cfg(unix)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum OverlayDirectoryTarget {
+    Existing,
+    Missing {
+        mount_target: PathBuf,
+        destination_relative: PathBuf,
+    },
+}
+
+/// A directory contributed by a module may not exist in the stock partition
+/// (for example `system/product/fonts` on a device without `/product/fonts`).
+/// OverlayFS still needs a real mount point, so introduce the missing subtree
+/// through the nearest existing non-root ancestor instead.
+#[cfg(unix)]
+fn resolve_overlay_directory_target(target: &Path) -> Result<OverlayDirectoryTarget> {
+    if !target.is_absolute() {
+        return Err(Error::msg(format!(
+            "overlay target is not absolute: {}",
+            target.display()
+        )));
+    }
+
+    match std::fs::metadata(target) {
+        Ok(metadata) if metadata.is_dir() => return Ok(OverlayDirectoryTarget::Existing),
+        Ok(_) => {
+            return Err(Error::msg(format!(
+                "overlay directory target exists but is not a directory: {}",
+                target.display()
+            )));
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => {
+            return Err(Error::msg(format!(
+                "inspect overlay target {}: {err}",
+                target.display()
+            )));
+        }
+    }
+
+    let mut ancestor = target.parent();
+    while let Some(candidate) = ancestor {
+        // Mounting a synthetic layer over `/` is far too broad and indicates
+        // that the expected Android partition root itself is unavailable.
+        if candidate == Path::new("/") {
+            break;
+        }
+
+        match std::fs::metadata(candidate) {
+            Ok(metadata) if metadata.is_dir() => {
+                let destination_relative = target
+                    .strip_prefix(candidate)
+                    .map_err(|err| {
+                        Error::msg(format!(
+                            "derive shallow overlay path {} below {}: {err}",
+                            target.display(),
+                            candidate.display()
+                        ))
+                    })?
+                    .to_path_buf();
+                if destination_relative.as_os_str().is_empty() {
+                    return Err(Error::msg(format!(
+                        "empty shallow overlay destination for {}",
+                        target.display()
+                    )));
+                }
+                return Ok(OverlayDirectoryTarget::Missing {
+                    mount_target: candidate.to_path_buf(),
+                    destination_relative,
+                });
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(Error::msg(format!(
+                    "inspect overlay ancestor {}: {err}",
+                    candidate.display()
+                )));
+            }
+        }
+        ancestor = candidate.parent();
+    }
+
+    Err(Error::msg(format!(
+        "overlay target has no existing non-root ancestor: {}",
+        target.display()
+    )))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn build_overlay_execution_plan(
+    plan: &MountPlan,
+) -> Result<(Vec<usize>, BTreeMap<PathBuf, Vec<ShallowOverlaySource>>)> {
+    let mut direct_operations = Vec::new();
+    let mut shallow = BTreeMap::<PathBuf, Vec<ShallowOverlaySource>>::new();
+
+    for (target, sources) in &plan.overlay_files {
+        let target_path = Path::new(target);
+        let (mount_target, prefix) = match resolve_overlay_directory_target(target_path)? {
+            OverlayDirectoryTarget::Existing => (target_path.to_path_buf(), PathBuf::new()),
+            OverlayDirectoryTarget::Missing {
+                mount_target,
+                destination_relative,
+            } => {
+                log::info!(
+                    "shallow overlay parent rerouted: requested_target={}, mount_target={}, relative={}",
+                    target_path.display(),
+                    mount_target.display(),
+                    destination_relative.display()
+                );
+                (mount_target, destination_relative)
+            }
+        };
+
+        for source in sources {
+            let file_name = source.file_name().ok_or_else(|| {
+                Error::msg(format!(
+                    "overlay file source has no file name: {}",
+                    source.display()
+                ))
+            })?;
+            shallow
+                .entry(mount_target.clone())
+                .or_default()
+                .push(ShallowOverlaySource {
+                    source: source.clone(),
+                    destination_relative: prefix.join(file_name),
+                });
+        }
+    }
+
+    for (index, operation) in plan.overlay_ops.iter().enumerate() {
+        match resolve_overlay_directory_target(Path::new(&operation.target))? {
+            OverlayDirectoryTarget::Existing => direct_operations.push(index),
+            OverlayDirectoryTarget::Missing {
+                mount_target,
+                destination_relative,
+            } => {
+                log::info!(
+                    "overlay directory rerouted to shallow parent: index={}, requested_target={}, mount_target={}, relative={}, layers={}",
+                    index,
+                    operation.target,
+                    mount_target.display(),
+                    destination_relative.display(),
+                    operation.lowerdirs.len()
+                );
+                let entries = shallow.entry(mount_target).or_default();
+                entries.extend(operation.lowerdirs.iter().cloned().map(|source| {
+                    ShallowOverlaySource {
+                        source,
+                        destination_relative: destination_relative.clone(),
+                    }
+                }));
+            }
+        }
+    }
+
+    for entries in shallow.values_mut() {
+        entries.sort_by(|left, right| {
+            left.source
+                .cmp(&right.source)
+                .then_with(|| left.destination_relative.cmp(&right.destination_relative))
+        });
+    }
+
+    Ok((direct_operations, shallow))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+fn overlay_rollback_order(active_mounts: &[String]) -> Vec<&Path> {
+    // A later parent overlay can hide an earlier child overlay, and the same
+    // target can legitimately be overlaid more than once. Peel mounts in the
+    // exact reverse application order so each earlier layer becomes visible
+    // before its own rollback attempt. Do not sort or deduplicate this list.
+    active_mounts
+        .iter()
+        .rev()
+        .map(String::as_str)
+        .map(Path::new)
+        .collect()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rollback_overlay_mounts(active_mounts: &[String]) {
+    for target in overlay_rollback_order(active_mounts) {
+        if !crate::sys::mount::is_mounted(target) {
+            continue;
+        }
+        match unmount(target, UnmountFlags::DETACH) {
+            Ok(()) => log::info!("overlay rollback complete: target={}", target.display()),
+            Err(err) => log::warn!(
+                "overlay rollback failed: target={}, error={err}",
+                target.display()
+            ),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_overlay_phase(
     plan: &MountPlan,
     config: &Config,
@@ -655,78 +860,89 @@ fn mount_overlay_phase(
     let mut shallow_overlay_mounts = 0;
     let mut active_mounts = Vec::new();
 
-    for (operation_index, op) in plan.overlay_ops.iter().enumerate() {
-        let lowerdirs = op
-            .lowerdirs
-            .iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect::<Vec<_>>();
+    let phase_result = (|| -> Result<()> {
+        let (direct_operations, shallow) = build_overlay_execution_plan(plan)?;
 
-        let staging_root = transient_root
-            .ok_or_else(|| Error::msg("overlay mount requires a runtime temporary session"))?;
-        let mount_source = overlay_mount_source(&op.target, effective_mount_source);
-        let register_unmountable = !config.disable_umount;
-        log::info!(
-            "overlay apply start: index={}, partition={}, target={}, source={}, layers={}, register_unmountable={}",
-            operation_index,
-            op.partition,
-            op.target,
-            mount_source,
-            lowerdirs.len(),
-            register_unmountable
-        );
-        for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
+        for operation_index in direct_operations {
+            let op = &plan.overlay_ops[operation_index];
+            let lowerdirs = op
+                .lowerdirs
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+
+            let staging_root = transient_root
+                .ok_or_else(|| Error::msg("overlay mount requires a runtime temporary session"))?;
+            let mount_source = overlay_mount_source(&op.target, effective_mount_source);
+            let register_unmountable = !config.disable_umount;
             log::info!(
-                "overlay apply lowerdir: operation={}, layer={}, path={}, exists={}, is_dir={}, mount={}",
+                "overlay apply start: index={}, partition={}, target={}, source={}, layers={}, register_unmountable={}",
                 operation_index,
-                layer_index,
-                lowerdir.display(),
-                lowerdir.exists(),
-                lowerdir.is_dir(),
-                describe_path_mount(lowerdir)
+                op.partition,
+                op.target,
+                mount_source,
+                lowerdirs.len(),
+                register_unmountable
             );
+            for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
+                log::info!(
+                    "overlay apply lowerdir: operation={}, layer={}, path={}, exists={}, is_dir={}, mount={}",
+                    operation_index,
+                    layer_index,
+                    lowerdir.display(),
+                    lowerdir.exists(),
+                    lowerdir.is_dir(),
+                    describe_path_mount(lowerdir)
+                );
+            }
+            mount_overlay(
+                &op.target,
+                &lowerdirs,
+                None,
+                None,
+                staging_root,
+                mount_source,
+                register_unmountable,
+            )
+            .map_err(|err| {
+                Error::msg(format!(
+                    "overlay mount failed: partition={}, target={}: {err}",
+                    op.partition, op.target
+                ))
+            })?;
+            if register_unmountable {
+                utils::ksu::send_unmountable(Path::new(&op.target));
+            }
+            log::info!(
+                "overlay apply complete: index={}, target={}, target_mount={}",
+                operation_index,
+                op.target,
+                describe_path_mount(Path::new(&op.target))
+            );
+            active_mounts.push(op.target.clone());
+            overlay_dir_mounts += 1;
         }
-        mount_overlay(
-            &op.target,
-            &lowerdirs,
-            None,
-            None,
-            staging_root,
-            mount_source,
-            register_unmountable,
-        )
-        .map_err(|err| {
-            Error::msg(format!(
-                "overlay mount failed: partition={}, target={}: {err}",
-                op.partition, op.target
-            ))
-        })?;
-        if register_unmountable {
-            utils::ksu::send_unmountable(Path::new(&op.target));
-        }
-        log::info!(
-            "overlay apply complete: index={}, target={}, target_mount={}",
-            operation_index,
-            op.target,
-            describe_path_mount(Path::new(&op.target))
-        );
-        active_mounts.push(op.target.clone());
-        overlay_dir_mounts += 1;
-    }
 
-    if !plan.overlay_files.is_empty() {
-        let storage_root = storage_root
-            .ok_or_else(|| Error::msg("overlay file rules require prepared overlay storage"))?;
-        shallow_overlay_mounts = mount_overlay_files(
-            &plan.overlay_files,
-            config,
-            storage_root,
-            transient_root.ok_or_else(|| {
-                Error::msg("shallow overlay requires a runtime temporary session")
-            })?,
-            effective_mount_source,
-            &mut active_mounts,
-        )?;
+        if !shallow.is_empty() {
+            let storage_root = storage_root
+                .ok_or_else(|| Error::msg("shallow overlays require prepared overlay storage"))?;
+            shallow_overlay_mounts = mount_overlay_files(
+                &shallow,
+                config,
+                storage_root,
+                transient_root.ok_or_else(|| {
+                    Error::msg("shallow overlay requires a runtime temporary session")
+                })?,
+                effective_mount_source,
+                &mut active_mounts,
+            )?;
+        }
+        Ok(())
+    })();
+
+    if let Err(err) = phase_result {
+        rollback_overlay_mounts(&active_mounts);
+        return Err(err);
     }
 
     active_mounts.sort();
@@ -736,7 +952,7 @@ fn mount_overlay_phase(
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_overlay_files(
-    files: &BTreeMap<String, Vec<PathBuf>>,
+    files: &BTreeMap<PathBuf, Vec<ShallowOverlaySource>>,
     config: &Config,
     storage_root: &Path,
     transient_root: &Path,
@@ -756,41 +972,37 @@ fn mount_overlay_files(
         describe_path_mount(storage_root)
     );
     for (target_index, (target, sources)) in files.iter().enumerate() {
+        let target_string = target.to_string_lossy();
         log::info!(
             "shallow overlay prepare: index={}, target={}, sources={}",
             target_index,
-            target,
+            target.display(),
             sources.len()
         );
         let mut lowerdirs = Vec::new();
-        for (index, source) in sources.iter().enumerate() {
+        for (index, entry) in sources.iter().enumerate() {
             let layer_dir = crate::sys::temp::create_random_dir(&staging_root)?;
-
-            let file_name = source.file_name().ok_or_else(|| {
-                Error::msg(format!(
-                    "overlay file source has no file name: {}",
-                    source.display()
-                ))
-            })?;
-            let dest = layer_dir.join(file_name);
+            let dest =
+                prepare_shallow_destination(target, &layer_dir, &entry.destination_relative)?;
             log::info!(
-                "shallow overlay source: target_index={}, layer={}, source={}, exists={}, source_mount={}, destination={}",
+                "shallow overlay source: target_index={}, layer={}, source={}, exists={}, source_mount={}, relative={}, destination={}",
                 target_index,
                 index,
-                source.display(),
-                source.exists(),
-                describe_path_mount(source),
+                entry.source.display(),
+                entry.source.exists(),
+                describe_path_mount(&entry.source),
+                entry.destination_relative.display(),
                 dest.display()
             );
-            copy_entry(source, &dest)?;
+            copy_entry(&entry.source, &dest)?;
 
             lowerdirs.push(layer_dir.to_string_lossy().into_owned());
         }
 
-        let mount_source = overlay_mount_source(target, effective_mount_source);
+        let mount_source = overlay_mount_source(&target_string, effective_mount_source);
         let register_unmountable = !config.disable_umount;
         mount_overlay(
-            target,
+            &target_string,
             &lowerdirs,
             None,
             None,
@@ -800,20 +1012,21 @@ fn mount_overlay_files(
         )
         .map_err(|err| {
             Error::msg(format!(
-                "shallow overlay mount failed: target={target}: {err}"
+                "shallow overlay mount failed: target={}: {err}",
+                target.display()
             ))
         })?;
         if register_unmountable {
-            utils::ksu::send_unmountable(Path::new(target));
+            utils::ksu::send_unmountable(target);
         }
         log::info!(
             "shallow overlay complete: index={}, target={}, layers={}, target_mount={}",
             target_index,
-            target,
+            target.display(),
             lowerdirs.len(),
-            describe_path_mount(Path::new(target))
+            describe_path_mount(target)
         );
-        active_mounts.push(target.clone());
+        active_mounts.push(target_string.into_owned());
         total_layers += lowerdirs.len();
         overlay_mounts += 1;
     }
@@ -824,6 +1037,39 @@ fn mount_overlay_files(
         total_layers
     );
     Ok(overlay_mounts)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn prepare_shallow_destination(
+    target: &Path,
+    layer_dir: &Path,
+    destination_relative: &Path,
+) -> Result<PathBuf> {
+    if destination_relative.as_os_str().is_empty() || destination_relative.is_absolute() {
+        return Err(Error::msg(format!(
+            "invalid shallow overlay destination: {}",
+            destination_relative.display()
+        )));
+    }
+
+    crate::sys::fs::clone_directory_metadata(target, layer_dir)?;
+
+    let mut structural_dir = layer_dir.to_path_buf();
+    if let Some(parent) = destination_relative.parent() {
+        for component in parent.components() {
+            let std::path::Component::Normal(name) = component else {
+                return Err(Error::msg(format!(
+                    "unsafe shallow overlay destination: {}",
+                    destination_relative.display()
+                )));
+            };
+            structural_dir.push(name);
+            fs::create_dir(&structural_dir)?;
+            crate::sys::fs::clone_directory_metadata(target, &structural_dir)?;
+        }
+    }
+
+    Ok(layer_dir.join(destination_relative))
 }
 
 fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
@@ -913,6 +1159,84 @@ mod tests {
         .unwrap();
 
         assert_eq!(staged, PathBuf::from("/mnt/hm_test/adb-ndk/system/bin"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_overlay_directory_stays_direct() {
+        let fixture = std::env::temp_dir().join(format!(
+            "hybrid-mount-existing-overlay-target-{}",
+            std::process::id()
+        ));
+        let target = fixture.join("product/fonts");
+        std::fs::remove_dir_all(&fixture).ok();
+        std::fs::create_dir_all(&target).unwrap();
+
+        assert_eq!(
+            resolve_overlay_directory_target(&target).unwrap(),
+            OverlayDirectoryTarget::Existing
+        );
+
+        std::fs::remove_dir_all(&fixture).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn missing_overlay_directory_uses_nearest_existing_parent() {
+        let fixture = std::env::temp_dir().join(format!(
+            "hybrid-mount-missing-overlay-target-{}",
+            std::process::id()
+        ));
+        let product = fixture.join("product");
+        let target = product.join("fonts/google");
+        std::fs::remove_dir_all(&fixture).ok();
+        std::fs::create_dir_all(&product).unwrap();
+
+        assert_eq!(
+            resolve_overlay_directory_target(&target).unwrap(),
+            OverlayDirectoryTarget::Missing {
+                mount_target: product,
+                destination_relative: PathBuf::from("fonts/google"),
+            }
+        );
+
+        std::fs::remove_dir_all(&fixture).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_directory_overlay_target_is_rejected() {
+        let fixture = std::env::temp_dir().join(format!(
+            "hybrid-mount-file-overlay-target-{}",
+            std::process::id()
+        ));
+        let target = fixture.join("product/fonts");
+        std::fs::remove_dir_all(&fixture).ok();
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, "not a directory").unwrap();
+
+        let err = resolve_overlay_directory_target(&target).unwrap_err();
+        assert!(err.to_string().contains("not a directory"), "{err}");
+
+        std::fs::remove_dir_all(&fixture).unwrap();
+    }
+
+    #[test]
+    fn overlay_rollback_reverses_application_order_without_deduplication() {
+        let active_mounts = vec![
+            "/product/etc".to_owned(),
+            "/product".to_owned(),
+            "/product".to_owned(),
+        ];
+
+        assert_eq!(
+            overlay_rollback_order(&active_mounts),
+            vec![
+                Path::new("/product"),
+                Path::new("/product"),
+                Path::new("/product/etc"),
+            ]
+        );
     }
 
     #[test]
