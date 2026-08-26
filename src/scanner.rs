@@ -109,7 +109,19 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Vec<Modul
         );
         for partition in partitions {
             let partition_dir = path.join(&partition);
-            if !partition_dir.is_dir() {
+            // `Path::is_dir` follows symlinks.  Magisk-style modules commonly
+            // expose aliases such as `product -> ./system/product`; following
+            // that alias here scans the same subtree once as `product/*` and
+            // again as `system/product/*`.  Besides producing duplicate plan
+            // sources, this can make the prepared OverlayFS tree much larger
+            // than the ext4 size scan (which deliberately does not follow
+            // symlinks).  Only real partition directories are scan roots;
+            // promoted content under `system/<partition>` is already found by
+            // the `system` walk and mapped to the correct target later.
+            let Ok(metadata) = fs::symlink_metadata(&partition_dir) else {
+                continue;
+            };
+            if !metadata.file_type().is_dir() {
                 continue;
             }
             has_mount_files = true;
@@ -339,6 +351,45 @@ mod tests {
                 .entries
                 .iter()
                 .any(|entry| entry.relative == "product/app/x.apk")
+        );
+
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn partition_root_symlink_does_not_duplicate_promoted_system_subtree() {
+        use std::os::unix::fs::symlink;
+
+        let root = module_dir("partition-alias");
+        let path = write_module(&root, "alias");
+        fs::create_dir_all(path.join("system/product/media")).unwrap();
+        fs::write(
+            path.join("system/product/media/bootanimation.zip"),
+            "payload",
+        )
+        .unwrap();
+        symlink("./system/product", path.join("product")).unwrap();
+
+        let modules = list_modules(&root, &["product".to_owned()]);
+        let entries = &modules[0].entries;
+
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.relative == "system/product/media/bootanimation.zip")
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|entry| !entry.relative.starts_with("product/"))
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.file_type == NodeFileType::RegularFile)
+                .count(),
+            2
         );
 
         fs::remove_dir_all(&root).ok();
