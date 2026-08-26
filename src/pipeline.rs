@@ -648,6 +648,12 @@ struct ShallowOverlaySource {
     destination_relative: PathBuf,
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+type ShallowOverlaySources = BTreeMap<PathBuf, Vec<ShallowOverlaySource>>;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+type OverlayExecutionPlan = (Vec<usize>, ShallowOverlaySources);
+
 #[cfg(unix)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum OverlayDirectoryTarget {
@@ -738,11 +744,9 @@ fn resolve_overlay_directory_target(target: &Path) -> Result<OverlayDirectoryTar
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn build_overlay_execution_plan(
-    plan: &MountPlan,
-) -> Result<(Vec<usize>, BTreeMap<PathBuf, Vec<ShallowOverlaySource>>)> {
+fn build_overlay_execution_plan(plan: &MountPlan) -> Result<OverlayExecutionPlan> {
     let mut direct_operations = Vec::new();
-    let mut shallow = BTreeMap::<PathBuf, Vec<ShallowOverlaySource>>::new();
+    let mut shallow = ShallowOverlaySources::new();
 
     for (target, sources) in &plan.overlay_files {
         let target_path = Path::new(target);
@@ -952,7 +956,7 @@ fn mount_overlay_phase(
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_overlay_files(
-    files: &BTreeMap<PathBuf, Vec<ShallowOverlaySource>>,
+    files: &ShallowOverlaySources,
     config: &Config,
     storage_root: &Path,
     transient_root: &Path,
