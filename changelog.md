@@ -1,4 +1,20 @@
 
+## v6.0.1
+
+
+### <!-- 1 --> Features
+
+- Implement shallow overlay directory handling and metadata cloning
+
+
+
+### <!-- 2 --> Fixes
+
+- Avoid duplicate partition symlink scans
+
+
+
+
 ## v6.0.0
 
 
