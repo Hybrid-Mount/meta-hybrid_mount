@@ -68,35 +68,6 @@
   letter-spacing: -1px;
 }
 
-.mount-base-chip {
-  align-self: flex-start;
-  background: rgba(0, 0, 0, 0.08);
-  padding: 6px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  font-family: var(--md-ref-typeface-mono);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: auto;
-  max-width: 100%;
-  z-index: 1;
-  backdrop-filter: blur(4px);
-}
-
-.mount-base-icon {
-  font-size: 14px;
-  width: 14px;
-  height: 14px;
-  opacity: 0.7;
-}
-
-.mount-base-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .metrics-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
