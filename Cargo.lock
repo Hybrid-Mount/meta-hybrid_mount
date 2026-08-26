@@ -770,7 +770,7 @@ dependencies = [
 
 [[package]]
 name = "hybrid-mount"
-version = "6.0.0"
+version = "6.0.1"
 dependencies = [
  "android_logger",
  "extattr",
