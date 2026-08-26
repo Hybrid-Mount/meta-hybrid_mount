@@ -305,7 +305,7 @@
 }
 
 .module-body-content {
-  padding: 0 16px 16px 16px; /* 内容区域内边距 */
+  padding: 0 16px 16px 16px;
   border-top: 1px solid var(--md-sys-color-outline-variant);
   opacity: 0;
   transform: translateY(-8px);
@@ -326,7 +326,7 @@
 }
 
 .section-label {
-  font-size: 11px; /* 字体减小 */
+  font-size: 11px;
   font-weight: 500;
   color: var(--md-sys-color-primary);
   text-transform: uppercase;

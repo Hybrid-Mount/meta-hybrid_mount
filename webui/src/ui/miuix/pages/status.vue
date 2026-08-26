@@ -29,6 +29,7 @@ const magicMountCount = computed(
     (state.value?.mount_stats.files_mounted ?? 0) +
     (state.value?.mount_stats.symlinks_created ?? 0),
 );
+const activeMounts = computed(() => [...new Set(state.value?.active_mounts ?? [])]);
 const statusKind = computed<"checking" | "normal" | "abnormal">(() => {
   if (!statusCheckFinished.value) return "checking";
 
@@ -127,34 +128,36 @@ onMounted(async () => {
     </div>
 
     <MiuixSmallTitle :text="t('status.backendTitle')" />
-    <MiuixCard class="card">
+    <MiuixCard class="card backend-card">
       <MiuixBasicComponent
         :title="t('status.storageMode')"
         :summary="state?.storage_mode ?? '-'"
       />
       <MiuixBasicComponent
+        class="backend-row"
         :title="t('status.overlayModules')"
         :summary="state?.overlay_modules.join(', ') || '0'"
       >
         <template #end>
-          <MiuixText>
+          <MiuixText class="backend-row__count">
             {{ t("status.mountCount", { count: overlayMountCount }) }}
           </MiuixText>
         </template>
       </MiuixBasicComponent>
       <MiuixBasicComponent
+        class="backend-row"
         :title="t('status.magicModules')"
         :summary="state?.magic_modules.join(', ') || '0'"
       >
         <template #end>
-          <MiuixText>
+          <MiuixText class="backend-row__count">
             {{ t("status.mountCount", { count: magicMountCount }) }}
           </MiuixText>
         </template>
       </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.activeMounts')"
-        :summary="state?.active_mounts.join(', ') || t('status.notReady')"
+        :summary="activeMounts.join(', ') || t('status.notReady')"
       />
     </MiuixCard>
 
@@ -325,6 +328,28 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin: 12px 0;
+}
+
+.backend-card :deep(.m-basic-component__center) {
+  overflow: hidden;
+}
+
+.backend-card :deep(.m-basic-component__center .m-text) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.backend-row :deep(.m-basic-component__row) {
+  align-items: flex-start;
+}
+
+.backend-row :deep(.m-basic-component__end) {
+  align-self: flex-start;
+  padding-top: 2px;
+}
+
+.backend-row__count {
+  white-space: nowrap;
 }
 
 @keyframes status-spin {
