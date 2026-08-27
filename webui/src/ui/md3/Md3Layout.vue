@@ -48,6 +48,10 @@ const {
   onPointerMove,
   onPointerUp,
   onPointerCancel,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onTouchCancel,
 } = useSwipePager(
   () => props.navindex,
   () => props.pages.length,
@@ -93,6 +97,10 @@ onBeforeUnmount(() => {
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerCancel"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+      @touchcancel="onTouchCancel"
     >
       <div class="swipe-track" :class="{ 'is-dragging': isDragging }" :style="trackStyle">
         <div

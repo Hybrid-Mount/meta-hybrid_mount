@@ -6,10 +6,8 @@ const EDGE_RESISTANCE = 3;
 const SWIPE_THRESHOLD_RATIO = 0.22;
 const SWIPE_THRESHOLD_MAX = 96;
 const SWIPE_THRESHOLD_FALLBACK = 64;
-const HORIZONTAL_LOCK_DISTANCE = 6;
-const VERTICAL_LOCK_DISTANCE = 12;
-const HORIZONTAL_INTENT_RATIO = 1.05;
-const VERTICAL_INTENT_RATIO = 1.25;
+
+type SwipeInput = "pointer" | "touch";
 
 export function useSwipePager(
   activeIndex: () => number,
@@ -26,7 +24,8 @@ export function useSwipePager(
   let activePointerId: number | null = null;
   let pendingOffset = 0;
   let animationFrame = 0;
-  let direction: "horizontal" | "vertical" | null = null;
+  let direction: "horizontal" | null = null;
+  let activeInput: SwipeInput | null = null;
 
   const trackStyle = computed<Record<string, string>>(() => {
     const count = Math.max(pageCount(), 1);
@@ -54,15 +53,13 @@ export function useSwipePager(
     immediate: true,
   });
 
-  function onPointerDown(event: PointerEvent): void {
-    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
-
-    activePointerId = event.pointerId;
-    pointerStartX = event.clientX;
-    pointerStartY = event.clientY;
+  function startSwipe(x: number, y: number, input: SwipeInput): void {
+    pointerStartX = x;
+    pointerStartY = y;
     pendingOffset = 0;
     dragOffset.value = 0;
     direction = null;
+    activeInput = input;
     isDragging.value = true;
     visitRange(activeIndex() - 1, activeIndex() + 1);
 
@@ -72,6 +69,26 @@ export function useSwipePager(
     }
   }
 
+  function onPointerDown(event: PointerEvent): void {
+    if (
+      event.pointerType === "touch" ||
+      !event.isPrimary ||
+      (event.pointerType === "mouse" && event.button !== 0)
+    ) {
+      return;
+    }
+
+    activePointerId = event.pointerId;
+    startSwipe(event.clientX, event.clientY, "pointer");
+  }
+
+  function onTouchStart(event: TouchEvent): void {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    activePointerId = null;
+    startSwipe(touch.screenX, touch.screenY, "touch");
+  }
+
   function releasePointer(element: EventTarget | null): void {
     if (!(element instanceof HTMLElement) || activePointerId === null) return;
     if (element.hasPointerCapture(activePointerId)) {
@@ -79,33 +96,27 @@ export function useSwipePager(
     }
   }
 
-  function onPointerMove(event: PointerEvent): void {
-    if (!isDragging.value || event.pointerId !== activePointerId) return;
+  function moveSwipe(
+    x: number,
+    y: number,
+    event: PointerEvent | TouchEvent,
+    capturePointer?: () => void,
+  ): void {
+    if (!isDragging.value) return;
 
-    let deltaX = event.clientX - pointerStartX;
-    const deltaY = event.clientY - pointerStartY;
+    let deltaX = x - pointerStartX;
+    const deltaY = y - pointerStartY;
 
     if (direction === null) {
       const absX = Math.abs(deltaX);
       const absY = Math.abs(deltaY);
 
-      if (absX >= HORIZONTAL_LOCK_DISTANCE && absX > absY * HORIZONTAL_INTENT_RATIO) {
+      if (absX > 0 && absX >= absY) {
         direction = "horizontal";
-        (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-      } else if (absY >= VERTICAL_LOCK_DISTANCE && absY > absX * VERTICAL_INTENT_RATIO) {
-        direction = "vertical";
+        capturePointer?.();
       } else {
         return;
       }
-    }
-
-    if (direction === "vertical") {
-      releasePointer(event.currentTarget);
-      activePointerId = null;
-      isDragging.value = false;
-      dragOffset.value = 0;
-      direction = null;
-      return;
     }
 
     if (event.cancelable) event.preventDefault();
@@ -123,6 +134,19 @@ export function useSwipePager(
         if (isDragging.value) dragOffset.value = pendingOffset;
       });
     }
+  }
+
+  function onPointerMove(event: PointerEvent): void {
+    if (activeInput !== "pointer" || event.pointerId !== activePointerId) return;
+    moveSwipe(event.clientX, event.clientY, event, () => {
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    });
+  }
+
+  function onTouchMove(event: TouchEvent): void {
+    if (activeInput !== "touch" || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    moveSwipe(touch.screenX, touch.screenY, event);
   }
 
   function finishSwipe(commit: boolean, element: EventTarget | null): void {
@@ -152,6 +176,7 @@ export function useSwipePager(
     pendingOffset = 0;
     direction = null;
     activePointerId = null;
+    activeInput = null;
   }
 
   function onPointerUp(event: PointerEvent): void {
@@ -161,6 +186,16 @@ export function useSwipePager(
 
   function onPointerCancel(event: PointerEvent): void {
     if (event.pointerId !== activePointerId) return;
+    finishSwipe(false, event.currentTarget);
+  }
+
+  function onTouchEnd(event: TouchEvent): void {
+    if (activeInput !== "touch" || event.touches.length > 0) return;
+    finishSwipe(true, event.currentTarget);
+  }
+
+  function onTouchCancel(event: TouchEvent): void {
+    if (activeInput !== "touch") return;
     finishSwipe(false, event.currentTarget);
   }
 
@@ -176,5 +211,9 @@ export function useSwipePager(
     onPointerMove,
     onPointerUp,
     onPointerCancel,
+    onTouchStart,
+    onTouchMove,
+    onTouchEnd,
+    onTouchCancel,
   };
 }

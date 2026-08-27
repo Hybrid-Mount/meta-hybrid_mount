@@ -55,6 +55,7 @@
 .page-scroller {
   height: 100%;
   overflow-y: auto;
+  touch-action: pan-y;
   padding: 16px;
   padding-bottom: calc(16px + var(--bottom-nav-height, 64px) + var(--bottom-inset, 0px));
   box-sizing: border-box;

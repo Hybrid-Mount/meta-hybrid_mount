@@ -47,6 +47,10 @@ const {
   onPointerMove,
   onPointerUp,
   onPointerCancel,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  onTouchCancel,
 } = useSwipePager(
   () => props.navindex,
   () => props.pages.length,
@@ -98,6 +102,10 @@ onBeforeUnmount(() => {
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerCancel"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+      @touchcancel="onTouchCancel"
     >
       <div
         class="miuix-swipe-track"
@@ -200,6 +208,11 @@ onBeforeUnmount(() => {
 .app__page-scroller {
   width: 100%;
   height: 100%;
+  touch-action: pan-y;
+}
+
+.app__page-scroller .m-scroll-area__viewport {
+  touch-action: pan-y;
 }
 
 .app__bottom {
