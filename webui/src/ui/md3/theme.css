@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 @import url("https://mui.kernelsu.org/internal/insets.css");
-@import url("https://mui.kernelsu.org/internal/colors.css");
 @import "./v420/app.css";
 @import "./v420/layout.css";
 @import "./v420/topbar.css";

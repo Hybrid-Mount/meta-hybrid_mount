@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-@import url("https://mui.kernelsu.org/internal/colors.css");
-
 :root {
   color-scheme: light dark;
   --status-normal-container: #dffae4;

@@ -3,17 +3,18 @@
 import { ref } from "vue";
 import type { AppConfig } from "../types";
 import { API } from "../api";
+import { cloneAppConfig } from "../config";
 import { DEFAULT_CONFIG } from "../constants";
 import { uiStore } from "./uiStore";
 
-const config = ref<AppConfig>({ ...DEFAULT_CONFIG });
+const config = ref<AppConfig>(cloneAppConfig(DEFAULT_CONFIG));
 const loading = ref(false);
 const saving = ref(false);
 let pendingLoad: Promise<void> | null = null;
 let hasLoaded = false;
 
 function setConfig(next: AppConfig): void {
-  config.value = { ...next };
+  config.value = cloneAppConfig(next);
 }
 
 async function loadConfig(): Promise<void> {
@@ -22,9 +23,10 @@ async function loadConfig(): Promise<void> {
   pendingLoad = (async () => {
     try {
       const data = await API.loadConfig();
-      config.value = structuredClone(data);
+      config.value = cloneAppConfig(data);
       hasLoaded = true;
-    } catch {
+    } catch (error) {
+      console.error("configStore: failed to load config", error);
       uiStore.showToast("Failed to load config");
     } finally {
       loading.value = false;
@@ -56,7 +58,7 @@ async function resetConfig(): Promise<boolean> {
   try {
     await API.genConfig();
     config.value = {
-      ...structuredClone(DEFAULT_CONFIG),
+      ...cloneAppConfig(DEFAULT_CONFIG),
       tmpfs_xattr_supported: config.value.tmpfs_xattr_supported,
     };
     hasLoaded = true;

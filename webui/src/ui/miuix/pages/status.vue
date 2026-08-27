@@ -306,17 +306,17 @@ onMounted(async () => {
 .status-banner--abnormal .status-banner__symbol::before,
 .status-banner--abnormal .status-banner__symbol::after {
   width: 58px;
-  left: 25px;
-  top: 47px;
+  left: 50%;
+  top: 50%;
   transform-origin: center;
 }
 
 .status-banner--abnormal .status-banner__symbol::before {
-  transform: rotate(45deg);
+  transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .status-banner--abnormal .status-banner__symbol::after {
-  transform: rotate(-45deg);
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .status-banner--checking .status-banner__symbol {
