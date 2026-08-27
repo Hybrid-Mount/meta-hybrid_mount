@@ -10,6 +10,10 @@ pub const SELF_MODULE_DIR: &str = "/data/adb/modules/hybrid_mount";
 pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
 
 pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
+pub const MODULE_BLACKLIST_FILE_NAME: &str = "module_blacklist.toml";
+pub const MODULE_BLACKLIST_PATH: &str = "/data/adb/hybrid-mount/module_blacklist.toml";
+pub const BUNDLED_MODULE_BLACKLIST_PATH: &str =
+    "/data/adb/modules/hybrid_mount/module_blacklist.toml";
 pub const SCAN_RET_PATH: &str = "/data/adb/hybrid-mount/scan.ret";
 pub const STATE_PATH: &str = "/data/adb/hybrid-mount/run/state.json";
 

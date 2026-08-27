@@ -18,8 +18,9 @@
 //!
 //! 未知字段会被拒绝,保证配置契约不会被悄悄漂移。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -100,6 +101,10 @@ pub struct Config {
     #[serde(default)]
     pub rules: BTreeMap<String, ModuleRule>,
 
+    /// 模块黑名单来自独立 TOML 文件，不属于 WebUI 可写配置。
+    #[serde(skip)]
+    pub(crate) module_blacklist: BTreeSet<String>,
+
     /// Upgrade-only input from releases that exposed custom bind mounts.
     /// The backend no longer implements that feature; accepting and omitting
     /// this field prevents one obsolete empty array from discarding the rest
@@ -117,6 +122,7 @@ impl Default for Config {
             disable_umount: false,
             default_mode: Mode::default(),
             rules: BTreeMap::new(),
+            module_blacklist: BTreeSet::new(),
             legacy_custom_mounts: Vec::new(),
         }
     }
@@ -153,7 +159,9 @@ impl Config {
     /// 从磁盘读取配置。
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path)?;
-        Self::from_toml(&text)
+        let mut config = Self::from_toml(&text)?;
+        config.load_module_blacklists(path);
+        Ok(config)
     }
 
     /// 读取配置;失败或不存在时回退默认值(参考项目行为)。
@@ -170,7 +178,9 @@ impl Config {
             }
             Err(err) => {
                 log::warn!("failed to load config, using default: {err}");
-                Self::default()
+                let mut config = Self::default();
+                config.load_module_blacklists(path);
+                config
             }
         }
     }
@@ -238,6 +248,75 @@ impl Config {
                 "global default_mode=ignore is no longer supported; falling back to overlay"
             );
             self.default_mode = Mode::Overlay;
+        }
+    }
+
+    pub(crate) fn is_module_blacklisted(&self, module_id: &str) -> bool {
+        self.module_blacklist.contains(module_id)
+    }
+
+    fn load_module_blacklists(&mut self, config_path: &Path) {
+        let persistent_path = if config_path == Path::new(defs::CONFIG_PATH) {
+            PathBuf::from(defs::MODULE_BLACKLIST_PATH)
+        } else {
+            config_path
+                .parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join(defs::MODULE_BLACKLIST_FILE_NAME)
+        };
+
+        // Released defaults live inside the module and must remain effective
+        // after an upgrade. The persistent copy additionally preserves local
+        // additions. Merge both sources instead of letting one shadow the
+        // other.
+        if config_path == Path::new(defs::CONFIG_PATH) {
+            self.module_blacklist
+                .extend(read_module_blacklist(Path::new(
+                    defs::BUNDLED_MODULE_BLACKLIST_PATH,
+                )));
+        }
+        self.module_blacklist
+            .extend(read_module_blacklist(&persistent_path));
+
+        log::info!(
+            "module blacklist loaded: entries={}",
+            self.module_blacklist.len()
+        );
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct ModuleBlacklistFile {
+    blacklist: Vec<String>,
+}
+
+fn read_module_blacklist(path: &Path) -> BTreeSet<String> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == ErrorKind::NotFound => return BTreeSet::new(),
+        Err(err) => {
+            log::warn!(
+                "failed to read module blacklist {}, ignoring it: {err}",
+                path.display()
+            );
+            return BTreeSet::new();
+        }
+    };
+
+    match toml::from_str::<ModuleBlacklistFile>(&text) {
+        Ok(file) => file
+            .blacklist
+            .into_iter()
+            .map(|id| id.trim().to_owned())
+            .filter(|id| !id.is_empty())
+            .collect(),
+        Err(err) => {
+            log::warn!(
+                "failed to parse module blacklist {}, ignoring it: {err}",
+                path.display()
+            );
+            BTreeSet::new()
         }
     }
 }
@@ -591,6 +670,46 @@ unknown_option = "overlay"
         let config = Config::load_or_default(&missing);
         assert_eq!(config, Config::default());
 
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
+        let dir = test_dir("module-blacklist");
+        let path = dir.join("config.toml");
+        Config::default().save(&path).unwrap();
+        fs::write(
+            dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
+            r#"blacklist = ["blocked", " blocked ", "other", ""]"#,
+        )
+        .unwrap();
+
+        let loaded = Config::load(&path).unwrap();
+
+        assert!(loaded.is_module_blacklisted("blocked"));
+        assert!(loaded.is_module_blacklisted("other"));
+        assert_eq!(loaded.module_blacklist.len(), 2);
+        assert!(!loaded.to_toml().unwrap().contains("module_blacklist"));
+        assert!(!loaded.to_toml().unwrap().contains("blocked"));
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn missing_main_config_still_loads_blacklist_and_bad_blacklist_is_fail_open() {
+        let dir = test_dir("module-blacklist-fallback");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
+        fs::write(&blacklist_path, r#"blacklist = ["blocked"]"#).unwrap();
+
+        let loaded = Config::load_or_default(&path);
+        assert!(loaded.is_module_blacklisted("blocked"));
+        assert_eq!(loaded.default_mode, Mode::Overlay);
+
+        fs::write(&blacklist_path, "blacklist = not-valid").unwrap();
+        let loaded = Config::load_or_default(&path);
+        assert!(loaded.module_blacklist.is_empty());
+        assert_eq!(loaded.default_mode, Mode::Overlay);
         cleanup(&dir);
     }
 

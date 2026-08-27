@@ -55,6 +55,10 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
         if !module.mountable() {
             continue;
         }
+        if input.config.is_module_blacklisted(&module.id) {
+            log::info!("plan skip module: id={}, reason=blacklisted", module.id);
+            continue;
+        }
         let rules = ModuleRulesView::new(&module.id, input.config);
         process_module(module, &rules, input.promoted_partitions, &mut builder)?;
     }
@@ -637,6 +641,31 @@ mod tests {
                 .source_for(Mode::Magic)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn module_blacklist_overrides_global_and_path_rules() {
+        let mut rules = no_rules();
+        rules.insert(
+            "blocked".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::from([("system/etc/blocked".to_owned(), Mode::Overlay)]),
+            },
+        );
+        let mut config = config(Mode::Overlay, rules);
+        config.module_blacklist.insert("blocked".to_owned());
+        let modules = [
+            record("blocked", &[("system/etc/blocked", false)]),
+            record("allowed", &[("system/etc/allowed", false)]),
+        ];
+
+        let result = plan(&modules, &config, &[]);
+
+        assert_eq!(result.overlay_module_ids, vec!["allowed"]);
+        assert!(result.magic_module_ids.is_empty());
+        assert!(result.tree.find("/system/etc/blocked").is_none());
+        assert!(result.tree.find("/system/etc/allowed").is_some());
     }
 
     #[test]
