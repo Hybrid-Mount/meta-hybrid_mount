@@ -40,7 +40,7 @@
     0 4px 8px 3px var(--md-sys-color-shadow), 0 1px 3px 0 var(--md-sys-color-shadow);
   --font-common:
     system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --md-ref-typeface-plain: var(--font-stack);
+  --md-ref-typeface-plain: var(--font-common);
   --md-ref-typeface-mono: "JetBrains Mono", "Fira Code", monospace;
 
   --top-inset: var(--window-inset-top, 0px);
