@@ -355,16 +355,16 @@ fn clone_entry_metadata(
     }
 }
 
-/// Make a synthetic shallow-layer directory behave like the stock directory
-/// it will cover.  Unlike ordinary module-entry staging, every part of this
-/// metadata is required: a private 0700 directory or an unlabeled OverlayFS
-/// root can make an entire Android partition inaccessible after the mount.
+/// Make an OverlayFS layer root behave like the stock directory it will cover.
+/// Unlike ordinary module-entry staging, every part of this metadata is
+/// required: a private 0700 directory or a wrongly labeled OverlayFS root can
+/// make an entire Android partition inaccessible after the mount.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()> {
     let metadata = fs::symlink_metadata(source)?;
     if !metadata.file_type().is_dir() {
         return Err(Error::msg(format!(
-            "shallow overlay metadata source is not a directory: {}",
+            "overlay layer metadata source is not a directory: {}",
             source.display()
         )));
     }
@@ -376,14 +376,14 @@ pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()>
     )
     .map_err(|err| {
         Error::msg(format!(
-            "copy shallow overlay ownership {} -> {}: {err}",
+            "copy overlay layer ownership {} -> {}: {err}",
             source.display(),
             destination.display()
         ))
     })?;
     fs::set_permissions(destination, metadata.permissions()).map_err(|err| {
         Error::msg(format!(
-            "copy shallow overlay permissions {} -> {}: {err}",
+            "copy overlay layer permissions {} -> {}: {err}",
             source.display(),
             destination.display()
         ))
@@ -392,14 +392,14 @@ pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()>
     let context = crate::utils::lgetfilecon(source)?;
     crate::utils::lsetfilecon(destination, &context).map_err(|err| {
         Error::msg(format!(
-            "copy shallow overlay SELinux context {} -> {}: {err}",
+            "copy overlay layer SELinux context {} -> {}: {err}",
             source.display(),
             destination.display()
         ))
     })?;
 
     log::debug!(
-        "shallow overlay directory metadata cloned: src={}, dst={}, mode={:o}, uid={}, gid={}, context={}",
+        "overlay layer directory metadata cloned: src={}, dst={}, mode={:o}, uid={}, gid={}, context={}",
         source.display(),
         destination.display(),
         metadata.permissions().mode() & 0o7777,

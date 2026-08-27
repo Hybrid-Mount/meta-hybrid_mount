@@ -22,8 +22,10 @@ use crate::defs;
 use crate::errors::{Error, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::magic_mount::exec;
+#[cfg(unix)]
+use crate::plan::MountPlan;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::plan::{MountPlan, PlanInput, build_plan};
+use crate::plan::{PlanInput, build_plan};
 use crate::scanner::ModuleRecord;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::scanner::list_modules;
@@ -288,11 +290,14 @@ fn prepare_overlay_storage(
         }
     }
 
+    let normalized_layers = normalize_direct_overlay_layer_metadata(plan)?;
+
     log::info!(
-        "overlay staging complete: root={}, operations={}, shallow_targets={}",
+        "overlay staging complete: root={}, operations={}, shallow_targets={}, normalized_layer_roots={}",
         storage_root.display(),
         plan.overlay_ops.len(),
-        plan.overlay_files.len()
+        plan.overlay_files.len(),
+        normalized_layers
     );
     Ok(())
 }
@@ -741,6 +746,51 @@ fn resolve_overlay_directory_target(target: &Path) -> Result<OverlayDirectoryTar
         "overlay target has no existing non-root ancestor: {}",
         target.display()
     )))
+}
+
+/// OverlayFS takes the merged directory inode metadata from the highest
+/// lowerdir. A module directory carrying `adb_data_file` (or any other
+/// unsuitable label) must therefore not be allowed to relabel an existing
+/// stock mount target such as `/system/bin`.
+#[cfg(unix)]
+fn normalize_direct_overlay_layer_metadata_with(
+    plan: &MountPlan,
+    mut clone_metadata: impl FnMut(&Path, &Path) -> Result<()>,
+) -> Result<usize> {
+    let mut normalized = 0;
+
+    for operation in &plan.overlay_ops {
+        let target = Path::new(&operation.target);
+        if resolve_overlay_directory_target(target)? != OverlayDirectoryTarget::Existing {
+            continue;
+        }
+
+        for lowerdir in &operation.lowerdirs {
+            clone_metadata(target, lowerdir)?;
+            normalized += 1;
+        }
+    }
+
+    Ok(normalized)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn normalize_direct_overlay_layer_metadata(plan: &MountPlan) -> Result<usize> {
+    normalize_direct_overlay_layer_metadata_with(plan, |target, lowerdir| {
+        crate::sys::fs::clone_directory_metadata(target, lowerdir).map_err(|err| {
+            Error::msg(format!(
+                "normalize direct overlay layer metadata {} -> {}: {err}",
+                target.display(),
+                lowerdir.display()
+            ))
+        })?;
+        log::debug!(
+            "overlay layer root metadata normalized: target={}, layer={}",
+            target.display(),
+            lowerdir.display()
+        );
+        Ok(())
+    })
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1221,6 +1271,56 @@ mod tests {
 
         let err = resolve_overlay_directory_target(&target).unwrap_err();
         assert!(err.to_string().contains("not a directory"), "{err}");
+
+        std::fs::remove_dir_all(&fixture).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn direct_overlay_layer_root_uses_stock_directory_label() {
+        use crate::plan::OverlayOperation;
+        use std::collections::BTreeMap;
+
+        let fixture = std::env::temp_dir().join(format!(
+            "hybrid-mount-overlay-root-label-{}",
+            std::process::id()
+        ));
+        let stock_bin = fixture.join("system/bin");
+        let droidspaces_bin = fixture.join("staging/droidspaces/system/bin");
+        let other_bin = fixture.join("staging/other/system/bin");
+        std::fs::remove_dir_all(&fixture).ok();
+        std::fs::create_dir_all(&stock_bin).unwrap();
+        std::fs::create_dir_all(&droidspaces_bin).unwrap();
+        std::fs::create_dir_all(&other_bin).unwrap();
+
+        let mut plan = MountPlan::default();
+        plan.overlay_ops.push(OverlayOperation {
+            partition: "system".to_owned(),
+            target: stock_bin.to_string_lossy().into_owned(),
+            lowerdirs: vec![droidspaces_bin.clone(), other_bin.clone()],
+        });
+
+        let system_file = "u:object_r:system_file:s0".to_owned();
+        let adb_data_file = "u:object_r:adb_data_file:s0".to_owned();
+        let mut labels = BTreeMap::from([
+            (stock_bin.clone(), system_file.clone()),
+            (droidspaces_bin.clone(), adb_data_file.clone()),
+            (other_bin.clone(), adb_data_file),
+        ]);
+
+        let normalized =
+            normalize_direct_overlay_layer_metadata_with(&plan, |source, destination| {
+                let label = labels.get(source).cloned().ok_or_else(|| {
+                    Error::msg(format!("missing test label for {}", source.display()))
+                })?;
+                labels.insert(destination.to_path_buf(), label);
+                Ok(())
+            })
+            .unwrap();
+
+        assert_eq!(normalized, 2);
+        assert_eq!(labels.get(&droidspaces_bin), Some(&system_file));
+        assert_eq!(labels.get(&other_bin), Some(&system_file));
 
         std::fs::remove_dir_all(&fixture).unwrap();
     }
