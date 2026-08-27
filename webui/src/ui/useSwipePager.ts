@@ -3,9 +3,13 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
 
 const EDGE_RESISTANCE = 3;
-const SWIPE_THRESHOLD_RATIO = 0.33;
-const SWIPE_THRESHOLD_FALLBACK = 80;
-const DIRECTION_LOCK_DISTANCE = 8;
+const SWIPE_THRESHOLD_RATIO = 0.22;
+const SWIPE_THRESHOLD_MAX = 96;
+const SWIPE_THRESHOLD_FALLBACK = 64;
+const HORIZONTAL_LOCK_DISTANCE = 6;
+const VERTICAL_LOCK_DISTANCE = 12;
+const HORIZONTAL_INTENT_RATIO = 1.05;
+const VERTICAL_INTENT_RATIO = 1.25;
 
 export function useSwipePager(
   activeIndex: () => number,
@@ -82,12 +86,16 @@ export function useSwipePager(
     const deltaY = event.clientY - pointerStartY;
 
     if (direction === null) {
-      if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < DIRECTION_LOCK_DISTANCE) {
-        return;
-      }
-      direction = Math.abs(deltaX) > Math.abs(deltaY) ? "horizontal" : "vertical";
-      if (direction === "horizontal") {
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      if (absX >= HORIZONTAL_LOCK_DISTANCE && absX > absY * HORIZONTAL_INTENT_RATIO) {
+        direction = "horizontal";
         (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      } else if (absY >= VERTICAL_LOCK_DISTANCE && absY > absX * VERTICAL_INTENT_RATIO) {
+        direction = "vertical";
+      } else {
+        return;
       }
     }
 
@@ -130,7 +138,9 @@ export function useSwipePager(
 
     if (commit && direction === "horizontal") {
       const width = containerRef.value?.clientWidth ?? 0;
-      const threshold = width * SWIPE_THRESHOLD_RATIO || SWIPE_THRESHOLD_FALLBACK;
+      const threshold = width
+        ? Math.min(width * SWIPE_THRESHOLD_RATIO, SWIPE_THRESHOLD_MAX)
+        : SWIPE_THRESHOLD_FALLBACK;
       const current = activeIndex();
       let next = current;
       if (dragOffset.value < -threshold && current < pageCount() - 1) next += 1;

@@ -259,8 +259,8 @@ onMounted(() => moduleStore.ensureModulesLoaded());
 }
 
 .modules-toolbar {
-  width: min(100%, 720px);
-  margin-inline: auto;
+  width: auto;
+  margin-inline: 12px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(160px, 190px);
   gap: 12px;
