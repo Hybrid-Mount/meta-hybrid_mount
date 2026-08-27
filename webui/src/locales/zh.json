@@ -107,6 +107,7 @@
     "saveFailed": "保存模块规则失败",
     "searchPlaceholder": "搜索模块...",
     "filterLabel": "筛选：",
+    "filterActive": "非忽略",
     "filterAll": "全部",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

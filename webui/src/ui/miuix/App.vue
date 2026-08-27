@@ -16,7 +16,6 @@ const navindex = computed({
   get: () => uiStore.navindex,
   set: (value: number) => uiStore.setNavindex(value),
 });
-const activepage = computed(() => pages[navindex.value]);
 const titles = computed(() => [
   t("tabs.status"),
   t("tabs.config"),
@@ -29,5 +28,5 @@ onBeforeUnmount(() => uiStore.setToastHandler());
 </script>
 
 <template>
-  <MiuixLayout v-model:navindex="navindex" :activepage="activepage" :titles="titles" />
+  <MiuixLayout v-model:navindex="navindex" :pages="pages" :titles="titles" />
 </template>

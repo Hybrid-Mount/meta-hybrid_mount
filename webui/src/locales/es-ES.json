@@ -96,6 +96,7 @@
     "saveFailed": "Error al guardar modos",
     "searchPlaceholder": "Buscar módulos...",
     "filterLabel": "Filtro:",
+    "filterActive": "Activos",
     "filterAll": "Todos",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

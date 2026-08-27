@@ -107,6 +107,7 @@
     "saveFailed": "Failed to save module rules",
     "searchPlaceholder": "Search modules...",
     "filterLabel": "Filter:",
+    "filterActive": "Active",
     "filterAll": "All",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

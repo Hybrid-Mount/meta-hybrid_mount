@@ -96,6 +96,7 @@
     "saveFailed": "モードの保存に失敗しました",
     "searchPlaceholder": "モジュールを検索...",
     "filterLabel": "フィルター:",
+    "filterActive": "有効",
     "filterAll": "すべて",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

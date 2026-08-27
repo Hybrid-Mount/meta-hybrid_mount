@@ -96,6 +96,7 @@
     "saveFailed": "Modlar kaydedilemedi",
     "searchPlaceholder": "Modülleri ara...",
     "filterLabel": "Filtrele:",
+    "filterActive": "Etkin",
     "filterAll": "Tümü",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

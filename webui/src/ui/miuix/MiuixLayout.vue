@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import "miuix-vue/style.css";
 import "./theme.css";
-import { ref, watch, onMounted, onBeforeUnmount, type Component } from "vue";
+import { ref, onMounted, onBeforeUnmount, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import {
   MiuixSnackbarHost,
@@ -16,12 +16,13 @@ import {
 } from "miuix-vue";
 import { ScreenMirroring, Settings, Info, Folder, Reset } from "miuix-vue/icons";
 import { sysStore } from "../../lib/stores/sysStore";
+import { useSwipePager } from "../useSwipePager";
 
 const { t } = useI18n();
 
 const props = defineProps<{
   navindex: number;
-  activepage: Component;
+  pages: Component[];
   titles: string[];
 }>();
 
@@ -30,28 +31,28 @@ const emit = defineEmits<{
 }>();
 
 const rebootRequested = ref(false);
-const pageTransition = ref("page-forward");
 const navIcons = [ScreenMirroring, Settings, Folder, Info];
 
-interface Scroller {
-  getScrollTop: () => number;
-  setScrollTop: (top: number) => void;
+function selectTab(index: number): void {
+  if (index === props.navindex) return;
+  emit("update:navindex", index);
 }
-const scrollerRef = ref<Scroller | null>(null);
-const scrollPositions = new Map<number, number>();
 
-watch(
+const swipeContainerRef = ref<HTMLElement | null>(null);
+const {
+  isDragging,
+  trackStyle,
+  visitedPages,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+} = useSwipePager(
   () => props.navindex,
-  (next, previous) => {
-    pageTransition.value = next > previous ? "page-forward" : "page-back";
-    scrollPositions.set(previous, scrollerRef.value?.getScrollTop() ?? 0);
-  },
-  { flush: "pre" },
+  () => props.pages.length,
+  selectTab,
+  swipeContainerRef,
 );
-
-function onPageEnter(): void {
-  scrollerRef.value?.setScrollTop(scrollPositions.get(props.navindex) ?? 0);
-}
 
 function rebootSystem(): void {
   sysStore.rebootDevice();
@@ -82,34 +83,46 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="app">
-    <MiuixScrollArea ref="scrollerRef" class="app__body">
-      <MiuixTopAppBar
-        :large="false"
-        :title="t('common.appName')"
-        class="app__top-app-bar"
-      >
-        <template #actions>
-          <MiuixIconButton
-            :aria-label="t('common.reboot')"
-            @click="rebootRequested = true"
-          >
-            <MiuixIcon :icon="Reset" :size="24" />
-          </MiuixIconButton>
-        </template>
-      </MiuixTopAppBar>
+    <MiuixTopAppBar :large="false" :title="t('common.appName')" class="app__top-app-bar">
+      <template #actions>
+        <MiuixIconButton :aria-label="t('common.reboot')" @click="rebootRequested = true">
+          <MiuixIcon :icon="Reset" :size="24" />
+        </MiuixIconButton>
+      </template>
+    </MiuixTopAppBar>
 
-      <Transition :name="pageTransition" mode="out-in" @enter="onPageEnter">
-        <KeepAlive>
-          <component :is="activepage" v-if="activepage" :key="navindex" />
-        </KeepAlive>
-      </Transition>
-    </MiuixScrollArea>
+    <main
+      ref="swipeContainerRef"
+      class="app__body"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerCancel"
+    >
+      <div
+        class="miuix-swipe-track"
+        :class="{ 'is-dragging': isDragging }"
+        :style="trackStyle"
+      >
+        <div
+          v-for="(page, index) in pages"
+          :key="index"
+          class="miuix-swipe-page"
+          :aria-hidden="navindex !== index"
+          :inert="navindex !== index"
+        >
+          <MiuixScrollArea class="app__page-scroller">
+            <component :is="page" v-if="visitedPages.has(index)" />
+          </MiuixScrollArea>
+        </div>
+      </div>
+    </main>
 
     <div ref="bottomBarRef" class="app__bottom">
       <MiuixNavigationBar
         :model-value="navindex"
         :items="titles.map((label) => ({ label }))"
-        @update:model-value="emit('update:navindex', $event)"
+        @update:model-value="selectTab"
       >
         <template #icon="{ index }">
           <MiuixIcon :icon="navIcons[index]" :size="26" />
@@ -156,11 +169,37 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  --m-scroll-area-inset-top: 52px;
+  touch-action: pan-y;
 }
 
 .app__top-app-bar {
+  flex: none;
   padding-top: var(--top-inset);
+}
+
+.miuix-swipe-track {
+  display: flex;
+  width: calc(var(--swipe-tab-count) * 100%);
+  height: 100%;
+  will-change: transform;
+  transform: translateX(calc(var(--swipe-base-translate) + var(--swipe-drag-offset)));
+  transition: transform 0.4s cubic-bezier(0.2, 1, 0.2, 1);
+}
+
+.miuix-swipe-track.is-dragging {
+  transition: none;
+}
+
+.miuix-swipe-page {
+  width: calc(100% / var(--swipe-tab-count));
+  height: 100%;
+  flex: none;
+  overflow: hidden;
+}
+
+.app__page-scroller {
+  width: 100%;
+  height: 100%;
 }
 
 .app__bottom {
@@ -195,40 +234,9 @@ onBeforeUnmount(() => {
   line-height: 20px;
 }
 
-.page-forward-enter-active,
-.page-forward-leave-active,
-.page-back-enter-active,
-.page-back-leave-active {
-  transition:
-    opacity 0.2s ease,
-    transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.page-forward-enter-from,
-.page-back-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
-}
-
-.page-forward-leave-to,
-.page-back-enter-from {
-  opacity: 0;
-  transform: translateX(-14px);
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .page-forward-enter-active,
-  .page-forward-leave-active,
-  .page-back-enter-active,
-  .page-back-leave-active {
-    transition: opacity 0.01ms linear;
-  }
-
-  .page-forward-enter-from,
-  .page-forward-leave-to,
-  .page-back-enter-from,
-  .page-back-leave-to {
-    transform: none;
+  .miuix-swipe-track {
+    transition-duration: 0.01ms;
   }
 }
 

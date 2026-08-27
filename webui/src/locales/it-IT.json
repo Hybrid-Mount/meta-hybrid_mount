@@ -96,6 +96,7 @@
     "saveFailed": "Impossibile salvare le modalita",
     "searchPlaceholder": "Cerca moduli...",
     "filterLabel": "Filtro:",
+    "filterActive": "Attivi",
     "filterAll": "Tutti",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

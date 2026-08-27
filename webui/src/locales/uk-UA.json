@@ -96,6 +96,7 @@
     "saveFailed": "Не вдалося зберегти режими модулів",
     "searchPlaceholder": "Пошук модулів...",
     "filterLabel": "Фільтр:",
+    "filterActive": "Активні",
     "filterAll": "Усі",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

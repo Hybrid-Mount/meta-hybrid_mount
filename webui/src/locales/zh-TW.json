@@ -104,6 +104,7 @@
     "saveFailed": "儲存失敗",
     "searchPlaceholder": "搜尋模組...",
     "filterLabel": "篩選:",
+    "filterActive": "非忽略",
     "filterAll": "全部",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

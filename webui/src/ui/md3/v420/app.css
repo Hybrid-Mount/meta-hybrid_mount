@@ -292,7 +292,7 @@ md-dialog.transparent-scrim {
 }
 
 .bottom-actions-root {
-  position: fixed;
+  position: absolute;
   left: 0;
   right: 0;
   bottom: calc(var(--bottom-nav-height, 64px) + var(--bottom-inset, 0px) + 16px);
@@ -320,13 +320,17 @@ md-dialog.transparent-scrim {
     transform 0.24s cubic-bezier(0.2, 1, 0.2, 1);
 }
 
-.bottom-actions-root.is-active {
+.swipe-page:not([inert]) .bottom-actions-root {
   opacity: 1;
 }
 
 .bottom-actions-root > * {
-  pointer-events: auto;
+  pointer-events: none;
   flex-shrink: 0;
+}
+
+.swipe-page:not([inert]) .bottom-actions-root > * {
+  pointer-events: auto;
 }
 
 .bottom-actions-root > .spacer {

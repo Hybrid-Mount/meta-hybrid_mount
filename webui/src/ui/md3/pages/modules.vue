@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { uiStore } from "../../../lib/stores/uiStore";
+import { matchesModuleFilter, type ModuleFilter } from "../../../lib/moduleFilter";
 import type { Module, ModuleRule, MountMode } from "../../../lib/types";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.vue";
@@ -21,11 +22,12 @@ const modeSelectOptions = computed<SelectOption[]>(() =>
   modeOptions.map((mode) => ({ value: mode, label: modeLabels.value[mode] })),
 );
 const filterOptions = computed<SelectOption[]>(() => [
+  { value: "active", label: t("modules.filterActive") },
   { value: "all", label: t("modules.filterAll") },
   ...modeSelectOptions.value,
 ]);
 const query = ref("");
-const filter = ref<"all" | MountMode>("all");
+const filter = ref<ModuleFilter>("active");
 const expanded = ref<Record<string, boolean>>({});
 const editing = ref<Record<string, ModuleRule>>({});
 const newPaths = ref<Record<string, string>>({});
@@ -33,7 +35,7 @@ const newModes = ref<Record<string, MountMode>>({});
 
 const filtered = computed(() =>
   moduleStore.modules.filter((module) => {
-    if (filter.value !== "all" && module.mode !== filter.value) return false;
+    if (!matchesModuleFilter(module, filter.value)) return false;
     const needle = query.value.trim().toLowerCase();
     if (!needle) return true;
     return [module.name, module.id, module.author].some((value) =>
@@ -91,7 +93,7 @@ onMounted(() => moduleStore.ensureModulesLoaded());
             :label="t('modules.filterLabel')"
             :model-value="filter"
             :options="filterOptions"
-            @update:model-value="filter = $event as 'all' | MountMode"
+            @update:model-value="filter = $event as ModuleFilter"
           />
         </div>
       </div>

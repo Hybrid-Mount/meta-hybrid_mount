@@ -96,6 +96,7 @@
     "saveFailed": "Thất bại khi lưu các chế độ",
     "searchPlaceholder": "Tìm kiếm các mô-đun...",
     "filterLabel": "Bộ lọc:",
+    "filterActive": "Đang hoạt động",
     "filterAll": "Tất cả",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",

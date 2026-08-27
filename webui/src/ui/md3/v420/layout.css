@@ -29,6 +29,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  touch-action: pan-y;
   --swipe-tab-count: 1;
   --swipe-base-translate: 0%;
   --swipe-drag-offset: 0px;
@@ -63,36 +64,9 @@
   display: flex;
   flex-direction: column;
 }
-.page-forward-enter-active,
-.page-forward-leave-active,
-.page-back-enter-active,
-.page-back-leave-active {
-  transition:
-    opacity 200ms ease,
-    transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.page-forward-enter-from,
-.page-back-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
-}
-.page-forward-leave-to,
-.page-back-enter-from {
-  opacity: 0;
-  transform: translateX(-14px);
-}
 @media (prefers-reduced-motion: reduce) {
-  .page-forward-enter-active,
-  .page-forward-leave-active,
-  .page-back-enter-active,
-  .page-back-leave-active {
-    transition: opacity 0.01ms linear;
-  }
-  .page-forward-enter-from,
-  .page-forward-leave-to,
-  .page-back-enter-from,
-  .page-back-leave-to {
-    transform: none;
+  .swipe-track {
+    transition-duration: 0.01ms;
   }
 }
 * {

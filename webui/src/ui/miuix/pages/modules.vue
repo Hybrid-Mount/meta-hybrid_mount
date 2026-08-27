@@ -16,6 +16,7 @@ import { Delete, ExpandLess, ExpandMore, Refresh } from "miuix-vue/icons";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
+import { matchesModuleFilter, type ModuleFilter } from "../../../lib/moduleFilter";
 import type { Module, ModuleRule, MountMode } from "../../../lib/types";
 import MiuixSelectField, {
   type MiuixSelectOption,
@@ -24,7 +25,7 @@ import MiuixSelectField, {
 const { t } = useI18n();
 
 const searchQuery = ref("");
-const filter = ref<MountMode | "all">("all");
+const filter = ref<ModuleFilter>("active");
 const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
 const modeLabels = computed(() => [
   t("config.modeOverlay"),
@@ -32,6 +33,7 @@ const modeLabels = computed(() => [
   t("config.modeIgnore"),
 ]);
 const filterOptions = computed<MiuixSelectOption[]>(() => [
+  { value: "active", label: t("modules.filterActive") },
   { value: "all", label: t("modules.filterAll") },
   ...modeOptions.map((mode, index) => ({
     value: mode,
@@ -53,7 +55,7 @@ const filteredModules = computed(() => {
   const query = searchQuery.value.trim().toLowerCase();
   const activeFilter = filter.value;
   return moduleStore.modules.filter((module) => {
-    if (activeFilter !== "all" && module.mode !== activeFilter) return false;
+    if (!matchesModuleFilter(module, activeFilter)) return false;
     if (!query) return true;
     return (
       module.name.toLowerCase().includes(query) || module.id.toLowerCase().includes(query)
@@ -121,7 +123,7 @@ onMounted(() => moduleStore.ensureModulesLoaded());
         :label="t('modules.filterLabel')"
         :model-value="filter"
         :options="filterOptions"
-        @update:model-value="filter = $event as MountMode | 'all'"
+        @update:model-value="filter = $event as ModuleFilter"
       />
     </div>
 
@@ -268,6 +270,10 @@ onMounted(() => moduleStore.ensureModulesLoaded());
 .module-search,
 .filter-select {
   min-width: 0;
+}
+
+.module-search :deep(.m-search-bar__row) {
+  padding-inline: 0;
 }
 
 .module-error-notice {

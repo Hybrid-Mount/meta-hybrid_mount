@@ -2,17 +2,18 @@
 <script setup lang="ts">
 import "./material";
 import "./theme.css";
-import { onBeforeUnmount, onMounted, ref, watch, type Component } from "vue";
+import { onBeforeUnmount, onMounted, ref, type Component } from "vue";
 import { useI18n } from "vue-i18n";
 import { uiStore } from "../../lib/stores/uiStore";
 import { sysStore } from "../../lib/stores/sysStore";
+import { useSwipePager } from "../useSwipePager";
 import { ICONS } from "./icons";
 
 const { t } = useI18n();
 
 const props = defineProps<{
   navindex: number;
-  activepage: Component;
+  pages: Component[];
   titles: string[];
 }>();
 
@@ -20,15 +21,10 @@ const emit = defineEmits<{
   (event: "update:navindex", value: number): void;
 }>();
 
-const pageScrollerRef = ref<HTMLElement | null>(null);
 const rebootOpen = ref(false);
 const toastText = ref("");
-const pageTransition = ref("page-forward");
-const scrollPositions = new Map<number, number>();
 const navIconKeys = ["home", "settings", "modules", "info"] as const;
 let toastTimer = 0;
-let touchStartX = 0;
-let touchStartY = 0;
 
 function showToast(text: string): void {
   toastText.value = text;
@@ -43,46 +39,31 @@ function selectTab(index: number): void {
   emit("update:navindex", index);
 }
 
+const swipeContainerRef = ref<HTMLElement | null>(null);
+const {
+  isDragging,
+  trackStyle,
+  visitedPages,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+  onPointerCancel,
+} = useSwipePager(
+  () => props.navindex,
+  () => props.pages.length,
+  selectTab,
+  swipeContainerRef,
+);
+
 function iconPath(index: number): string {
   const key = navIconKeys[index];
   const activeKey = `${key}_filled` as keyof typeof ICONS;
   return props.navindex === index ? ICONS[activeKey] || ICONS[key] : ICONS[key];
 }
 
-function onTouchStart(event: TouchEvent): void {
-  touchStartX = event.changedTouches[0]?.screenX ?? 0;
-  touchStartY = event.changedTouches[0]?.screenY ?? 0;
-}
-
-function onTouchEnd(event: TouchEvent): void {
-  const end = event.changedTouches[0];
-  if (!end) return;
-  const deltaX = end.screenX - touchStartX;
-  const deltaY = end.screenY - touchStartY;
-  if (Math.abs(deltaX) < 72 || Math.abs(deltaX) < Math.abs(deltaY) * 1.2) return;
-  const next = deltaX < 0 ? props.navindex + 1 : props.navindex - 1;
-  if (next >= 0 && next < props.titles.length) selectTab(next);
-}
-
 async function rebootSystem(): Promise<void> {
   rebootOpen.value = false;
   await sysStore.rebootDevice();
-}
-
-watch(
-  () => props.navindex,
-  (next, previous) => {
-    pageTransition.value = next > previous ? "page-forward" : "page-back";
-    scrollPositions.set(previous, pageScrollerRef.value?.scrollTop ?? 0);
-  },
-  { flush: "pre" },
-);
-
-function onPageEnter(): void {
-  pageScrollerRef.value?.scrollTo({
-    top: scrollPositions.get(props.navindex) ?? 0,
-    behavior: "instant" as ScrollBehavior,
-  });
 }
 
 onMounted(() => {
@@ -106,18 +87,25 @@ onBeforeUnmount(() => {
     </header>
 
     <main
+      ref="swipeContainerRef"
       class="main-content"
-      @touchstart.passive="onTouchStart"
-      @touchend.passive="onTouchEnd"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerCancel"
     >
-      <div class="swipe-page">
-        <Transition :name="pageTransition" mode="out-in" @enter="onPageEnter">
-          <div ref="pageScrollerRef" :key="navindex" class="page-scroller">
-            <KeepAlive>
-              <component :is="activepage" v-if="activepage" />
-            </KeepAlive>
+      <div class="swipe-track" :class="{ 'is-dragging': isDragging }" :style="trackStyle">
+        <div
+          v-for="(page, index) in pages"
+          :key="index"
+          class="swipe-page"
+          :aria-hidden="navindex !== index"
+          :inert="navindex !== index"
+        >
+          <div class="page-scroller">
+            <component :is="page" v-if="visitedPages.has(index)" />
           </div>
-        </Transition>
+        </div>
       </div>
     </main>
 

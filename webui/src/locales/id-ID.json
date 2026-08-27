@@ -96,6 +96,7 @@
     "saveFailed": "Gagal menyimpan mode",
     "searchPlaceholder": "Cari modul...",
     "filterLabel": "Filter:",
+    "filterActive": "Aktif",
     "filterAll": "Semua",
     "modeOverlay": "OverlayFS",
     "modeMagic": "Magic Mount",
