@@ -327,7 +327,7 @@ fn remove_image_file(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        #[cfg(unix)]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         Err(err) if err.raw_os_error() == Some(rustix::io::Errno::BUSY.raw_os_error()) => {
             log::warn!(
                 "cleanup skipped: path={}, reason=resource_busy",
