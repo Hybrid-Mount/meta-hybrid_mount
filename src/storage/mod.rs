@@ -274,7 +274,7 @@ fn remove_image_file(path: &Path) -> Result<()> {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         #[cfg(unix)]
-        Err(err) if err.raw_os_error() == Some(libc::EBUSY) => {
+        Err(err) if err.raw_os_error() == Some(rustix::io::Errno::BUSY.raw_os_error()) => {
             log::warn!(
                 "cleanup skipped: path={}, reason=resource_busy",
                 path.display()

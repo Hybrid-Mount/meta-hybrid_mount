@@ -369,6 +369,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn minimal_tokio_features_support_the_notify_runtime() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let value = runtime.block_on(async { 42 });
+        assert_eq!(value, 42);
+    }
+
+    #[test]
     fn find_zip_files_returns_all_zips_sorted() -> Result<()> {
         let output_dir = make_temp_output_dir()?;
         File::create(output_dir.join("Hybrid-Mount-6.0.0-1.zip"))?;

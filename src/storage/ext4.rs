@@ -217,7 +217,7 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<SizeCounter> {
     while let Some(current) = stack.pop() {
         let metadata = match fs::symlink_metadata(&current) {
             Ok(metadata) => metadata,
-            Err(err) if err.raw_os_error() == Some(libc::ELOOP) => {
+            Err(err) if err.raw_os_error() == Some(rustix::io::Errno::LOOP.raw_os_error()) => {
                 log::warn!("size scan symlink loop: path={}", current.display());
                 continue;
             }

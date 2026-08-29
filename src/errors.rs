@@ -322,7 +322,13 @@ fn classify_io(source: &io::Error) -> ErrorClass {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn classify_errno(errno: &rustix::io::Errno) -> ErrorClass {
     let code = errno.raw_os_error();
-    if code == libc::EINTR || code == libc::EAGAIN || code == libc::EBUSY || code == libc::ESTALE {
+    let transient = [
+        rustix::io::Errno::INTR.raw_os_error(),
+        rustix::io::Errno::AGAIN.raw_os_error(),
+        rustix::io::Errno::BUSY.raw_os_error(),
+        rustix::io::Errno::STALE.raw_os_error(),
+    ];
+    if transient.contains(&code) {
         ErrorClass::Transient
     } else {
         ErrorClass::Permanent

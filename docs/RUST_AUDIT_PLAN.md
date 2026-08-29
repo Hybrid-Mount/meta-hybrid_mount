@@ -70,6 +70,8 @@
 > PR11 实施后（本地边界）：workspace 测试通过（host 165+3+1=169），fmt/clippy（host 与 Linux target all-targets）及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；`e2fsck`/`mke2fs`/`getprop`/`insmod`/`ksud`/`apd` 已迁入统一 runner，Linux runtime CI 与 Android 真机边界仍待推送后验证。
 >
 > PR12 实施后（本地边界）：workspace 测试通过（host 177+3+1=181），fmt/clippy（host 与 Linux target all-targets）及四个 Linux/Android 目标 check 通过；`scan.ret.is_mounted` 改为 mountinfo 确认结果，`status` 新增状态来源与失败/回滚诊断字段，CLI wire JSON 快照测试补齐。
+>
+> PR2/3 实施后（本地边界）：workspace 测试通过（host 177+4+1=182），fmt/clippy（host 与 Linux target all-targets）及四个 Linux/Android 目标 check 通过；主程序直接 `extattr`/`libc` 依赖移除，xtask 正常依赖树 385→322 行、notify 284→273 行，zip 仅保留 `deflate-flate2-zlib-rs`，Tokio 收敛为 `rt-multi-thread`。
 
 ### 4.1 验证证据等级
 
@@ -386,20 +388,22 @@
 
 ## 15. 阶段 8：P2 代码复用与依赖收敛
 
+> 实施状态：PR2/PR3 已实现并通过本地全部门禁（host 177+4+1=182；Linux xattr 长值测试在 Linux CI 执行）。
+
 ### 15.1 优先复用现有依赖
 
-- [ ] 用 `rustix::fs::lgetxattr/lsetxattr` 替代 `extattr`。
-- [ ] 用 `rustix::fs::chownat(..., SYMLINK_NOFOLLOW)` 替代手写 `libc::lchown`。
-- [ ] 用 `rustix::io::Errno::BUSY/LOOP` 替代直接 `libc` 常量。
-- [ ] 删除直接 `extattr` 和 `libc` 依赖，并确认目标构建通过。
-- [ ] 对 rustix xattr 读取采用正确的长度查询/缓冲策略，测试长 SELinux context。
+- [x] 用 `rustix::fs::lgetxattr/lsetxattr` 替代 `extattr`。
+- [x] 用 `rustix::fs::chownat(..., SYMLINK_NOFOLLOW)` 替代手写 `libc::lchown`。
+- [x] 用 `rustix::io::Errno::BUSY/LOOP` 替代直接 `libc` 常量（EINTR/EAGAIN/EBUSY/ESTALE 分类同步迁移）。
+- [x] 删除直接 `extattr` 和 `libc` 依赖，并确认目标构建通过（libc 仅剩 ksu/loopdev 传递依赖）。
+- [x] 对 rustix xattr 读取采用正确的长度查询/缓冲策略，测试长 SELinux context（先查长度，再 `Vec::with_capacity + spare_capacity` 一次读满；Linux-only 测试覆盖 16 KiB 值）。
 
 ### 15.2 构建依赖瘦身
 
-- [ ] 将 `zip` 改为 `default-features = false`，只启用 `deflate-flate2-zlib-rs`。
-- [ ] 比较修改前后 `cargo tree -p xtask`、首次构建时间和 release ZIP 内容。
-- [ ] 将通知工具 Tokio 从 `full` 收敛到实际需要的 feature，至少保留 `rt-multi-thread`。
-- [ ] 验证通知发送、multipart 上传和超时路径。
+- [x] 将 `zip` 改为 `default-features = false`，只启用 `deflate-flate2-zlib-rs`。
+- [x] 比较修改前后 `cargo tree -p xtask`、首次构建时间和 release ZIP 内容（依赖树 385→322 行，移除 aes/bzip2/lzma/zstd/deflate64 等 39 个 crate；zip_ext golden 测试保持 ZIP 内容断言；release 产物哈希仍由 CI 复验）。
+- [x] 将通知工具 Tokio 从 `full` 收敛到实际需要的 feature，至少保留 `rt-multi-thread`（最终仅 `rt-multi-thread`；依赖树 284→273 行）。
+- [x] 验证通知发送、multipart 上传和超时路径（本地新增最小 Runtime 测试与既有 caption/multipart 构造测试；真实 Telegram 发送仍属 CI/发布门禁）。
 
 ### 15.3 条件性 crate 候选
 
@@ -413,18 +417,18 @@
 
 ### 15.4 明确不引入
 
-- [ ] 主程序不引入 `anyhow`。
-- [ ] 主程序 CLI 不引入 `clap`。
-- [ ] 不引入 `regex` 只为验证 Module ID。
-- [ ] 不同时混用 `nix` 与 `rustix`。
-- [ ] 不引入 `env_logger` 取代当前很小的 Android/host logger。
-- [ ] 不用 `scopeguard` 取代需要返回错误和聚合诊断的挂载事务。
+- [x] 主程序不引入 `anyhow`。
+- [x] 主程序 CLI 不引入 `clap`。
+- [x] 不引入 `regex` 只为验证 Module ID。
+- [x] 不同时混用 `nix` 与 `rustix`。
+- [x] 不引入 `env_logger` 取代当前很小的 Android/host logger。
+- [x] 不用 `scopeguard` 取代需要返回错误和聚合诊断的挂载事务。
 
 ### 15.5 阶段验收
 
-- [ ] 主程序直接依赖数量下降，且没有功能回归。
-- [ ] 唯一手写 `lchown` FFI `unsafe` 被移除。
-- [ ] `xtask` 不再编译未使用的 ZIP 加密和压缩算法。
+- [x] 主程序直接依赖数量下降，且没有功能回归（删除 extattr/libc 两个直接依赖）。
+- [x] 唯一手写 `lchown` FFI `unsafe` 被移除（测试仅保留 rustix `unshare_unsafe` 封装）。
+- [x] `xtask` 不再编译未使用的 ZIP 加密和压缩算法。
 
 ## 16. 阶段 9：P1/P2 测试架构与故障注入
 
@@ -532,9 +536,9 @@ git diff --check
 
 | PR | 内容 | 风险 | 前置条件 | 状态 |
 | --- | --- | --- | --- | --- |
-| 1 | 固定工具链策略、记录基线 | 低 | 无 | 待执行（用户未选择） |
-| 2 | `rustix` 收敛，删除直接 `libc/extattr` | 低-中 | Android target check | 待执行 |
-| 3 | `zip`/Tokio feature 瘦身 | 低 | 构建产物比较 | 待执行 |
+| 1 | 固定工具链策略、记录基线 | 低 | 无 | ⛔ 放弃（用户决定，2026-08-30） |
+| 2 | `rustix` 收敛，删除直接 `libc/extattr` | 低-中 | Android target check | ✅ 已实现（本地门禁通过，待提交/push/CI） |
+| 3 | `zip`/Tokio feature 瘦身 | 低 | 构建产物比较 | ✅ 已实现（本地门禁通过，待提交/push/CI） |
 | 4 | Config 原子写与损坏配置 fail-closed | 中 | CLI/WebUI 错误契约 | ✅ 已提交（`b11bb03e`，含 G03/G04/G07） |
 | 5 | `ModuleId` 与重复模块拒绝 | 中 | 扫描回归测试 | ✅ 已提交（含 G08） |
 | 6 | `is_mounted -> Result<bool>` 与 mount ops 边界 | 中 | fake mount ops | ✅ 已提交（与 PR7 合并，G15） |
@@ -573,8 +577,8 @@ git diff --check
 - [x] Magic executor 不再吞掉直接子节点或只读重挂载失败。
 - [ ] Overlay 子挂载按深度正确卸载。
 - [ ] LKM 候选选择、哈希验证和 boot-guard 全部生效。
-- [ ] 直接 `libc/extattr` 依赖被现有 `rustix` 能力替代。
-- [ ] `zip` 和 Tokio 只启用实际需要的特性。
+- [x] 直接 `libc/extattr` 依赖被现有 `rustix` 能力替代（PR2）。
+- [x] `zip` 和 Tokio 只启用实际需要的特性（PR3）。
 - [x] 关键错误为可匹配的结构化类型，而不是只剩字符串（PR11：高风险路径已迁移，`Msg` 仅留低风险路径）。
 - [ ] 关键失败路径具备故障注入测试。
 - [ ] CI、Linux namespace 与 Android 真机验证边界被明确记录。
@@ -620,6 +624,7 @@ git diff --check
 - [x] PR9 本地复验：fmt、host/Linux-target clippy、workspace host 测试（147+3+1=151）、Magic Linux-only 测试编译，以及 x86_64 Linux 与 aarch64/armv7/x86_64 Android check 通过；Linux runtime CI 与 Android 真机验证边界未混淆。
 - [x] PR11 本地复验：fmt、host/Linux-target clippy、workspace host 测试（165+3+1=169），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；runner 单测覆盖 head+tail 上限、总超时、drain 超时、退出码策略与 env Debug 脱敏。
 - [x] PR12 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+3+1=181），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；新增测试覆盖 mountinfo 反推模块挂载、状态来源三态、wire JSON 快照与回滚诊断字段。
+- [x] PR2/3 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+4+1=182），以及四个 Linux/Android 目标 check 通过；`grep` 确认主程序无 `extattr`/`libc` 引用，`cargo tree -p xtask` 385→322、`-p notify` 284→273，zip_ext 与 notify minimal-runtime 测试通过。
 
 ## 23. 最终交付物
 

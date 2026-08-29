@@ -27,7 +27,6 @@ workspace = true
 flate2 = "1"
 getrandom = "0.4"
 hex = "0.4"
-libc = "0.2"
 log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -37,11 +36,8 @@ toml = "1"
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.15"
 
-[target.'cfg(unix)'.dependencies]
-extattr = "1"
-
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.2.0" }
 loopdev = { git = "https://github.com/Hybrid-Mount/loopdev.git", version = "0.5.0" }
 procfs = "0.18"
-rustix = { version = "1.1.4", features = ["fs", "mount"] }
+rustix = { version = "1.1.4", features = ["fs", "mount", "thread"] }

@@ -4,21 +4,17 @@
 
 use std::path::Path;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::ffi::CString;
 #[cfg(unix)]
 use std::fs::{self, OpenOptions};
 #[cfg(unix)]
 use std::io::Write;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::ffi::OsStrExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink};
 #[cfg(unix)]
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fs::{CWD, FileType, Gid, Mode, Uid, chown, mknodat};
+use rustix::fs::{AtFlags, CWD, FileType, Gid, Mode, Uid, chown, chownat, mknodat};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -258,13 +254,7 @@ fn copy_tree_entry(source: &Path, destination: &Path, stats: &mut CopyTreeStats)
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_overlay_opaque(path: &Path) -> Result<()> {
-    extattr::lsetxattr(
-        path,
-        crate::defs::REPLACE_DIR_XATTR,
-        b"y",
-        extattr::Flags::empty(),
-    )
-    .map_err(|err| {
+    crate::utils::write_xattr(path, crate::defs::REPLACE_DIR_XATTR, b"y").map_err(|err| {
         Error::msg(format!(
             "set overlay opaque xattr on {}: {err}",
             path.display()
@@ -310,23 +300,14 @@ fn clone_entry_metadata(
     }
 
     let ownership_result = if is_symlink {
-        match CString::new(destination.as_os_str().as_bytes()) {
-            Ok(path) => {
-                let result = unsafe {
-                    libc::lchown(
-                        path.as_ptr(),
-                        metadata.uid() as libc::uid_t,
-                        metadata.gid() as libc::gid_t,
-                    )
-                };
-                if result == 0 {
-                    Ok(())
-                } else {
-                    Err(std::io::Error::last_os_error())
-                }
-            }
-            Err(err) => Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, err)),
-        }
+        chownat(
+            CWD,
+            destination,
+            Some(Uid::from_raw(metadata.uid())),
+            Some(Gid::from_raw(metadata.gid())),
+            AtFlags::SYMLINK_NOFOLLOW,
+        )
+        .map_err(std::io::Error::from)
     } else {
         chown(
             destination,

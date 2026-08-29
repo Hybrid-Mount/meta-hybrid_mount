@@ -184,14 +184,12 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     fn unshare_mount_namespace() -> bool {
-        if unsafe { libc::unshare(libc::CLONE_NEWNS) } == 0 {
-            true
-        } else {
-            eprintln!(
-                "skipping mount namespace test: unshare failed: {}",
-                std::io::Error::last_os_error()
-            );
-            false
+        match unsafe { rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWNS) } {
+            Ok(()) => true,
+            Err(err) => {
+                eprintln!("skipping mount namespace test: unshare failed: {err}");
+                false
+            }
         }
     }
 

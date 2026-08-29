@@ -2,7 +2,14 @@
 
 //! 通用工具:模块 ID 校验、目录创建、SELinux 上下文读写。
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::io;
 use std::path::Path;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::buffer::spare_capacity;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fs::{XattrFlags, lgetxattr, lsetxattr};
 
 use crate::defs;
 use crate::errors::{Error, Result};
@@ -19,11 +26,33 @@ pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
     }
 }
 
+/// 读取路径的扩展属性：先查询长度，再按长度分配并一次读取，
+/// 兼容长 SELinux context，不依赖固定栈缓冲。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
+    let mut empty = [0_u8; 0];
+    let size = lgetxattr(path, name, &mut empty)?;
+    if size == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut value = Vec::with_capacity(size);
+    let filled = lgetxattr(path, name, spare_capacity(&mut value))?;
+    value.truncate(filled);
+    Ok(value)
+}
+
+/// 设置路径的扩展属性，不跟随最终路径组件的符号链接。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn write_xattr(path: &Path, name: &str, value: &[u8]) -> io::Result<()> {
+    Ok(lsetxattr(path, name, value, XattrFlags::empty())?)
+}
+
 /// 设置路径的 SELinux 上下文。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
     log::debug!("file: {}, con: {context}", path.display());
-    extattr::lsetxattr(path, defs::SELINUX_XATTR, context, extattr::Flags::empty()).map_err(|err| {
+    write_xattr(path, defs::SELINUX_XATTR, context.as_bytes()).map_err(|err| {
         Error::msg(format!(
             "failed to change SELinux context for {}: {err}",
             path.display()
@@ -34,7 +63,7 @@ pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
 /// 读取路径的 SELinux 上下文。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lgetfilecon(path: &Path) -> Result<String> {
-    let context = extattr::lgetxattr(path, defs::SELINUX_XATTR).map_err(|err| {
+    let context = read_xattr(path, defs::SELINUX_XATTR).map_err(|err| {
         Error::msg(format!(
             "failed to get SELinux context for {}: {err}",
             path.display()
@@ -98,5 +127,40 @@ mod tests {
         assert!(!is_ignored_unmount_partition(
             "/data/adb/hybrid-mount/run/staging_x"
         ));
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+
+    #[test]
+    fn xattr_roundtrip_handles_long_contexts() {
+        let dir = std::env::temp_dir().join(format!("hybrid-mount-xattr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("probe");
+        std::fs::write(&path, b"data").unwrap();
+
+        let long_value = vec![b'x'; 16 * 1024];
+        if let Err(err) = write_xattr(&path, "user.hybrid_mount_test", &long_value) {
+            let unsupported = err.raw_os_error().is_some_and(|code| {
+                code == rustix::io::Errno::NOTSUP.raw_os_error()
+                    || code == rustix::io::Errno::OPNOTSUPP.raw_os_error()
+                    || code == rustix::io::Errno::PERM.raw_os_error()
+            });
+            if unsupported {
+                eprintln!(
+                    "skipping long xattr test: filesystem does not support user xattrs: {err}"
+                );
+                let _ = std::fs::remove_dir_all(&dir);
+                return;
+            }
+            panic!("set long xattr failed: {err}");
+        }
+
+        let read_back = read_xattr(&path, "user.hybrid_mount_test").unwrap();
+        assert_eq!(read_back, long_value);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

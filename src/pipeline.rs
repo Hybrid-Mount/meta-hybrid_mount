@@ -1622,11 +1622,10 @@ mod tests {
 
         let _fault_guard = crate::sys::faults::test_lock();
 
-        if unsafe { libc::unshare(libc::CLONE_NEWNS) } != 0 {
-            eprintln!(
-                "skipping overlay rollback test: unshare failed: {}",
-                std::io::Error::last_os_error()
-            );
+        if let Err(err) =
+            unsafe { rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWNS) }
+        {
+            eprintln!("skipping overlay rollback test: unshare failed: {err}");
             return;
         }
 
