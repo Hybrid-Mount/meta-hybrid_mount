@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, Mode};
 use crate::defs;
-use crate::errors::Result;
+use crate::errors::{CausalError, ContextError, Error, Result};
 use crate::module_id::ModuleId;
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::{ModuleRecord, list_modules};
@@ -93,10 +93,26 @@ impl RunState {
 
     pub(crate) fn save_to(&self, path: &Path) -> Result<()> {
         if crate::sys::faults::should_fail_state_save() {
-            return Err(crate::errors::Error::msg("injected state save failure"));
+            return Err(Error::State(Box::new(ContextError::new(
+                "save run state",
+                Some(path.to_path_buf()),
+                CausalError::Message("injected state save failure".to_owned()),
+            ))));
         }
-        let json = serde_json::to_string_pretty(self)?;
-        crate::sys::fs::atomic_write(path, json.as_bytes())
+        let json = serde_json::to_string_pretty(self).map_err(|source| {
+            Error::State(Box::new(ContextError::new(
+                "serialize run state",
+                Some(path.to_path_buf()),
+                source,
+            )))
+        })?;
+        crate::sys::fs::atomic_write(path, json.as_bytes()).map_err(|source| {
+            Error::State(Box::new(ContextError::new(
+                "atomically save run state",
+                Some(path.to_path_buf()),
+                source.to_string(),
+            )))
+        })
     }
 
     pub fn load_or_default() -> Self {

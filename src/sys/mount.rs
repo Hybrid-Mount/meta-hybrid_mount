@@ -6,14 +6,18 @@
 //! 即立即执行;与 KernelSU try-umount 列表注册不是一回事。
 
 use std::path::Path;
-use std::process::Command;
+use std::time::Duration;
 
 use procfs::process::Process;
 use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
 
-use crate::errors::{Error, Result};
+use crate::errors::{CausalError, ContextError, Error, Result};
 use crate::sys::mountinfo::MountSnapshot;
+use crate::sys::process::{CaptureMode, CommandSpec, run_command};
 use crate::utils::ensure_dir_exists;
+
+/// e2fsck 修复大镜像可能耗时，但启动路径上的等待必须有界。
+const E2FSCK_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// 从 `/proc/self/mountinfo` 判断路径是否为挂载点。
 pub fn is_mounted(path: &Path) -> Result<bool> {
@@ -45,10 +49,11 @@ pub fn rollback_mount_target(path: &Path) -> Result<()> {
 
     for target in targets {
         if crate::sys::faults::should_fail_next_unmount_ebusy() {
-            return Err(Error::msg(format!(
-                "unmount {}: injected EBUSY",
-                target.display()
-            )));
+            return Err(Error::Mount(Box::new(ContextError::new(
+                "unmount mount target",
+                Some(target.to_path_buf()),
+                CausalError::Message("injected EBUSY".to_owned()),
+            ))));
         }
         match unmount(target, UnmountFlags::empty()) {
             Ok(()) => log::info!("mount rollback complete: target={}", target.display()),
@@ -63,8 +68,12 @@ pub fn rollback_mount_target(path: &Path) -> Result<()> {
                     "mount rollback busy, falling back to lazy unmount: target={}, errno={err}",
                     target.display()
                 );
-                unmount(target, UnmountFlags::DETACH).map_err(|detach_err| {
-                    Error::msg(format!("lazy unmount {}: {detach_err}", target.display()))
+                unmount(target, UnmountFlags::DETACH).map_err(|source| {
+                    Error::Mount(Box::new(ContextError::new(
+                        "lazy unmount mount target",
+                        Some(target.to_path_buf()),
+                        source,
+                    )))
                 })?;
             }
         }
@@ -83,44 +92,60 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
         MountFlags::empty(),
         Some(c"mode=0755"),
     )
-    .map_err(|err| {
-        Error::msg(format!(
-            "mount tmpfs {} at {}: {err}",
+    .map_err(|source| {
+        Error::Mount(Box::new(ContextError::new(
+            "mount tmpfs staging",
+            Some(target.to_path_buf()),
             source,
-            target.display()
-        ))
+        )))
     })
 }
 
 /// 用 `e2fsck -y -f` 修复镜像;退出码 0..=3 视为成功(v4.2.0 行为)。
 pub fn repair_image(image_path: &Path) -> Result<()> {
-    let status = Command::new("e2fsck")
+    let spec = CommandSpec::new("e2fsck")
+        .operation("repair ext4 image")
         .args(["-y", "-f"])
-        .arg(image_path)
-        .status()
-        .map_err(|err| Error::msg(format!("execute e2fsck {}: {err}", image_path.display())))?;
+        .arg(image_path.display().to_string())
+        .capture(CaptureMode::Both)
+        .accepted_exit_codes(&[0, 1, 2, 3])
+        .timeout(E2FSCK_TIMEOUT);
 
-    match status.code() {
-        Some(code) if code > 3 => Err(Error::msg(format!(
-            "e2fsck failed for {} with exit code {code}",
-            image_path.display()
-        ))),
-        None => Err(Error::msg(format!(
-            "e2fsck terminated by signal for {}",
-            image_path.display()
-        ))),
-        Some(_) => Ok(()),
+    let outcome = run_command(&spec).map_err(|err| {
+        Error::Storage(Box::new(ContextError::new(
+            "e2fsck repair ext4 image",
+            Some(image_path.to_path_buf()),
+            CausalError::from(err),
+        )))
+    })?;
+    if let Some(stderr) = outcome
+        .stderr_text()
+        .as_deref()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        log::debug!("e2fsck output: {stderr}");
     }
+    Ok(())
 }
 
 /// `emulated-soft-reboot`:立即卸载 mountinfo 中 source 为指定值的所有挂载点
 /// (参考项目行为,用于模拟软重启前的挂载清理)。
 pub fn emulated_soft_reboot(source: &str) -> Result<()> {
-    let process =
-        Process::myself().map_err(|err| Error::msg(format!("get self process: {err}")))?;
-    let mountinfo = process
-        .mountinfo()
-        .map_err(|err| Error::msg(format!("get mountinfo: {err}")))?;
+    let process = Process::myself().map_err(|source| {
+        Error::Mount(Box::new(ContextError::new(
+            "read self process for emulated soft reboot",
+            None,
+            source,
+        )))
+    })?;
+    let mountinfo = process.mountinfo().map_err(|source| {
+        Error::Mount(Box::new(ContextError::new(
+            "read mountinfo for emulated soft reboot",
+            None,
+            source,
+        )))
+    })?;
 
     let mut mount_points = mountinfo
         .into_iter()
@@ -140,8 +165,13 @@ pub fn emulated_soft_reboot(source: &str) -> Result<()> {
             "unmounting {} from {source} in emulated-soft-reboot",
             mount_point.display()
         );
-        unmount(&mount_point, UnmountFlags::DETACH)
-            .map_err(|err| Error::msg(format!("unmount {}: {err}", mount_point.display())))?;
+        unmount(&mount_point, UnmountFlags::DETACH).map_err(|source| {
+            Error::Mount(Box::new(ContextError::new(
+                "unmount in emulated soft reboot",
+                Some(mount_point.to_path_buf()),
+                source,
+            )))
+        })?;
     }
     Ok(())
 }

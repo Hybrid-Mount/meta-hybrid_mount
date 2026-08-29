@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use ::ksu::{TryUmount, TryUmountFlags};
 
-use crate::errors::{Error, Result};
+use crate::errors::{ContextError, Error, Result};
 use crate::utils::is_ignored_unmount_partition;
 
 static KSU_ACTIVE: AtomicBool = AtomicBool::new(false);
@@ -78,7 +78,11 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
 /// 提交尝试卸载列表(`MNT_DETACH`),流水线结束后调用。
 pub fn commit_unmount_list() -> Result<()> {
     if crate::sys::faults::should_fail_ksu_commit() {
-        return Err(Error::msg("injected KernelSU try-umount commit failure"));
+        return Err(Error::Mount(Box::new(ContextError::new(
+            "commit KernelSU try-umount list",
+            None,
+            "injected KernelSU try-umount commit failure".to_owned(),
+        ))));
     }
     if !is_active() {
         return Ok(());
@@ -91,9 +95,13 @@ pub fn commit_unmount_list() -> Result<()> {
 
     control.flags(TryUmountFlags::MNT_DETACH);
     control.format_msg(|paths| format!("umount {paths:?} successful"));
-    control
-        .umount()
-        .map_err(|err| Error::msg(format!("commit KernelSU try-umount list: {err}")))?;
+    control.umount().map_err(|err| {
+        Error::Mount(Box::new(ContextError::new(
+            "commit KernelSU try-umount list",
+            None,
+            err.to_string(),
+        )))
+    })?;
     Ok(())
 }
 
@@ -108,7 +116,13 @@ pub fn clear_unmount_list() -> Result<()> {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .wipe()
-        .map_err(|err| Error::msg(format!("wipe KernelSU try-umount list: {err}")))?;
+        .map_err(|err| {
+            Error::Mount(Box::new(ContextError::new(
+                "wipe KernelSU try-umount list",
+                None,
+                err.to_string(),
+            )))
+        })?;
 
     if let Some(history) = REGISTERED_PATHS.get() {
         history

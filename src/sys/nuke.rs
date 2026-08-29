@@ -11,18 +11,24 @@
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::time::Duration;
 
 use ::ksu::NukeExt4Sysfs;
 use procfs::process::Process;
 
 use crate::defs;
+use crate::errors::{ContextError, Error};
+use crate::sys::process::{CaptureMode, CommandSpec, run_command};
 use crate::utils::ksu;
 
 const KALLSYMS_PATH: &str = "/proc/kallsyms";
 const KPTR_RESTRICT_PATH: &str = "/proc/sys/kernel/kptr_restrict";
 const KERNEL_RELEASE_PATH: &str = "/proc/sys/kernel/osrelease";
 const LKM_OVERRIDE_ENV: &str = "HYBRID_MOUNT_LKM_PATH";
+/// 读取 Android 版本的 getprop 是辅助诊断路径，短超时后降级。
+const GETPROP_TIMEOUT: Duration = Duration::from_secs(10);
+/// LKM insmod 一次加载有已知的有限耗时上限。
+const INSMOD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Conceal the ext4 staging superblock from `/proc/fs/ext4`.
 ///
@@ -70,7 +76,17 @@ fn run_ksu_nuke(path: &Path) {
     }
 }
 
-fn try_lkm_nuke(path: &Path) -> Result<(), String> {
+fn try_lkm_nuke(path: &Path) -> crate::errors::Result<()> {
+    try_lkm_nuke_inner(path).map_err(|message| {
+        Error::Lkm(Box::new(ContextError::new(
+            "LKM ext4 sysfs nuke",
+            Some(path.to_path_buf()),
+            message,
+        )))
+    })
+}
+
+fn try_lkm_nuke_inner(path: &Path) -> Result<(), String> {
     let procfs_node = ext4_procfs_node(path)?;
     if !procfs_node.exists() {
         log::info!(
@@ -101,28 +117,34 @@ fn try_lkm_nuke(path: &Path) -> Result<(), String> {
     let mut attempts = Vec::new();
 
     for (program, applet) in candidates {
-        let mut command = Command::new(program);
+        let mut args = Vec::new();
         if let Some(applet) = applet {
-            command.arg(applet);
+            args.push(applet.to_owned());
         }
-        command
-            .arg(&lkm_path)
-            .arg(&mount_parameter)
-            .arg(&symbol_parameter);
+        args.push(lkm_path.display().to_string());
+        args.push(mount_parameter.clone());
+        args.push(symbol_parameter.clone());
 
-        match command.output() {
-            Ok(output) => {
-                // The LKM deliberately returns -EAGAIN from module_init so it
-                // is not retained. A non-zero insmod status can therefore be
-                // the expected successful path; disappearance is authoritative.
+        let spec = CommandSpec::new(program)
+            .operation("load LKM for ext4 sysfs nuke")
+            .args(args)
+            .capture(CaptureMode::Stderr)
+            // The LKM deliberately returns -EAGAIN from module_init so it
+            // is not retained. A non-zero insmod status can therefore be
+            // the expected successful path; disappearance is authoritative.
+            .any_exit_status()
+            .timeout(INSMOD_TIMEOUT);
+
+        match run_command(&spec) {
+            Ok(outcome) => {
                 if !procfs_node.exists() {
                     return Ok(());
                 }
-                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stderr = outcome.stderr_text().unwrap_or_default();
                 return Err(format!(
                     "{program} executed once but did not remove {}: status={}, stderr={}; unavailable candidates: {}",
                     procfs_node.display(),
-                    output.status,
+                    outcome.status,
                     stderr.trim(),
                     attempts.join("; ")
                 ));
@@ -273,14 +295,19 @@ fn is_bundled_lkm_arch_supported(arch: &str) -> bool {
 
 fn device_android_major() -> Option<u32> {
     for program in ["/system/bin/getprop", "getprop"] {
-        let Ok(output) = Command::new(program)
+        let spec = CommandSpec::new(program)
+            .operation("read Android version")
             .arg("ro.build.version.release")
-            .output()
-        else {
+            .capture(CaptureMode::Stdout)
+            .timeout(GETPROP_TIMEOUT);
+
+        let Ok(outcome) = run_command(&spec) else {
             continue;
         };
-        if output.status.success()
-            && let Some(major) = parse_android_major(&String::from_utf8_lossy(&output.stdout))
+        if let Some(major) = outcome
+            .stdout_text()
+            .as_deref()
+            .and_then(parse_android_major)
         {
             return Some(major);
         }

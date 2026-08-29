@@ -66,6 +66,8 @@
 > PR8 实施后：workspace 测试通过（host 147+3+1=151），fmt/clippy（host 与 Linux target all-targets）及 x86_64-linux-gnu/aarch64-linux-android check 通过；Linux mount namespace 故障注入测试已加入并在 Linux CI 执行。
 >
 > PR9 实施后（本地边界）：workspace 测试通过（host 147+3+1=151）；Magic Linux-only 测试通过目标编译与 Clippy，x86_64 Linux 及 aarch64/armv7/x86_64 Android check 通过。本机没有 Linux 运行环境，因此 Linux 测试实际执行以推送后 CI 为准，Android 真机候选测试仍留作发布门禁。
+>
+> PR11 实施后（本地边界）：workspace 测试通过（host 165+3+1=169），fmt/clippy（host 与 Linux target all-targets）及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；`e2fsck`/`mke2fs`/`getprop`/`insmod`/`ksud`/`apd` 已迁入统一 runner，Linux runtime CI 与 Android 真机边界仍待推送后验证。
 
 ### 4.1 验证证据等级
 
@@ -325,33 +327,35 @@
 
 ## 13. 阶段 6：P1 错误模型与子进程边界
 
+> 实施状态：PR11 已实现并通过本地全部门禁（host 165 项测试）；Linux runtime CI 与 Android 真机验证仍属后续门禁。
+
 ### 13.1 结构化错误
 
 当前大量路径使用 `Error::Msg(String)`。计划逐层替换，不一次性重写全部错误：
 
-- [ ] 建立带 `context`、`path` 和 `source: io::Error` 的 I/O 错误类型。
-- [ ] 为 Config、Scan、Plan、Mount、Storage、LKM、State 建立可匹配变体。
-- [ ] Display 文本由错误类型生成，不在调用点提前拼成不可解析字符串。
-- [ ] 在层边界统一翻译 rustix、procfs、serde 和子进程错误。
-- [ ] 明确永久错误、可重试错误和需要人工介入的错误。
-- [ ] 主程序保持 `thiserror`，不引入 `anyhow`；`anyhow` 继续只用于 `xtask`/通知等应用边界。
+- [x] 建立带 `context`、`path` 和 `source: io::Error` 的 I/O 错误类型（`Error::IoContext(Box<IoError>)`）。
+- [x] 为 Config、Scan、Plan、Mount、Storage、LKM、State 建立可匹配变体（Config/Scan/Plan 复用 PR4/PR5 已落地的专项变体；新增 `Mount/Storage/Lkm/State(Box<ContextError>)` 与 `Subprocess`）。
+- [x] Display 文本由错误类型生成，不在调用点提前拼成不可解析字符串（新增路径全部遵守；`Msg` 仅保留给尚未迁移的低风险路径）。
+- [x] 在层边界统一翻译 rustix、procfs、serde 和子进程错误（`CausalError` 收敛）。
+- [x] 明确永久错误、可重试错误和需要人工介入的错误（`ErrorClass` + 穷尽 `Error::classify()`）。
+- [x] 主程序保持 `thiserror`，不引入 `anyhow`；`anyhow` 继续只用于 `xtask`/通知等应用边界。
 
 ### 13.2 子进程执行器
 
 为 `e2fsck`、`mke2fs`、`getprop`、`insmod` 等生产路径建立统一 helper：
 
-- [ ] 记录程序、参数、工作目录、退出码或 signal。
-- [ ] stdout/stderr 使用有上限的 head+tail 缓冲，继续 drain，避免大输出 OOM 或管道死锁。
-- [ ] 对无需捕获输出的命令只检查 status，不额外分配缓冲。
-- [ ] 不通过通用 shell 拼接命令，不接受未验证的命令字符串。
-- [ ] 每个调用点显式声明可接受退出码。
-- [ ] 敏感环境变量和 Telegram token 不进入 Debug、错误或日志。
+- [x] 记录程序、参数、工作目录、退出码或 signal（`ProcessError` 保留 program/args/cwd/`ExitStatus`）。
+- [x] stdout/stderr 使用有上限的 head+tail 缓冲，继续 drain，避免大输出 OOM 或管道死锁（`OutputCapture`，默认每流 32 KiB）。
+- [x] 对无需捕获输出的命令只检查 status，不额外分配缓冲（`CaptureMode::None` 使用 `Stdio::null`）。
+- [x] 不通过通用 shell 拼接命令，不接受未验证的命令字符串（`CommandSpec` 逐参数传入）。
+- [x] 每个调用点显式声明可接受退出码（`ExitPolicy::{Success,Accepted,Any}`；`Any` 仅用于 insmod -EAGAIN 语义）。
+- [x] 敏感环境变量和 Telegram token 不进入 Debug、错误或日志（`CommandSpec` 手工 Debug 对 env 值做 `<redacted>`；`ProcessError` 不保存 env）。
 
 ### 13.3 阶段验收
 
-- [ ] 高风险错误可以通过 enum variant 精确断言。
-- [ ] 子进程失败日志同时保留开头上下文和结尾错误信息。
-- [ ] 不存在无限 stdout/stderr 内存增长。
+- [x] 高风险错误可以通过 enum variant 精确断言（`Error::Mount/Storage/Lkm/State/IoContext/Subprocess`）。
+- [x] 子进程失败日志同时保留开头上下文和结尾错误信息（head + omitted 标记 + tail）。
+- [x] 不存在无限 stdout/stderr 内存增长（固定 8 KiB 读块 + 32 KiB 容量 + 继续 drain）。
 
 ## 14. 阶段 7：P1 状态真实性与协议回归
 
@@ -533,8 +537,8 @@ git diff --check
 | 7 | `MountTransaction` 基础设施，不改变执行顺序 | 中-高 | 故障注入框架 | ✅ 已提交（与 PR6 合并，G15） |
 | 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | ✅ 已提交（含 G13） |
 | 9 | Magic executor 错误语义和测试 | 高 | 真机候选测试 | ✅ 已实现（真机候选验证留待发布门禁） |
-| 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | 待执行 |
-| 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | 待执行 |
+| 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | ⛔ 放弃（用户决定，2026-08-29） |
+| 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | ✅ 已实现（本地门禁通过，待提交/push/CI） |
 | 12 | 状态真实性、CLI snapshots、文档 | 中 | 执行器结果模型稳定 | 待执行 |
 | 13 | 计时与性能基线 | 低-中 | 核心修复完成 | 待执行 |
 
@@ -567,7 +571,7 @@ git diff --check
 - [ ] LKM 候选选择、哈希验证和 boot-guard 全部生效。
 - [ ] 直接 `libc/extattr` 依赖被现有 `rustix` 能力替代。
 - [ ] `zip` 和 Tokio 只启用实际需要的特性。
-- [ ] 关键错误为可匹配的结构化类型，而不是只剩字符串。
+- [x] 关键错误为可匹配的结构化类型，而不是只剩字符串（PR11：高风险路径已迁移，`Msg` 仅留低风险路径）。
 - [ ] 关键失败路径具备故障注入测试。
 - [ ] CI、Linux namespace 与 Android 真机验证边界被明确记录。
 - [ ] 稳定 CLI、JSON 字段和路径没有未经迁移的破坏性变化。
@@ -593,8 +597,8 @@ git diff --check
 
 ### 22.2 技能强化项
 
-- [ ] **G11（并入 13.2）**：统一子进程 runner 增加"子进程总超时 + I/O drain 独立超时"；把 `ksud`/`apd`（`module_status.rs`）也纳入 runner 范围。
-- [ ] **G12（并入 13.1）**：用"瞬态/永久"两个错误变体 + 穷尽 `is_retryable` match 编码重试分类，避免只靠文档约定。
+- [x] **G11（并入 13.2）**：统一子进程 runner 增加"子进程总超时 + I/O drain 独立超时"；把 `ksud`/`apd`（`module_status.rs`）也纳入 runner 范围。
+- [x] **G12（并入 13.1）**：用"瞬态/永久/需人工介入"三分类 + 穷尽 `classify()` match 编码重试分类，避免只靠文档约定。
 - [x] **G13（并入 10.5）**：故障注入用 `AtomicBool` 门控（与现有 KSU/xattr 缓存风格一致），不引入 cargo feature。
 - [ ] **G14（并入 14.2）**：serde 改名/删字段采用 `rename + alias` 与可解析 tombstone（现有 `legacy_custom_mounts` 已是范例）；内部错误 enum 与 CLI/WebUI 线格式错误分离。
 - [x] **G15（并入 19 PR 6/7）**：`is_mounted -> Result<bool>` 与 `MountTransaction` 基础设施合并落地——可传播路径用查询 API，`Drop` 路径用 best-effort helper，避免 PR 6 单独触碰 5 个调用点中的 3 个 Drop 路径。
@@ -610,6 +614,7 @@ git diff --check
 - [x] PR6/7 完成后复验：fmt/clippy 通过，workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR8 完成后复验：fmt/clippy（host 与 Linux target all-targets）通过，workspace 测试通过（host 147+3+1=151），x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR9 本地复验：fmt、host/Linux-target clippy、workspace host 测试（147+3+1=151）、Magic Linux-only 测试编译，以及 x86_64 Linux 与 aarch64/armv7/x86_64 Android check 通过；Linux runtime CI 与 Android 真机验证边界未混淆。
+- [x] PR11 本地复验：fmt、host/Linux-target clippy、workspace host 测试（165+3+1=169），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；runner 单测覆盖 head+tail 上限、总超时、drain 超时、退出码策略与 env Debug 脱敏。
 
 ## 23. 最终交付物
 

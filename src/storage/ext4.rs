@@ -9,18 +9,20 @@
 #[cfg(unix)]
 use std::{fs, path::PathBuf};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::{path::Path, process::Command};
+use std::{path::Path, time::Duration};
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::errors::Error;
 #[cfg(unix)]
 use crate::errors::Result;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::errors::{CausalError, ContextError, Error};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::overlayfs::utils as overlay_utils;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::storage::{StorageHandle, StorageMode};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::sys::process::{CaptureMode, CommandSpec, run_command};
 
 const EXT4_MIN_IMAGE_SIZE_BYTES: u64 = 64 * 1024 * 1024;
 const EXT4_FIXED_HEADROOM_BYTES: u64 = 16 * 1024 * 1024;
@@ -36,6 +38,9 @@ const EXT4_IMAGE_ALIGNMENT_BYTES: u64 = 4 * 1024 * 1024;
 const EXT4_BYTES_PER_INODE: u64 = 4096;
 const SYSTEM_MKE2FS: &str = "/system/bin/mke2fs";
 const MODULES_IMG_SELINUX_CONTEXT: &str = "u:object_r:ksu_file:s0";
+/// 大镜像格式化/校验是设备启动路径上的慢操作，给足上限但仍必须有限。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const EXT4_IMAGE_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
 /// staging 逻辑占用统计器。
 ///
@@ -243,30 +248,27 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<SizeCounter> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn format_ext4_image(img_path: &Path, block_size: u64) -> Result<()> {
-    let output = Command::new(SYSTEM_MKE2FS)
+    let spec = CommandSpec::new(SYSTEM_MKE2FS)
+        .operation("format ext4 image")
         .args(mke2fs_args(block_size))
-        .arg(img_path)
-        .output()
-        .map_err(|err| {
-            Error::msg(format!(
-                "execute system mke2fs for {}: {err}",
-                img_path.display()
-            ))
-        })?;
+        .arg(img_path.display().to_string())
+        .capture(CaptureMode::Both)
+        .timeout(EXT4_IMAGE_COMMAND_TIMEOUT);
 
-    if !output.status.success() {
-        let exit = output
-            .status
-            .code()
-            .map_or_else(|| "signal".to_owned(), |code| code.to_string());
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        return Err(Error::msg(format!(
-            "system mke2fs failed for {} with exit {exit}: stderr={}, stdout={}",
-            img_path.display(),
-            stderr.trim(),
-            stdout.trim()
-        )));
+    let outcome = run_command(&spec).map_err(|err| {
+        Error::Storage(Box::new(ContextError::new(
+            "format ext4 image",
+            Some(img_path.to_path_buf()),
+            CausalError::from(err),
+        )))
+    })?;
+    if let Some(stderr) = outcome
+        .stderr_text()
+        .as_deref()
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+    {
+        log::debug!("mke2fs output: {}", stderr);
     }
 
     log::info!(
@@ -286,10 +288,11 @@ fn check_ext4_image(img_path: &Path) -> Result<()> {
         img_path.display()
     );
     sys::mount::repair_image(img_path).map_err(|err| {
-        Error::msg(format!(
-            "system e2fsck validation failed for {}: {err}",
-            img_path.display()
-        ))
+        Error::Storage(Box::new(ContextError::new(
+            "validate ext4 image with e2fsck",
+            Some(img_path.to_path_buf()),
+            CausalError::Message(err.to_string()),
+        )))
     })?;
     log::info!("ext4 image check complete: path={}", img_path.display());
     Ok(())
@@ -308,11 +311,15 @@ fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
     );
 
     sys::mount::repair_image(img_path).map_err(|repair_err| {
-        Error::msg(format!(
-            "ext4 mount failed for {} at {} ({first_error}); system e2fsck failed: {repair_err}",
-            img_path.display(),
-            target.display()
-        ))
+        Error::Storage(Box::new(ContextError::new(
+            "repair ext4 image after failed mount",
+            Some(img_path.to_path_buf()),
+            CausalError::Message(format!(
+                "first mount of {} at {} failed: {first_error}; e2fsck failed: {repair_err}",
+                img_path.display(),
+                target.display()
+            )),
+        )))
     })?;
     log::info!(
         "ext4 system repair complete: image={}, retry_target={}",
@@ -320,11 +327,11 @@ fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
         target.display()
     );
     overlay_utils::mount_ext4(img_path, target).map_err(|err| {
-        Error::msg(format!(
-            "mount repaired ext4 image {} at {}: {err}",
-            img_path.display(),
-            target.display()
-        ))
+        Error::Storage(Box::new(ContextError::new(
+            "mount repaired ext4 image",
+            Some(target.to_path_buf()),
+            CausalError::Message(err.to_string()),
+        )))
     })
 }
 

@@ -5,11 +5,17 @@
 use std::fs;
 use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::process::Command;
+use std::time::Duration;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::defs;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, IoError, Result};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::sys::process::{CaptureMode, CommandSpec, ProcessErrorKind, run_command};
+
+/// ksud/apd 描述更新是尽力而为的副作用：只允许短总超时，不得拖慢启动。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const DESCRIPTION_OVERRIDE_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize) {
@@ -55,7 +61,8 @@ fn set_temporary_override(description: &str) -> bool {
         ("apd", "AP_MODULE")
     };
 
-    match Command::new(program)
+    let spec = CommandSpec::new(program)
+        .operation("update temporary module description")
         .args([
             "module",
             "config",
@@ -65,18 +72,17 @@ fn set_temporary_override(description: &str) -> bool {
             "--temp",
         ])
         .env(module_env, defs::MODULE_ID)
-        .output()
-    {
-        Ok(output) if output.status.success() => true,
-        Ok(output) => {
-            log::warn!(
-                "{program} description override failed: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
+        .capture(CaptureMode::None)
+        .timeout(DESCRIPTION_OVERRIDE_TIMEOUT);
+
+    match run_command(&spec) {
+        Ok(_) => true,
+        Err(err) if matches!(&err.kind, ProcessErrorKind::Spawn { .. }) => {
+            log::debug!("{program} description override unavailable: {err}");
             false
         }
         Err(err) => {
-            log::debug!("{program} description override unavailable: {err}");
+            log::warn!("{program} description override failed: {err}");
             false
         }
     }
@@ -102,8 +108,14 @@ fn replace_description(prop_path: &Path, description: &str) -> Result<()> {
     }
 
     let updated = format!("{}\n", lines.join("\n"));
-    crate::sys::fs::atomic_write(prop_path, updated.as_bytes())
-        .map_err(|err| Error::msg(format!("atomically replace {}: {err}", prop_path.display())))
+    crate::sys::fs::atomic_write(prop_path, updated.as_bytes()).map_err(|err| match err {
+        Error::Io(source) => Error::IoContext(Box::new(IoError::new(
+            "atomically replace module description",
+            Some(prop_path.to_path_buf()),
+            source,
+        ))),
+        other => other,
+    })
 }
 
 #[cfg(test)]

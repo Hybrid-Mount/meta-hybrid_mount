@@ -5,6 +5,7 @@
 pub mod faults;
 pub mod fs;
 pub mod mountinfo;
+pub mod process;
 pub mod temp;
 pub mod transaction;
 
