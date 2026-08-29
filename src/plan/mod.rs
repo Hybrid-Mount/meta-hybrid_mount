@@ -245,7 +245,10 @@ fn process_module(
     let decisions: Vec<EntryDecision> = module
         .entries
         .iter()
-        .filter(|entry| !is_promoted_partition_alias(entry, promoted))
+        .filter(|entry| {
+            !is_promoted_partition_alias(entry, promoted)
+                && !is_redundant_partition_self_alias(entry, promoted)
+        })
         .map(|entry| EntryDecision {
             entry,
             mode: rules.resolve_mode(&entry.relative),
@@ -488,6 +491,27 @@ fn is_promoted_partition_alias(entry: &ModuleEntry, promoted: &BTreeSet<String>)
         && components
             .next()
             .is_some_and(|partition| promoted.contains(partition))
+        && components.next().is_none()
+}
+
+/// Older installers could accidentally create `product/product`,
+/// `vendor/vendor`, and equivalent self-named symlinks when the promoted
+/// top-level partition directory already existed.  They are layout artifacts,
+/// not mount contributions.  Treating one as a direct partition child would
+/// require a shallow overlay over the entire partition and place that root in
+/// KernelSU's try-unmount list.
+fn is_redundant_partition_self_alias(entry: &ModuleEntry, promoted: &BTreeSet<String>) -> bool {
+    if entry.file_type != NodeFileType::Symlink {
+        return false;
+    }
+
+    let mut components = entry.relative.split('/');
+    let Some(partition) = components.next() else {
+        return false;
+    };
+
+    promoted.contains(partition)
+        && components.next() == Some(partition)
         && components.next().is_none()
 }
 
@@ -741,6 +765,39 @@ mod tests {
                 .iter()
                 .all(|operation| operation.target != "/vendor")
         );
+    }
+
+    #[test]
+    fn redundant_partition_self_aliases_do_not_mount_partition_roots() {
+        let config = config(Mode::Overlay, no_rules());
+        let mut module = record(
+            "collection",
+            &[
+                ("product/overlay", true),
+                ("product/overlay/product.apk", false),
+                ("product/product", false),
+                ("vendor/overlay", true),
+                ("vendor/overlay/vendor.apk", false),
+                ("vendor/vendor", false),
+            ],
+        );
+        module.entries[2].file_type = NodeFileType::Symlink;
+        module.entries[5].file_type = NodeFileType::Symlink;
+
+        let result = plan(&[module], &config, &["product", "vendor"]);
+
+        assert_eq!(
+            result
+                .overlay_ops
+                .iter()
+                .map(|operation| operation.target.as_str())
+                .collect::<Vec<_>>(),
+            vec!["/product/overlay", "/vendor/overlay"]
+        );
+        assert!(!result.overlay_files.contains_key("/product"));
+        assert!(!result.overlay_files.contains_key("/vendor"));
+        assert!(result.tree.find("/product/product").is_none());
+        assert!(result.tree.find("/vendor/vendor").is_none());
     }
 
     #[test]

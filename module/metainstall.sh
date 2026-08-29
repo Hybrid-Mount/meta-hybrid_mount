@@ -15,6 +15,14 @@ ui_print "- Hybrid Mount metainstall"
 install_module
 
 for partition in $MANAGED_PARTITIONS; do
+  # A module may already provide the promoted partition at the top level and
+  # keep system/<partition> as its compatibility alias.  Passing an existing
+  # directory to `ln` creates the link *inside* that directory (for example
+  # product/product), which later forces a mount over the whole partition.
+  if [ -e "$MODPATH/$partition" ] || [ -L "$MODPATH/$partition" ]; then
+    continue
+  fi
+
   if [ ! -d "$MODPATH/system/$partition" ]; then
     continue
   fi
