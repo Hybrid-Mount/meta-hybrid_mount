@@ -1,4 +1,64 @@
 
+## v6.1.1
+
+
+### <!-- 1 --> Features
+
+- Add APatch LKM fallback and module safeguards
+
+- `scanner` Enforce module identity with validated ModuleId Introduce a ModuleId newtype as the single validation boundary and use it throughout config rules, blacklist, scanner records, mount tree, plan, and state snapshots while keeping the JSON/TOML wire format unchanged. Scanner now rejects duplicate declared module IDs instead of silently sorting, skips directories whose name disagrees with module.prop, and turns an unreadable module root into a fatal scan error instead of an empty list. Entry-level read errors are logged and skipped explicitly. Closes plan phase 2 (PR5) and gap G08.
+
+- `mount` Roll back the whole pipeline through one transaction Register every successful side effect in MountTransaction: runtime temp dir, overlay storage, magic staging, intermediate overlay staging, overlay child and shallow mounts, magic bind/move targets, and the KernelSU try-unmount list. Rollback-only actions unmount targets deepest-first and are skipped on successful commit unless cleanup fails, in which case commit rolls back mounted targets as well. Pipeline rollback now verifies mountinfo subtree IDs against a pre-execution baseline instead of assuming targets were not previously mounted. AtomicBool-gated fault injection covers overlay Nth-target, magic, KSU commit, state save, mountinfo read, EBUSY unmount, and staging removal failures, with Linux mount-namespace tests. Closes plan phase 3 (PR8) and gap G13.
+
+- `observability` Add low-overhead boot phase timing - Add an RAII PhaseTimer that logs status=ok on finish and status=aborted when an early return drops the guard. - Instrument startup/config/scan/plan/storage/overlay/magic/state/ rollback/cleanup in the mount pipeline with phase= on key failure logs. - Log aggregate plan metrics including MountTree::node_count. - Keep per-module and per-mount details at debug level.
+
+
+
+### <!-- 2 --> Fixes
+
+- Avoid self-named partition alias mounts
+
+- Unify active mount targets and expand readme locales
+
+- `config` Fail closed on corrupt config and persist atomically - Config::load_or_default now returns Result: a missing config file still yields defaults with a config_missing flag, while corrupt or unreadable files stop the pipeline with path context instead of silently falling back to Overlay mode. - Reuse sys::fs::atomic_write for Config::save; file and parent directory are fsynced, temp files are cleaned up on failure, and symlinked config targets are rejected instead of being silently replaced by rename. - Reject global default_mode=ignore during parse, patch and save; keep per-module/per-path ignore rules working. - Treat a corrupt module_blacklist.toml as an error (fail closed); a missing blacklist file remains a normal empty blacklist. - Move config tests to src/config_tests.rs via #[path] sibling module. - Record PR4 status in docs/RUST_AUDIT_PLAN.md (§8, G03/G04/G07). Verified with cargo fmt, clippy -D warnings, workspace tests (117 on host), stable 1.97 tests, and x86_64-unknown-linux-gnu / aarch64-linux-android checks including test-only compilation.
+
+- `storage` Adapt ext4 block size for large images
+
+- `webui` Preserve module version display
+
+- `magic` Make executor failures transactional Return structured bind, move, symlink, whiteout, replace, and no-op outcomes from Magic Mount execution. Record only real mount targets as active while registering staging paths for rollback, and propagate direct-child failures instead of continuing with a partial stage. Treat failed read-only remounts and mount moves as errors, immediately unwind the just-created mount, and let the existing MountTransaction roll back earlier Magic and Overlay effects. Add rootless fake operations plus bind/remount/move/symlink fault gates, serialize process-global fault tests, and move the Linux executor matrix into exec_tests.rs. Closes audit plan PR9; Android real-device candidate validation remains a release gate.
+
+- `mount` Exclude apex from managed partitions Prevent the metamodule from mounting the apexd activation tree and blacklist MoveCertificate, which manages its own certificate mounts. Refs #403
+
+- `state` Derive is_mounted from mountinfo and expose boot diagnostics - scan.ret.is_mounted is no longer derived from the plan: the pipeline confirms executed targets against mountinfo, maps them back to modules through the shared mount tree, and adds symlink/whiteout-only magic modules from executor stats. - RunState now records state_load (missing/loaded/corrupt/io_error), failed_stage, rollback_status and leftover_mount_targets, so status can distinguish mount failure, clean rollback and incomplete rollback. - Failure paths rewrite scan.ret back to all-unmounted after rollback. - confirmed_active_mounts keeps executor attempt counts separate from the final mountinfo-confirmed active targets. - Add wire snapshot tests for modules/status/install-state/clear-errors and legacy-state deserialization coverage.
+
+- `storage` Close Stage 4 overlay and ext4 audit gaps - G05: strict cleanup paths now propagate mountinfo probe failures and re-read mountinfo after detach; best-effort probing remains Drop-only. - G06: tmpfs to ext4 fallback verifies the tmpfs mount is gone and fails closed when unmount or verification fails. - G09: reset_image_files removes only the exact modules.img file, preserving user backups like modules.img.bak. - Add 64-layer boundary table tests (0/1/63/64/65/128) and a mountinfo failure injection test for overlay staging cleanup. - Add ext4 sizing tests for hardlinks, sparse files, symlinks and special entries, plus an e2fsck 0..=3 exit-code contract helper/test. - Keep the ext4 loop device in StorageHandle for explicit teardown detach and add bounded EBUSY retry with exponential backoff for loop attach/mount/detach.
+
+
+
+### <!-- 3 --> Documentation
+
+- `webui` Complete French localization
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Harden mount planning and tooling
+
+- `mount` Add MountTransaction and Result mount probes Turn is_mounted into Result<bool> backed by a shared MountSnapshot query layer, with a best-effort helper reserved for Drop cleanup paths. Update the overlay, pipeline, and storage call sites so mountinfo failures propagate instead of being mistaken for unmounted targets. Add MountTransaction as the cleanup journal for mount side effects: reverse-order rollback, explicit commit/disarm/rollback, aggregated failure reports, Drop as last defense, and retainable actions that only commit(true) may keep for disable_umount. Wire it into intermediate overlay staging cleanup without changing mount execution order. Closes plan PR6/7 and gap G15; full pipeline integration follows in PR8.
+
+- `errors` Introduce structured errors and subprocess runner - Add ErrorClass (transient/permanent/manual-recovery) with an exhaustive classify() match covering every Error variant. - Add IoError and ContextError backed by CausalError so mount/storage/LKM/ state boundaries translate io, rustix, procfs, serde and subprocess errors instead of pre-formatting Error::Msg strings. - Add a unified subprocess runner with bounded head+tail output capture, independent total and I/O drain timeouts, explicit exit-code policies and env-redacted Debug output. - Migrate e2fsck, mke2fs, getprop, insmod and ksud/apd production call sites. - Mark PR10 abandoned and PR11 implemented in the Rust audit plan.
+
+- `deps` Converge on rustix and slim zip/tokio features PR2 (rustix convergence): - Replace extattr lgetxattr/lsetxattr with a two-step rustix xattr helper (length query + Vec::with_capacity + spare_capacity), covering long SELinux contexts. - Replace the hand-written libc::lchown FFI with rustix chownat AT_SYMLINK_NOFOLLOW. - Replace libc EINTR/EAGAIN/EBUSY/ESTALE and ELOOP/EBUSY constants with rustix Errno constants; migrate test unshare to rustix unshare_unsafe. - Drop direct extattr and libc dependencies. PR3 (build dependency slimming): - xtask zip: default-features=false with only deflate-flate2-zlib-rs, removing aes/bzip2/deflate64/lzma/zstd/xz from the build. - notify tokio: full -> rt-multi-thread plus a minimal-runtime test. - cargo tree: xtask 385->322 lines, notify 284->273 lines.
+
+- French translation (#401) Co-authored-by: PifGadget92 <tiktok.ds@outlook.com>
+
+- Remove stale audit plan and trim redundant tests
+
+
+
+
 ## v6.1.0
 
 
