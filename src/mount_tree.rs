@@ -264,6 +264,14 @@ impl MountTree {
         self.root.has_backend(backend)
     }
 
+    /// 共享树节点总数(含根),用于启动性能计数。
+    pub fn node_count(&self) -> usize {
+        fn count(node: &MountNode) -> usize {
+            1 + node.children.values().map(count).sum::<usize>()
+        }
+        count(&self.root)
+    }
+
     pub fn module_ids_for(&self, backend: Mode) -> BTreeSet<&ModuleId> {
         fn collect<'a>(node: &'a MountNode, backend: Mode, ids: &mut BTreeSet<&'a ModuleId>) {
             ids.extend(
@@ -445,6 +453,23 @@ mod tests {
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from(["beta"])
         );
+    }
+
+    #[test]
+    fn node_count_includes_root_and_all_descendants() {
+        let mut tree = MountTree::default();
+        assert_eq!(tree.node_count(), 1);
+        tree.insert(
+            "/system/etc/hosts",
+            source(
+                "m",
+                "system/etc/hosts",
+                NodeFileType::RegularFile,
+                Mode::Overlay,
+            ),
+        );
+
+        assert_eq!(tree.node_count(), 4);
     }
 
     #[test]

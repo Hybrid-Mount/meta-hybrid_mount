@@ -34,6 +34,8 @@ use crate::state::MountStatistics;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::state::{RunState, app_modules, mounted_module_ids_for_snapshot, write_scan_ret};
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::timing::PhaseTimer;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
 
 /// 无参数启动挂载流水线的统一入口。
@@ -330,6 +332,7 @@ fn execute_mount_phases(
         }
     }
 
+    let storage_phase = PhaseTimer::start("storage");
     let storage_root = if needs_overlay_storage {
         let session_root = transient_root
             .as_deref()
@@ -369,6 +372,7 @@ fn execute_mount_phases(
         log::info!("overlay storage skipped: reason=no_overlay_operations");
         None
     };
+    storage_phase.finish();
 
     let magic_work_dir = if plan.magic_module_ids.is_empty() {
         log::info!("magic staging skipped: reason=no_magic_modules");
@@ -384,6 +388,7 @@ fn execute_mount_phases(
         Some(crate::sys::temp::create_random_dir(&staging_path)?)
     };
 
+    let overlay_phase = PhaseTimer::start("overlay");
     let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts) = mount_overlay_phase(
         plan,
         config,
@@ -393,6 +398,9 @@ fn execute_mount_phases(
         transaction,
         mounted,
     )?;
+    overlay_phase.finish();
+
+    let magic_phase = PhaseTimer::start("magic");
     let magic_stats = mount_magic_phase(
         config,
         plan,
@@ -401,6 +409,7 @@ fn execute_mount_phases(
         transaction,
         mounted,
     )?;
+    magic_phase.finish();
 
     crate::utils::ksu::commit_unmount_list()?;
 
@@ -475,6 +484,7 @@ fn rollback_mount_pipeline(
     mounted: &MountedTargets,
     baseline: &crate::sys::mountinfo::MountSnapshot,
 ) -> RollbackSummary {
+    let rollback_phase = PhaseTimer::start("rollback");
     let report = transaction.rollback();
     for failure in &report.failures {
         log::error!(
@@ -484,7 +494,7 @@ fn rollback_mount_pipeline(
         );
     }
 
-    match mountinfo_mismatches(baseline, mounted) {
+    let summary = match mountinfo_mismatches(baseline, mounted) {
         Ok((leftover, missing)) => {
             for target in &leftover {
                 log::error!("rollback left an uncleaned mount target: {target}");
@@ -505,7 +515,9 @@ fn rollback_mount_pipeline(
             log::error!("rollback verification unavailable: {err}");
             RollbackSummary::unverified()
         }
-    }
+    };
+    rollback_phase.finish();
+    summary
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -556,13 +568,30 @@ fn confirmed_mount_targets(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn run_mount_pipeline_impl() -> Result<()> {
-    utils::ksu::init();
+fn log_phase_failure<T>(phase: &'static str, result: Result<T>) -> Result<T> {
+    if let Err(err) = &result {
+        log::error!("phase={phase} failed: {err}");
+    }
+    result
+}
 
-    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn run_mount_pipeline_impl() -> Result<()> {
+    let startup = PhaseTimer::start("startup");
+    utils::ksu::init();
+    startup.finish();
+
+    let config_phase = PhaseTimer::start("config");
+    let config = log_phase_failure(
+        "config",
+        Config::load_or_default(Path::new(defs::CONFIG_PATH)),
+    )?;
     let ksu_active = utils::ksu::is_active();
     let mount_source = effective_mount_source(&config.mountsource, ksu_active).to_owned();
-    log::info!("config info: {}", config.to_toml()?);
+    log::info!(
+        "config info: {}",
+        log_phase_failure("config", config.to_toml())?
+    );
     log::info!(
         "runtime: pid={}, configured_mount_source={}, effective_mount_source={}, ksu_ioctl_active={}",
         std::process::id(),
@@ -571,9 +600,11 @@ fn run_mount_pipeline_impl() -> Result<()> {
         ksu_active
     );
     log_backend_capabilities();
+    config_phase.finish();
 
+    let scan_phase = PhaseTimer::start("scan");
     let managed_partitions = managed_partition_names();
-    let modules = list_modules(&config.moduledir, &managed_partitions)?;
+    let modules = log_phase_failure("scan", list_modules(&config.moduledir, &managed_partitions))?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {
         let entry_roots = module
@@ -596,21 +627,35 @@ fn run_mount_pipeline_impl() -> Result<()> {
             describe_path_mount(&module.source_path)
         );
     }
+    scan_phase.finish();
 
+    let plan_phase = PhaseTimer::start("plan");
     let promoted = detect_promoted_partitions();
     log::info!(
         "partition detection: managed={}, promoted={}",
         managed_partitions.join(","),
         promoted.iter().cloned().collect::<Vec<_>>().join(",")
     );
-    let mut plan = build_plan(&PlanInput {
-        modules: &modules,
-        config: &config,
-        promoted_partitions: &promoted,
-    })?;
+    let mut plan = log_phase_failure(
+        "plan",
+        build_plan(&PlanInput {
+            modules: &modules,
+            config: &config,
+            promoted_partitions: &promoted,
+        }),
+    )?;
     log::info!(
         "plan: overlay_ops={}, overlay_modules={}, magic_modules={}",
         plan.overlay_ops.len(),
+        plan.overlay_module_ids.len(),
+        plan.magic_module_ids.len()
+    );
+    log::info!(
+        "plan metrics: modules={}, nodes={}, overlay_ops={}, shallow_targets={}, overlay_modules={}, magic_modules={}",
+        modules.len(),
+        plan.tree.node_count(),
+        plan.overlay_ops.len(),
+        plan.overlay_files.len(),
         plan.overlay_module_ids.len(),
         plan.magic_module_ids.len()
     );
@@ -633,11 +678,13 @@ fn run_mount_pipeline_impl() -> Result<()> {
             );
         }
     }
+    plan_phase.finish();
 
     // `modules` is a boot-time snapshot, not a proof that every mount already
     // succeeded.  Persist it before entering the fallible mount phases so the
     // WebUI can still show the scanned modules and their planned modes when a
     // device rejects one overlay operation.
+    let state_phase = PhaseTimer::start("state");
     let initial_mount_errors = crate::state::collect_mount_error_modules(&config.moduledir);
     let initial_app_modules = app_modules(
         &modules,
@@ -646,7 +693,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         &initial_mount_errors,
         &BTreeSet::new(),
     );
-    write_scan_ret(&initial_app_modules)?;
+    log_phase_failure("state", write_scan_ret(&initial_app_modules))?;
     log::info!(
         "module snapshot saved: modules={}",
         initial_app_modules.len()
@@ -656,14 +703,15 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // before any fallible mount operation so `status` and the WebUI can still
     // report the selected backends when the device rejects a later mount.
     let mut state = RunState::from_plan(&config, &modules, &plan, initial_mount_errors);
-    state.save()?;
+    log_phase_failure("state", state.save())?;
+    state_phase.finish();
     log::info!(
         "planned state saved: overlay_modules={}, magic_modules={}",
         state.overlay_modules.len(),
         state.magic_modules.len()
     );
 
-    let baseline = crate::sys::mountinfo::MountSnapshot::read()?;
+    let baseline = log_phase_failure("baseline", crate::sys::mountinfo::MountSnapshot::read())?;
     let mut transaction = crate::sys::transaction::MountTransaction::new();
     transaction.register_rollback_only("ksu_try_umount_list", || {
         crate::utils::ksu::clear_unmount_list()
@@ -682,7 +730,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             Ok(result) => result,
             Err(err) => {
                 log::error!(
-                    "mount execution failed: error={err}, overlay_modules={}, magic_modules={}",
+                    "mount execution failed: phase=mount_execution, error={err}, overlay_modules={}, magic_modules={}",
                     plan.overlay_module_ids.join(","),
                     plan.magic_module_ids.join(",")
                 );
@@ -699,7 +747,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     let final_mountinfo = match crate::sys::mountinfo::MountSnapshot::read() {
         Ok(snapshot) => snapshot,
         Err(err) => {
-            log::error!("final mountinfo confirmation failed: {err}");
+            log::error!("phase=mountinfo_confirm failed: {err}");
             let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
             persist_mount_failure_state(&mut state, "mountinfo_confirm", &rollback);
             persist_unmounted_module_snapshot(&modules, &config, &plan);
@@ -738,7 +786,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         &mounted_module_ids,
     );
     if let Err(err) = write_scan_ret(&app_modules) {
-        log::error!("module snapshot save failed, rolling back mounts: {err}");
+        log::error!("phase=module_snapshot_save failed, rolling back mounts: {err}");
         let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
         persist_mount_failure_state(&mut state, "module_snapshot_save", &rollback);
         persist_unmounted_module_snapshot(&modules, &config, &plan);
@@ -750,6 +798,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         .map(|module| (module.clone(), "mount_error marker present".to_owned()))
         .collect();
 
+    let state_phase = PhaseTimer::start("state");
     state.active_mounts = confirmed_active_mounts.clone();
     state.overlay_active_mounts = confirmed_overlay_targets;
     state.magic_active_mounts = confirmed_magic_targets;
@@ -770,15 +819,18 @@ fn run_mount_pipeline_impl() -> Result<()> {
         state.mount_point = PathBuf::new();
     }
     if let Err(err) = state.save() {
-        log::error!("final state save failed, rolling back mounts: {err}");
+        log::error!("phase=state_save failed, rolling back mounts: {err}");
         let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
         persist_mount_failure_state(&mut state, "state_save", &rollback);
         persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
+    state_phase.finish();
 
+    let cleanup_phase = PhaseTimer::start("cleanup");
     if let Err(err) = transaction.commit(config.disable_umount) {
-        log::error!("mount transaction commit failed: {err}");
+        cleanup_phase.abort();
+        log::error!("phase=mount_transaction_commit failed: {err}");
         let rollback = match mountinfo_mismatches(&baseline, &mounted) {
             Ok((leftover, missing)) => {
                 for target in &leftover {
@@ -801,12 +853,20 @@ fn run_mount_pipeline_impl() -> Result<()> {
         persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
+    cleanup_phase.finish();
 
+    let post_commit_state_phase = PhaseTimer::start("state");
     state.rollback_status = Some("committed".to_owned());
     state.failed_stage = None;
     state.leftover_mount_targets.clear();
-    if let Err(err) = state.save() {
-        log::error!("post-commit state save failed, mounts remain active: {err}");
+    match state.save() {
+        Ok(()) => {
+            post_commit_state_phase.finish();
+        }
+        Err(err) => {
+            log::error!("post-commit state save failed, mounts remain active: {err}");
+            post_commit_state_phase.abort();
+        }
     }
 
     crate::module_status::update_description(

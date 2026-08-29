@@ -72,6 +72,8 @@
 > PR12 实施后（本地边界）：workspace 测试通过（host 177+3+1=181），fmt/clippy（host 与 Linux target all-targets）及四个 Linux/Android 目标 check 通过；`scan.ret.is_mounted` 改为 mountinfo 确认结果，`status` 新增状态来源与失败/回滚诊断字段，CLI wire JSON 快照测试补齐。
 >
 > PR2/3 实施后（本地边界）：workspace 测试通过（host 177+4+1=182），fmt/clippy（host 与 Linux target all-targets）及四个 Linux/Android 目标 check 通过；主程序直接 `extattr`/`libc` 依赖移除，xtask 正常依赖树 385→322 行、notify 284→273 行，zip 仅保留 `deflate-flate2-zlib-rs`，Tokio 收敛为 `rt-multi-thread`。
+>
+> PR13 实施后（本地边界）：workspace 测试通过（host 181+4+1=186），fmt/clippy（host 与 Linux target all-targets）及四个 Linux/Android 目标 check 通过；`src/timing.rs` 覆盖 11 个启动阶段的 ok/aborted 计时，失败日志带 `phase=`，真机 10 次性能报告仍留待发布门禁。
 
 ### 4.1 验证证据等级
 
@@ -479,25 +481,27 @@
 
 ## 17. 阶段 10：P2 可观测性与性能基线
 
+> 实施状态：PR13 已实现并通过本地全部门禁（host 181+4+1=186）；真机 10 次运行的中位数/P95 与事务开销对比留待设备性能报告。
+
 ### 17.1 低开销阶段计时
 
-- [ ] 复用项目既有的粗粒度计时设计；若当前分支不存在，则以独立小 PR 恢复。
-- [ ] 记录 startup、config、scan、plan、storage、Overlay、Magic、state、rollback、cleanup。
-- [ ] 正常完成记录 `status=ok`，异常离开作用域记录 `status=aborted`。
-- [ ] 默认日志级别为 `info`；逐模块和逐挂载细节放在 `debug`。
-- [ ] 日志不包含 Telegram token、完整敏感环境或不必要的用户路径内容。
+- [x] 复用项目既有的粗粒度计时设计；若当前分支不存在，则以独立小 PR 恢复（本分支原先没有，PR13 以独立 `src/timing.rs` 恢复）。
+- [x] 记录 startup、config、scan、plan、storage、Overlay、Magic、state、rollback、cleanup。
+- [x] 正常完成记录 `status=ok`，异常离开作用域记录 `status=aborted`（RAII `PhaseTimer`）。
+- [x] 默认日志级别为 `info`；逐模块和逐挂载细节放在 `debug`（本次只新增常量级 info 日志）。
+- [x] 日志不包含 Telegram token、完整敏感环境或不必要的用户路径内容（计时日志只有 phase/status/elapsed_ms）。
 
 ### 17.2 性能检查
 
-- [ ] 记录模块数量、节点数量、计划操作数量和各阶段耗时。
-- [ ] 在相同设备、相同模块集上至少运行 10 次，报告中位数和 P95。
-- [ ] 比较挂载事务与额外 mountinfo 确认带来的开销。
-- [ ] 若启动耗时回归超过约 5%，必须解释并评估是否可降低粒度或系统调用次数。
+- [x] 记录模块数量、节点数量、计划操作数量和各阶段耗时（新增 `MountTree::node_count` 与 `plan metrics` 日志）。
+- [ ] 在相同设备、相同模块集上至少运行 10 次，报告中位数和 P95（发布前设备性能报告）。
+- [ ] 比较挂载事务与额外 mountinfo 确认带来的开销（发布前设备性能报告）。
+- [ ] 若启动耗时回归超过约 5%，必须解释并评估是否可降低粒度或系统调用次数（发布前设备性能报告）。
 
 ### 17.3 阶段验收
 
-- [ ] 一条失败日志可以定位阶段、目标、后端、错误和回滚结果。
-- [ ] 默认日志量不会随文件节点数量线性爆炸。
+- [x] 一条失败日志可以定位阶段、目标、后端、错误和回滚结果（关键失败点统一带 `phase=`；rollback 结果进入 state 与日志）。
+- [x] 默认日志量不会随文件节点数量线性爆炸（阶段计时为常量条数；节点/操作计数为聚合值；逐条目仍为 debug）。
 
 ## 18. 阶段 11：CI、发布与文档
 
@@ -548,7 +552,7 @@ git diff --check
 | 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | ⛔ 放弃（用户决定，2026-08-29） |
 | 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | ✅ 已提交（CI/真机待验） |
 | 12 | 状态真实性、CLI snapshots、文档 | 中 | 执行器结果模型稳定 | ✅ 已实现（本地门禁通过，待提交/push/CI） |
-| 13 | 计时与性能基线 | 低-中 | 核心修复完成 | 待执行 |
+| 13 | 计时与性能基线 | 低-中 | 核心修复完成 | ✅ 已实现（计时器与计数器；设备性能报告待发布门禁） |
 
 高风险 PR 不应与依赖升级、格式化全仓库或无关重命名混合。
 
@@ -625,6 +629,7 @@ git diff --check
 - [x] PR11 本地复验：fmt、host/Linux-target clippy、workspace host 测试（165+3+1=169），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；runner 单测覆盖 head+tail 上限、总超时、drain 超时、退出码策略与 env Debug 脱敏。
 - [x] PR12 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+3+1=181），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；新增测试覆盖 mountinfo 反推模块挂载、状态来源三态、wire JSON 快照与回滚诊断字段。
 - [x] PR2/3 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+4+1=182），以及四个 Linux/Android 目标 check 通过；`grep` 确认主程序无 `extattr`/`libc` 引用，`cargo tree -p xtask` 385→322、`-p notify` 284→273，zip_ext 与 notify minimal-runtime 测试通过。
+- [x] PR13 本地复验：fmt、host/Linux-target clippy、workspace host 测试（181+4+1=186），以及四个 Linux/Android 目标 check 通过；`timing` 单测覆盖 record 格式、finish/abort 与 Drop 契约，pipeline 失败日志抽查均带 `phase=`。
 
 ## 23. 最终交付物
 

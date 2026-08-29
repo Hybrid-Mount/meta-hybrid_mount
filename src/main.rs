@@ -19,6 +19,7 @@ mod scanner;
 mod state;
 mod storage;
 mod sys;
+mod timing;
 mod utils;
 
 use std::env;
