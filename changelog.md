@@ -1,4 +1,24 @@
 
+## v6.1.2
+
+
+### <!-- 4 --> Tests
+
+- Skip long xattr probe when filesystem limit is reached
+
+- Derive version assertion from package metadata
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Use tag as release package version
+
+- Complete and fix Turkish (tr-TR) WebUI locale translations
+
+
+
+
 ## v6.1.1
 
 
