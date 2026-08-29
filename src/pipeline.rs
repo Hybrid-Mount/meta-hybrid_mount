@@ -106,7 +106,7 @@ pub fn staged_overlay_path(
             source.display()
         ))
     })?;
-    Ok(storage_root.join(&module.id).join(relative))
+    Ok(storage_root.join(module.id.as_str()).join(relative))
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -332,7 +332,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     log_backend_capabilities();
 
     let managed_partitions = managed_partition_names();
-    let modules = list_modules(&config.moduledir, &managed_partitions);
+    let modules = list_modules(&config.moduledir, &managed_partitions)?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {
         let entry_roots = module
@@ -1222,7 +1222,7 @@ mod tests {
     #[test]
     fn overlay_sources_are_remapped_under_prepared_storage() {
         let module = ModuleRecord {
-            id: "adb-ndk".to_owned(),
+            id: crate::module_id::ModuleId::try_from("adb-ndk").unwrap(),
             name: "ADB".to_owned(),
             version: "1".to_owned(),
             author: "a".to_owned(),

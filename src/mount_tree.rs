@@ -12,6 +12,7 @@ use std::fs::FileType;
 use std::path::{Path, PathBuf};
 
 use crate::config::Mode;
+use crate::module_id::ModuleId;
 
 /// 内建分区提升规则:`(分区名, 是否要求 /system/<分区> 是符号链接)`。
 pub const BUILTIN_PARTITIONS: [(&str, bool); 4] = [
@@ -60,7 +61,7 @@ impl fmt::Display for NodeFileType {
 /// 一个模块对目标节点的贡献。`source_path` 始终指向只读模块源目录。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MountSource {
-    pub module_id: String,
+    pub module_id: ModuleId,
     pub relative: String,
     pub source_path: PathBuf,
     pub file_type: NodeFileType,
@@ -70,7 +71,7 @@ pub struct MountSource {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StructuralSource {
-    pub module_id: String,
+    pub module_id: ModuleId,
     pub source_path: PathBuf,
 }
 
@@ -231,13 +232,13 @@ impl MountTree {
         self.root.has_backend(backend)
     }
 
-    pub fn module_ids_for(&self, backend: Mode) -> BTreeSet<&str> {
-        fn collect<'a>(node: &'a MountNode, backend: Mode, ids: &mut BTreeSet<&'a str>) {
+    pub fn module_ids_for(&self, backend: Mode) -> BTreeSet<&ModuleId> {
+        fn collect<'a>(node: &'a MountNode, backend: Mode, ids: &mut BTreeSet<&'a ModuleId>) {
             ids.extend(
                 node.sources
                     .iter()
                     .filter(|source| source.backend == backend)
-                    .map(|source| source.module_id.as_str()),
+                    .map(|source| &source.module_id),
             );
             for child in node.children.values() {
                 collect(child, backend, ids);
@@ -256,7 +257,7 @@ mod tests {
 
     fn source(module: &str, relative: &str, file_type: NodeFileType, backend: Mode) -> MountSource {
         MountSource {
-            module_id: module.to_owned(),
+            module_id: ModuleId::try_from(module).unwrap(),
             relative: relative.to_owned(),
             source_path: PathBuf::from(format!("/modules/{module}/{relative}")),
             file_type,
@@ -367,6 +368,12 @@ mod tests {
                 .file_type_for(Mode::Overlay),
             Some(NodeFileType::Whiteout)
         );
-        assert_eq!(tree.module_ids_for(Mode::Overlay), BTreeSet::from(["m"]));
+        assert_eq!(
+            tree.module_ids_for(Mode::Overlay)
+                .into_iter()
+                .map(ModuleId::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["m"])
+        );
     }
 }

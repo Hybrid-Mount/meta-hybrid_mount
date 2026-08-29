@@ -2,6 +2,10 @@
 
 use super::*;
 
+fn module_id(id: &str) -> ModuleId {
+    ModuleId::try_from(id).unwrap()
+}
+
 #[test]
 fn defaults_match_contract() {
     let config = Config::default();
@@ -104,13 +108,30 @@ custom_mounts = []
 }
 
 #[test]
+fn invalid_module_id_rule_key_is_rejected_with_context() {
+    let err = Config::from_toml(
+        r#"
+default_mode = "overlay"
+
+[rules."1bad"]
+default_mode = "magic"
+"#,
+    )
+    .unwrap_err();
+
+    let message = err.to_string();
+    assert!(message.contains("Invalid module ID"), "{message}");
+    assert!(message.contains("1bad"), "{message}");
+}
+
+#[test]
 fn toml_roundtrip_preserves_rules() {
     let mut config = Config {
         default_mode: Mode::Magic,
         ..Config::default()
     };
     config.rules.insert(
-        "demo".to_owned(),
+        module_id("demo"),
         ModuleRule {
             default_mode: Some(Mode::Ignore),
             paths: BTreeMap::from([
@@ -214,7 +235,7 @@ fn save_creates_parent_and_load_roundtrips() {
         ..Config::default()
     };
     config.rules.insert(
-        "demo".to_owned(),
+        module_id("demo"),
         ModuleRule {
             default_mode: Some(Mode::Magic),
             paths: BTreeMap::new(),
@@ -362,6 +383,28 @@ fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
 }
 
 #[test]
+fn invalid_blacklist_module_id_fails_closed_with_path_context() {
+    let dir = test_dir("module-blacklist-invalid-id");
+    let path = dir.join("config.toml");
+    Config::default().save(&path).unwrap();
+    let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
+    fs::write(&blacklist_path, r#"blacklist = ["1bad"]"#).unwrap();
+
+    let err = Config::load(&path).unwrap_err();
+    let message = err.to_string();
+    assert!(
+        message.contains("Invalid module ID") || message.contains("invalid module id"),
+        "{message}"
+    );
+    assert!(
+        message.contains(&blacklist_path.display().to_string()),
+        "{message}"
+    );
+
+    cleanup(&dir);
+}
+
+#[test]
 fn missing_main_config_loads_blacklist_but_corrupt_blacklist_fails_closed() {
     let dir = test_dir("module-blacklist-fallback");
     fs::create_dir_all(&dir).unwrap();
@@ -397,7 +440,7 @@ fn patch_merges_while_preserving_untouched_fields() {
         ..Config::default()
     };
     config.rules.insert(
-        "keep".to_owned(),
+        module_id("keep"),
         ModuleRule {
             default_mode: Some(Mode::Ignore),
             paths: BTreeMap::from([("system/etc/a".to_owned(), Mode::Overlay)]),
@@ -439,7 +482,7 @@ fn patch_rejects_ignore_as_global_default_without_partial_update() {
 fn patch_null_clears_module_default_mode() {
     let mut config = Config::default();
     config.rules.insert(
-        "m".to_owned(),
+        module_id("m"),
         ModuleRule {
             default_mode: Some(Mode::Magic),
             paths: BTreeMap::new(),
@@ -458,10 +501,10 @@ fn patch_can_replace_all_rules_for_full_editor_save() {
     let mut config = Config::default();
     config
         .rules
-        .insert("stale".to_owned(), ModuleRule::default());
+        .insert(module_id("stale"), ModuleRule::default());
     config
         .rules
-        .insert("keep".to_owned(), ModuleRule::default());
+        .insert(module_id("keep"), ModuleRule::default());
 
     let patch: ConfigPatch =
         serde_json::from_str(r#"{"replace_rules":true,"rules":{"keep":{"default_mode":"magic"}}}"#)

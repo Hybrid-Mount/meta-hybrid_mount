@@ -58,6 +58,8 @@
 现有 Rust 测试总计 110 项通过，但该结果不覆盖真实 mount namespace、loop device、SELinux、KernelSU/APatch、LKM ABI 或 Android 启动时序。
 
 > PR4 实施后：workspace 测试通过（host 113+3+1=117；Linux 另含 1 个 cfg(unix) 符号链接测试），stable 1.97 与两个 Linux/Android 目标 check 通过。
+>
+> PR5 实施后：workspace 测试通过（host 124+3+1=128；Linux 另含 1 个 cfg(unix) 符号链接测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
 
 ### 4.1 验证证据等级
 
@@ -153,36 +155,38 @@
 
 ## 9. 阶段 2：P0 模块身份与扫描不变量
 
+> 实施状态：PR5 已实现并通过本地全部门禁（host 128 项测试），已提交。
+
 ### 9.1 `ModuleId` 强类型
 
-- [ ] 新建 `ModuleId` newtype，以 `TryFrom<String>` 集中执行合法性验证。
-- [ ] 支持 `Display`、`AsRef<str>`、排序、哈希以及必要的 serde map-key 行为。
-- [ ] scanner、config rules、mount tree、plan、state 不再传递未验证的模块 ID `String`。
-- [ ] 不为 ASCII ID 规则引入 `regex`。
+- [x] 新建 `ModuleId` newtype，以 `TryFrom<String>` 集中执行合法性验证。
+- [x] 支持 `Display`、`AsRef<str>`、排序、哈希以及必要的 serde map-key 行为。
+- [x] scanner、config rules、mount tree、plan、state 不再传递未验证的模块 ID `String`。
+- [x] 不为 ASCII ID 规则引入 `regex`。
 
 ### 9.2 扫描一致性
 
-- [ ] 校验目录名与 `module.prop` 中的 ID 一致。
-- [ ] 检测不同目录声明同一 ID；不得静默排序后继续。
-- [ ] 对缺失、目录型、符号链接型 `module.prop` 保持“辅助目录跳过”语义。
-- [ ] 对真正模块的无效 ID、重复 ID、必填字段缺失给出结构化诊断。
-- [ ] 明确每类 `read_dir`、metadata、文件读取错误是跳过、警告还是致命。
-- [ ] 不跟随分区根符号链接，避免重复扫描和 staging 膨胀。
+- [x] 校验目录名与 `module.prop` 中的 ID 一致。
+- [x] 检测不同目录声明同一 ID；不得静默排序后继续。
+- [x] 对缺失、目录型、符号链接型 `module.prop` 保持“辅助目录跳过”语义。
+- [x] 对真正模块的无效 ID、重复 ID、必填字段缺失给出结构化诊断。
+- [x] 明确每类 `read_dir`、metadata、文件读取错误是跳过、警告还是致命。
+- [x] 不跟随分区根符号链接，避免重复扫描和 staging 膨胀。
 
 ### 9.3 测试矩阵
 
-- [ ] 有效 ID、非法首字符、非法字符、空 ID。
-- [ ] 目录名与 ID 不一致。
-- [ ] 两个目录声明相同 ID。
-- [ ] 普通辅助目录、符号链接 `module.prop`、目录型 `module.prop`。
-- [ ] `product -> system/product` 等分区别名不产生重复节点。
-- [ ] `.replace`、whiteout、符号链接和特殊文件保持既有语义。
+- [x] 有效 ID、非法首字符、非法字符、空 ID。
+- [x] 目录名与 ID 不一致。
+- [x] 两个目录声明相同 ID。
+- [x] 普通辅助目录、符号链接 `module.prop`、目录型 `module.prop`。
+- [x] `product -> system/product` 等分区别名不产生重复节点。
+- [x] `.replace`、whiteout、符号链接和特殊文件保持既有语义。
 
 ### 9.4 阶段验收
 
-- [ ] 无法构造未验证 `ModuleId`。
-- [ ] scanner、plan、state 对同一模块集合得出一致结果。
-- [ ] 重复或冲突模块不会覆盖彼此 staging 路径。
+- [x] 无法构造未验证 `ModuleId`。
+- [x] scanner、plan、state 对同一模块集合得出一致结果。
+- [x] 重复或冲突模块不会覆盖彼此 staging 路径。
 
 ## 10. 阶段 3：P0 挂载事务与全流水线回滚
 
@@ -515,8 +519,8 @@ git diff --check
 | 1 | 固定工具链策略、记录基线 | 低 | 无 | 待执行（用户未选择） |
 | 2 | `rustix` 收敛，删除直接 `libc/extattr` | 低-中 | Android target check | 待执行 |
 | 3 | `zip`/Tokio feature 瘦身 | 低 | 构建产物比较 | 待执行 |
-| 4 | Config 原子写与损坏配置 fail-closed | 中 | CLI/WebUI 错误契约 | ✅ 已实现（含 G03/G04/G07，待确认/提交） |
-| 5 | `ModuleId` 与重复模块拒绝 | 中 | 扫描回归测试 | 待执行 |
+| 4 | Config 原子写与损坏配置 fail-closed | 中 | CLI/WebUI 错误契约 | ✅ 已提交（`b11bb03e`，含 G03/G04/G07） |
+| 5 | `ModuleId` 与重复模块拒绝 | 中 | 扫描回归测试 | ✅ 已提交（含 G08） |
 | 6 | `is_mounted -> Result<bool>` 与 mount ops 边界 | 中 | fake mount ops | 与 PR7 合并执行（G15） |
 | 7 | `MountTransaction` 基础设施，不改变执行顺序 | 中-高 | 故障注入框架 | 与 PR6 合并执行（G15） |
 | 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | 待执行 |
@@ -575,7 +579,7 @@ git diff --check
 - [ ] **G05（并入 10.3 / 10.4 / 11.3）**：清理 helper 的 mountinfo 探测失败必须返回错误；清理后必须重新读 mountinfo 确认目标消失；禁止"未探测到 = 已清理"。当前 `is_mounted` 错误返回 `false`，会跳过 unmount 却返回 `Ok`。
 - [ ] **G06（并入 11.3）**：tmpfs → ext4 回退前必须验证 tmpfs 已卸载；卸载失败则 fail-closed，不再尝试 ext4。当前 `storage/mod.rs` 对卸载失败只告警后继续。
 - [x] **G07（并入 8.2）**：父目录 `sync_all` 失败按保存失败处理；非 Unix 回退已注明仅用于 host 测试且无崩溃安全保证（PR4）。
-- [ ] **G08（并入 9.2）**：scanner 根 `read_dir` 失败（当前静默返回空列表）与 walk 内 `read_dir`/`symlink_metadata` 失败（当前无日志）必须按"跳过/警告/致命"分类并记录。
+- [x] **G08（并入 9.2）**：scanner 根 `read_dir` 失败（当前静默返回空列表）与 walk 内 `read_dir`/`symlink_metadata` 失败（当前无日志）必须按"跳过/警告/致命"分类并记录。已实现：模块根不可读为致命 `ScanReadDir`，条目级错误警告跳过（PR5）。
 - [ ] **G09（并入 11.3 / 7.1）**：`reset_image_files` 停止按文件名前缀删除，改为精确文件名或保留后缀白名单，避免删除用户 `modules.img.*` 备份。
 - [ ] **G10（并入 12）**：定义 LKM nuke 失败语义——hash/矩阵/加载失败是中断流水线，还是"记录到 `state.json` 的显式降级"；两者必选其一并写验收标准。当前 `nuke_ext4_sysfs` 返回 `()`、失败仅告警。
 
@@ -594,6 +598,7 @@ git diff --check
 - [x] `x86_64-unknown-linux-gnu` 与 `aarch64-linux-android` `cargo check` 通过。
 - [x] §4 全部基线论断、§5–§12 的关键诊断均经代码逐条核实。
 - [x] PR4 完成后复验：fmt/clippy 通过，workspace 测试通过（host 113+3+1=117；Linux 另含 cfg(unix) 符号链接测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
+- [x] PR5 完成后复验：fmt/clippy 通过，workspace 测试通过（host 124+3+1=128；Linux 另含 cfg(unix) 符号链接测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
 
 ## 23. 最终交付物
 

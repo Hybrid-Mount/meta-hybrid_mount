@@ -8,6 +8,7 @@ mod defs;
 mod errors;
 mod logging;
 mod magic_mount;
+mod module_id;
 #[cfg(any(target_os = "linux", target_os = "android", test))]
 mod module_status;
 mod mount_tree;

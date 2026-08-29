@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use crate::config::{Config, Mode};
 use crate::errors::{Error, Result};
+use crate::module_id::ModuleId;
 use crate::mount_tree::{MountNode, MountSource, MountTree, NodeFileType};
 use crate::scanner::{ModuleEntry, ModuleRecord};
 
@@ -34,8 +35,8 @@ pub struct MountPlan {
     pub overlay_ops: Vec<OverlayOperation>,
     /// 文件级 overlay 规则:父目录目标 -> 文件源(执行层做 shallow 层)。
     pub overlay_files: BTreeMap<String, Vec<PathBuf>>,
-    pub overlay_module_ids: Vec<String>,
-    pub magic_module_ids: Vec<String>,
+    pub overlay_module_ids: Vec<ModuleId>,
+    pub magic_module_ids: Vec<ModuleId>,
 }
 
 pub struct PlanInput<'a> {
@@ -55,7 +56,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
         if !module.mountable() {
             continue;
         }
-        if input.config.is_module_blacklisted(&module.id) {
+        if input.config.is_module_blacklisted(module.id.as_str()) {
             log::debug!("plan skip module: id={}, reason=blacklisted", module.id);
             continue;
         }
@@ -74,7 +75,7 @@ struct ModuleRulesView {
 }
 
 impl ModuleRulesView {
-    fn new(module_id: &str, config: &Config) -> Self {
+    fn new(module_id: &ModuleId, config: &Config) -> Self {
         let module_rule = config.rules.get(module_id);
         let default_mode = module_rule
             .and_then(|rule| rule.default_mode)
@@ -127,12 +128,12 @@ impl ModuleRulesView {
 struct PlanBuilder {
     tree: MountTree,
     /// target -> (partition, module id -> lowerdir)
-    overlay_by_target: BTreeMap<String, (String, BTreeMap<String, PathBuf>)>,
+    overlay_by_target: BTreeMap<String, (String, BTreeMap<ModuleId, PathBuf>)>,
     /// 文件规则:父目录 target -> 有序且去重的 (module id, file source)。
     /// 同一模块可以在一个父目录内贡献多个文件。
-    overlay_files_by_target: BTreeMap<String, BTreeSet<(String, PathBuf)>>,
-    overlay_module_ids: BTreeSet<String>,
-    magic_module_ids: BTreeSet<String>,
+    overlay_files_by_target: BTreeMap<String, BTreeSet<(ModuleId, PathBuf)>>,
+    overlay_module_ids: BTreeSet<ModuleId>,
+    magic_module_ids: BTreeSet<ModuleId>,
     /// 跨模块分配表:target -> 已分配的节点,用于冲突检测。
     assignments: BTreeMap<String, Vec<TargetAssignment>>,
 }
@@ -149,7 +150,7 @@ impl PlanBuilder {
         &mut self,
         target: &str,
         mode: Mode,
-        module_id: &str,
+        module_id: &ModuleId,
         relative: &str,
         file_type: NodeFileType,
         replace: bool,
@@ -187,23 +188,23 @@ impl PlanBuilder {
         &mut self,
         partition: &str,
         target: &str,
-        module_id: &str,
+        module_id: &ModuleId,
         source: PathBuf,
     ) {
         let (_, layers) = self
             .overlay_by_target
             .entry(target.to_owned())
             .or_insert_with(|| (partition.to_owned(), BTreeMap::new()));
-        layers.insert(module_id.to_owned(), source);
-        self.overlay_module_ids.insert(module_id.to_owned());
+        layers.insert(module_id.clone(), source);
+        self.overlay_module_ids.insert(module_id.clone());
     }
 
-    fn add_overlay_file(&mut self, target: &str, module_id: &str, source: PathBuf) {
+    fn add_overlay_file(&mut self, target: &str, module_id: &ModuleId, source: PathBuf) {
         self.overlay_files_by_target
             .entry(target.to_owned())
             .or_default()
-            .insert((module_id.to_owned(), source));
-        self.overlay_module_ids.insert(module_id.to_owned());
+            .insert((module_id.clone(), source));
+        self.overlay_module_ids.insert(module_id.clone());
     }
 
     fn finish(self) -> MountPlan {
@@ -573,7 +574,7 @@ mod tests {
 
     fn record(id: &str, entries: &[(&str, bool)]) -> ModuleRecord {
         ModuleRecord {
-            id: id.to_owned(),
+            id: ModuleId::try_from(id).unwrap(),
             name: id.to_owned(),
             version: "1".to_owned(),
             author: "a".to_owned(),
@@ -598,6 +599,10 @@ mod tests {
     }
 
     fn config(default_mode: Mode, rules: BTreeMap<String, crate::config::ModuleRule>) -> Config {
+        let rules = rules
+            .into_iter()
+            .map(|(id, rule)| (ModuleId::try_from(id).unwrap(), rule))
+            .collect();
         Config {
             default_mode,
             rules,
@@ -719,7 +724,9 @@ mod tests {
             },
         );
         let mut config = config(Mode::Overlay, rules);
-        config.module_blacklist.insert("blocked".to_owned());
+        config
+            .module_blacklist
+            .insert(ModuleId::try_from("blocked").unwrap());
         let modules = [
             record("blocked", &[("system/etc/blocked", false)]),
             record("allowed", &[("system/etc/allowed", false)]),
@@ -1378,7 +1385,7 @@ mod tests {
         let hosts = module.join("system/etc/hosts");
         fs::write(&hosts, "127.0.0.1 localhost").unwrap();
 
-        let scanned = crate::scanner::list_modules(&root, &[]);
+        let scanned = crate::scanner::list_modules(&root, &[]).unwrap();
         let config = config(Mode::Overlay, no_rules());
         let result = plan(&scanned, &config, &[]);
 
@@ -1388,7 +1395,7 @@ mod tests {
         );
         // 源目录结构与内容不变
         assert_eq!(fs::read_to_string(&hosts).unwrap(), "127.0.0.1 localhost");
-        assert_eq!(scanned, crate::scanner::list_modules(&root, &[]));
+        assert_eq!(scanned, crate::scanner::list_modules(&root, &[]).unwrap());
 
         fs::remove_dir_all(&root).ok();
     }

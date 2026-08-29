@@ -117,7 +117,7 @@ pub struct CopyTreeStats {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn stage_overlay_tree(tree: &MountTree, destination: &Path) -> Result<CopyTreeStats> {
     for module_id in tree.module_ids_for(MountMode::Overlay) {
-        remove_path(&destination.join(module_id))?;
+        remove_path(&destination.join(module_id.as_str()))?;
     }
 
     let mut stats = CopyTreeStats::default();
@@ -144,12 +144,10 @@ fn stage_overlay_node(
         .iter()
         .filter(|source| source.backend == MountMode::Overlay)
     {
-        let staged = source
-            .relative
-            .split('/')
-            .fold(destination.join(&source.module_id), |path, component| {
-                path.join(component)
-            });
+        let staged = source.relative.split('/').fold(
+            destination.join(source.module_id.as_str()),
+            |path, component| path.join(component),
+        );
         let metadata = fs::symlink_metadata(&source.source_path)?;
 
         if source.file_type != NodeFileType::Directory
@@ -565,7 +563,7 @@ mod tests {
         symlink("overlay.conf", etc.join("overlay.link")).unwrap();
 
         let source = |relative: &str, file_type: NodeFileType, backend: MountMode| MountSource {
-            module_id: "m".to_owned(),
+            module_id: crate::module_id::ModuleId::try_from("m").unwrap(),
             relative: relative.to_owned(),
             source_path: relative
                 .split('/')

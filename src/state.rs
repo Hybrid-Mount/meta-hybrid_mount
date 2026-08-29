@@ -15,13 +15,15 @@ use serde::{Deserialize, Serialize};
 use crate::config::{Config, Mode};
 use crate::defs;
 use crate::errors::Result;
+use crate::module_id::ModuleId;
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::{ModuleRecord, list_modules};
 
 /// `modules` 命令输出的模块条目(交互契约参考上游 scanner JSON)。
+/// `id` 在反序列化时仍然验证;线格式保持普通 JSON 字符串。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppModule {
-    pub id: String,
+    pub id: ModuleId,
     pub name: String,
     pub version: String,
     pub author: String,
@@ -146,7 +148,7 @@ impl RunState {
         let skip_mount_modules = modules
             .iter()
             .filter(|module| module.skip_mount)
-            .map(|module| module.id.clone())
+            .map(|module| module.id.to_string())
             .collect();
         let mount_error_reasons = mount_error_modules
             .iter()
@@ -156,8 +158,14 @@ impl RunState {
         let mut state = Self::new(
             config.overlay_mode.as_str().to_owned(),
             PathBuf::new(),
-            plan.overlay_module_ids.clone(),
-            plan.magic_module_ids.clone(),
+            plan.overlay_module_ids
+                .iter()
+                .map(ModuleId::to_string)
+                .collect(),
+            plan.magic_module_ids
+                .iter()
+                .map(ModuleId::to_string)
+                .collect(),
             skip_mount_modules,
             Vec::new(),
             Vec::new(),
@@ -227,7 +235,7 @@ pub fn app_modules(
 
             let mount_error = mount_errors
                 .iter()
-                .any(|id| id == &module.id)
+                .any(|id| id == module.id.as_str())
                 .then(|| "mount_error marker present".to_owned());
 
             AppModule {
@@ -248,7 +256,7 @@ pub fn app_modules(
         .collect()
 }
 
-fn app_module_rules(config: &Config, module_id: &str) -> AppModuleRules {
+fn app_module_rules(config: &Config, module_id: &ModuleId) -> AppModuleRules {
     let rule = config.rules.get(module_id);
     AppModuleRules {
         default_mode: rule
@@ -328,7 +336,7 @@ fn rebuild_module_snapshot() -> Result<Vec<AppModule>> {
         .iter()
         .map(|partition| (*partition).to_owned())
         .collect::<Vec<_>>();
-    let modules = list_modules(&config.moduledir, &managed_partitions);
+    let modules = list_modules(&config.moduledir, &managed_partitions)?;
     Ok(fallback_app_modules(&modules, &config))
 }
 
@@ -500,7 +508,7 @@ mod tests {
 
     fn record(id: &str) -> ModuleRecord {
         ModuleRecord {
-            id: id.to_owned(),
+            id: ModuleId::try_from(id).unwrap(),
             name: id.to_owned(),
             version: "1".to_owned(),
             author: "a".to_owned(),
@@ -515,8 +523,8 @@ mod tests {
 
     fn test_plan() -> MountPlan {
         MountPlan {
-            overlay_module_ids: vec!["overlay_mod".to_owned()],
-            magic_module_ids: vec!["magic_mod".to_owned()],
+            overlay_module_ids: vec![ModuleId::try_from("overlay_mod").unwrap()],
+            magic_module_ids: vec![ModuleId::try_from("magic_mod").unwrap()],
             ..MountPlan::default()
         }
     }
@@ -530,7 +538,7 @@ mod tests {
         ];
         let mut config = Config::default();
         config.rules.insert(
-            "magic_mod".to_owned(),
+            ModuleId::try_from("magic_mod").unwrap(),
             crate::config::ModuleRule {
                 default_mode: Some(Mode::Magic),
                 paths: BTreeMap::from([("system/etc/hosts".to_owned(), Mode::Overlay)]),
@@ -554,14 +562,14 @@ mod tests {
         let modules = [record("switchable")];
         let boot_config = Config::default();
         let plan = MountPlan {
-            overlay_module_ids: vec!["switchable".to_owned()],
+            overlay_module_ids: vec![ModuleId::try_from("switchable").unwrap()],
             ..MountPlan::default()
         };
         let mut snapshot = app_modules(&modules, &boot_config, &plan, &[]);
 
         let mut edited_config = Config::default();
         edited_config.rules.insert(
-            "switchable".to_owned(),
+            ModuleId::try_from("switchable").unwrap(),
             crate::config::ModuleRule {
                 default_mode: Some(Mode::Magic),
                 paths: BTreeMap::new(),
@@ -666,6 +674,36 @@ mod tests {
         );
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn app_module_id_keeps_string_wire_format_and_validates_on_read() {
+        let json = serde_json::to_string(&AppModule {
+            id: ModuleId::try_from("hosts").unwrap(),
+            name: "H".to_owned(),
+            version: "1".to_owned(),
+            author: "a".to_owned(),
+            description: "d".to_owned(),
+            mode: "overlay".to_owned(),
+            is_mounted: true,
+            enabled: true,
+            source_path: "/data/adb/modules/hosts".to_owned(),
+            mount_error: None,
+            suggest_ignore: false,
+            rules: AppModuleRules {
+                default_mode: None,
+                paths: BTreeMap::new(),
+            },
+        })
+        .unwrap();
+        assert!(json.contains(r#""id":"hosts""#), "{json}");
+
+        let parsed: AppModule = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.id, "hosts");
+
+        let invalid_json = json.replace(r#""id":"hosts""#, r#""id":"1bad""#);
+        let err = serde_json::from_str::<AppModule>(&invalid_json).unwrap_err();
+        assert!(err.to_string().contains("Invalid module ID"), "{err}");
     }
 
     #[test]

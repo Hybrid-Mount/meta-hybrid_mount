@@ -7,27 +7,6 @@ use std::path::Path;
 use crate::defs;
 use crate::errors::{Error, Result};
 
-/// 校验 module id:`^[a-zA-Z][a-zA-Z0-9._-]+$`(参考项目行为)。
-pub fn validate_module_id(module_id: &str) -> Result<()> {
-    let mut chars = module_id.chars();
-    match chars.next() {
-        Some(first) if first.is_ascii_alphabetic() => {}
-        _ => {
-            return Err(Error::InvalidModuleID {
-                module_id: module_id.to_owned(),
-            });
-        }
-    }
-
-    if chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '.' || ch == '_' || ch == '-') {
-        Ok(())
-    } else {
-        Err(Error::InvalidModuleID {
-            module_id: module_id.to_owned(),
-        })
-    }
-}
-
 /// 创建目录并确认结果是目录(参考项目 `ensure_dir_exists` 行为)。
 pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
     std::fs::create_dir_all(dir)?;
@@ -82,20 +61,6 @@ pub mod ksu;
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn valid_module_ids_accepted() {
-        for id in ["ab", "a-b.c_d", "Z9", "module_name"] {
-            assert!(validate_module_id(id).is_ok(), "{id}");
-        }
-    }
-
-    #[test]
-    fn invalid_module_ids_rejected() {
-        for id in ["", "1abc", "-abc", "_abc", ".abc", "ab/c", "ab cd"] {
-            assert!(validate_module_id(id).is_err(), "{id}");
-        }
-    }
 
     #[test]
     fn ensure_dir_exists_creates_missing_parents() {

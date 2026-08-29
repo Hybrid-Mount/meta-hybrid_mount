@@ -27,6 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::defs;
 use crate::errors::{Error, Result};
+use crate::module_id::ModuleId;
 
 /// 单个路径/模块可选的挂载后端。
 #[derive(
@@ -99,11 +100,11 @@ pub struct Config {
     pub default_mode: Mode,
 
     #[serde(default)]
-    pub rules: BTreeMap<String, ModuleRule>,
+    pub rules: BTreeMap<ModuleId, ModuleRule>,
 
     /// 模块黑名单来自独立 TOML 文件，不属于 WebUI 可写配置。
     #[serde(skip)]
-    pub(crate) module_blacklist: BTreeSet<String>,
+    pub(crate) module_blacklist: BTreeSet<ModuleId>,
 
     /// 主配置文件不存在时使用默认值；仅用于 `show-config` 的诊断展示，
     /// 不写入 TOML。配置文件存在但损坏/不可读时，`load_or_default` 返回错误。
@@ -351,7 +352,7 @@ struct ModuleBlacklistFile {
     blacklist: Vec<String>,
 }
 
-fn read_module_blacklist(path: &Path) -> Result<BTreeSet<String>> {
+fn read_module_blacklist(path: &Path) -> Result<BTreeSet<ModuleId>> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(BTreeSet::new()),
@@ -369,12 +370,21 @@ fn read_module_blacklist(path: &Path) -> Result<BTreeSet<String>> {
             source,
         }
     })?;
-    Ok(file
-        .blacklist
-        .into_iter()
-        .map(|id| id.trim().to_owned())
-        .filter(|id| !id.is_empty())
-        .collect())
+
+    let mut blacklist = BTreeSet::new();
+    for entry in file.blacklist {
+        let id = entry.trim();
+        if id.is_empty() {
+            continue;
+        }
+        let module_id =
+            ModuleId::try_from(id.to_owned()).map_err(|_| Error::InvalidBlacklistModuleId {
+                path: path.to_path_buf(),
+                module_id: id.to_owned(),
+            })?;
+        blacklist.insert(module_id);
+    }
+    Ok(blacklist)
 }
 
 /// `save-config --payload <hex>` 的部分配置 patch:缺省字段保留。
@@ -397,7 +407,7 @@ pub struct ConfigPatch {
     pub default_mode: Option<Mode>,
 
     #[serde(default)]
-    pub rules: Option<BTreeMap<String, ModuleRulePatch>>,
+    pub rules: Option<BTreeMap<ModuleId, ModuleRulePatch>>,
 
     /// 全量配置保存时先清空旧规则；缺省时保持历史 patch 合并语义。
     #[serde(default)]

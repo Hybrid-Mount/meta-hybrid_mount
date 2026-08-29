@@ -63,8 +63,28 @@ pub enum Error {
     #[error("{path:?} is not a regular directory")]
     RegularDirectory { path: String },
 
-    #[error("Invalid module ID: '{module_id:?}'. Must match /^[a-zA-Z][a-zA-Z0-9._-]+$/")]
+    #[error("Invalid module ID: '{module_id:?}'. Must match /^[a-zA-Z][a-zA-Z0-9._-]*$/")]
     InvalidModuleID { module_id: String },
+
+    #[error("read module directory {}: {source}", path.display())]
+    ScanReadDir {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error(
+        "duplicate module id {module_id:?}: declared by {} and {}",
+        first.display(),
+        second.display()
+    )]
+    DuplicateModuleId {
+        module_id: String,
+        first: PathBuf,
+        second: PathBuf,
+    },
+
+    #[error("invalid module id in module blacklist {}: {module_id:?}", path.display())]
+    InvalidBlacklistModuleId { path: PathBuf, module_id: String },
 
     #[error(
         "plan conflict at {target:?}: {first_backend}({first_source}) vs {second_backend}({second_source})"
