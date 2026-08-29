@@ -27,9 +27,62 @@ use rustix::mount::{
 };
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct StagingMountGuard {
-    paths: Vec<PathBuf>,
+    transaction: Option<crate::sys::transaction::MountTransaction<'static>>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl StagingMountGuard {
+    fn track(&mut self, path: PathBuf) {
+        self.transaction
+            .get_or_insert_with(crate::sys::transaction::MountTransaction::new)
+            .register("intermediate_overlay_staging", move || {
+                cleanup_staging_mount(path)
+            });
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for StagingMountGuard {
+    fn drop(&mut self) {
+        if let Some(transaction) = self.transaction.take() {
+            let report = transaction.rollback();
+            if !report.failures.is_empty() {
+                log::warn!(
+                    "intermediate overlay staging rollback incomplete: failures={}",
+                    report.failures.len()
+                );
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
+    if crate::sys::mount::is_mounted_best_effort(&path)
+        && let Err(err) = unmount(&path, UnmountFlags::DETACH)
+    {
+        return Err(Error::msg(format!(
+            "detach intermediate overlay staging failed: path={}, error={err}",
+            path.display()
+        )));
+    }
+
+    match std::fs::remove_dir_all(&path) {
+        Ok(()) => {
+            log::debug!(
+                "intermediate overlay staging removed: path={}",
+                path.display()
+            );
+            Ok(())
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(Error::msg(format!(
+            "remove intermediate overlay staging failed: path={}, error={err}",
+            path.display()
+        ))),
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -57,41 +110,6 @@ impl Drop for CurrentDirGuard {
                 "failed to restore current directory to {}: {err}",
                 self.original.display()
             );
-        }
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl StagingMountGuard {
-    fn track(&mut self, path: PathBuf) {
-        self.paths.push(path);
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl Drop for StagingMountGuard {
-    fn drop(&mut self) {
-        for path in self.paths.iter().rev() {
-            if crate::sys::mount::is_mounted(path)
-                && let Err(err) = unmount(path, UnmountFlags::DETACH)
-            {
-                log::warn!(
-                    "detach intermediate overlay staging failed: path={}, error={err}",
-                    path.display()
-                );
-                continue;
-            }
-            match std::fs::remove_dir_all(path) {
-                Ok(()) => log::debug!(
-                    "intermediate overlay staging removed: path={}",
-                    path.display()
-                ),
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-                Err(err) => log::warn!(
-                    "remove intermediate overlay staging failed: path={}, error={err}",
-                    path.display()
-                ),
-            }
         }
     }
 }

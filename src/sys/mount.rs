@@ -12,22 +12,27 @@ use procfs::process::Process;
 use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
 
 use crate::errors::{Error, Result};
+use crate::sys::mountinfo::MountSnapshot;
 use crate::utils::ensure_dir_exists;
 
 /// 从 `/proc/self/mountinfo` 判断路径是否为挂载点。
-pub fn is_mounted(path: &Path) -> bool {
-    let Ok(process) = Process::myself() else {
-        return false;
-    };
-    let Ok(mountinfo) = process.mountinfo() else {
-        log::debug!(
-            "mount probe fallback: reason=mountinfo_unavailable, path={}",
-            path.display()
-        );
-        return false;
-    };
+pub fn is_mounted(path: &Path) -> Result<bool> {
+    Ok(MountSnapshot::read()?.contains(path))
+}
 
-    mountinfo.into_iter().any(|entry| entry.mount_point == path)
+/// Drop 清理路径的 best-effort 探测:查询失败记录原因并按未挂载处理,
+/// 正常路径必须使用返回错误的 [`is_mounted`]。
+pub fn is_mounted_best_effort(path: &Path) -> bool {
+    match is_mounted(path) {
+        Ok(mounted) => mounted,
+        Err(err) => {
+            log::warn!(
+                "mount probe failed, assuming unmounted: path={}, error={err}",
+                path.display()
+            );
+            false
+        }
+    }
 }
 
 /// 挂载 tmpfs(`mode=0755`),用于 overlay staging(v4.2.0 行为)。

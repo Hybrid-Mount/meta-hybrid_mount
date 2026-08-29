@@ -60,6 +60,8 @@
 > PR4 实施后：workspace 测试通过（host 113+3+1=117；Linux 另含 1 个 cfg(unix) 符号链接测试），stable 1.97 与两个 Linux/Android 目标 check 通过。
 >
 > PR5 实施后：workspace 测试通过（host 124+3+1=128；Linux 另含 1 个 cfg(unix) 符号链接测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
+>
+> PR6/7 实施后（基于 ext4 块大小修复 `bd2ae521`）：workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
 
 ### 4.1 验证证据等级
 
@@ -194,12 +196,14 @@
 
 设计项目内 `MountTransaction` 或 `MountJournal`，不直接使用通用 `scopeguard`：
 
+> 实施状态：PR7 已实现事务类型、查询层与测试；全部资源接入与跨阶段回滚留待 PR8。
+
 - [ ] 每个成功副作用立即登记对应清理动作。
-- [ ] 清理动作按逆序执行。
-- [ ] 支持显式 `commit`、`disarm` 和 `rollback`。
-- [ ] `Drop` 只做最后防线并记录失败；正常路径显式调用可返回错误的清理。
-- [ ] 回滚结果包含每个失败目标，不能只保留最后一个错误。
-- [ ] `disable_umount` 只解除明确允许保留的动作，不能整体关闭错误清理。
+- [x] 清理动作按逆序执行。
+- [x] 支持显式 `commit`、`disarm` 和 `rollback`。
+- [x] `Drop` 只做最后防线并记录失败；正常路径显式调用可返回错误的清理。
+- [x] 回滚结果包含每个失败目标，不能只保留最后一个错误。
+- [x] `disable_umount` 只解除明确允许保留的动作，不能整体关闭错误清理。
 
 计划纳入统一事务的资源：
 
@@ -220,10 +224,10 @@
 
 ### 10.3 `is_mounted` 错误语义
 
-- [ ] 把 `is_mounted(path) -> bool` 改为 `Result<bool>`。
-- [ ] `/proc/self/mountinfo` 读取失败必须向上传播。
-- [ ] 仅将明确的“不存在/不是挂载点”映射为 `false`。
-- [ ] 最终状态确认和回滚都使用同一 mountinfo 快照或同一查询层。
+- [x] 把 `is_mounted(path) -> bool` 改为 `Result<bool>`。
+- [x] `/proc/self/mountinfo` 读取失败必须向上传播。
+- [x] 仅将明确的“不存在/不是挂载点”映射为 `false`。
+- [x] 最终状态确认和回滚都使用同一 mountinfo 快照或同一查询层。
 
 ### 10.4 卸载策略
 
@@ -521,8 +525,8 @@ git diff --check
 | 3 | `zip`/Tokio feature 瘦身 | 低 | 构建产物比较 | 待执行 |
 | 4 | Config 原子写与损坏配置 fail-closed | 中 | CLI/WebUI 错误契约 | ✅ 已提交（`b11bb03e`，含 G03/G04/G07） |
 | 5 | `ModuleId` 与重复模块拒绝 | 中 | 扫描回归测试 | ✅ 已提交（含 G08） |
-| 6 | `is_mounted -> Result<bool>` 与 mount ops 边界 | 中 | fake mount ops | 与 PR7 合并执行（G15） |
-| 7 | `MountTransaction` 基础设施，不改变执行顺序 | 中-高 | 故障注入框架 | 与 PR6 合并执行（G15） |
+| 6 | `is_mounted -> Result<bool>` 与 mount ops 边界 | 中 | fake mount ops | ✅ 已提交（与 PR7 合并，G15） |
+| 7 | `MountTransaction` 基础设施，不改变执行顺序 | 中-高 | 故障注入框架 | ✅ 已提交（与 PR6 合并，G15） |
 | 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | 待执行 |
 | 9 | Magic executor 错误语义和测试 | 高 | 真机候选测试 | 待执行 |
 | 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | 待执行 |
@@ -589,7 +593,7 @@ git diff --check
 - [ ] **G12（并入 13.1）**：用"瞬态/永久"两个错误变体 + 穷尽 `is_retryable` match 编码重试分类，避免只靠文档约定。
 - [ ] **G13（并入 10.5）**：故障注入用 `AtomicBool` 门控（与现有 KSU/xattr 缓存风格一致），不引入 cargo feature。
 - [ ] **G14（并入 14.2）**：serde 改名/删字段采用 `rename + alias` 与可解析 tombstone（现有 `legacy_custom_mounts` 已是范例）；内部错误 enum 与 CLI/WebUI 线格式错误分离。
-- [ ] **G15（并入 19 PR 6/7）**：`is_mounted -> Result<bool>` 与 `MountTransaction` 基础设施合并落地——可传播路径用查询 API，`Drop` 路径用 best-effort helper，避免 PR 6 单独触碰 5 个调用点中的 3 个 Drop 路径。
+- [x] **G15（并入 19 PR 6/7）**：`is_mounted -> Result<bool>` 与 `MountTransaction` 基础设施合并落地——可传播路径用查询 API，`Drop` 路径用 best-effort helper，避免 PR 6 单独触碰 5 个调用点中的 3 个 Drop 路径。
 
 ### 22.3 复核确认（已完成）
 
@@ -599,6 +603,7 @@ git diff --check
 - [x] §4 全部基线论断、§5–§12 的关键诊断均经代码逐条核实。
 - [x] PR4 完成后复验：fmt/clippy 通过，workspace 测试通过（host 113+3+1=117；Linux 另含 cfg(unix) 符号链接测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR5 完成后复验：fmt/clippy 通过，workspace 测试通过（host 124+3+1=128；Linux 另含 cfg(unix) 符号链接测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
+- [x] PR6/7 完成后复验：fmt/clippy 通过，workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
 
 ## 23. 最终交付物
 

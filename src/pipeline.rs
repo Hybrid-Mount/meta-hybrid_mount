@@ -182,15 +182,19 @@ impl MagicStagingGuard {
     }
 
     fn cleanup(mut self) -> Result<()> {
-        self.cleanup_now()
+        self.cleanup_now(true)
     }
 
-    fn cleanup_now(&mut self) -> Result<()> {
+    fn cleanup_now(&mut self, strict: bool) -> Result<()> {
         if !self.cleanup {
             return Ok(());
         }
 
-        cleanup_tmp_root(&self.path)?;
+        if strict {
+            cleanup_tmp_root(&self.path)?;
+        } else {
+            cleanup_tmp_root_best_effort(&self.path)?;
+        }
         match fs::remove_dir_all(&self.path) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -209,7 +213,7 @@ impl MagicStagingGuard {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl Drop for MagicStagingGuard {
     fn drop(&mut self) {
-        if let Err(err) = self.cleanup_now() {
+        if let Err(err) = self.cleanup_now(false) {
             log::warn!(
                 "magic staging cleanup failed: path={}, error={err}",
                 self.path.display()
@@ -617,7 +621,21 @@ fn prepare_tmp_root(tmp_root: &Path, mount_source: &str) -> Result<()> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn cleanup_tmp_root(tmp_root: &Path) -> Result<()> {
-    if crate::sys::mount::is_mounted(tmp_root) {
+    if crate::sys::mount::is_mounted(tmp_root)? {
+        unmount(tmp_root, UnmountFlags::DETACH).map_err(|err| {
+            Error::msg(format!(
+                "detach magic staging mount {}: {err}",
+                tmp_root.display()
+            ))
+        })?;
+        log::info!("magic staging unmounted: target={}", tmp_root.display());
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn cleanup_tmp_root_best_effort(tmp_root: &Path) -> Result<()> {
+    if crate::sys::mount::is_mounted_best_effort(tmp_root) {
         unmount(tmp_root, UnmountFlags::DETACH).map_err(|err| {
             Error::msg(format!(
                 "detach magic staging mount {}: {err}",
@@ -899,18 +917,28 @@ fn overlay_rollback_order(active_mounts: &[String]) -> Vec<&Path> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn rollback_overlay_mounts(active_mounts: &[String]) {
+fn rollback_overlay_mounts(active_mounts: &[String]) -> Result<()> {
+    let snapshot = crate::sys::mountinfo::MountSnapshot::read()
+        .map_err(|err| Error::msg(format!("read mountinfo for overlay rollback: {err}")))?;
+    let mut failures = Vec::new();
     for target in overlay_rollback_order(active_mounts) {
-        if !crate::sys::mount::is_mounted(target) {
+        if !snapshot.contains(target) {
             continue;
         }
-        match unmount(target, UnmountFlags::DETACH) {
-            Ok(()) => log::info!("overlay rollback complete: target={}", target.display()),
-            Err(err) => log::warn!(
-                "overlay rollback failed: target={}, error={err}",
-                target.display()
-            ),
+        if let Err(err) = unmount(target, UnmountFlags::DETACH) {
+            failures.push(format!("{}: {err}", target.display()));
+        } else {
+            log::info!("overlay rollback complete: target={}", target.display());
         }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::msg(format!(
+            "overlay rollback incomplete: {}",
+            failures.join("; ")
+        )))
     }
 }
 
@@ -1009,7 +1037,11 @@ fn mount_overlay_phase(
     })();
 
     if let Err(err) = phase_result {
-        rollback_overlay_mounts(&active_mounts);
+        if let Err(rollback_err) = rollback_overlay_mounts(&active_mounts) {
+            log::error!(
+                "overlay rollback incomplete: original_error={err}, rollback_error={rollback_err}"
+            );
+        }
         return Err(err);
     }
 

@@ -96,7 +96,7 @@ pub fn setup_with_sources(
         img_path.display()
     );
     reset_image_files(img_path)?;
-    detach_existing_mount(mnt_base);
+    detach_existing_mount(mnt_base)?;
 
     if !force_ext4 && try_setup_tmpfs(mnt_base, mount_source)? {
         log::info!("storage backend select: mode=tmpfs");
@@ -168,15 +168,17 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn detach_existing_mount(mnt_base: &Path) {
-    if sys::mount::is_mounted(mnt_base)
-        && let Err(err) = unmount(mnt_base, UnmountFlags::DETACH)
-    {
-        log::warn!(
+fn detach_existing_mount(mnt_base: &Path) -> Result<()> {
+    if !sys::mount::is_mounted(mnt_base)? {
+        return Ok(());
+    }
+
+    unmount(mnt_base, UnmountFlags::DETACH).map_err(|err| {
+        crate::errors::Error::msg(format!(
             "detach existing mount failed at {}: {err}",
             mnt_base.display()
-        );
-    }
+        ))
+    })
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -204,7 +206,7 @@ pub fn teardown(handle: &StorageHandle) -> Result<()> {
     );
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if sys::mount::is_mounted(handle.mount_point()) {
+    if sys::mount::is_mounted(handle.mount_point())? {
         unmount(handle.mount_point(), UnmountFlags::DETACH).map_err(|err| {
             crate::errors::Error::msg(format!(
                 "detach storage mount {}: {err}",
