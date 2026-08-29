@@ -31,6 +31,22 @@ jobs:
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Apply tag version to package
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_version="${RELEASE_TAG#v}"
+          if [[ ! "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          sed -i "s/^version = \".*\"/version = \"$release_version\"/" Cargo.toml
+          grep -q "^version = \"$release_version\"$" Cargo.toml
+          echo "building package version $release_version from tag $RELEASE_TAG"
+
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
