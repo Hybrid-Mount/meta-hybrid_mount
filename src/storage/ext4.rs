@@ -196,7 +196,7 @@ pub(super) fn setup_ext4_image(
     }
 
     crate::utils::ensure_dir_exists(target)?;
-    mount_ext4_with_repair(img_path, target)?;
+    let loop_mount = mount_ext4_with_repair(img_path, target)?;
     log::info!(
         "ext4 image mounted: image={}, target={}",
         img_path.display(),
@@ -206,7 +206,11 @@ pub(super) fn setup_ext4_image(
     // mount is detached later, so conceal the sysfs node while it is mounted.
     sys::nuke::nuke_ext4_sysfs(target);
 
-    Ok(StorageHandle::new(target, StorageMode::Ext4))
+    Ok(StorageHandle::new_ext4(
+        target,
+        StorageMode::Ext4,
+        loop_mount,
+    ))
 }
 
 #[cfg(unix)]
@@ -299,9 +303,9 @@ fn check_ext4_image(img_path: &Path) -> Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<()> {
+fn mount_ext4_with_repair(img_path: &Path, target: &Path) -> Result<overlay_utils::Ext4LoopMount> {
     let first_error = match overlay_utils::mount_ext4(img_path, target) {
-        Ok(()) => return Ok(()),
+        Ok(loop_mount) => return Ok(loop_mount),
         Err(err) => err,
     };
     log::warn!(
@@ -415,10 +419,67 @@ mod tests {
     }
 
     #[test]
+    fn sizing_models_hardlinks_as_independent_copies() {
+        // 普通复制不保留硬链接块共享，按每个目标文件分别计数据与 inode。
+        let mut counter = SizeCounter::default();
+        counter.add_file(8 * EXT4_BLOCK_SIZE_BYTES);
+        counter.add_file(8 * EXT4_BLOCK_SIZE_BYTES);
+
+        assert_eq!(counter.total(), 16 * EXT4_BLOCK_SIZE_BYTES);
+        assert_eq!(counter.entries(), 2);
+    }
+
+    #[test]
+    fn sparse_files_use_logical_size_not_allocated_blocks() {
+        let mut counter = SizeCounter::default();
+        counter.add_file(16 * 1024 * 1024);
+
+        assert_eq!(counter.total(), 16 * 1024 * 1024);
+        assert_eq!(counter.entries(), 1);
+    }
+
+    #[test]
+    fn symlinks_and_special_entries_cost_one_inode_without_data() {
+        let mut counter = SizeCounter::default();
+        counter.add_metadata_entry(); // symlink
+        counter.add_metadata_entry(); // whiteout char device
+
+        assert_eq!(counter.total(), 0);
+        assert_eq!(counter.entries(), 2);
+    }
+
+    #[test]
     fn size_calculation_saturates_instead_of_overflowing() {
         let mut counter = SizeCounter::default();
         counter.add_file(u64::MAX);
         assert_eq!(counter.total(), u64::MAX);
         assert_eq!(planned_image_size(u64::MAX, u64::MAX), u64::MAX);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn calculate_total_size_treats_hardlinks_and_sparse_files_by_copy_semantics() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-ext4-size-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let first = dir.join("first");
+        fs::write(&first, b"x".repeat(3 * EXT4_BLOCK_SIZE_BYTES as usize)).unwrap();
+        fs::hard_link(&first, dir.join("hardlink")).unwrap();
+
+        let sparse = dir.join("sparse");
+        fs::File::create(&sparse)
+            .unwrap()
+            .set_len(2 * 1024 * 1024)
+            .unwrap();
+
+        std::os::unix::fs::symlink("missing-target", dir.join("symlink")).unwrap();
+
+        let counter = calculate_total_size(std::slice::from_ref(&dir)).unwrap();
+        assert_eq!(counter.entries(), 4);
+        assert_eq!(counter.total(), 6 * EXT4_BLOCK_SIZE_BYTES + 2 * 1024 * 1024);
+
+        fs::remove_dir_all(&dir).ok();
     }
 }

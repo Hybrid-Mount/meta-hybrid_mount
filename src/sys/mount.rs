@@ -18,6 +18,13 @@ use crate::utils::ensure_dir_exists;
 
 /// e2fsck 修复大镜像可能耗时，但启动路径上的等待必须有界。
 const E2FSCK_TIMEOUT: Duration = Duration::from_secs(300);
+/// v4.2.0 兼容语义:退出码 0..=3 视为成功,4 及以上失败,被 signal 终止失败。
+pub const E2FSCK_COMPATIBLE_EXIT_CODES: &[i32] = &[0, 1, 2, 3];
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub const fn e2fsck_exit_code_is_compatible(code: i32) -> bool {
+    matches!(code, 0..=3)
+}
 
 /// 从 `/proc/self/mountinfo` 判断路径是否为挂载点。
 pub fn is_mounted(path: &Path) -> Result<bool> {
@@ -108,7 +115,7 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
         .args(["-y", "-f"])
         .arg(image_path.display().to_string())
         .capture(CaptureMode::Both)
-        .accepted_exit_codes(&[0, 1, 2, 3])
+        .accepted_exit_codes(E2FSCK_COMPATIBLE_EXIT_CODES)
         .timeout(E2FSCK_TIMEOUT);
 
     let outcome = run_command(&spec).map_err(|err| {
@@ -182,6 +189,20 @@ mod tests {
     use crate::sys::faults;
     use std::fs;
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn e2fsck_exit_code_contract_accepts_zero_through_three() {
+        for code in 0..=3 {
+            assert!(
+                e2fsck_exit_code_is_compatible(code),
+                "code {code} should pass"
+            );
+            assert!(E2FSCK_COMPATIBLE_EXIT_CODES.contains(&code));
+        }
+        for code in [4, 8, 255] {
+            assert!(!e2fsck_exit_code_is_compatible(code));
+        }
+    }
 
     fn unshare_mount_namespace() -> bool {
         match unsafe { rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWNS) } {

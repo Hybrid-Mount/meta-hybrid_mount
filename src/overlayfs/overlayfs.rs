@@ -35,11 +35,19 @@ pub enum MountEffect {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
-    if crate::sys::mount::is_mounted_best_effort(&path)
+    // G05: 正常清理路径不得把 mountinfo 查询失败当成“未挂载”。
+    if crate::sys::mount::is_mounted(&path)?
         && let Err(err) = unmount(&path, UnmountFlags::DETACH)
+        && !matches!(err, rustix::io::Errno::NOENT | rustix::io::Errno::INVAL)
     {
         return Err(Error::msg(format!(
             "detach intermediate overlay staging failed: path={}, error={err}",
+            path.display()
+        )));
+    }
+    if crate::sys::mount::is_mounted(&path)? {
+        return Err(Error::msg(format!(
+            "intermediate overlay staging still mounted after detach: path={}",
             path.display()
         )));
     }
@@ -484,6 +492,18 @@ mod tests {
     }
 
     #[test]
+    fn layer_count_boundaries_match_the_64_layer_contract() {
+        for (count, expected_chunks) in [(0, 0), (1, 0), (63, 0), (64, 0), (65, 1), (128, 2)] {
+            let layers: Vec<String> = (0..count).map(layer).collect();
+            assert_eq!(
+                plan_staging_chunks(&layers).len(),
+                expected_chunks,
+                "unexpected staging plan for {count} layers"
+            );
+        }
+    }
+
+    #[test]
     fn one_extra_layer_splits_one_chunk() {
         let layers: Vec<String> = (0..MAX_LAYERS + 1).map(layer).collect();
         let chunks = plan_staging_chunks(&layers);
@@ -533,6 +553,25 @@ mod tests {
         crate::sys::faults::reset();
 
         assert!(err.to_string().contains("injected"), "{err}");
+        std::fs::remove_dir_all(&path).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cleanup_propagates_mountinfo_probe_failures() {
+        let _fault_guard = crate::sys::faults::test_lock();
+        let path = std::env::temp_dir().join(format!(
+            "hybrid-mount-overlay-mountinfo-fault-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+
+        crate::sys::faults::enable_mountinfo_read_failure();
+        let err = cleanup_staging_mount(path.clone()).unwrap_err();
+        crate::sys::faults::reset();
+
+        assert!(err.to_string().contains("mountinfo"), "{err}");
         std::fs::remove_dir_all(&path).ok();
     }
 }

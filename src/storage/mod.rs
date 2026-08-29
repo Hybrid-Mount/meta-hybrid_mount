@@ -12,6 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::overlayfs::utils::Ext4LoopMount;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount};
 
 use crate::defs;
@@ -42,6 +44,8 @@ impl StorageMode {
 pub struct StorageHandle {
     mount_point: PathBuf,
     mode: StorageMode,
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    loop_mount: Option<Ext4LoopMount>,
 }
 
 impl StorageHandle {
@@ -49,6 +53,17 @@ impl StorageHandle {
         Self {
             mount_point: mount_point.to_path_buf(),
             mode,
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            loop_mount: None,
+        }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn new_ext4(mount_point: &Path, mode: StorageMode, loop_mount: Ext4LoopMount) -> Self {
+        Self {
+            mount_point: mount_point.to_path_buf(),
+            mode,
+            loop_mount: Some(loop_mount),
         }
     }
 
@@ -141,7 +156,6 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
     let Some(file_name) = img_path.file_name() else {
         return Ok(());
     };
-    let prefix = file_name.to_string_lossy();
 
     let entries = match fs::read_dir(parent) {
         Ok(entries) => entries,
@@ -150,18 +164,22 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
     };
     for entry in entries {
         let entry = entry?;
-        if !entry
-            .file_name()
-            .to_string_lossy()
-            .starts_with(prefix.as_ref())
-        {
+        // G09: 只删除项目自有的精确文件名；modules.img.bak 等用户备份必须保留。
+        if entry.file_name() != file_name {
             continue;
         }
-        if let Err(err) = fs::remove_file(entry.path()) {
-            log::warn!(
-                "remove stale image file failed: path={}, error={err}",
-                entry.path().display()
-            );
+        match fs::remove_file(entry.path()) {
+            Ok(()) => log::debug!("stale image file removed: path={}", entry.path().display()),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => {
+                return Err(crate::errors::Error::Storage(Box::new(
+                    crate::errors::ContextError::new(
+                        "remove stale ext4 image",
+                        Some(entry.path()),
+                        err,
+                    ),
+                )));
+            }
         }
     }
     Ok(())
@@ -214,6 +232,28 @@ pub fn teardown(handle: &StorageHandle) -> Result<()> {
             ))
         })?;
     }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if sys::mount::is_mounted(handle.mount_point())? {
+        return Err(crate::errors::Error::Storage(Box::new(
+            crate::errors::ContextError::new(
+                "verify storage mount detached",
+                Some(handle.mount_point().to_path_buf()),
+                "storage mount still present after teardown".to_owned(),
+            ),
+        )));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Some(loop_mount) = &handle.loop_mount {
+        loop_mount.detach().map_err(|err| {
+            crate::errors::Error::Storage(Box::new(crate::errors::ContextError::new(
+                "detach ext4 loop device",
+                Some(handle.mount_point().to_path_buf()),
+                err,
+            )))
+        })?;
+        log::debug!("ext4 loop device detached: mode=ext4");
+    }
 
     match fs::remove_dir(handle.mount_point()) {
         Ok(()) => {}
@@ -257,10 +297,24 @@ fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
     }
 
     if let Err(err) = unmount(target, UnmountFlags::DETACH) {
-        log::warn!(
-            "unmount tmpfs failed after xattr probe at {}: {err}",
-            target.display()
-        );
+        // G06: tmpfs 回退前必须确认 tmpfs 已卸载；卸载失败 fail-closed，
+        // 不能继续尝试把 ext4 挂到同一个仍被占用的目标上。
+        return Err(crate::errors::Error::Storage(Box::new(
+            crate::errors::ContextError::new(
+                "unmount tmpfs before ext4 fallback",
+                Some(target.to_path_buf()),
+                err,
+            ),
+        )));
+    }
+    if sys::mount::is_mounted(target)? {
+        return Err(crate::errors::Error::Storage(Box::new(
+            crate::errors::ContextError::new(
+                "verify tmpfs unmounted before ext4 fallback",
+                Some(target.to_path_buf()),
+                "target is still mounted after tmpfs teardown".to_owned(),
+            ),
+        )));
     }
     Ok(false)
 }
@@ -307,5 +361,28 @@ mod tests {
     fn cleanup_only_applies_to_ext4() {
         assert!(!should_cleanup_image(StorageMode::Tmpfs));
         assert!(should_cleanup_image(StorageMode::Ext4));
+    }
+
+    #[test]
+    fn reset_image_files_removes_only_the_exact_image_name() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-reset-image-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let image = dir.join("modules.img");
+        let backup = dir.join("modules.img.bak");
+        let old = dir.join("modules.img.old");
+        let unrelated = dir.join("notes.txt");
+        for path in [&image, &backup, &old, &unrelated] {
+            fs::write(path, b"data").unwrap();
+        }
+
+        reset_image_files(&image).unwrap();
+
+        assert!(!image.exists());
+        assert!(backup.exists(), "user backup must be preserved");
+        assert!(old.exists(), "user backup must be preserved");
+        assert!(unrelated.exists());
+        fs::remove_dir_all(&dir).ok();
     }
 }

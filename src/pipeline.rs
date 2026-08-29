@@ -923,6 +923,12 @@ fn cleanup_tmp_root(tmp_root: &Path) -> Result<()> {
         })?;
         log::info!("magic staging unmounted: target={}", tmp_root.display());
     }
+    if crate::sys::mount::is_mounted(tmp_root)? {
+        return Err(Error::msg(format!(
+            "magic staging mount still mounted after detach: target={}",
+            tmp_root.display()
+        )));
+    }
     Ok(())
 }
 

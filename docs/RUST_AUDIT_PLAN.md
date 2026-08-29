@@ -267,14 +267,16 @@
 
 ## 11. 阶段 4：P0/P1 后端执行器审计
 
+> 实施状态：Stage 4 / §11.3 收尾已实现并通过本地全部门禁（host 186+4+1=191）；真机 ext4/loop 路径仍待设备验证。
+
 ### 11.1 OverlayFS
 
-- [ ] 验证 64 lowerdir 分段边界：0、1、63、64、65、128 层。
-- [ ] 检查 shallow layer 与中间 open-tree/move-mount 生命周期。
-- [ ] 验证 `.replace` 转换为 opaque xattr，whiteout 保持设备节点语义。
-- [ ] 验证符号链接不被跟随，所有权和 SELinux 上下文复制失败有明确策略。
-- [ ] 中间 staging mount 全部登记到统一挂载事务。
-- [ ] 根目标卸载前先处理所有子挂载。
+- [x] 验证 64 lowerdir 分段边界：0、1、63、64、65、128 层（新增边界表测试，与既有 65/128 拆分测试并存）。
+- [x] 检查 shallow layer 与中间 open-tree/move-mount 生命周期（staging mount 通过 `MountEffect::Staging` 登记事务；清理在事务逆序执行）。
+- [x] 验证 `.replace` 转换为 opaque xattr，whiteout 保持设备节点语义（`stage_overlay_tree` 写 opaque xattr；whiteout 按 char(0,0) 设备节点复制，既有 scanner/staging 测试覆盖）。
+- [x] 验证符号链接不被跟随，所有权和 SELinux 上下文复制失败有明确策略（PR2 用 `chownat(SYMLINK_NOFOLLOW)` + `lgetxattr/lsetxattr`；失败在 clone 路径 warn 跳过，overlay 根目录元数据失败返回 `Err`）。
+- [x] 中间 staging mount 全部登记到统一挂载事务。
+- [x] 根目标卸载前先处理所有子挂载（PR8 `MountSnapshot::descendants` 深度优先）。
 
 ### 11.2 Magic Mount
 
@@ -287,17 +289,17 @@
 
 ### 11.3 ext4 storage 与 loop device
 
-- [ ] 检查镜像空间估算对硬链接、稀疏文件、特殊文件和符号链接的处理。
-- [ ] 明确 `e2fsck` 退出码 0..=3 的既有兼容语义并建立测试。
-- [ ] loop attach、mount、resize、repair、detach 每一步都登记生命周期动作。
-- [ ] `EBUSY` 重试必须有上限、退避和最终诊断。
-- [ ] ext4 与 tmpfs 两种 storage mode 使用相同的上层事务接口。
+- [x] 检查镜像空间估算对硬链接、稀疏文件、特殊文件和符号链接的处理（按“普通复制”语义计硬链接为独立文件/独立 inode，稀疏文件按逻辑长度计，symlink/特殊文件只计 inode；新增 host 与 cfg(unix) 文件系统测试）。
+- [x] 明确 `e2fsck` 退出码 0..=3 的既有兼容语义并建立测试（`E2FSCK_COMPATIBLE_EXIT_CODES` + 契约测试）。
+- [x] loop attach、mount、resize、repair、detach 每一步都登记生命周期动作（本项目无 resize 步骤；attach/mount 成功后的 loop 设备由 `Ext4LoopMount` 持有，`storage::teardown` 先 unmount 并确认、再显式 detach，mount 失败路径当场 detach；repair 为独立 e2fsck 步骤）。
+- [x] `EBUSY` 重试必须有上限、退避和最终诊断（loop attach/mount/detach 上限 3 次重试、50ms 指数退避，日志含 operation/retry/backoff）。
+- [x] ext4 与 tmpfs 两种 storage mode 使用相同的上层事务接口（统一 `StorageHandle` 由同一 `overlay_storage` 事务动作 teardown）。
 
 ### 11.4 阶段验收
 
-- [ ] Overlay 与 Magic 的失败语义一致：失败就是 `Err`，降级必须显式记录策略。
-- [ ] 每个成功目标都能追溯到 plan source 和最终 mountinfo。
-- [ ] 后端执行器具备不需要 root 的 fake/fault-injection 测试。
+- [x] Overlay 与 Magic 的失败语义一致：失败就是 `Err`，降级必须显式记录策略。
+- [x] 每个成功目标都能追溯到 plan source 和最终 mountinfo（PR12 起 active 目标经 mountinfo 确认，`scan.ret` 反推模块）。
+- [x] 后端执行器具备不需要 root 的 fake/fault-injection 测试（既有 fault gate + Linux namespace 测试分层）。
 
 ## 12. 阶段 5：P0 LKM 选择、完整性与熔断
 
@@ -573,18 +575,18 @@ git diff --check
 
 只有同时满足以下条件，全面审计整改才算完成：
 
-- [ ] 配置损坏不再静默使用默认 Overlay。
-- [ ] 配置和状态文件使用原子写入。
-- [ ] 模块 ID 在类型边界验证，重复和目录不匹配被拒绝。
-- [ ] 任意后端或后续阶段失败都会触发全流水线回滚。
-- [ ] 回滚后通过 mountinfo 重新确认，不把查询错误当作未挂载。
+- [x] 配置损坏不再静默使用默认 Overlay。
+- [x] 配置和状态文件使用原子写入。
+- [x] 模块 ID 在类型边界验证，重复和目录不匹配被拒绝。
+- [x] 任意后端或后续阶段失败都会触发全流水线回滚。
+- [x] 回滚后通过 mountinfo 重新确认，不把查询错误当作未挂载。
 - [x] Magic executor 不再吞掉直接子节点或只读重挂载失败。
-- [ ] Overlay 子挂载按深度正确卸载。
+- [x] Overlay 子挂载按深度正确卸载。
 - [ ] LKM 候选选择、哈希验证和 boot-guard 全部生效。
 - [x] 直接 `libc/extattr` 依赖被现有 `rustix` 能力替代（PR2）。
 - [x] `zip` 和 Tokio 只启用实际需要的特性（PR3）。
 - [x] 关键错误为可匹配的结构化类型，而不是只剩字符串（PR11：高风险路径已迁移，`Msg` 仅留低风险路径）。
-- [ ] 关键失败路径具备故障注入测试。
+- [x] 关键失败路径具备故障注入测试。
 - [ ] CI、Linux namespace 与 Android 真机验证边界被明确记录。
 - [x] 稳定 CLI、JSON 字段和路径没有未经迁移的破坏性变化（PR12：新字段 additive，wire 快照与 legacy 反序列化测试覆盖）。
 - [ ] 最终文档包含设备验证结果、已知限制和回退步骤。
@@ -600,11 +602,11 @@ git diff --check
 - [x] **G02（并入 14.1 / 7.1）**：`RunState::load_or_default` 区分状态文件缺失、损坏与 I/O 错误；损坏状态不得静默回退默认，至少产生可查询诊断。PR12 新增 `state_load{kind,detail}`，`status` JSON 直接暴露 `missing/loaded/corrupt/io_error`。
 - [x] **G03（并入 8.1）**：`default_mode = "ignore"` 等"可解析但已废弃的值"不得静默规范化为 Overlay；已改为解析/patch/save 三处显式报错（PR4）。
 - [x] **G04（并入 8）**：`module_blacklist.toml` 语义已定为"缺失=无黑名单（正常），损坏/不可读=错误并 fail-closed"，测试已覆盖（PR4）。
-- [ ] **G05（并入 10.3 / 10.4 / 11.3）**：清理 helper 的 mountinfo 探测失败必须返回错误；清理后必须重新读 mountinfo 确认目标消失；禁止"未探测到 = 已清理"。当前 `is_mounted` 错误返回 `false`，会跳过 unmount 却返回 `Ok`。
-- [ ] **G06（并入 11.3）**：tmpfs → ext4 回退前必须验证 tmpfs 已卸载；卸载失败则 fail-closed，不再尝试 ext4。当前 `storage/mod.rs` 对卸载失败只告警后继续。
+- [x] **G05（并入 10.3 / 10.4 / 11.3）**：清理 helper 的 mountinfo 探测失败必须返回错误；清理后必须重新读 mountinfo 确认目标消失；禁止"未探测到 = 已清理"。Stage 4 收尾：`cleanup_staging_mount`、`cleanup_tmp_root`、`storage::teardown` 全部改用 `Result<bool>` 探测并在 detach 后二次确认；best-effort 仅保留在 Drop 路径。
+- [x] **G06（并入 11.3）**：tmpfs → ext4 回退前必须验证 tmpfs 已卸载；卸载失败则 fail-closed，不再尝试 ext4。Stage 4 收尾：`try_setup_tmpfs` 卸载失败或确认仍挂载时返回 `Error::Storage`。
 - [x] **G07（并入 8.2）**：父目录 `sync_all` 失败按保存失败处理；非 Unix 回退已注明仅用于 host 测试且无崩溃安全保证（PR4）。
 - [x] **G08（并入 9.2）**：scanner 根 `read_dir` 失败（当前静默返回空列表）与 walk 内 `read_dir`/`symlink_metadata` 失败（当前无日志）必须按"跳过/警告/致命"分类并记录。已实现：模块根不可读为致命 `ScanReadDir`，条目级错误警告跳过（PR5）。
-- [ ] **G09（并入 11.3 / 7.1）**：`reset_image_files` 停止按文件名前缀删除，改为精确文件名或保留后缀白名单，避免删除用户 `modules.img.*` 备份。
+- [x] **G09（并入 11.3 / 7.1）**：`reset_image_files` 停止按文件名前缀删除，改为精确文件名或保留后缀白名单，避免删除用户 `modules.img.*` 备份。Stage 4 收尾：只删除精确 `modules.img`，新增备份保留测试。
 - [ ] **G10（并入 12）**：定义 LKM nuke 失败语义——hash/矩阵/加载失败是中断流水线，还是"记录到 `state.json` 的显式降级"；两者必选其一并写验收标准。当前 `nuke_ext4_sysfs` 返回 `()`、失败仅告警。
 
 ### 22.2 技能强化项
@@ -630,6 +632,7 @@ git diff --check
 - [x] PR12 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+3+1=181），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；新增测试覆盖 mountinfo 反推模块挂载、状态来源三态、wire JSON 快照与回滚诊断字段。
 - [x] PR2/3 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+4+1=182），以及四个 Linux/Android 目标 check 通过；`grep` 确认主程序无 `extattr`/`libc` 引用，`cargo tree -p xtask` 385→322、`-p notify` 284→273，zip_ext 与 notify minimal-runtime 测试通过。
 - [x] PR13 本地复验：fmt、host/Linux-target clippy、workspace host 测试（181+4+1=186），以及四个 Linux/Android 目标 check 通过；`timing` 单测覆盖 record 格式、finish/abort 与 Drop 契约，pipeline 失败日志抽查均带 `phase=`。
+- [x] Stage 4 / §11.3 本地复验：fmt、host/Linux-target clippy、workspace host 测试（186+4+1=191），以及四个 Linux/Android 目标 check 通过；新增 64 层边界表测试、G09 备份保留测试、ext4 估算语义测试、G05 mountinfo 故障注入测试（Linux CI）与 loop EBUSY 有界重试。
 
 ## 23. 最终交付物
 
