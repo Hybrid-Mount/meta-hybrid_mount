@@ -1,4 +1,40 @@
 
+## v6.1.0
+
+
+### <!-- 1 --> Features
+
+- Add active mounts computation and enhance backend card styling
+
+- Implement cloneAppConfig function and add tests; enhance config handling
+
+- Add module blacklist support and enhance configuration handling
+
+- Add module filtering support and implement swipe navigation
+
+- Enhance overlay layer metadata handling and improve logging
+
+
+
+### <!-- 2 --> Fixes
+
+- Simplify overlay execution plan type
+
+- `webui` Restore touch swipe navigation
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- `blacklist` Add self-mounting modules
+
+- Fix Turkish character rendering in Material 3 UI (#399) Fixes Turkish characters appearing thinner in the Material 3 UI by correcting the font variable reference. Tested on device.
+
+- Adjust modules toolbar width and margin for better layout refactor: update swipe pager thresholds and locking logic for improved responsiveness
+
+
+
+
 ## v6.0.1
 
 
