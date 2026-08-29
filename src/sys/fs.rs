@@ -61,14 +61,16 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         file.write_all(content)?;
         file.sync_all()?;
 
-        if let Ok(metadata) = fs::metadata(path) {
-            fs::set_permissions(&temporary, metadata.permissions())?;
+        match fs::metadata(path) {
+            Ok(metadata) => fs::set_permissions(&temporary, metadata.permissions())?,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
         }
 
         fs::rename(&temporary, path)?;
-        if let Ok(parent_dir) = fs::File::open(parent) {
-            let _ = parent_dir.sync_all();
-        }
+        // G07: 父目录 fsync 失败按保存失败处理。rename 已经可见，但调用方
+        // 必须知道目录项未持久化，不能把它当成一次成功的原子保存。
+        fs::File::open(parent)?.sync_all()?;
         Ok(())
     })();
 
@@ -80,6 +82,8 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
 
 #[cfg(not(unix))]
 pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
+    // Host 测试/开发用途的非原子回退：Windows 上不提供崩溃安全的
+    // 临时文件 + rename 语义，发布目标(Android/Linux)始终走上面的实现。
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -477,6 +481,70 @@ mod tests {
         assert!(!file.exists());
         remove_path(&dir).unwrap();
         assert!(!dir.exists());
+    }
+
+    #[test]
+    fn atomic_write_creates_and_replaces_content() {
+        let dir = std::env::temp_dir().join(format!("hybrid-mount-atomic-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.txt");
+
+        atomic_write(&path, b"first").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"first");
+        atomic_write(&path, b"second").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"second");
+
+        let leftovers = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+            .count();
+        assert_eq!(leftovers, 0);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_removes_temp_file_when_rename_fails() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-atomic-fail-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target");
+        std::fs::create_dir_all(&target).unwrap();
+
+        let err = atomic_write(&target, b"payload").unwrap_err();
+        let crate::errors::Error::Io(source) = err else {
+            panic!("atomic_write failure must wrap an I/O error");
+        };
+        assert_ne!(source.kind(), std::io::ErrorKind::NotFound);
+
+        assert!(target.is_dir());
+        let leftovers = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(std::result::Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+            .count();
+        assert_eq!(leftovers, 0, "rename 失败后不能遗留临时文件");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn atomic_write_fails_when_parent_is_not_a_directory() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-parent-file-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let parent_file = dir.join("parent");
+        std::fs::write(&parent_file, b"occupied").unwrap();
+        let target = parent_file.join("config.toml");
+
+        let err = atomic_write(&target, b"payload").unwrap_err();
+        let crate::errors::Error::Io(source) = err else {
+            panic!("atomic_write failure must wrap an I/O error");
+        };
+        assert_ne!(source.kind(), std::io::ErrorKind::NotFound);
+
+        assert_eq!(std::fs::read(&parent_file).unwrap(), b"occupied");
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

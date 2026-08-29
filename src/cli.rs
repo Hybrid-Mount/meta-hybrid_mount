@@ -35,7 +35,7 @@ pub fn run(args: &[String]) -> Result<()> {
 fn emulated_soft_reboot() -> Result<()> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+        let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
         crate::utils::ksu::init();
         let source =
             pipeline::effective_mount_source(&config.mountsource, crate::utils::ksu::is_active());

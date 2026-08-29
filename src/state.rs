@@ -287,7 +287,7 @@ pub fn handle_modules() -> Result<()> {
     match fs::read_to_string(defs::SCAN_RET_PATH) {
         Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
             Ok(mut modules) => {
-                let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+                let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
                 sync_app_module_rules(&mut modules, &config);
                 if let Err(write_err) = write_scan_ret(&modules) {
                     log::warn!(
@@ -311,7 +311,7 @@ pub fn handle_modules() -> Result<()> {
         }
     }
 
-    let modules = rebuild_module_snapshot();
+    let modules = rebuild_module_snapshot()?;
     if let Err(write_err) = write_scan_ret(&modules) {
         log::warn!(
             "failed to cache rebuilt module snapshot at {}: {write_err}",
@@ -322,14 +322,14 @@ pub fn handle_modules() -> Result<()> {
     Ok(())
 }
 
-fn rebuild_module_snapshot() -> Vec<AppModule> {
-    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+fn rebuild_module_snapshot() -> Result<Vec<AppModule>> {
+    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let managed_partitions = defs::MANAGED_PARTITIONS
         .iter()
         .map(|partition| (*partition).to_owned())
         .collect::<Vec<_>>();
     let modules = list_modules(&config.moduledir, &managed_partitions);
-    fallback_app_modules(&modules, &config)
+    Ok(fallback_app_modules(&modules, &config))
 }
 
 fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
@@ -460,7 +460,7 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
 
 /// `clear-mount-errors`:清除标记并刷新状态快照。
 pub fn handle_clear_mount_errors() -> Result<()> {
-    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let removed = clear_mount_error_markers(&config.moduledir);
 
     let mut state = RunState::load_or_default();

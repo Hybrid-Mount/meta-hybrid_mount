@@ -105,6 +105,11 @@ pub struct Config {
     #[serde(skip)]
     pub(crate) module_blacklist: BTreeSet<String>,
 
+    /// 主配置文件不存在时使用默认值；仅用于 `show-config` 的诊断展示，
+    /// 不写入 TOML。配置文件存在但损坏/不可读时，`load_or_default` 返回错误。
+    #[serde(skip)]
+    pub config_missing: bool,
+
     /// Upgrade-only input from releases that exposed custom bind mounts.
     /// The backend no longer implements that feature; accepting and omitting
     /// this field prevents one obsolete empty array from discarding the rest
@@ -123,6 +128,7 @@ impl Default for Config {
             default_mode: Mode::default(),
             rules: BTreeMap::new(),
             module_blacklist: BTreeSet::new(),
+            config_missing: false,
             legacy_custom_mounts: Vec::new(),
         }
     }
@@ -130,9 +136,14 @@ impl Default for Config {
 
 impl Config {
     /// 解析 TOML 文本(空文本等价于全默认)。
+    ///
+    /// `default_mode = "ignore"` 是"可解析但已废弃"的值：直接报错，
+    /// 不再静默规范化为 Overlay。按模块/路径禁用请使用 `[rules.*]`。
     pub fn from_toml(text: &str) -> Result<Self> {
-        let mut config: Self = toml::from_str(text)?;
-        config.normalize_global_default();
+        let config: Self = toml::from_str(text)?;
+        if config.default_mode == Mode::Ignore {
+            return Err(Error::UnsupportedGlobalDefaultMode);
+        }
         Ok(config)
     }
 
@@ -142,30 +153,46 @@ impl Config {
     }
 
     /// WebUI 配置响应。运行时能力只用于控制选项可见性，不持久化到 TOML。
+    /// `config_missing` 让 WebUI 区分"从未创建配置"与"配置损坏"。
     pub fn to_webui_json(&self, tmpfs_xattr_supported: bool) -> Result<String> {
         #[derive(Serialize)]
         struct WebUiConfig<'a> {
             #[serde(flatten)]
             config: &'a Config,
             tmpfs_xattr_supported: bool,
+            config_missing: bool,
         }
 
         Ok(serde_json::to_string_pretty(&WebUiConfig {
             config: self,
             tmpfs_xattr_supported,
+            config_missing: self.config_missing,
         })?)
     }
 
-    /// 从磁盘读取配置。
+    /// 从磁盘读取配置。读取、解析和黑名单加载错误都携带配置路径上下文。
     pub fn load(path: &Path) -> Result<Self> {
-        let text = fs::read_to_string(path)?;
-        let mut config = Self::from_toml(&text)?;
-        config.load_module_blacklists(path);
+        let text = fs::read_to_string(path).map_err(|source| Error::ConfigRead {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let mut config = match Self::from_toml(&text) {
+            Ok(config) => config,
+            Err(Error::TomlParse(source)) => {
+                return Err(Error::ConfigParse {
+                    path: path.to_path_buf(),
+                    source,
+                });
+            }
+            Err(err) => return Err(err),
+        };
+        config.load_module_blacklists(path)?;
         Ok(config)
     }
 
-    /// 读取配置;失败或不存在时回退默认值(参考项目行为)。
-    pub fn load_or_default(path: &Path) -> Self {
+    /// 读取配置：文件不存在时使用默认值并标记 `config_missing`；
+    /// 文件存在但损坏、无权限或黑名单不可用时返回错误，绝不伪装成缺失。
+    pub fn load_or_default(path: &Path) -> Result<Self> {
         match Self::load(path) {
             Ok(mut config) => {
                 if !config.legacy_custom_mounts.is_empty() {
@@ -174,24 +201,59 @@ impl Config {
                     );
                 }
                 config.legacy_custom_mounts.clear();
-                config
+                Ok(config)
             }
-            Err(err) => {
-                log::warn!("failed to load config, using default: {err}");
-                let mut config = Self::default();
-                config.load_module_blacklists(path);
-                config
+            Err(Error::ConfigRead { source, .. }) if source.kind() == ErrorKind::NotFound => {
+                log::info!(
+                    "config file missing, using defaults: path={}",
+                    path.display()
+                );
+                let mut config = Self {
+                    config_missing: true,
+                    ..Self::default()
+                };
+                config.load_module_blacklists(path)?;
+                Ok(config)
             }
+            Err(err) => Err(err),
         }
     }
 
-    /// 持久化配置;父目录不存在时自动创建。
+    /// 持久化配置；父目录不存在时自动创建。
+    /// 通过 `sys::fs::atomic_write` 写临时文件 + fsync + rename，失败不会暴露截断内容。
+    /// 与 `from_toml`/`apply_patch` 一样拒绝把已废弃的全局 ignore 落到磁盘。
+    /// 原子 rename 会替换符号链接本身，与旧的 `fs::write` 跟随链接语义不同，
+    /// 因此对符号链接目标显式报错，避免静默改变用户的数据布局。
     pub fn save(&self, path: &Path) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+        if self.default_mode == Mode::Ignore {
+            return Err(Error::UnsupportedGlobalDefaultMode);
         }
-        fs::write(path, self.to_toml()?)?;
-        Ok(())
+        match fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(Error::msg(format!(
+                    "refusing to replace symlinked config file {}; remove the symlink and save a regular file",
+                    path.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(err) if err.kind() == ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(Error::ConfigRead {
+                    path: path.to_path_buf(),
+                    source,
+                });
+            }
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|err| {
+                Error::msg(format!(
+                    "create config parent directory {}: {err}",
+                    parent.display()
+                ))
+            })?;
+        }
+        crate::sys::fs::atomic_write(path, self.to_toml()?.as_bytes())
+            .map_err(|err| Error::msg(format!("atomically save config {}: {err}", path.display())))
     }
 
     /// `gen-config`:重置为默认配置并写入磁盘,返回写入后的配置。
@@ -202,7 +264,12 @@ impl Config {
     }
 
     /// 合并配置 patch:未出现的字段保留,`rules` 按模块合并。
-    pub fn apply_patch(&mut self, patch: ConfigPatch) {
+    /// 校验在修改前完成：非法 patch 不会留下部分更新。
+    pub fn apply_patch(&mut self, patch: ConfigPatch) -> Result<()> {
+        if patch.default_mode == Some(Mode::Ignore) {
+            return Err(Error::UnsupportedGlobalDefaultMode);
+        }
+
         if let Some(moduledir) = patch.moduledir {
             self.moduledir = moduledir;
         }
@@ -216,11 +283,7 @@ impl Config {
             self.disable_umount = disable_umount;
         }
         if let Some(default_mode) = patch.default_mode {
-            if default_mode == Mode::Ignore {
-                log::warn!("ignored unsupported global default_mode=ignore patch");
-            } else {
-                self.default_mode = default_mode;
-            }
+            self.default_mode = default_mode;
         }
 
         if patch.replace_rules.unwrap_or(false) {
@@ -239,23 +302,19 @@ impl Config {
             }
         }
 
-        self.normalize_global_default();
-    }
-
-    fn normalize_global_default(&mut self) {
-        if self.default_mode == Mode::Ignore {
-            log::warn!(
-                "global default_mode=ignore is no longer supported; falling back to overlay"
-            );
-            self.default_mode = Mode::Overlay;
-        }
+        Ok(())
     }
 
     pub(crate) fn is_module_blacklisted(&self, module_id: &str) -> bool {
         self.module_blacklist.contains(module_id)
     }
 
-    fn load_module_blacklists(&mut self, config_path: &Path) {
+    /// 加载随包发布与用户持久化的模块黑名单。
+    ///
+    /// 语义（G04）：文件**缺失** = 无对应来源的黑名单，属于正常状态；
+    /// 文件存在但**损坏或不可读** = 错误，调用方必须 fail-closed，
+    /// 防止用户明确屏蔽的模块因解析失败而重新参与挂载。
+    fn load_module_blacklists(&mut self, config_path: &Path) -> Result<()> {
         let persistent_path = if config_path == Path::new(defs::CONFIG_PATH) {
             PathBuf::from(defs::MODULE_BLACKLIST_PATH)
         } else {
@@ -273,15 +332,16 @@ impl Config {
             self.module_blacklist
                 .extend(read_module_blacklist(Path::new(
                     defs::BUNDLED_MODULE_BLACKLIST_PATH,
-                )));
+                ))?);
         }
         self.module_blacklist
-            .extend(read_module_blacklist(&persistent_path));
+            .extend(read_module_blacklist(&persistent_path)?);
 
         log::info!(
             "module blacklist loaded: entries={}",
             self.module_blacklist.len()
         );
+        Ok(())
     }
 }
 
@@ -291,34 +351,30 @@ struct ModuleBlacklistFile {
     blacklist: Vec<String>,
 }
 
-fn read_module_blacklist(path: &Path) -> BTreeSet<String> {
+fn read_module_blacklist(path: &Path) -> Result<BTreeSet<String>> {
     let text = match fs::read_to_string(path) {
         Ok(text) => text,
-        Err(err) if err.kind() == ErrorKind::NotFound => return BTreeSet::new(),
-        Err(err) => {
-            log::warn!(
-                "failed to read module blacklist {}, ignoring it: {err}",
-                path.display()
-            );
-            return BTreeSet::new();
+        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(BTreeSet::new()),
+        Err(source) => {
+            return Err(Error::ModuleBlacklistRead {
+                path: path.to_path_buf(),
+                source,
+            });
         }
     };
 
-    match toml::from_str::<ModuleBlacklistFile>(&text) {
-        Ok(file) => file
-            .blacklist
-            .into_iter()
-            .map(|id| id.trim().to_owned())
-            .filter(|id| !id.is_empty())
-            .collect(),
-        Err(err) => {
-            log::warn!(
-                "failed to parse module blacklist {}, ignoring it: {err}",
-                path.display()
-            );
-            BTreeSet::new()
+    let file = toml::from_str::<ModuleBlacklistFile>(&text).map_err(|source| {
+        Error::ModuleBlacklistParse {
+            path: path.to_path_buf(),
+            source,
         }
-    }
+    })?;
+    Ok(file
+        .blacklist
+        .into_iter()
+        .map(|id| id.trim().to_owned())
+        .filter(|id| !id.is_empty())
+        .collect())
 }
 
 /// `save-config --payload <hex>` 的部分配置 patch:缺省字段保留。
@@ -412,17 +468,22 @@ pub fn decode_payload_arg(payload_hex: &str) -> Result<String> {
 /// 解析 payload 并合并/持久化到指定路径。
 pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
     let payload_json = decode_payload_arg(payload_hex)?;
-    let patch: ConfigPatch = serde_json::from_str(&payload_json)
-        .map_err(|err| Error::msg(format!("parse config payload json: {err}")))?;
+    let patch: ConfigPatch = serde_json::from_str(&payload_json).map_err(|err| {
+        Error::msg(format!(
+            "parse config payload json for {}: {err}",
+            path.display()
+        ))
+    })?;
 
-    let mut config = Config::load_or_default(path);
-    config.apply_patch(patch);
+    let mut config = Config::load_or_default(path)?;
+    config.apply_patch(patch)?;
     config.save(path)
 }
 
 /// `show-config`:输出 JSON 配置。
+/// 配置缺失时输出默认配置并带 `config_missing: true`；损坏/不可读时返回错误。
 pub fn handle_show_config() -> Result<()> {
-    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let tmpfs_xattr_supported = match crate::sys::fs::is_overlay_xattr_supported() {
         Ok(supported) => supported,
         Err(err) => {
@@ -458,374 +519,5 @@ fn default_mountsource() -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn defaults_match_contract() {
-        let config = Config::default();
-
-        assert_eq!(config.moduledir, PathBuf::from("/data/adb/modules"));
-        assert_eq!(config.mountsource, "KSU");
-        assert_eq!(config.overlay_mode, OverlayMode::Ext4);
-        assert!(!config.disable_umount);
-        assert_eq!(config.default_mode, Mode::Overlay);
-        assert!(config.rules.is_empty());
-    }
-
-    #[test]
-    fn parses_empty_toml_as_defaults() {
-        let config = Config::from_toml("").unwrap();
-        assert_eq!(config, Config::default());
-    }
-
-    #[test]
-    fn legacy_global_ignore_falls_back_without_changing_rule_ignores() {
-        let config = Config::from_toml(
-            r#"
-default_mode = "ignore"
-
-[rules.demo]
-default_mode = "ignore"
-
-[rules.demo.paths]
-"system/etc/hosts" = "ignore"
-"#,
-        )
-        .unwrap();
-
-        assert_eq!(config.default_mode, Mode::Overlay);
-        assert_eq!(config.rules["demo"].default_mode, Some(Mode::Ignore));
-        assert_eq!(config.rules["demo"].paths["system/etc/hosts"], Mode::Ignore);
-    }
-
-    #[test]
-    fn parses_planned_example() {
-        let text = r#"
-moduledir = "/data/adb/modules"
-mountsource = "KSU"
-overlay_mode = "ext4"
-disable_umount = false
-default_mode = "overlay"
-
-[rules."hosts_redirect"]
-default_mode = "magic"
-
-[rules."hosts_redirect".paths]
-"system/etc/hosts" = "overlay"
-"#;
-
-        let config = Config::from_toml(text).unwrap();
-
-        let rule = config.rules.get("hosts_redirect").unwrap();
-        assert_eq!(rule.default_mode, Some(Mode::Magic));
-        assert_eq!(rule.paths.get("system/etc/hosts"), Some(&Mode::Overlay));
-    }
-
-    #[test]
-    fn accepts_and_drops_obsolete_empty_custom_mounts_during_upgrade() {
-        let config = Config::from_toml(
-            r#"
-moduledir = "/data/adb/modules"
-default_mode = "magic"
-custom_mounts = []
-"#,
-        )
-        .unwrap();
-
-        assert_eq!(config.default_mode, Mode::Magic);
-        assert!(config.legacy_custom_mounts.is_empty());
-        assert!(!config.to_toml().unwrap().contains("custom_mounts"));
-    }
-
-    #[test]
-    fn toml_roundtrip_preserves_rules() {
-        let mut config = Config {
-            default_mode: Mode::Magic,
-            ..Config::default()
-        };
-        config.rules.insert(
-            "demo".to_owned(),
-            ModuleRule {
-                default_mode: Some(Mode::Ignore),
-                paths: BTreeMap::from([
-                    ("system/etc/hosts".to_owned(), Mode::Overlay),
-                    ("system/bin/app".to_owned(), Mode::Magic),
-                ]),
-            },
-        );
-
-        let text = config.to_toml().unwrap();
-        let reparsed = Config::from_toml(&text).unwrap();
-
-        assert_eq!(reparsed, config);
-    }
-
-    #[test]
-    fn rejects_invalid_mode() {
-        let err = Config::from_toml(r#"default_mode = "transparent""#).unwrap_err();
-        let message = err.to_string();
-
-        assert!(message.contains("default_mode"), "{message}");
-    }
-
-    #[test]
-    fn rejects_unknown_top_level_field() {
-        let err = Config::from_toml(
-            r#"
-default_mode = "overlay"
-unknown_option = true
-"#,
-        )
-        .unwrap_err();
-
-        assert!(err.to_string().contains("unknown field"), "{}", err);
-    }
-
-    #[test]
-    fn rejects_unknown_rule_field() {
-        let err = Config::from_toml(
-            r#"
-[rules.demo]
-unknown_option = "overlay"
-"#,
-        )
-        .unwrap_err();
-
-        assert!(err.to_string().contains("unknown field"), "{}", err);
-    }
-
-    #[test]
-    fn json_uses_contract_shape() {
-        let config = Config::default();
-
-        let value: serde_json::Value =
-            serde_json::from_str(&serde_json::to_string_pretty(&config).unwrap()).unwrap();
-
-        assert_eq!(value["moduledir"], "/data/adb/modules");
-        assert_eq!(value["mountsource"], "KSU");
-        assert_eq!(value["overlay_mode"], "ext4");
-        assert_eq!(value["default_mode"], "overlay");
-        assert_eq!(value["disable_umount"], false);
-        assert_eq!(value["rules"], serde_json::json!({}));
-    }
-
-    #[test]
-    fn webui_json_exposes_tmpfs_capability_without_persisting_it() {
-        let config = Config::default();
-        let value: serde_json::Value =
-            serde_json::from_str(&config.to_webui_json(false).unwrap()).unwrap();
-
-        assert_eq!(value["tmpfs_xattr_supported"], false);
-        assert!(!config.to_toml().unwrap().contains("tmpfs_xattr_supported"));
-    }
-
-    #[test]
-    fn save_creates_parent_and_load_roundtrips() {
-        let dir = test_dir("save-load");
-        let path = dir.join("nested").join("config.toml");
-
-        let mut config = Config {
-            disable_umount: true,
-            ..Config::default()
-        };
-        config.rules.insert(
-            "demo".to_owned(),
-            ModuleRule {
-                default_mode: Some(Mode::Magic),
-                paths: BTreeMap::new(),
-            },
-        );
-
-        config.save(&path).unwrap();
-        let loaded = Config::load(&path).unwrap();
-
-        assert_eq!(loaded, config);
-        cleanup(&dir);
-    }
-
-    #[test]
-    fn write_default_resets_disk_content() {
-        let dir = test_dir("write-default");
-        let path = dir.join("config.toml");
-
-        let config = Config {
-            default_mode: Mode::Ignore,
-            ..Config::default()
-        };
-        config.save(&path).unwrap();
-
-        let written = Config::write_default(&path).unwrap();
-
-        assert_eq!(written, Config::default());
-        assert_eq!(Config::load(&path).unwrap(), Config::default());
-        cleanup(&dir);
-    }
-
-    #[test]
-    fn load_or_default_falls_back_on_missing_file() {
-        let dir = test_dir("load-or-default");
-        let missing = dir.join("missing.toml");
-
-        let config = Config::load_or_default(&missing);
-        assert_eq!(config, Config::default());
-
-        cleanup(&dir);
-    }
-
-    #[test]
-    fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
-        let dir = test_dir("module-blacklist");
-        let path = dir.join("config.toml");
-        Config::default().save(&path).unwrap();
-        fs::write(
-            dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
-            r#"blacklist = ["blocked", " blocked ", "other", ""]"#,
-        )
-        .unwrap();
-
-        let loaded = Config::load(&path).unwrap();
-
-        assert!(loaded.is_module_blacklisted("blocked"));
-        assert!(loaded.is_module_blacklisted("other"));
-        assert_eq!(loaded.module_blacklist.len(), 2);
-        assert!(!loaded.to_toml().unwrap().contains("module_blacklist"));
-        assert!(!loaded.to_toml().unwrap().contains("blocked"));
-        cleanup(&dir);
-    }
-
-    #[test]
-    fn missing_main_config_still_loads_blacklist_and_bad_blacklist_is_fail_open() {
-        let dir = test_dir("module-blacklist-fallback");
-        fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("config.toml");
-        let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
-        fs::write(&blacklist_path, r#"blacklist = ["blocked"]"#).unwrap();
-
-        let loaded = Config::load_or_default(&path);
-        assert!(loaded.is_module_blacklisted("blocked"));
-        assert_eq!(loaded.default_mode, Mode::Overlay);
-
-        fs::write(&blacklist_path, "blacklist = not-valid").unwrap();
-        let loaded = Config::load_or_default(&path);
-        assert!(loaded.module_blacklist.is_empty());
-        assert_eq!(loaded.default_mode, Mode::Overlay);
-        cleanup(&dir);
-    }
-
-    #[test]
-    fn patch_merges_while_preserving_untouched_fields() {
-        let mut config = Config {
-            default_mode: Mode::Magic,
-            ..Config::default()
-        };
-        config.rules.insert(
-            "keep".to_owned(),
-            ModuleRule {
-                default_mode: Some(Mode::Ignore),
-                paths: BTreeMap::from([("system/etc/a".to_owned(), Mode::Overlay)]),
-            },
-        );
-
-        let patch: ConfigPatch = serde_json::from_str(
-            r#"{"disable_umount":true,"rules":{"new":{"default_mode":"overlay","paths":{"system/etc/hosts":"magic"}}}}"#,
-        )
-        .unwrap();
-        config.apply_patch(patch);
-
-        assert!(config.disable_umount);
-        assert_eq!(config.default_mode, Mode::Magic);
-        assert_eq!(config.rules["keep"].default_mode, Some(Mode::Ignore));
-        assert_eq!(config.rules["keep"].paths["system/etc/a"], Mode::Overlay);
-        assert_eq!(config.rules["new"].default_mode, Some(Mode::Overlay));
-        assert_eq!(config.rules["new"].paths["system/etc/hosts"], Mode::Magic);
-    }
-
-    #[test]
-    fn patch_cannot_set_ignore_as_global_default() {
-        let mut config = Config {
-            default_mode: Mode::Magic,
-            ..Config::default()
-        };
-        let patch: ConfigPatch = serde_json::from_str(r#"{"default_mode":"ignore"}"#).unwrap();
-
-        config.apply_patch(patch);
-
-        assert_eq!(config.default_mode, Mode::Magic);
-    }
-
-    #[test]
-    fn patch_null_clears_module_default_mode() {
-        let mut config = Config::default();
-        config.rules.insert(
-            "m".to_owned(),
-            ModuleRule {
-                default_mode: Some(Mode::Magic),
-                paths: BTreeMap::new(),
-            },
-        );
-
-        let patch: ConfigPatch =
-            serde_json::from_str(r#"{"rules":{"m":{"default_mode":null}}}"#).unwrap();
-        config.apply_patch(patch);
-
-        assert_eq!(config.rules["m"].default_mode, None);
-    }
-
-    #[test]
-    fn patch_can_replace_all_rules_for_full_editor_save() {
-        let mut config = Config::default();
-        config
-            .rules
-            .insert("stale".to_owned(), ModuleRule::default());
-        config
-            .rules
-            .insert("keep".to_owned(), ModuleRule::default());
-
-        let patch: ConfigPatch = serde_json::from_str(
-            r#"{"replace_rules":true,"rules":{"keep":{"default_mode":"magic"}}}"#,
-        )
-        .unwrap();
-        config.apply_patch(patch);
-
-        assert!(!config.rules.contains_key("stale"));
-        assert_eq!(config.rules.len(), 1);
-        assert_eq!(config.rules["keep"].default_mode, Some(Mode::Magic));
-    }
-
-    #[test]
-    fn payload_hex_roundtrips_through_save() {
-        let dir = test_dir("payload");
-        let path = dir.join("config.toml");
-
-        let json = r#"{"default_mode":"magic","disable_umount":true}"#;
-        let payload_hex = hex::encode(json);
-        save_config_payload(&path, &payload_hex).unwrap();
-
-        let saved = Config::load(&path).unwrap();
-        assert_eq!(saved.default_mode, Mode::Magic);
-        assert!(saved.disable_umount);
-        assert_eq!(saved.moduledir, PathBuf::from("/data/adb/modules"));
-
-        cleanup(&dir);
-    }
-
-    #[test]
-    fn payload_arg_requires_marker_and_rejects_invalid_hex() {
-        assert_eq!(
-            parse_payload_arg(&["--payload".to_owned(), "7b7d".to_owned()]).unwrap(),
-            "7b7d"
-        );
-        assert!(parse_payload_arg(&["x".to_owned()]).is_err());
-        assert!(decode_payload_arg("zz").is_err());
-        assert_eq!(decode_payload_arg("7b7d").unwrap(), "{}");
-    }
-
-    fn test_dir(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("hybrid-mount-{tag}-{}", std::process::id()))
-    }
-
-    fn cleanup(dir: &Path) {
-        fs::remove_dir_all(dir).ok();
-    }
-}
+#[path = "config_tests.rs"]
+mod tests;

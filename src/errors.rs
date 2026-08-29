@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use std::path::PathBuf;
+
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -15,6 +17,33 @@ pub enum Error {
 
     #[error("TOML serialize error: {0}")]
     TomlSerialize(#[from] toml::ser::Error),
+
+    #[error("read config {}: {source}", path.display())]
+    ConfigRead {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("parse config {}: {source}", path.display())]
+    ConfigParse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
+
+    #[error("global default_mode=ignore is not supported; set per-module ignore rules instead")]
+    UnsupportedGlobalDefaultMode,
+
+    #[error("read module blacklist {}: {source}", path.display())]
+    ModuleBlacklistRead {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("parse module blacklist {}: {source}", path.display())]
+    ModuleBlacklistParse {
+        path: PathBuf,
+        source: toml::de::Error,
+    },
 
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),

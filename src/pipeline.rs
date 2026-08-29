@@ -318,7 +318,7 @@ fn prepare_overlay_storage(
 fn run_mount_pipeline_impl() -> Result<()> {
     utils::ksu::init();
 
-    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+    let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let ksu_active = utils::ksu::is_active();
     let mount_source = effective_mount_source(&config.mountsource, ksu_active).to_owned();
     log::info!("config info: {}", config.to_toml()?);
