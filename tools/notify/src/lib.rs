@@ -38,6 +38,7 @@ impl NotifyRequest {
         }
     }
 
+    #[must_use]
     pub fn with_topic_id(mut self, topic_id: Option<i64>) -> Self {
         self.topic_id = topic_id;
         self
@@ -46,12 +47,8 @@ impl NotifyRequest {
 
 /// secrets 缺失时跳过并返回 `Ok(false)`;本地构建行为与现状一致。
 pub fn maybe_send_output_dir_notification(request: &NotifyRequest) -> Result<bool> {
-    let has_token = env::var("TELEGRAM_BOT_TOKEN")
-        .ok()
-        .is_some_and(|value| !value.is_empty());
-    let has_chat = env::var("TELEGRAM_CHAT_ID")
-        .ok()
-        .is_some_and(|value| !value.is_empty());
+    let has_token = env::var("TELEGRAM_BOT_TOKEN").is_ok_and(|value| !value.trim().is_empty());
+    let has_chat = env::var("TELEGRAM_CHAT_ID").is_ok_and(|value| !value.trim().is_empty());
 
     if !has_token || !has_chat {
         println!("Telegram secrets not configured, skipping notification.");
@@ -79,7 +76,7 @@ async fn send_output_dir_notification_async(request: &NotifyRequest) -> Result<(
     let artifacts = find_zip_files(&request.output_dir)?;
     let (commit_msg, commit_hash) = get_git_commit();
     let safe_commit_msg = escape_html(&commit_msg);
-    let commit_link = format!("{}/{}/commit/{}", server_url, repo, commit_hash);
+    let commit_link = escape_html(&format!("{server_url}/{repo}/commit/{commit_hash}"));
 
     println!("Selecting {} yield(s)", artifacts.len());
 
@@ -172,14 +169,18 @@ impl NotificationContext<'_> {
     ) -> Result<Vec<MediaGroupItem>> {
         let mut items = Vec::with_capacity(artifacts.len());
 
-        for artifact in &artifacts[..artifacts.len() - 1] {
+        let (last, leading) = artifacts
+            .split_last()
+            .context("cannot build an empty Telegram media group")?;
+
+        for artifact in leading {
             let file = InputFile::path(artifact.path.clone()).await?;
             let info = InputMediaDocument::default().with_disable_content_type_detection(true);
             items.push(MediaGroupItem::for_document(file, info));
         }
 
         items.push(MediaGroupItem::for_document(
-            InputFile::path(artifacts.last().unwrap().path.clone()).await?,
+            InputFile::path(last.path.clone()).await?,
             InputMediaDocument::default()
                 .with_disable_content_type_detection(true)
                 .with_caption_parse_mode(ParseMode::Html)
@@ -221,19 +222,22 @@ fn find_zip_files(output_dir: &Path) -> Result<Vec<Artifact>> {
         .with_context(|| format!("failed to read output directory {}", output_dir.display()))?;
     let mut artifacts = Vec::new();
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry
+            .with_context(|| format!("failed to read an entry in {}", output_dir.display()))?;
         let path = entry.path();
         if is_zip_path(&path) {
-            let file_name = path
-                .file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            let size_bytes = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+            let metadata = entry
+                .metadata()
+                .with_context(|| format!("failed to inspect artifact {}", path.display()))?;
+            if !metadata.is_file() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy().into_owned();
             artifacts.push(Artifact {
                 path,
                 file_name,
-                size_bytes,
+                size_bytes: metadata.len(),
             });
         }
     }
@@ -294,7 +298,7 @@ fn build_extra_caption(
 }
 
 fn truncate_caption(caption: &str, fallback_link: &str) -> String {
-    if caption.chars().count() < 1024 {
+    if caption.chars().count() <= 1024 {
         caption.to_string()
     } else {
         fallback_link.to_string()
@@ -302,7 +306,7 @@ fn truncate_caption(caption: &str, fallback_link: &str) -> String {
 }
 
 fn truncate_caption_extra(caption: &str, file_name: &str) -> String {
-    if caption.chars().count() < 1024 {
+    if caption.chars().count() <= 1024 {
         caption.to_string()
     } else {
         escape_html(file_name)

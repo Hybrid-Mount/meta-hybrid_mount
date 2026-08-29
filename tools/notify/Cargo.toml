@@ -8,6 +8,9 @@ description = "Telegram notification helper for Hybrid Mount build artifacts"
 authors = ["Hybrid Mount Developers"]
 license = "GPL-3.0-only"
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow = "1.0.102"
 tgbot = "0.46.0"

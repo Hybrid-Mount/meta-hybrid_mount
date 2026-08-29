@@ -143,10 +143,13 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
     };
     let prefix = file_name.to_string_lossy();
 
-    let Ok(entries) = fs::read_dir(parent) else {
-        return Ok(());
+    let entries = match fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err.into()),
     };
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry?;
         if !entry
             .file_name()
             .to_string_lossy()

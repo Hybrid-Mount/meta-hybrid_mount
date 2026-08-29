@@ -30,16 +30,18 @@ pub enum NodeFileType {
     Whiteout,
 }
 
-impl From<FileType> for NodeFileType {
-    fn from(value: FileType) -> Self {
+impl NodeFileType {
+    /// Convert ordinary filesystem entry types. Whiteouts need device metadata
+    /// and are classified by the scanner; other special entries are rejected.
+    pub fn from_file_type(value: FileType) -> Option<Self> {
         if value.is_file() {
-            Self::RegularFile
+            Some(Self::RegularFile)
         } else if value.is_dir() {
-            Self::Directory
+            Some(Self::Directory)
         } else if value.is_symlink() {
-            Self::Symlink
+            Some(Self::Symlink)
         } else {
-            Self::Whiteout
+            None
         }
     }
 }

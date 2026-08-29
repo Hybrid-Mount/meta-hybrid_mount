@@ -1,0 +1,2 @@
+*.sh text eol=lf
+module/lkm/binaries/list.txt text eol=lf

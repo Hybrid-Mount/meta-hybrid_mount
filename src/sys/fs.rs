@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::fs::{CWD, FileType, Gid, Mode, Uid, chown, mknodat};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::config::Mode as MountMode;
@@ -148,22 +148,23 @@ fn stage_overlay_node(
             });
         let metadata = fs::symlink_metadata(&source.source_path)?;
 
-        if source.file_type == NodeFileType::Directory {
-            fs::create_dir_all(&staged)?;
-            stats.directories += 1;
-            if source.replace {
-                set_overlay_opaque(&staged)?;
-                stats.opaque_directories += 1;
-            }
-            directory_metadata.push((source.source_path.clone(), staged, metadata));
-            continue;
-        }
-
-        if let Some(parent) = staged.parent() {
+        if source.file_type != NodeFileType::Directory
+            && let Some(parent) = staged.parent()
+        {
             fs::create_dir_all(parent)?;
         }
 
         match source.file_type {
+            NodeFileType::Directory => {
+                fs::create_dir_all(&staged)?;
+                stats.directories += 1;
+                if source.replace {
+                    set_overlay_opaque(&staged)?;
+                    stats.opaque_directories += 1;
+                }
+                directory_metadata.push((source.source_path.clone(), staged, metadata));
+                continue;
+            }
             NodeFileType::RegularFile => {
                 fs::copy(&source.source_path, &staged)?;
                 stats.files += 1;
@@ -177,7 +178,6 @@ fn stage_overlay_node(
                 make_device_node(&staged, &metadata)?;
                 stats.special_entries += 1;
             }
-            NodeFileType::Directory => unreachable!("directory handled above"),
         }
 
         clone_entry_metadata(
@@ -440,17 +440,19 @@ pub fn check_kernel_config(_key: &str) -> Result<bool> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-static TMPFS_XATTR_SUPPORTED: AtomicBool = AtomicBool::new(false);
+static TMPFS_XATTR_SUPPORT: AtomicU8 = AtomicU8::new(0);
 
 /// overlay 层落到 tmpfs 时要求 tmpfs 支持 xattr;结果缓存一次(v4.2.0 行为)。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn is_overlay_xattr_supported() -> Result<bool> {
-    if TMPFS_XATTR_SUPPORTED.load(Ordering::Relaxed) {
-        return Ok(true);
+    match TMPFS_XATTR_SUPPORT.load(Ordering::Relaxed) {
+        1 => return Ok(false),
+        2 => return Ok(true),
+        _ => {}
     }
 
     let supported = check_kernel_config("CONFIG_TMPFS_XATTR")?;
-    TMPFS_XATTR_SUPPORTED.store(supported, Ordering::Relaxed);
+    TMPFS_XATTR_SUPPORT.store(if supported { 2 } else { 1 }, Ordering::Relaxed);
     Ok(supported)
 }
 

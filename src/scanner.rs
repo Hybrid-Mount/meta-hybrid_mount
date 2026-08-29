@@ -56,14 +56,38 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Vec<Modul
         return modules;
     };
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                log::warn!(
+                    "failed to read module directory entry in {}: {err}",
+                    module_dir.display()
+                );
+                continue;
+            }
+        };
         let path = entry.path();
-        if !path.is_dir() {
+        let Ok(file_type) = entry.file_type() else {
+            log::warn!(
+                "failed to inspect module directory entry: {}",
+                path.display()
+            );
+            continue;
+        };
+        if !file_type.is_dir() {
             continue;
         }
 
         let prop_path = path.join(defs::MODULE_PROP_FILE_NAME);
-        let Ok(prop_text) = fs::read_to_string(prop_path) else {
+        let Ok(prop_metadata) = fs::symlink_metadata(&prop_path) else {
+            continue;
+        };
+        if !prop_metadata.file_type().is_file() {
+            log::warn!("{} is not a regular module.prop file", prop_path.display());
+            continue;
+        }
+        let Ok(prop_text) = fs::read_to_string(&prop_path) else {
             continue;
         };
         let prop = parse_prop(&prop_text);
@@ -167,7 +191,14 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
             return;
         };
 
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    log::warn!("failed to read module entry in {}: {err}", dir.display());
+                    continue;
+                }
+            };
             let path = entry.path();
             if entry.file_name() == defs::REPLACE_DIR_FILE_NAME {
                 continue;
@@ -187,7 +218,10 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
             let Ok(metadata) = fs::symlink_metadata(&path) else {
                 continue;
             };
-            let file_type = classify_file_type(&metadata);
+            let Some(file_type) = classify_file_type(&metadata) else {
+                log::warn!("unsupported module entry type: {}", path.display());
+                continue;
+            };
             let replace = file_type == NodeFileType::Directory && is_replace_dir(&path);
 
             out.push(ModuleEntry {
@@ -208,13 +242,13 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
     out
 }
 
-fn classify_file_type(metadata: &fs::Metadata) -> NodeFileType {
+fn classify_file_type(metadata: &fs::Metadata) -> Option<NodeFileType> {
     #[cfg(unix)]
     if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
-        return NodeFileType::Whiteout;
+        return Some(NodeFileType::Whiteout);
     }
 
-    NodeFileType::from(metadata.file_type())
+    NodeFileType::from_file_type(metadata.file_type())
 }
 
 fn is_replace_dir(path: &Path) -> bool {
@@ -335,6 +369,30 @@ mod tests {
 
         assert!(list_modules(&root, &[]).is_empty());
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_module_directory_and_prop_are_not_scanned() {
+        use std::os::unix::fs::symlink;
+
+        let root = module_dir("symlink-module");
+        let outside = module_dir("symlink-module-outside");
+        let real_module = write_module(&outside, "real");
+        symlink(&real_module, root.join("linked_module")).unwrap();
+
+        let linked_prop = root.join("linked_prop");
+        fs::create_dir_all(linked_prop.join("system")).unwrap();
+        symlink(
+            real_module.join("module.prop"),
+            linked_prop.join("module.prop"),
+        )
+        .unwrap();
+
+        assert!(list_modules(&root, &[]).is_empty());
+
+        fs::remove_dir_all(&root).ok();
+        fs::remove_dir_all(&outside).ok();
     }
 
     #[test]

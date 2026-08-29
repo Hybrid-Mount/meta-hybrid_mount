@@ -34,12 +34,10 @@ pub fn install_panic_hook() {
     panic::set_hook(Box::new(move |info| {
         let thread_name = thread::current()
             .name()
-            .map(str::to_owned)
-            .unwrap_or_else(|| "<unnamed>".to_owned());
+            .map_or_else(|| "<unnamed>".to_owned(), str::to_owned);
         let location = info
             .location()
-            .map(ToString::to_string)
-            .unwrap_or_else(|| "<unknown location>".to_owned());
+            .map_or_else(|| "<unknown location>".to_owned(), ToString::to_string);
         let message = info
             .payload()
             .downcast_ref::<&str>()
@@ -54,17 +52,17 @@ pub fn install_panic_hook() {
 }
 
 fn detect_level_filter() -> LevelFilter {
-    match env::var("RUST_LOG") {
-        Ok(value) => match value.to_ascii_lowercase().as_str() {
-            "off" => LevelFilter::Off,
-            "error" => LevelFilter::Error,
-            "warn" => LevelFilter::Warn,
-            "info" => LevelFilter::Info,
-            "debug" => LevelFilter::Debug,
-            "trace" => LevelFilter::Trace,
-            _ => LevelFilter::Info,
-        },
-        Err(_) => LevelFilter::Info,
+    let Ok(value) = env::var("RUST_LOG") else {
+        return LevelFilter::Info;
+    };
+
+    match value.to_ascii_lowercase().as_str() {
+        "off" => LevelFilter::Off,
+        "error" => LevelFilter::Error,
+        "warn" => LevelFilter::Warn,
+        "debug" => LevelFilter::Debug,
+        "trace" => LevelFilter::Trace,
+        _ => LevelFilter::Info,
     }
 }
 

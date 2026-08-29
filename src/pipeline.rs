@@ -331,7 +331,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             .into_iter()
             .collect::<Vec<_>>()
             .join(",");
-        log::info!(
+        log::debug!(
             "module scan: id={}, enabled={}, skip_mount={}, mountable={}, entries={}, roots={}, source={}, source_mount={}",
             module.id,
             !module.disabled,
@@ -362,7 +362,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         plan.magic_module_ids.len()
     );
     for (index, op) in plan.overlay_ops.iter().enumerate() {
-        log::info!(
+        log::debug!(
             "plan overlay operation: index={}, partition={}, target={}, layers={}",
             index,
             op.partition,
@@ -370,7 +370,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             op.lowerdirs.len()
         );
         for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
-            log::info!(
+            log::debug!(
                 "plan overlay lowerdir: operation={}, layer={}, path={}, exists={}, mount={}",
                 index,
                 layer_index,
@@ -496,7 +496,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             }
             runtime_temp
                 .as_mut()
-                .expect("overlay requires session")
+                .ok_or_else(|| Error::msg("retained overlay storage requires a runtime session"))?
                 .keep();
         } else {
             if let Some(storage) = overlay_storage.take() {
@@ -929,7 +929,7 @@ fn mount_overlay_phase(
                 .ok_or_else(|| Error::msg("overlay mount requires a runtime temporary session"))?;
             let mount_source = overlay_mount_source(&op.target, effective_mount_source);
             let register_unmountable = !config.disable_umount;
-            log::info!(
+            log::debug!(
                 "overlay apply start: index={}, partition={}, target={}, source={}, layers={}, register_unmountable={}",
                 operation_index,
                 op.partition,
@@ -939,7 +939,7 @@ fn mount_overlay_phase(
                 register_unmountable
             );
             for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
-                log::info!(
+                log::debug!(
                     "overlay apply lowerdir: operation={}, layer={}, path={}, exists={}, is_dir={}, mount={}",
                     operation_index,
                     layer_index,
@@ -967,7 +967,7 @@ fn mount_overlay_phase(
             if register_unmountable {
                 utils::ksu::send_unmountable(Path::new(&op.target));
             }
-            log::info!(
+            log::debug!(
                 "overlay apply complete: index={}, target={}, target_mount={}",
                 operation_index,
                 op.target,
@@ -1027,7 +1027,7 @@ fn mount_overlay_files(
     );
     for (target_index, (target, sources)) in files.iter().enumerate() {
         let target_string = target.to_string_lossy();
-        log::info!(
+        log::debug!(
             "shallow overlay prepare: index={}, target={}, sources={}",
             target_index,
             target.display(),
@@ -1038,7 +1038,7 @@ fn mount_overlay_files(
             let layer_dir = crate::sys::temp::create_random_dir(&staging_root)?;
             let dest =
                 prepare_shallow_destination(target, &layer_dir, &entry.destination_relative)?;
-            log::info!(
+            log::debug!(
                 "shallow overlay source: target_index={}, layer={}, source={}, exists={}, source_mount={}, relative={}, destination={}",
                 target_index,
                 index,
@@ -1073,7 +1073,7 @@ fn mount_overlay_files(
         if register_unmountable {
             utils::ksu::send_unmountable(target);
         }
-        log::info!(
+        log::debug!(
             "shallow overlay complete: index={}, target={}, layers={}, target_mount={}",
             target_index,
             target.display(),

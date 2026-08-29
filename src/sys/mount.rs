@@ -16,31 +16,18 @@ use crate::utils::ensure_dir_exists;
 
 /// 从 `/proc/self/mountinfo` 判断路径是否为挂载点。
 pub fn is_mounted(path: &Path) -> bool {
-    let Some(path_str) = path.to_str() else {
+    let Ok(process) = Process::myself() else {
+        return false;
+    };
+    let Ok(mountinfo) = process.mountinfo() else {
         log::debug!(
-            "skip mount probe: reason=non_utf8_path, path={}",
+            "mount probe fallback: reason=mountinfo_unavailable, path={}",
             path.display()
         );
         return false;
     };
 
-    let search = if path_str == "/" {
-        "/"
-    } else {
-        path_str.trim_end_matches('/')
-    };
-
-    let Ok(process) = Process::myself() else {
-        return false;
-    };
-    let Ok(mountinfo) = process.mountinfo() else {
-        log::debug!("mount probe fallback: reason=mountinfo_unavailable, path={search}");
-        return false;
-    };
-
-    mountinfo
-        .into_iter()
-        .any(|entry| entry.mount_point.to_string_lossy() == search)
+    mountinfo.into_iter().any(|entry| entry.mount_point == path)
 }
 
 /// 挂载 tmpfs(`mode=0755`),用于 overlay staging(v4.2.0 行为)。
@@ -92,16 +79,26 @@ pub fn emulated_soft_reboot(source: &str) -> Result<()> {
         .mountinfo()
         .map_err(|err| Error::msg(format!("get mountinfo: {err}")))?;
 
-    for entry in mountinfo.into_iter() {
-        if entry.mount_source.as_deref() == Some(source) {
-            log::debug!("unmounting {source} in emulated-soft-reboot");
-            unmount(&entry.mount_point, UnmountFlags::DETACH).map_err(|err| {
-                Error::msg(format!(
-                    "unmount {}: {err}",
-                    entry.mount_point.to_string_lossy()
-                ))
-            })?;
-        }
+    let mut mount_points = mountinfo
+        .into_iter()
+        .filter(|entry| entry.mount_source.as_deref() == Some(source))
+        .map(|entry| entry.mount_point)
+        .collect::<Vec<_>>();
+    mount_points.sort_by(|left, right| {
+        right
+            .components()
+            .count()
+            .cmp(&left.components().count())
+            .then_with(|| right.cmp(left))
+    });
+
+    for mount_point in mount_points {
+        log::debug!(
+            "unmounting {} from {source} in emulated-soft-reboot",
+            mount_point.display()
+        );
+        unmount(&mount_point, UnmountFlags::DETACH)
+            .map_err(|err| Error::msg(format!("unmount {}: {err}", mount_point.display())))?;
     }
     Ok(())
 }

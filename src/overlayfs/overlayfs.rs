@@ -33,6 +33,35 @@ struct StagingMountGuard {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug)]
+struct CurrentDirGuard {
+    original: PathBuf,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl CurrentDirGuard {
+    fn change_to(path: &Path) -> Result<Self> {
+        let original = std::env::current_dir()
+            .map_err(|err| Error::msg(format!("read current directory: {err}")))?;
+        std::env::set_current_dir(path)
+            .map_err(|err| Error::msg(format!("chdir to {}: {err}", path.display())))?;
+        Ok(Self { original })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        if let Err(err) = std::env::set_current_dir(&self.original) {
+            log::error!(
+                "failed to restore current directory to {}: {err}",
+                self.original.display()
+            );
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 impl StagingMountGuard {
     fn track(&mut self, path: PathBuf) {
         self.paths.push(path);
@@ -153,7 +182,7 @@ fn mount_overlay_core(
         .filter(|work| work.exists())
         .map(|work| work.display().to_string());
 
-    log::info!(
+    log::debug!(
         "overlay core mount request: dest={}, layers={}, source={}, lowerdirs={}, upperdir={}, workdir={}",
         dest.display(),
         lower_dirs.len(),
@@ -201,7 +230,7 @@ fn mount_overlay_core(
         .map_err(|err| Error::msg(format!("legacy overlay mount {}: {err}", dest.display())))?;
     }
 
-    log::info!("overlay mount success: {}", dest.display());
+    log::debug!("overlay mount success: {}", dest.display());
     Ok(())
 }
 
@@ -246,7 +275,7 @@ pub fn mount_overlayfs(
 /// 递归 bind mount:优先 open_tree + move_mount,失败回退传统 bind(v4.2.0 行为)。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
-    log::info!("bind mount: src={}, dst={}", from.display(), to.display());
+    log::debug!("bind mount: src={}, dst={}", from.display(), to.display());
 
     let tree = open_tree(
         rustix::fs::CWD,
@@ -357,13 +386,11 @@ pub fn mount_overlay(
     mount_source: &str,
     register_unmountable: bool,
 ) -> Result<()> {
-    log::info!("overlay mount root: target={root}");
-
-    let old_cwd = std::env::current_dir().ok();
-    std::env::set_current_dir(root).map_err(|err| Error::msg(format!("chdir to {root}: {err}")))?;
-    let stock_root = ".";
+    log::debug!("overlay mount root: target={root}");
 
     let root_path = Path::new(root);
+    let _current_dir = CurrentDirGuard::change_to(root_path)?;
+    let stock_root = ".";
     let mount_seq = collect_child_mount_points(root_path)?;
 
     let root_result = mount_overlayfs(
@@ -377,9 +404,6 @@ pub fn mount_overlay(
     );
 
     if let Err(err) = root_result {
-        if let Some(cwd) = &old_cwd {
-            std::env::set_current_dir(cwd).ok();
-        }
         return Err(Error::msg(format!(
             "mount overlayfs for root failed: {err}"
         )));
@@ -407,16 +431,10 @@ pub fn mount_overlay(
                 "child mount failed, reverting root: mount_point={mount_point}, error={err}"
             );
             utils::umount_dir(root_path)?;
-            if let Some(cwd) = old_cwd {
-                std::env::set_current_dir(&cwd).ok();
-            }
             return Err(err);
         }
     }
 
-    if let Some(cwd) = old_cwd {
-        std::env::set_current_dir(&cwd).ok();
-    }
     Ok(())
 }
 

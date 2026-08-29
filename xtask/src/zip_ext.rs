@@ -2,7 +2,7 @@
 
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io,
     path::{Component, Path, PathBuf},
 };
 
@@ -31,64 +31,73 @@ where
     F: Fn(&PathBuf) -> FileOptions<()>,
 {
     let mut paths_queue = vec![directory.to_path_buf()];
-    let mut buffer = Vec::new();
 
     while let Some(next) = paths_queue.pop() {
-        let entries = fs::read_dir(next)?;
+        let mut entries = fs::read_dir(next)?.collect::<std::io::Result<Vec<_>>>()?;
+        entries.sort_by_key(fs::DirEntry::file_name);
+        let mut child_directories = Vec::new();
+
         for entry in entries {
-            let entry = entry?;
             let entry_path = entry.path();
             let file_options = cb_file_options(&entry_path);
-            let metadata = fs::metadata(&entry_path)?;
+            let metadata = fs::symlink_metadata(&entry_path)?;
+            let relative_path = entry_path.strip_prefix(directory).map_err(|err| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!(
+                        "zip entry {} is outside {}: {err}",
+                        entry_path.display(),
+                        directory.display()
+                    ),
+                )
+            })?;
+            let relative_name = path_as_string(relative_path)?;
 
             if metadata.is_file() {
                 let mut file = File::open(&entry_path)?;
-                file.read_to_end(&mut buffer)?;
-                let relative_path = make_relative_path(directory, &entry_path);
-                zip_writer.start_file(path_as_string(&relative_path), file_options)?;
-                zip_writer.write_all(&buffer)?;
-                buffer.clear();
+                zip_writer.start_file(relative_name, file_options)?;
+                io::copy(&mut file, &mut zip_writer)?;
             } else if metadata.is_dir() {
-                let relative_path = make_relative_path(directory, &entry_path);
-                zip_writer.add_directory(path_as_string(&relative_path), file_options)?;
-                paths_queue.push(entry_path);
+                zip_writer.add_directory(relative_name, file_options)?;
+                child_directories.push(entry_path);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unsupported zip entry type: {}", entry_path.display()),
+                )
+                .into());
             }
         }
+
+        child_directories.reverse();
+        paths_queue.extend(child_directories);
     }
 
     zip_writer.finish()?;
     Ok(())
 }
 
-fn make_relative_path(root: &Path, current: &Path) -> PathBuf {
-    let root_components = root.components().collect::<Vec<Component>>();
-    let current_components = current.components().collect::<Vec<_>>();
-    let mut result = PathBuf::new();
-
-    for (index, current_component) in current_components.iter().enumerate() {
-        if index < root_components.len() {
-            if root_components[index] != *current_component {
-                break;
-            }
-        } else {
-            result.push(current_component);
-        }
-    }
-
-    result
-}
-
-fn path_as_string(path: &Path) -> String {
+fn path_as_string(path: &Path) -> std::io::Result<String> {
     let mut path_str = String::new();
     for component in path.components() {
-        if let Component::Normal(os_str) = component {
-            if !path_str.is_empty() {
-                path_str.push('/');
-            }
-            path_str.push_str(&os_str.to_string_lossy());
+        let Component::Normal(os_str) = component else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("invalid relative zip path: {}", path.display()),
+            ));
+        };
+        let name = os_str.to_str().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("zip path is not valid UTF-8: {}", path.display()),
+            )
+        })?;
+        if !path_str.is_empty() {
+            path_str.push('/');
         }
+        path_str.push_str(name);
     }
-    path_str
+    Ok(path_str)
 }
 
 #[cfg(test)]

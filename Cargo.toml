@@ -4,6 +4,13 @@
 members = ["xtask", "tools/notify"]
 resolver = "2"
 
+[workspace.lints.clippy]
+dbg_macro = "deny"
+expect_used = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
+
 [package]
 name = "hybrid-mount"
 version = "6.1.0"
@@ -12,6 +19,9 @@ description = "Hybrid Mount: mixed OverlayFS and Magic Mount for KernelSU and AP
 license = "GPL-3.0-only"
 repository = "https://github.com/Hybrid-Mount/meta-hybrid_mount"
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 flate2 = "1"

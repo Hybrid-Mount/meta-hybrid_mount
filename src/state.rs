@@ -274,25 +274,24 @@ pub fn write_scan_ret(modules: &[AppModule]) -> Result<()> {
 /// `modules`:输出启动时缓存的 `scan.ret`。
 pub fn handle_modules() -> Result<()> {
     match fs::read_to_string(defs::SCAN_RET_PATH) {
-        Ok(text) if serde_json::from_str::<Vec<AppModule>>(&text).is_ok() => {
-            let mut modules: Vec<AppModule> = serde_json::from_str(&text)?;
-            let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
-            sync_app_module_rules(&mut modules, &config);
-            if let Err(write_err) = write_scan_ret(&modules) {
-                log::warn!(
-                    "failed to refresh rules in {}: {write_err}",
-                    defs::SCAN_RET_PATH
-                );
+        Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
+            Ok(mut modules) => {
+                let config = Config::load_or_default(Path::new(defs::CONFIG_PATH));
+                sync_app_module_rules(&mut modules, &config);
+                if let Err(write_err) = write_scan_ret(&modules) {
+                    log::warn!(
+                        "failed to refresh rules in {}: {write_err}",
+                        defs::SCAN_RET_PATH
+                    );
+                }
+                println!("{}", serde_json::to_string_pretty(&modules)?);
+                return Ok(());
             }
-            println!("{}", serde_json::to_string_pretty(&modules)?);
-            return Ok(());
-        }
-        Ok(_) => {
-            log::warn!(
-                "failed to parse {}, rebuilding module snapshot",
+            Err(err) => log::warn!(
+                "failed to parse {}, rebuilding module snapshot: {err}",
                 defs::SCAN_RET_PATH
-            );
-        }
+            ),
+        },
         Err(err) => {
             log::warn!(
                 "failed to read {}, rebuilding module snapshot: {err}",
@@ -385,19 +384,23 @@ pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
         return modules;
     };
 
-    for entry in entries.flatten() {
-        if !entry.path().is_dir() {
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
             continue;
         }
         let Ok(children) = fs::read_dir(entry.path()) else {
             continue;
         };
-        if children.flatten().any(|child| {
+        let has_marker = children.filter_map(std::result::Result::ok).any(|child| {
             child
                 .file_name()
                 .to_string_lossy()
                 .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
-        }) {
+        });
+        if has_marker {
             modules.push(entry.file_name().to_string_lossy().into_owned());
         }
     }
@@ -413,14 +416,17 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
         return 0;
     };
 
-    for entry in entries.flatten() {
-        if !entry.path().is_dir() {
+    for entry in entries {
+        let Ok(entry) = entry else {
+            continue;
+        };
+        if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
             continue;
         }
         let Ok(children) = fs::read_dir(entry.path()) else {
             continue;
         };
-        for child in children.flatten() {
+        for child in children.filter_map(std::result::Result::ok) {
             if !child
                 .file_name()
                 .to_string_lossy()
@@ -428,8 +434,12 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
             {
                 continue;
             }
-            if crate::sys::fs::remove_path(&child.path()).is_ok() {
-                removed += 1;
+            match crate::sys::fs::remove_path(&child.path()) {
+                Ok(()) => removed += 1,
+                Err(err) => log::warn!(
+                    "failed to remove mount error marker {}: {err}",
+                    child.path().display()
+                ),
             }
         }
     }

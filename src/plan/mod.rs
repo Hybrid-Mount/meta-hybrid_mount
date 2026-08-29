@@ -56,7 +56,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
             continue;
         }
         if input.config.is_module_blacklisted(&module.id) {
-            log::info!("plan skip module: id={}, reason=blacklisted", module.id);
+            log::debug!("plan skip module: id={}, reason=blacklisted", module.id);
             continue;
         }
         let rules = ModuleRulesView::new(&module.id, input.config);
@@ -106,8 +106,10 @@ impl ModuleRulesView {
         self.path_rules
             .iter()
             .find(|(key, _)| {
-                let prefix = format!("{key}/");
-                relative == key.as_str() || relative.starts_with(&prefix)
+                relative == key.as_str()
+                    || relative
+                        .strip_prefix(key)
+                        .is_some_and(|suffix| suffix.starts_with('/'))
             })
             .map(|(_, mode)| *mode)
             .unwrap_or(self.default_mode)
@@ -126,8 +128,9 @@ struct PlanBuilder {
     tree: MountTree,
     /// target -> (partition, module id -> lowerdir)
     overlay_by_target: BTreeMap<String, (String, BTreeMap<String, PathBuf>)>,
-    /// 文件规则:父目录 target -> (module id -> file source)
-    overlay_files_by_target: BTreeMap<String, BTreeMap<String, PathBuf>>,
+    /// 文件规则:父目录 target -> 有序且去重的 (module id, file source)。
+    /// 同一模块可以在一个父目录内贡献多个文件。
+    overlay_files_by_target: BTreeMap<String, BTreeSet<(String, PathBuf)>>,
     overlay_module_ids: BTreeSet<String>,
     magic_module_ids: BTreeSet<String>,
     /// 跨模块分配表:target -> 已分配的节点,用于冲突检测。
@@ -199,7 +202,7 @@ impl PlanBuilder {
         self.overlay_files_by_target
             .entry(target.to_owned())
             .or_default()
-            .insert(module_id.to_owned(), source);
+            .insert((module_id.to_owned(), source));
         self.overlay_module_ids.insert(module_id.to_owned());
     }
 
@@ -217,7 +220,12 @@ impl PlanBuilder {
         let overlay_files = self
             .overlay_files_by_target
             .into_iter()
-            .map(|(target, sources)| (target, sources.into_values().collect()))
+            .map(|(target, sources)| {
+                (
+                    target,
+                    sources.into_iter().map(|(_, source)| source).collect(),
+                )
+            })
             .collect();
 
         MountPlan {
@@ -664,6 +672,39 @@ mod tests {
                 .unwrap()
                 .source_for(Mode::Magic)
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn partial_overlay_keeps_multiple_files_from_one_module_and_parent() {
+        let mut rules = no_rules();
+        rules.insert(
+            "hosts".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::from([
+                    ("system/etc/hosts".to_owned(), Mode::Overlay),
+                    ("system/etc/resolv.conf".to_owned(), Mode::Overlay),
+                ]),
+            },
+        );
+        let module = record(
+            "hosts",
+            &[
+                ("system/etc", true),
+                ("system/etc/hosts", false),
+                ("system/etc/resolv.conf", false),
+            ],
+        );
+
+        let result = plan(&[module], &config(Mode::Magic, rules), &[]);
+
+        assert_eq!(
+            result.overlay_files["/system/etc"],
+            vec![
+                PathBuf::from("/data/adb/modules/hosts/system/etc/hosts"),
+                PathBuf::from("/data/adb/modules/hosts/system/etc/resolv.conf"),
+            ]
         );
     }
 

@@ -152,16 +152,26 @@ impl MagicMount<'_> {
                 .filter(|(_, node)| node.has_backend(MountMode::Magic))
             {
                 let real_path = self.path.join(name);
-                let node_type = node
-                    .file_type_for(MountMode::Magic)
-                    .expect("filtered magic child has a type");
+                let Some(node_type) = node.file_type_for(MountMode::Magic) else {
+                    debug_assert!(false, "a filtered magic child must have a selected type");
+                    log::error!("magic child has no selected type: {}", real_path.display());
+                    skipped_children.insert(name.clone());
+                    continue;
+                };
                 let need = match node_type {
                     NodeFileType::Symlink => true,
-                    NodeFileType::Whiteout => real_path.exists(),
+                    NodeFileType::Whiteout => match fs::symlink_metadata(&real_path) {
+                        Ok(_) => true,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => false,
+                        Err(_) => true,
+                    },
                     _ => {
                         if let Ok(metadata) = real_path.symlink_metadata() {
-                            let file_type = NodeFileType::from(metadata.file_type());
-                            file_type != node_type || file_type == NodeFileType::Symlink
+                            NodeFileType::from_file_type(metadata.file_type()).is_none_or(
+                                |file_type| {
+                                    file_type != node_type || file_type == NodeFileType::Symlink
+                                },
+                            )
                         } else {
                             // 实际路径不存在:必须用 tmpfs 承载新文件。
                             true
@@ -294,7 +304,8 @@ impl MagicMount<'_> {
         skipped_children: &BTreeSet<String>,
     ) -> Result<BTreeSet<String>> {
         let mut processed = BTreeSet::new();
-        for entry in self.path.read_dir()?.flatten() {
+        for entry in self.path.read_dir()? {
+            let entry = entry?;
             let name = entry.file_name().to_string_lossy().to_string();
 
             let result = if let Some(node) = self
@@ -405,14 +416,17 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
 
     fs::create_dir_all(work_dir_path)?;
 
-    let (metadata, reference) = if path.exists() {
-        (path.metadata()?, path.to_path_buf())
-    } else if let Some(module_path) = node.module_path_for(MountMode::Magic) {
-        (module_path.metadata()?, module_path.to_path_buf())
-    } else {
-        return Err(Error::MountRootFile {
-            path: path.display().to_string(),
-        });
+    let (metadata, reference) = match path.metadata() {
+        Ok(metadata) => (metadata, path.to_path_buf()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let Some(module_path) = node.module_path_for(MountMode::Magic) else {
+                return Err(Error::MountRootFile {
+                    path: path.display().to_string(),
+                });
+            };
+            (module_path.metadata()?, module_path.to_path_buf())
+        }
+        Err(err) => return Err(err.into()),
     };
 
     chmod(work_dir_path, Mode::from_raw_mode(metadata.mode()))?;
@@ -455,8 +469,8 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
         )?;
         lsetfilecon(&work_dir_path, &lgetfilecon(&path)?)?;
 
-        for child in path.read_dir()?.flatten() {
-            mount_mirror(&path, &work_dir_path, &child)?;
+        for child in path.read_dir()? {
+            mount_mirror(&path, &work_dir_path, &child?)?;
         }
     } else if file_type.is_symlink() {
         log::debug!(
@@ -476,7 +490,7 @@ fn clone_symlink(source: &Path, target: &Path) -> Result<()> {
     lsetfilecon(target, &lgetfilecon(source)?)?;
     log::debug!(
         "clone symlink {} -> {}({})",
-        target.display(),
+        source.display(),
         target.display(),
         link.display()
     );

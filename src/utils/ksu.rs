@@ -61,16 +61,17 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
     let mut history = REGISTERED_PATHS
         .get_or_init(|| Mutex::new(HashSet::new()))
         .lock()
-        .expect("try-umount history poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
 
     if !history.insert(path_str.to_owned()) {
         return;
     }
+    drop(history);
 
     TRY_UMOUNT_LIST
         .get_or_init(|| Mutex::new(TryUmount::new()))
         .lock()
-        .expect("try-umount list poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .add(path);
 }
 
@@ -83,7 +84,7 @@ pub fn commit_unmount_list() -> Result<()> {
     let mut control = TRY_UMOUNT_LIST
         .get_or_init(|| Mutex::new(TryUmount::new()))
         .lock()
-        .expect("try-umount list poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
 
     control.flags(TryUmountFlags::MNT_DETACH);
     control.format_msg(|paths| format!("umount {paths:?} successful"));

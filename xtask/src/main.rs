@@ -107,12 +107,24 @@ fn package_version() -> Result<String> {
 
 fn version_code(version: &str) -> Result<u64> {
     let version = Version::parse(version).context("invalid semver version")?;
-    Ok(version.major * 100_000 + version.minor * 1_000 + version.patch)
+    version
+        .major
+        .checked_mul(100_000)
+        .and_then(|major| {
+            version
+                .minor
+                .checked_mul(1_000)
+                .and_then(|minor| major.checked_add(minor))
+        })
+        .and_then(|value| value.checked_add(version.patch))
+        .context("version is too large to encode as versionCode")
 }
 
 fn git_commit_count() -> Result<String> {
+    let root = workspace_root()?;
     let output = Command::new("git")
         .args(["rev-list", "--count", "HEAD"])
+        .current_dir(root)
         .output()
         .context("failed to run git rev-list")?;
     if !output.status.success() {
@@ -136,6 +148,22 @@ fn run_command(program: &str, args: &[&str], cwd: &Path) -> Result<()> {
         bail!("{program} exited with {status}");
     }
     Ok(())
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| format!("failed to remove {}", path.display())),
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| format!("failed to remove {}", path.display())),
+    }
 }
 
 fn build_webui() -> Result<()> {
@@ -251,7 +279,7 @@ fn build(release: bool) -> Result<()> {
     let binaries = compile_binaries(release)?;
 
     let stage = root.join("output").join("stage");
-    let _ = fs::remove_dir_all(&stage);
+    remove_dir_if_exists(&stage)?;
     fs::create_dir_all(stage.join("binaries"))?;
 
     fs_extra::dir::copy(
@@ -275,7 +303,7 @@ fn build(release: bool) -> Result<()> {
     fs::create_dir_all(&output_dir)?;
     let zip_name = format!("Hybrid-Mount-{version}-{commit_count}.zip");
     let zip_path = output_dir.join(&zip_name);
-    let _ = fs::remove_file(&zip_path);
+    remove_file_if_exists(&zip_path)?;
 
     zip_create_from_directory_with_options(&zip_path, &stage, |_| FileOptions::default())?;
 
