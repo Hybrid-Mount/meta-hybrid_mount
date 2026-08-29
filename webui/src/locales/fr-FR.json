@@ -57,7 +57,12 @@
     "compatible": "Compatible",
     "incompatible": "Incompatible",
     "modeStats": "Statistiques",
-    "mountCount": "{count} montages"
+    "mountCount": "{count} montages",
+    "moduleCount": "{count} module(s)",
+    "magicOperationCount": "{files} montage(s) de fichier · {symlinks} lien(s)",
+    "noActiveMounts": "Aucune cible de montage active dans l'instantané de ce démarrage",
+    "mountTargetCount": "{count} cible(s)",
+    "mountDetails": "Voir {count} cible(s) de montage"
   },
   "config": {
     "title": "Configuration",
@@ -103,7 +108,7 @@
     "save": "Enregistrer les modifications",
     "empty": "Aucun module trouvé",
     "scanError": "Échec de l'analyse des modules",
-    "saveSuccess": "Règles du module enregistrée",
+    "saveSuccess": "Règles du module enregistrées",
     "saveFailed": "Échec de l'enregistrement des règles du module",
     "searchPlaceholder": "Recherche de modules...",
     "filterLabel": "Filtre :",

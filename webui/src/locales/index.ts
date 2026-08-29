@@ -2,7 +2,8 @@
 
 import { createI18n } from "vue-i18n";
 
-type LocaleModule = { default: Record<string, unknown> };
+type LocaleMessages = Record<string, unknown>;
+type LocaleModule = { default: LocaleMessages };
 
 const localeModules = import.meta.glob("./*.json", { eager: false });
 
@@ -34,12 +35,22 @@ export async function getSupportedLocales(): Promise<
 > {
   if (cachedLocales) return cachedLocales;
 
-  const results = Object.keys(localeModules).map((path) => {
-    const match = path.match(/\.\/(.+)\.json$/);
-    if (!match) return null;
-    const code = normalizeLocaleCode(match[1]);
-    return { code, display: code };
-  });
+  const results = await Promise.all(
+    Object.entries(localeModules).map(async ([path, loader]) => {
+      const match = path.match(/\.\/(.+)\.json$/);
+      if (!match) return null;
+
+      const code = normalizeLocaleCode(match[1]);
+      const module = (await loader()) as LocaleModule;
+      const lang = module.default.lang;
+      const display =
+        lang && typeof lang === "object" && "display" in lang
+          ? (lang as { display?: unknown }).display
+          : undefined;
+
+      return { code, display: typeof display === "string" ? display : code };
+    }),
+  );
 
   cachedLocales = results
     .filter((item): item is { code: string; display: string } => item !== null)
