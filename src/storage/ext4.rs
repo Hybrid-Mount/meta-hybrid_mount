@@ -26,21 +26,15 @@ const EXT4_MIN_IMAGE_SIZE_BYTES: u64 = 64 * 1024 * 1024;
 const EXT4_FIXED_HEADROOM_BYTES: u64 = 16 * 1024 * 1024;
 const EXT4_GROWTH_NUMERATOR: u64 = 5;
 const EXT4_GROWTH_DENOMINATOR: u64 = 4;
+// Keep the historical 1 KiB geometry for small images. Older Android
+// e2fsck builds can crash while checking 1 KiB images with more than 32 groups.
 const EXT4_BLOCK_SIZE_BYTES: u64 = 1024;
+const EXT4_LARGE_BLOCK_SIZE_BYTES: u64 = 4096;
+const EXT4_BLOCKS_PER_GROUP_FACTOR: u64 = 8;
+const EXT4_MAX_1K_BLOCK_GROUPS: u64 = 32;
 const EXT4_IMAGE_ALIGNMENT_BYTES: u64 = 4 * 1024 * 1024;
 const EXT4_BYTES_PER_INODE: u64 = 4096;
 const SYSTEM_MKE2FS: &str = "/system/bin/mke2fs";
-const MKE2FS_ARGS: [&str; 9] = [
-    "-t",
-    "ext4",
-    "-b",
-    "1024",
-    "-i",
-    "4096",
-    "-O",
-    "^has_journal",
-    "-F",
-];
 const MODULES_IMG_SELINUX_CONTEXT: &str = "u:object_r:ksu_file:s0";
 
 /// staging 逻辑占用统计器。
@@ -99,6 +93,49 @@ const fn multiply_ratio_ceil(value: u64, numerator: u64, denominator: u64) -> u6
     whole.saturating_add(fractional)
 }
 
+const fn ext4_block_group_size_bytes(block_size: u64) -> u64 {
+    block_size
+        .saturating_mul(block_size)
+        .saturating_mul(EXT4_BLOCKS_PER_GROUP_FACTOR)
+}
+
+const fn ext4_block_group_count(image_size: u64, block_size: u64) -> u64 {
+    let group_size = ext4_block_group_size_bytes(block_size);
+    if group_size == 0 {
+        return u64::MAX;
+    }
+    let groups = image_size / group_size;
+    if image_size.is_multiple_of(group_size) {
+        groups
+    } else {
+        groups.saturating_add(1)
+    }
+}
+
+/// Select a block size that keeps legacy 1 KiB images away from the Android
+/// `e2fsck` multi-group crash while retaining the old geometry where possible.
+const fn select_ext4_block_size(image_size: u64) -> u64 {
+    if ext4_block_group_count(image_size, EXT4_BLOCK_SIZE_BYTES) <= EXT4_MAX_1K_BLOCK_GROUPS {
+        EXT4_BLOCK_SIZE_BYTES
+    } else {
+        EXT4_LARGE_BLOCK_SIZE_BYTES
+    }
+}
+
+fn mke2fs_args(block_size: u64) -> Vec<String> {
+    vec![
+        "-t".to_owned(),
+        "ext4".to_owned(),
+        "-b".to_owned(),
+        block_size.to_string(),
+        "-i".to_owned(),
+        "4096".to_owned(),
+        "-O".to_owned(),
+        "^has_journal".to_owned(),
+        "-F".to_owned(),
+    ]
+}
+
 /// 镜像容量计划：
 ///
 /// - 数据需求为逻辑文件块 × 1.25 + 16 MiB；
@@ -129,19 +166,21 @@ pub(super) fn setup_ext4_image(
 
     let usage = calculate_total_size(source_paths)?;
     let image_size = planned_image_size(usage.total(), usage.entries());
+    let block_size = select_ext4_block_size(image_size);
 
     log::info!(
-        "ext4 image plan: source_bytes={}, source_entries={}, image_bytes={}, source_roots={}",
+        "ext4 image plan: source_bytes={}, source_entries={}, image_bytes={}, block_size={}, source_roots={}",
         usage.total(),
         usage.entries(),
         image_size,
+        block_size,
         source_paths.len()
     );
 
     // set_len creates the same sparse image that upstream creates with truncate.
     fs::File::create(img_path)?.set_len(image_size)?;
     log::info!("ext4 image format start: path={}", img_path.display());
-    format_ext4_image(img_path)?;
+    format_ext4_image(img_path, block_size)?;
     check_ext4_image(img_path)?;
 
     if let Err(err) = crate::utils::lsetfilecon(img_path, MODULES_IMG_SELINUX_CONTEXT) {
@@ -203,9 +242,9 @@ fn calculate_total_size(paths: &[PathBuf]) -> Result<SizeCounter> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn format_ext4_image(img_path: &Path) -> Result<()> {
+fn format_ext4_image(img_path: &Path, block_size: u64) -> Result<()> {
     let output = Command::new(SYSTEM_MKE2FS)
-        .args(MKE2FS_ARGS)
+        .args(mke2fs_args(block_size))
         .arg(img_path)
         .output()
         .map_err(|err| {
@@ -234,7 +273,7 @@ fn format_ext4_image(img_path: &Path) -> Result<()> {
         "ext4 image format complete: path={}, implementation={}, block_size={}, bytes_per_inode={}, features=^has_journal",
         img_path.display(),
         SYSTEM_MKE2FS,
-        EXT4_BLOCK_SIZE_BYTES,
+        block_size,
         EXT4_BYTES_PER_INODE
     );
     Ok(())
@@ -295,8 +334,9 @@ mod tests {
 
     #[test]
     fn formatter_arguments_combine_upstream_and_v4_geometry() {
+        let args = mke2fs_args(EXT4_BLOCK_SIZE_BYTES);
         assert_eq!(
-            MKE2FS_ARGS,
+            args.iter().map(String::as_str).collect::<Vec<_>>(),
             [
                 "-t",
                 "ext4",
@@ -310,6 +350,12 @@ mod tests {
             ]
         );
         assert_eq!(SYSTEM_MKE2FS, "/system/bin/mke2fs");
+    }
+
+    #[test]
+    fn formatter_arguments_support_large_image_geometry() {
+        let args = mke2fs_args(EXT4_LARGE_BLOCK_SIZE_BYTES);
+        assert_eq!(args[3], "4096");
     }
 
     #[test]
@@ -327,6 +373,26 @@ mod tests {
     #[test]
     fn planned_image_size_accounts_for_inode_demand() {
         assert_eq!(planned_image_size(0, 100_000), 492 * 1024 * 1024);
+    }
+
+    #[test]
+    fn large_images_use_four_kib_blocks_to_bound_group_count() {
+        let issue_image_size = planned_image_size(455_715_840, 158);
+        assert_eq!(issue_image_size, 587_202_560);
+        assert_eq!(select_ext4_block_size(issue_image_size), 4096);
+        assert_eq!(select_ext4_block_size(256 * 1024 * 1024), 1024);
+        assert_eq!(
+            ext4_block_group_count(256 * 1024 * 1024, EXT4_BLOCK_SIZE_BYTES),
+            EXT4_MAX_1K_BLOCK_GROUPS
+        );
+        assert_eq!(
+            ext4_block_group_count(260 * 1024 * 1024, EXT4_BLOCK_SIZE_BYTES),
+            EXT4_MAX_1K_BLOCK_GROUPS + 1
+        );
+        assert_eq!(
+            ext4_block_group_count(587_202_560, EXT4_LARGE_BLOCK_SIZE_BYTES),
+            5
+        );
     }
 
     #[test]
