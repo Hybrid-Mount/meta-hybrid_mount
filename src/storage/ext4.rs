@@ -124,7 +124,6 @@ pub(super) fn setup_ext4_image(
     target: &Path,
     img_path: &Path,
     source_paths: &[PathBuf],
-    retain_mount: bool,
 ) -> Result<StorageHandle> {
     log::info!("storage backend select: mode=ext4");
 
@@ -159,14 +158,9 @@ pub(super) fn setup_ext4_image(
         img_path.display(),
         target.display()
     );
-    if retain_mount {
-        sys::nuke::nuke_ext4_sysfs(target);
-    } else {
-        log::info!(
-            "ext4 sysfs nuke skipped: path={}, reason=transient_mount",
-            target.display()
-        );
-    }
+    // Overlay lowerdirs keep the ext4 superblock alive even when the staging
+    // mount is detached later, so conceal the sysfs node while it is mounted.
+    sys::nuke::nuke_ext4_sysfs(target);
 
     Ok(StorageHandle::new(target, StorageMode::Ext4))
 }

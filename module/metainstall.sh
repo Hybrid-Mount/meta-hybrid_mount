@@ -5,12 +5,34 @@
 # 铁律:只允许 `ln -sf "./system/$partition" "$MODPATH/$partition"`;
 # 禁止 cp -a && rm -rf、禁止 mv system/<partition>、禁止归一化逻辑。
 
-export KSU_HAS_METAMODULE="true"
-export KSU_METAMODULE="hybrid-mount"
+if [ "$KSU" = "true" ]; then
+  export KSU_HAS_METAMODULE="true"
+  export KSU_METAMODULE="hybrid-mount"
+fi
+
+if [ "$APATCH" = "true" ]; then
+  export APATCH_HAS_METAMODULE="true"
+  export APATCH_METAMODULE="hybrid-mount"
+fi
+
+export HYBRID_MOUNT="true"
 
 MANAGED_PARTITIONS="odm product system_ext vendor apex mi_ext my_bigball my_carrier my_company my_engineering my_heytap my_manifest my_preload my_product my_region my_reserve my_stock oem optics prism"
 
 ui_print "- Hybrid Mount metainstall"
+
+# KernelSU's built-in installer resolves these functions dynamically while
+# install_module runs. Keep the canonical system/<partition> hierarchy intact
+# and translate the official REPLACE variable into OverlayFS opaque metadata.
+handle_partition() {
+  :
+}
+
+mark_replace() {
+  replace_target="$1"
+  mkdir -p "$replace_target" || return 1
+  setfattr -n trusted.overlay.opaque -v y "$replace_target"
+}
 
 install_module
 

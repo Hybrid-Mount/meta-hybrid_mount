@@ -72,6 +72,17 @@ jobs:
             exit 1
           fi
 
+      - name: Verify bundled LKM provenance assets
+        run: |
+          set -euo pipefail
+          test -f module/lkm/src/LICENSE
+          test -f module/lkm/src/Kconfig
+          test -f module/lkm/src/Makefile
+          test -f module/lkm/README.md
+          grep -q "GPL-2.0-only" module/lkm/README.md
+          grep -q "SPDX-License-Identifier: GPL-2.0-only" module/lkm/src/nuke.c
+          (cd module/lkm/binaries && sha256sum --check list.txt)
+
       - name: ShellCheck module scripts
         run: |
           set -euo pipefail
@@ -80,7 +91,10 @@ jobs:
             apt-get install -y --no-install-recommends shellcheck
             rm -rf /var/lib/apt/lists/*
           fi
-          shellcheck module/*.sh
+          shellcheck module/*.sh tests/shell/*.sh
+
+      - name: Test installer platform split
+        run: sh tests/shell/customize_lkm.sh
 
   webui-lints:
     runs-on: ubuntu-latest

@@ -25,6 +25,15 @@ esac
 
 ui_print "- Device Architecture: $ARCH"
 
+if [ "$KSU" = "true" ]; then
+  # KernelSU provides the supported nuke-ext4-sysfs ioctl. Do not retain an
+  # ABI-dependent compatibility LKM on KernelSU installations.
+  rm -rf "$MODPATH/lkm"
+  ui_print "- KernelSU detected: omitted compatibility LKM"
+else
+  ui_print "- Non-KernelSU environment: retained compatibility LKM"
+fi
+
 BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
 BIN_TARGET="$MODPATH/hybrid-mount"
 if [ ! -f "$BIN_SOURCE" ]; then

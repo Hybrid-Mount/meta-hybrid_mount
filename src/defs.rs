@@ -8,6 +8,8 @@ pub const MODULE_ID: &str = "hybrid_mount";
 pub const DEFAULT_MODULE_DIR: &str = "/data/adb/modules";
 pub const SELF_MODULE_DIR: &str = "/data/adb/modules/hybrid_mount";
 pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
+pub const MODULE_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/lkm/binaries";
+pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
 
 pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
 pub const MODULE_BLACKLIST_FILE_NAME: &str = "module_blacklist.toml";

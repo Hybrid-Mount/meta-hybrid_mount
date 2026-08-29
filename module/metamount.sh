@@ -10,9 +10,20 @@ RUN_DIR="$BASE_DIR/run"
 mkdir -p "$BASE_DIR" "$RUN_DIR"
 
 BINARY="$MODDIR/hybrid-mount"
+LOCK_DIR="/dev/hybrid_mount_single_instance"
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "Hybrid Mount already ran during this boot"
+  exit 0
+fi
+
+cleanup_lock() {
+  rmdir "$LOCK_DIR" 2>/dev/null
+}
 
 if [ ! -f "$BINARY" ]; then
   echo "ERROR: Binary not found at $BINARY"
+  cleanup_lock
   exit 1
 fi
 

@@ -36,7 +36,7 @@ module/metamount.sh
 - `src/plan/`：应用“路径规则 > 模块默认值 > 全局默认值”，在共享树上检测跨后端冲突并派生 Overlay 操作。
 - `src/overlayfs/`：从共享树物化文件、目录、符号链接、opaque `.replace` 与 whiteout，随后执行 64 层分段、子挂载重建与文件级 shallow layer。
 - `src/magic_mount/`：直接消费共享树，执行 tmpfs skeleton、mirror、bind、`.replace` 与 whiteout 语义；不再二次扫描模块目录。
-- `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。
+- `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
 - `src/sys/`、`src/utils/`：挂载、文件系统、随机临时目录、SELinux xattr 与 KernelSU 接口。
@@ -51,8 +51,12 @@ module/metamount.sh
 - 模块快照：`/data/adb/hybrid-mount/scan.ret`
 - 启动状态：`/data/adb/hybrid-mount/run/state.json`
 - ext4 staging 镜像：`/data/adb/hybrid-mount/modules.img`
+- 可选 LKM：`/data/adb/modules/hybrid_mount/lkm/binaries/*.ko`
+- LKM 启动熔断标记：`/data/adb/hybrid-mount/lkm_boot_guard`
 
 这些路径属于安装、WebUI 和启动脚本之间的兼容接口，不应仅为品牌或目录整理而改名。
+
+LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍为 GPL-3.0-only，WebUI 仍为 Apache-2.0。预编译 LKM 只按受支持的内核线与 Android/GKI 版本做精确候选选择，不能替代实机 ABI 校验；KernelSU 安装不保留这些文件，非 KSU 环境默认尝试匹配项。
 
 发布 ZIP 在安装前包含 `binaries/hybrid-mount-arm64`、`binaries/hybrid-mount-armv7` 和 `binaries/hybrid-mount-x86_64`。`customize.sh` 只复制当前架构对应的文件到上述稳定二进制路径，随后删除安装目录中的 `binaries/`，设备上没有第二套常驻可执行文件。
 
