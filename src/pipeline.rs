@@ -1472,6 +1472,8 @@ mod tests {
     fn injected_overlay_failure_rolls_back_previous_mount_target() {
         use crate::plan::OverlayOperation;
 
+        let _fault_guard = crate::sys::faults::test_lock();
+
         if unsafe { libc::unshare(libc::CLONE_NEWNS) } != 0 {
             eprintln!(
                 "skipping overlay rollback test: unshare failed: {}",

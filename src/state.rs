@@ -714,6 +714,7 @@ mod tests {
 
     #[test]
     fn state_save_failure_injection_is_one_shot() {
+        let _fault_guard = crate::sys::faults::test_lock();
         let dir =
             std::env::temp_dir().join(format!("hybrid-mount-state-fault-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);

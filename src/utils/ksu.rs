@@ -125,6 +125,7 @@ mod tests {
 
     #[test]
     fn ksu_commit_failure_injection_is_one_shot() {
+        let _fault_guard = crate::sys::faults::test_lock();
         crate::sys::faults::enable_ksu_commit_failure();
         let err = commit_unmount_list().unwrap_err();
         assert!(err.to_string().contains("injected KernelSU"), "{err}");

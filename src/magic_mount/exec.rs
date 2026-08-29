@@ -24,6 +24,43 @@ use crate::errors::{Error, Result};
 use crate::mount_tree::{MountNode, MountTree, NodeFileType};
 use crate::utils::{ensure_dir_exists, lgetfilecon, lsetfilecon};
 
+/// A single externally visible result from the Magic Mount executor.
+///
+/// Symlink and whiteout entries affect the staging tree but are not mount
+/// points. `Bind`, `Move`, and `Replace` are real mount operations and are
+/// the only results that may be reported through `active_mounts`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MagicOperation {
+    Bind,
+    Move,
+    Symlink,
+    Whiteout,
+    Replace,
+    Noop,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MagicMountResult {
+    pub operation: MagicOperation,
+    pub target: PathBuf,
+}
+
+impl MagicMountResult {
+    fn new(operation: MagicOperation, target: &Path) -> Self {
+        Self {
+            operation,
+            target: target.to_path_buf(),
+        }
+    }
+
+    pub fn is_mount_target(&self) -> bool {
+        matches!(
+            self.operation,
+            MagicOperation::Bind | MagicOperation::Move | MagicOperation::Replace
+        )
+    }
+}
+
 pub struct MagicMount<'tree, 'stats, 'mount> {
     node: &'tree MountNode,
     path: PathBuf,
@@ -55,7 +92,7 @@ impl<'tree, 'stats, 'mount> MagicMount<'tree, 'stats, 'mount> {
         }
     }
 
-    pub fn do_mount(&mut self) -> Result<()> {
+    pub fn do_mount(&mut self) -> Result<MagicMountResult> {
         if crate::sys::faults::should_fail_next_magic_mount() {
             return Err(Error::msg(format!(
                 "injected magic mount failure: target={}",
@@ -74,14 +111,14 @@ impl<'tree, 'stats, 'mount> MagicMount<'tree, 'stats, 'mount> {
             NodeFileType::Directory => self.mount_directory(),
             NodeFileType::Whiteout => {
                 log::debug!("file {} is removed", self.path.display());
-                Ok(())
+                Ok(MagicMountResult::new(MagicOperation::Whiteout, &self.path))
             }
         }
     }
 }
 
 impl MagicMount<'_, '_, '_> {
-    fn mount_symlink(&mut self) -> Result<()> {
+    fn mount_symlink(&mut self) -> Result<MagicMountResult> {
         let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootSymlink {
                 path: self.path.display().to_string(),
@@ -102,10 +139,10 @@ impl MagicMount<'_, '_, '_> {
         })?;
 
         self.stats.mounted_symlinks = self.stats.mounted_symlinks.saturating_add(1);
-        Ok(())
+        Ok(MagicMountResult::new(MagicOperation::Symlink, &self.path))
     }
 
-    fn mount_regular_file(&mut self) -> Result<()> {
+    fn mount_regular_file(&mut self) -> Result<MagicMountResult> {
         let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootFile {
                 path: self.path.display().to_string(),
@@ -124,7 +161,7 @@ impl MagicMount<'_, '_, '_> {
             module_path.display(),
             target.display()
         );
-        mount_bind(module_path, target).map_err(|err| {
+        magic_mount_bind(module_path, target).map_err(|err| {
             Error::msg(format!(
                 "mount module file {} -> {}: {err}",
                 module_path.display(),
@@ -136,24 +173,24 @@ impl MagicMount<'_, '_, '_> {
             crate::utils::ksu::send_unmountable(target);
         }
 
-        // MS_REMOUNT | MS_BIND 组合用于把单文件改成只读;失败只告警不中断。
-        if let Err(err) = mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "") {
-            log::warn!("make file {} read-only: {err}", target.display());
+        // MS_REMOUNT | MS_BIND 把单文件改成只读。无法降为只读时，撤销刚刚
+        // 创建的 bind mount 并将目标视为失败，不能报告部分成功。
+        if let Err(error) = magic_mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "")
+            .map_err(|err| Error::msg(format!("make file {} read-only: {err}", target.display())))
+        {
+            return Err(rollback_magic_mount(target, error));
         }
 
         self.stats.mounted_files = self.stats.mounted_files.saturating_add(1);
-        let target = self.path.to_string_lossy().into_owned();
-        self.stats.active_mounts.push(target.clone());
-        (self.on_mount)(&target);
-        Ok(())
+        let result = MagicMountResult::new(MagicOperation::Bind, &self.path);
+        record_mount_target(self.stats, &mut *self.on_mount, &result, target);
+        Ok(result)
     }
 
-    fn mount_directory(&mut self) -> Result<()> {
+    fn mount_directory(&mut self) -> Result<MagicMountResult> {
         let replace = self.node.replace_for(MountMode::Magic);
         let module_path = self.node.module_path_for(MountMode::Magic);
         let mut tmpfs = !self.has_tmpfs && replace && module_path.is_some();
-        let mut skipped_children = BTreeSet::new();
-
         if !self.has_tmpfs && !tmpfs {
             for (name, node) in self
                 .node
@@ -164,9 +201,10 @@ impl MagicMount<'_, '_, '_> {
                 let real_path = self.path.join(name);
                 let Some(node_type) = node.file_type_for(MountMode::Magic) else {
                     debug_assert!(false, "a filtered magic child must have a selected type");
-                    log::error!("magic child has no selected type: {}", real_path.display());
-                    skipped_children.insert(name.clone());
-                    continue;
+                    return Err(Error::msg(format!(
+                        "magic child has no selected type: {}",
+                        real_path.display()
+                    )));
                 };
                 let need = match node_type {
                     NodeFileType::Symlink => true,
@@ -190,14 +228,10 @@ impl MagicMount<'_, '_, '_> {
                 };
 
                 if need {
-                    if module_path.is_none() {
-                        log::error!(
-                            "cannot create tmpfs on {}, ignored child: {name}",
-                            self.path.display()
-                        );
-                        self.stats.ignored_files = self.stats.ignored_files.saturating_add(1);
-                        skipped_children.insert(name.clone());
-                        continue;
+                    if module_path.is_none() && !self.path.exists() {
+                        return Err(Error::MountRootFile {
+                            path: self.path.display().to_string(),
+                        });
                     }
                     tmpfs = true;
                     break;
@@ -212,7 +246,7 @@ impl MagicMount<'_, '_, '_> {
 
         if tmpfs {
             // 先自身 bind 一次,保证后续 mount-move 作用于这个挂载点。
-            mount_bind(&self.work_dir_path, &self.work_dir_path).map_err(|err| {
+            magic_mount_bind(&self.work_dir_path, &self.work_dir_path).map_err(|err| {
                 Error::msg(format!(
                     "creating tmpfs for {} at {}: {err}",
                     self.path.display(),
@@ -222,7 +256,7 @@ impl MagicMount<'_, '_, '_> {
         }
 
         let processed = if self.path.exists() && !replace {
-            self.mount_path(has_tmpfs, &skipped_children)?
+            self.mount_path(has_tmpfs)?
         } else {
             BTreeSet::new()
         };
@@ -242,11 +276,11 @@ impl MagicMount<'_, '_, '_> {
             .iter()
             .filter(|(_, node)| node.has_backend(MountMode::Magic))
         {
-            if processed.contains(name) || skipped_children.contains(name) {
+            if processed.contains(name) {
                 continue;
             }
 
-            let result = MagicMount::new(
+            MagicMount::new(
                 node,
                 &self.path,
                 &self.work_dir_path,
@@ -255,19 +289,7 @@ impl MagicMount<'_, '_, '_> {
                 &mut *self.stats,
                 &mut *self.on_mount,
             )
-            .do_mount();
-
-            if let Err(err) = result {
-                if has_tmpfs {
-                    return Err(err);
-                }
-                log::error!(
-                    "mount child {}/{} failed: {}",
-                    self.path.display(),
-                    name,
-                    err
-                );
-            }
+            .do_mount()?;
         }
 
         if tmpfs {
@@ -277,47 +299,55 @@ impl MagicMount<'_, '_, '_> {
                 self.path.display()
             );
 
-            if let Err(err) = mount_remount(
+            if let Err(error) = magic_mount_remount(
                 &self.work_dir_path,
                 MountFlags::RDONLY | MountFlags::BIND,
                 "",
-            ) {
-                log::warn!("make dir {} read-only: {err}", self.path.display());
+            )
+            .map_err(|err| Error::msg(format!("make dir {} read-only: {err}", self.path.display())))
+            {
+                return Err(rollback_magic_mount(&self.work_dir_path, error));
             }
-            mount_move(&self.work_dir_path, &self.path).map_err(|err| {
+            if let Err(error) = magic_mount_move(&self.work_dir_path, &self.path).map_err(|err| {
                 Error::msg(format!(
                     "moving tmpfs {} -> {}: {err}",
                     self.work_dir_path.display(),
                     self.path.display()
                 ))
-            })?;
-            let target = self.path.to_string_lossy().into_owned();
-            self.stats.active_mounts.push(target.clone());
-            (self.on_mount)(&target);
+            }) {
+                return Err(rollback_magic_mount(&self.work_dir_path, error));
+            }
+            let operation = if replace {
+                MagicOperation::Replace
+            } else {
+                MagicOperation::Move
+            };
+            let result = MagicMountResult::new(operation, &self.path);
+            record_mount_target(self.stats, &mut *self.on_mount, &result, &self.path);
 
             // 降为 private,减少 peer group 数量。
-            if let Err(err) = mount_change(
-                &self.path,
-                MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
-            ) {
+            if !crate::sys::faults::use_fake_magic_mount_ops()
+                && let Err(err) = mount_change(
+                    &self.path,
+                    MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
+                )
+            {
                 log::warn!("make dir {} private: {err}", self.path.display());
             }
 
             if self.umount {
                 crate::utils::ksu::send_unmountable(&self.path);
             }
+
+            return Ok(result);
         }
 
-        Ok(())
+        Ok(MagicMountResult::new(MagicOperation::Noop, &self.path))
     }
 
     /// 处理实际目录中已有的条目:命中收集树的走 magic mount,
     /// 其余条目在 tmpfs 场景下 mirror 进 staging。
-    fn mount_path(
-        &mut self,
-        has_tmpfs: bool,
-        skipped_children: &BTreeSet<String>,
-    ) -> Result<BTreeSet<String>> {
+    fn mount_path(&mut self, has_tmpfs: bool) -> Result<BTreeSet<String>> {
         let mut processed = BTreeSet::new();
         for entry in self.path.read_dir()? {
             let entry = entry?;
@@ -330,10 +360,6 @@ impl MagicMount<'_, '_, '_> {
                 .filter(|node| node.has_backend(MountMode::Magic))
             {
                 processed.insert(name.clone());
-                if skipped_children.contains(&name) {
-                    continue;
-                }
-
                 MagicMount::new(
                     node,
                     &self.path,
@@ -344,6 +370,7 @@ impl MagicMount<'_, '_, '_> {
                     &mut *self.on_mount,
                 )
                 .do_mount()
+                .map(|_| ())
             } else if has_tmpfs {
                 mount_mirror(&self.path, &self.work_dir_path, &entry)
             } else {
@@ -351,20 +378,31 @@ impl MagicMount<'_, '_, '_> {
             };
 
             if let Err(err) = result {
-                if has_tmpfs {
-                    return Err(err);
-                }
-                log::error!(
-                    "mount child {}/{} failed: {}",
+                return Err(Error::msg(format!(
+                    "mount child {}/{} failed: {err}",
                     self.path.display(),
-                    name,
-                    err
-                );
+                    name
+                )));
             }
         }
 
         Ok(processed)
     }
+}
+
+fn record_mount_target(
+    stats: &mut MagicMountStats,
+    on_mount: &mut dyn FnMut(&str),
+    result: &MagicMountResult,
+    rollback_target: &Path,
+) {
+    if !result.is_mount_target() {
+        return;
+    }
+    stats
+        .active_mounts
+        .push(result.target.to_string_lossy().into_owned());
+    on_mount(&rollback_target.to_string_lossy());
 }
 
 /// magic mount 一次执行的统计(供 `run/state.json` 快照)。
@@ -462,7 +500,9 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
         Some(Uid::from_raw(metadata.uid())),
         Some(Gid::from_raw(metadata.gid())),
     )?;
-    lsetfilecon(work_dir_path, &lgetfilecon(&reference)?)?;
+    if !crate::sys::faults::use_fake_magic_mount_ops() {
+        lsetfilecon(work_dir_path, &lgetfilecon(&reference)?)?;
+    }
     Ok(())
 }
 
@@ -479,7 +519,7 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
             work_dir_path.display()
         );
         fs::File::create(&work_dir_path)?;
-        mount_bind(&path, &work_dir_path)?;
+        magic_mount_bind(&path, &work_dir_path)?;
     } else if file_type.is_dir() {
         log::debug!(
             "mount mirror dir {} -> {}",
@@ -494,7 +534,9 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
             Some(Uid::from_raw(metadata.uid())),
             Some(Gid::from_raw(metadata.gid())),
         )?;
-        lsetfilecon(&work_dir_path, &lgetfilecon(&path)?)?;
+        if !crate::sys::faults::use_fake_magic_mount_ops() {
+            lsetfilecon(&work_dir_path, &lgetfilecon(&path)?)?;
+        }
 
         for child in path.read_dir()? {
             mount_mirror(&path, &work_dir_path, &child?)?;
@@ -512,9 +554,17 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
 }
 
 fn clone_symlink(source: &Path, target: &Path) -> Result<()> {
+    if crate::sys::faults::should_fail_next_magic_symlink() {
+        return Err(Error::msg(format!(
+            "injected magic symlink failure: target={}",
+            target.display()
+        )));
+    }
     let link = fs::read_link(source)?;
     symlink(&link, target)?;
-    lsetfilecon(target, &lgetfilecon(source)?)?;
+    if !crate::sys::faults::use_fake_magic_mount_ops() {
+        lsetfilecon(target, &lgetfilecon(source)?)?;
+    }
     log::debug!(
         "clone symlink {} -> {}({})",
         source.display(),
@@ -524,47 +574,57 @@ fn clone_symlink(source: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, target_os = "linux"))]
-mod tests {
-    use super::*;
-    use crate::module_id::ModuleId;
-    use crate::mount_tree::{MountSource, MountTree};
+fn magic_mount_bind(source: &Path, target: &Path) -> Result<()> {
+    if crate::sys::faults::should_fail_next_magic_bind() {
+        return Err(Error::msg(format!(
+            "injected magic bind failure: source={}, target={}",
+            source.display(),
+            target.display()
+        )));
+    }
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return Ok(());
+    }
+    mount_bind(source, target).map_err(Error::from)
+}
 
-    #[test]
-    fn injected_magic_mount_failure_fires_before_side_effects() {
-        let root =
-            std::env::temp_dir().join(format!("hybrid-mount-magic-fault-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
-        let source = root.join("source");
-        fs::write(&source, "data").unwrap();
+fn magic_mount_remount(target: &Path, flags: MountFlags, data: &str) -> Result<()> {
+    if crate::sys::faults::should_fail_next_magic_remount() {
+        return Err(Error::msg(format!(
+            "injected magic remount failure: target={}",
+            target.display()
+        )));
+    }
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return Ok(());
+    }
+    mount_remount(target, flags, data).map_err(Error::from)
+}
 
-        let mut tree = MountTree::default();
-        tree.insert(
-            "hosts",
-            MountSource {
-                module_id: ModuleId::try_from("m").unwrap(),
-                relative: "hosts".to_owned(),
-                source_path: source,
-                file_type: NodeFileType::RegularFile,
-                replace: false,
-                backend: MountMode::Magic,
-            },
-        );
-        let node = tree.root.children.get("hosts").unwrap();
-        let mut stats = MagicMountStats::default();
-        let mut calls = 0;
-        let mut on_mount = |_: &str| calls += 1;
+fn magic_mount_move(source: &Path, target: &Path) -> Result<()> {
+    if crate::sys::faults::should_fail_next_magic_move() {
+        return Err(Error::msg(format!(
+            "injected magic move failure: source={}, target={}",
+            source.display(),
+            target.display()
+        )));
+    }
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return Ok(());
+    }
+    mount_move(source, target).map_err(Error::from)
+}
 
-        crate::sys::faults::enable_next_magic_mount_failure();
-        let mut mount =
-            MagicMount::new(node, &root, &root, false, false, &mut stats, &mut on_mount);
-        let err = mount.do_mount().unwrap_err();
-        crate::sys::faults::reset();
-
-        assert!(err.to_string().contains("injected magic mount"), "{err}");
-        assert_eq!(calls, 0);
-        assert_eq!(stats.mounted_files, 0);
-        fs::remove_dir_all(&root).ok();
+fn rollback_magic_mount(target: &Path, error: Error) -> Error {
+    match crate::sys::mount::rollback_mount_target(target) {
+        Ok(()) => error,
+        Err(cleanup_error) => Error::msg(format!(
+            "{error}; rollback magic mount {}: {cleanup_error}",
+            target.display()
+        )),
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "exec_tests.rs"]
+mod tests;

@@ -207,6 +207,7 @@ mod tests {
 
     #[test]
     fn injected_ebusy_fails_rollback_with_target() {
+        let _fault_guard = faults::test_lock();
         if !unshare_mount_namespace() {
             return;
         }
@@ -231,6 +232,7 @@ mod tests {
 
     #[test]
     fn injected_mountinfo_failure_propagates_from_rollback() {
+        let _fault_guard = faults::test_lock();
         if !unshare_mount_namespace() {
             return;
         }

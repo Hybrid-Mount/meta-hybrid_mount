@@ -64,6 +64,8 @@
 > PR6/7 实施后（基于 ext4 块大小修复 `bd2ae521`）：workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
 >
 > PR8 实施后：workspace 测试通过（host 147+3+1=151），fmt/clippy（host 与 Linux target all-targets）及 x86_64-linux-gnu/aarch64-linux-android check 通过；Linux mount namespace 故障注入测试已加入并在 Linux CI 执行。
+>
+> PR9 实施后（本地边界）：workspace 测试通过（host 147+3+1=151）；Magic Linux-only 测试通过目标编译与 Clippy，x86_64 Linux 及 aarch64/armv7/x86_64 Android check 通过。本机没有 Linux 运行环境，因此 Linux 测试实际执行以推送后 CI 为准，Android 真机候选测试仍留作发布门禁。
 
 ### 4.1 验证证据等级
 
@@ -268,12 +270,12 @@
 
 ### 11.2 Magic Mount
 
-- [ ] 补齐 executor 成功、失败和回滚测试。
-- [ ] 直接子节点失败必须导致该阶段失败，不能在“没有 tmpfs”分支静默继续。
-- [ ] 只读重挂载失败不能只发 warning 后报告整体成功；需按目标策略分类。
-- [ ] bind、move、symlink、whiteout、`.replace` 各自返回结构化结果。
-- [ ] `active_mounts` 只记录真实 mount target，不把普通 symlink 操作伪装成挂载。
-- [ ] Magic 执行失败后必须回滚本阶段以及此前已提交到事务的 Overlay 动作。
+- [x] 补齐 executor 成功、失败和回滚测试。
+- [x] 直接子节点失败必须导致该阶段失败，不能在“没有 tmpfs”分支静默继续。
+- [x] 只读重挂载失败不能只发 warning 后报告整体成功；按目标撤销刚创建的 bind/move staging 后返回 `Err`。
+- [x] bind、move、symlink、whiteout、`.replace` 各自返回结构化结果。
+- [x] `active_mounts` 只记录真实 mount target，不把普通 symlink 操作伪装成挂载。
+- [x] Magic 执行失败后回滚本阶段以及此前已登记到事务的 Overlay 动作（PR8 事务 + PR9 executor 失败传播）。
 
 ### 11.3 ext4 storage 与 loop device
 
@@ -530,7 +532,7 @@ git diff --check
 | 6 | `is_mounted -> Result<bool>` 与 mount ops 边界 | 中 | fake mount ops | ✅ 已提交（与 PR7 合并，G15） |
 | 7 | `MountTransaction` 基础设施，不改变执行顺序 | 中-高 | 故障注入框架 | ✅ 已提交（与 PR6 合并，G15） |
 | 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | ✅ 已提交（含 G13） |
-| 9 | Magic executor 错误语义和测试 | 高 | 真机候选测试 | 待执行 |
+| 9 | Magic executor 错误语义和测试 | 高 | 真机候选测试 | ✅ 已实现（真机候选验证留待发布门禁） |
 | 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | 待执行 |
 | 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | 待执行 |
 | 12 | 状态真实性、CLI snapshots、文档 | 中 | 执行器结果模型稳定 | 待执行 |
@@ -560,7 +562,7 @@ git diff --check
 - [ ] 模块 ID 在类型边界验证，重复和目录不匹配被拒绝。
 - [ ] 任意后端或后续阶段失败都会触发全流水线回滚。
 - [ ] 回滚后通过 mountinfo 重新确认，不把查询错误当作未挂载。
-- [ ] Magic executor 不再吞掉直接子节点或只读重挂载失败。
+- [x] Magic executor 不再吞掉直接子节点或只读重挂载失败。
 - [ ] Overlay 子挂载按深度正确卸载。
 - [ ] LKM 候选选择、哈希验证和 boot-guard 全部生效。
 - [ ] 直接 `libc/extattr` 依赖被现有 `rustix` 能力替代。
@@ -607,6 +609,7 @@ git diff --check
 - [x] PR5 完成后复验：fmt/clippy 通过，workspace 测试通过（host 124+3+1=128；Linux 另含 cfg(unix) 符号链接测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR6/7 完成后复验：fmt/clippy 通过，workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR8 完成后复验：fmt/clippy（host 与 Linux target all-targets）通过，workspace 测试通过（host 147+3+1=151），x86_64-linux-gnu/aarch64-linux-android check 通过。
+- [x] PR9 本地复验：fmt、host/Linux-target clippy、workspace host 测试（147+3+1=151）、Magic Linux-only 测试编译，以及 x86_64 Linux 与 aarch64/armv7/x86_64 Android check 通过；Linux runtime CI 与 Android 真机验证边界未混淆。
 
 ## 23. 最终交付物
 

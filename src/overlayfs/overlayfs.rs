@@ -520,6 +520,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn injected_staging_remove_failure_is_reported() {
+        let _fault_guard = crate::sys::faults::test_lock();
         let path = std::env::temp_dir().join(format!(
             "hybrid-mount-overlay-staging-fault-{}",
             std::process::id()
