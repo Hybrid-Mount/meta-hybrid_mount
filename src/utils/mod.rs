@@ -147,10 +147,11 @@ mod linux_tests {
                 code == rustix::io::Errno::NOTSUP.raw_os_error()
                     || code == rustix::io::Errno::OPNOTSUPP.raw_os_error()
                     || code == rustix::io::Errno::PERM.raw_os_error()
+                    || code == rustix::io::Errno::NOSPC.raw_os_error()
             });
             if unsupported {
                 eprintln!(
-                    "skipping long xattr test: filesystem does not support user xattrs: {err}"
+                    "skipping long xattr test: filesystem cannot store the requested xattr: {err}"
                 );
                 let _ = std::fs::remove_dir_all(&dir);
                 return;
