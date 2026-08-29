@@ -5,10 +5,10 @@ import type { Module, MountMode } from "./types";
 export type ModuleFilter = "active" | "all" | MountMode;
 
 export function matchesModuleFilter(
-  module: Pick<Module, "mode">,
+  module: Pick<Module, "mode"> & Partial<Pick<Module, "blacklisted">>,
   filter: ModuleFilter,
 ): boolean {
-  if (filter === "active") return module.mode !== "ignore";
+  if (filter === "active") return module.blacklisted === true || module.mode !== "ignore";
   if (filter === "all") return true;
   return module.mode === filter;
 }

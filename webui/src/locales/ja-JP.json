@@ -110,6 +110,8 @@
     "clearErrorsSuccess": "マウントエラーをクリアしました",
     "mountError": "マウントエラー",
     "suggestIgnore": "このモジュールの .sh ファイルにはマウント関連のコマンドが含まれています。モードを「Ignore」に設定することを検討してください。",
+    "blacklisted": "ブラックリスト登録済み",
+    "blacklistReason": "コミュニティから自前でマウント処理を行うとの報告が複数寄せられたため、このモジュールはブラックリストに追加されました。",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

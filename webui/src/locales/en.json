@@ -126,6 +126,8 @@
     "mountError": "Mount error",
     "mountErrorSummary": "Affected modules: {count}",
     "suggestIgnore": "Suggest ignoring this module",
+    "blacklisted": "Blacklisted",
+    "blacklistReason": "This module has been added to the blacklist because the community has repeatedly reported that it handles mounting on its own.",
     "authorLabel": "Author",
     "descriptionLabel": "Description",
     "unknownLabel": "Unknown",

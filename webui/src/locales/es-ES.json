@@ -110,6 +110,8 @@
     "clearErrorsSuccess": "Errores limpiados",
     "mountError": "Error de montaje",
     "suggestIgnore": "Este módulo contiene comandos de montaje en sus archivos .sh. Considere establecer su modo en \"Ignorar\".",
+    "blacklisted": "En la lista negra",
+    "blacklistReason": "Este módulo se ha añadido a la lista negra porque la comunidad ha informado repetidamente de que gestiona los montajes por su cuenta.",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

@@ -110,6 +110,8 @@
     "clearErrorsSuccess": "Kesalahan mount berhasil dihapus",
     "mountError": "Kesalahan Mount",
     "suggestIgnore": "Modul ini berisi perintah mount di file .sh-nya. Pertimbangkan untuk mengatur modenya ke \"Ignore\".",
+    "blacklisted": "Masuk daftar hitam",
+    "blacklistReason": "Modul ini telah dimasukkan ke daftar hitam karena komunitas berulang kali melaporkan bahwa modul ini menangani mount sendiri.",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

@@ -135,6 +135,10 @@
   opacity: 0.75;
 }
 
+.module-card.blacklisted {
+  border-color: var(--md-sys-color-error);
+}
+
 .module-card.dirty {
   border-color: var(--md-sys-color-primary);
 }
@@ -262,6 +266,19 @@
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   line-height: 1.4;
+}
+
+.blacklist-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--md-sys-color-on-error-container);
+  background-color: var(--md-sys-color-error-container);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.module-blacklist-notice {
+  margin: 0 16px 12px;
 }
 
 .mode-overlay {

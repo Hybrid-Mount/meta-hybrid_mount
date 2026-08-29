@@ -126,6 +126,8 @@
     "mountError": "Bağlama Hatası",
     "mountErrorSummary": "Etkilenen modüller: {count}",
     "suggestIgnore": "Bu modülü yoksaymayı öner",
+    "blacklisted": "Kara listede",
+    "blacklistReason": "Topluluk, bu modülün bağlama işlemlerini kendi başına yaptığını defalarca bildirdiği için modül kara listeye alındı.",
     "authorLabel": "Yazar",
     "descriptionLabel": "Açıklama",
     "unknownLabel": "Bilinmiyor",

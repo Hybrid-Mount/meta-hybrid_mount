@@ -110,6 +110,8 @@
     "clearErrorsSuccess": "Ошибки очищены",
     "mountError": "Ошибка монтирования",
     "suggestIgnore": "Этот модуль содержит команды монтирования в своих .sh файлах. Рассмотрите установку режима \"Ignore\".",
+    "blacklisted": "В чёрном списке",
+    "blacklistReason": "Модуль добавлен в чёрный список, поскольку сообщество неоднократно сообщало, что он самостоятельно выполняет монтирование.",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

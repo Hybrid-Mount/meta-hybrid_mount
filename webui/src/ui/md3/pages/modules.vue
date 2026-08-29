@@ -127,6 +127,7 @@ onMounted(() => moduleStore.ensureModulesLoaded());
         :class="{
           expanded: expanded[module.id],
           unmounted: !module.is_mounted,
+          blacklisted: module.blacklisted,
           'has-error': Boolean(module.mount_error),
         }"
       >
@@ -136,7 +137,10 @@ onMounted(() => moduleStore.ensureModulesLoaded());
           :aria-expanded="Boolean(expanded[module.id])"
           @click="expanded[module.id] = !expanded[module.id]"
         >
-          <span class="mode-indicator" :class="`mode-${module.mode}`" />
+          <span
+            class="mode-indicator"
+            :class="`mode-${module.blacklisted ? 'blacklisted' : module.mode}`"
+          />
           <span class="module-info">
             <span class="module-name">{{ module.name || module.id }}</span>
             <span v-if="expanded[module.id]" class="module-id">{{ module.id }}</span>
@@ -145,8 +149,14 @@ onMounted(() => moduleStore.ensureModulesLoaded());
               <span>{{ module.author || t("modules.unknownLabel") }}</span>
             </span>
           </span>
-          <span class="mode-pill">{{ modeLabels[module.mode] }}</span>
+          <span class="mode-pill">
+            {{ module.blacklisted ? t("modules.blacklisted") : modeLabels[module.mode] }}
+          </span>
         </button>
+
+        <p v-if="module.blacklisted" class="blacklist-hint module-blacklist-notice">
+          {{ t("modules.blacklistReason") }}
+        </p>
 
         <div v-if="expanded[module.id]" class="module-body-wrapper">
           <div class="module-body-inner">

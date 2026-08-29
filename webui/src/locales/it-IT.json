@@ -110,6 +110,8 @@
     "clearErrorsSuccess": "Errori cancellati",
     "mountError": "Errore di mount",
     "suggestIgnore": "Questo modulo contiene comandi di mount nei suoi file .sh. Considera di impostare la modalità su \"Ignora\".",
+    "blacklisted": "Nella lista nera",
+    "blacklistReason": "Questo modulo è stato inserito nella lista nera perché la comunità ha segnalato più volte che gestisce autonomamente i mount.",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

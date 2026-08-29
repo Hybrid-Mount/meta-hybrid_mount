@@ -126,6 +126,8 @@
     "mountError": "挂载错误",
     "mountErrorSummary": "受影响模块：{count}",
     "suggestIgnore": "建议忽略此模块",
+    "blacklisted": "已加入黑名单",
+    "blacklistReason": "因模块被社区多次反映自行处理挂载，现已被加入黑名单",
     "authorLabel": "作者",
     "descriptionLabel": "描述",
     "unknownLabel": "未知",

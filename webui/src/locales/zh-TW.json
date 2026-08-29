@@ -119,6 +119,8 @@
     "mountError": "掛載錯誤",
     "mountErrorSummary": "受影響模組：{count}",
     "suggestIgnore": "該模組的 .sh 檔案中包含掛載相關指令，建議將其模式設定為 \"Ignore\"（忽略）。",
+    "blacklisted": "已加入黑名單",
+    "blacklistReason": "因社群多次反映該模組會自行處理掛載，現已被加入黑名單",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

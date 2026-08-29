@@ -14,4 +14,10 @@ describe("matchesModuleFilter", () => {
     expect(matchesModuleFilter({ mode: "ignore" }, "all")).toBe(true);
     expect(matchesModuleFilter({ mode: "ignore" }, "ignore")).toBe(true);
   });
+
+  it("keeps blacklisted modules visible in the active view", () => {
+    expect(matchesModuleFilter({ mode: "ignore", blacklisted: true }, "active")).toBe(
+      true,
+    );
+  });
 });

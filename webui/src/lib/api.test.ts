@@ -48,6 +48,16 @@ describe("WebUI configuration contract", () => {
     expect(module.rules.paths).toEqual({ "system/etc/hosts": "overlay" });
   });
 
+  it("recognizes blacklisted modules and legacy blacklist markers", () => {
+    expect(normalizeModule({ id: "blocked", blacklisted: true }).blacklisted).toBe(true);
+    const legacyModule = normalizeModule({
+      id: "legacy-blocked",
+      mount_error: "blacklisted",
+    });
+    expect(legacyModule.blacklisted).toBe(true);
+    expect(legacyModule.mount_error).toBeNull();
+  });
+
   it("normalizes explicit and inherited config rules without freezing defaults", () => {
     const config = normalizeConfigPayload({
       default_mode: "magic",

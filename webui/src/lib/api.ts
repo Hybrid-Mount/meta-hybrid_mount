@@ -120,6 +120,8 @@ export function createConfigPayload(config: AppConfig): Record<string, unknown> 
 }
 
 export function normalizeModule(raw: Record<string, unknown>): Module {
+  const legacyBlacklistMarker = raw.mount_error === "blacklisted";
+  const blacklisted = raw.blacklisted === true || legacyBlacklistMarker;
   const rawRules =
     raw.rules && typeof raw.rules === "object"
       ? (raw.rules as Record<string, unknown>)
@@ -143,9 +145,12 @@ export function normalizeModule(raw: Record<string, unknown>): Module {
     mode: isMountMode(raw.mode) ? raw.mode : "ignore",
     is_mounted: Boolean(raw.is_mounted),
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
+    blacklisted,
     source_path: String(raw.source_path ?? ""),
     mount_error:
-      typeof raw.mount_error === "string" && raw.mount_error.length > 0
+      !legacyBlacklistMarker &&
+      typeof raw.mount_error === "string" &&
+      raw.mount_error.length > 0
         ? raw.mount_error
         : null,
     suggest_ignore: Boolean(raw.suggest_ignore),

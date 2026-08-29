@@ -34,6 +34,7 @@ export interface Module {
   mode: MountMode;
   is_mounted: boolean;
   enabled: boolean;
+  blacklisted: boolean;
   source_path: string;
   mount_error: string | null;
   suggest_ignore: boolean;

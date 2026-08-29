@@ -31,6 +31,10 @@ pub struct AppModule {
     pub mode: String,
     pub is_mounted: bool,
     pub enabled: bool,
+    /// Whether this module is blocked by the bundled or persistent blacklist.
+    /// Missing in older `scan.ret` snapshots, where it defaults to `false`.
+    #[serde(default)]
+    pub blacklisted: bool,
     pub source_path: String,
     pub mount_error: Option<String>,
     pub suggest_ignore: bool,
@@ -347,7 +351,10 @@ pub fn app_modules(
     modules
         .iter()
         .map(|module| {
-            let mode = if plan.overlay_module_ids.contains(&module.id) {
+            let blacklisted = config.is_module_blacklisted(module.id.as_str());
+            let mode = if blacklisted {
+                Mode::Ignore
+            } else if plan.overlay_module_ids.contains(&module.id) {
                 Mode::Overlay
             } else if plan.magic_module_ids.contains(&module.id) {
                 Mode::Magic
@@ -367,8 +374,9 @@ pub fn app_modules(
                 author: module.author.clone(),
                 description: module.description.clone(),
                 mode: mode.as_str().to_owned(),
-                is_mounted: mounted_module_ids.contains(module.id.as_str()),
-                enabled: !module.disabled,
+                is_mounted: !blacklisted && mounted_module_ids.contains(module.id.as_str()),
+                enabled: !module.disabled && !blacklisted,
+                blacklisted,
                 source_path: module.source_path.to_string_lossy().into_owned(),
                 suggest_ignore: mount_error.is_some(),
                 mount_error,
@@ -450,6 +458,12 @@ fn app_module_rules(config: &Config, module_id: &ModuleId) -> AppModuleRules {
 /// the mounted backend/status intact while presenting the latest saved rules.
 fn sync_app_module_rules(modules: &mut [AppModule], config: &Config) {
     for module in modules {
+        module.blacklisted = config.is_module_blacklisted(module.id.as_str());
+        if module.blacklisted {
+            module.mode = Mode::Ignore.as_str().to_owned();
+            module.is_mounted = false;
+            module.enabled = false;
+        }
         module.rules = app_module_rules(config, &module.id);
     }
 }
@@ -794,6 +808,32 @@ mod tests {
     }
 
     #[test]
+    fn app_modules_surface_blacklist_status_and_skip_mounting() {
+        let modules = [record("blocked")];
+        let mut config = Config::default();
+        config
+            .module_blacklist
+            .insert(ModuleId::try_from("blocked").unwrap());
+        let plan = MountPlan {
+            overlay_module_ids: vec![ModuleId::try_from("blocked").unwrap()],
+            ..MountPlan::default()
+        };
+
+        let list = app_modules(
+            &modules,
+            &config,
+            &plan,
+            &[],
+            &BTreeSet::from(["blocked".to_owned()]),
+        );
+
+        assert!(list[0].blacklisted);
+        assert_eq!(list[0].mode, "ignore");
+        assert!(!list[0].enabled);
+        assert!(!list[0].is_mounted);
+    }
+
+    #[test]
     fn fallback_snapshot_scans_planned_mode_without_claiming_mount_success() {
         let mut module = record("fallback_mod");
         module.entries = vec![
@@ -884,6 +924,7 @@ mod tests {
             mode: "overlay".to_owned(),
             is_mounted: true,
             enabled: true,
+            blacklisted: false,
             source_path: "/data/adb/modules/hosts".to_owned(),
             mount_error: None,
             suggest_ignore: false,
@@ -1189,6 +1230,7 @@ mod tests {
             mode: "overlay".to_owned(),
             is_mounted: true,
             enabled: true,
+            blacklisted: false,
             source_path: "/data/adb/modules/hosts".to_owned(),
             mount_error: None,
             suggest_ignore: false,
@@ -1209,6 +1251,7 @@ mod tests {
   "mode": "overlay",
   "is_mounted": true,
   "enabled": true,
+  "blacklisted": false,
   "source_path": "/data/adb/modules/hosts",
   "mount_error": null,
   "suggest_ignore": false,

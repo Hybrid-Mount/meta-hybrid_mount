@@ -162,8 +162,14 @@ onMounted(() => moduleStore.ensureModulesLoaded());
         >
           <template #end>
             <span class="module-header-end">
-              <MiuixText :color="module.mode === 'ignore' ? 'error' : 'success'">
-                {{ modeLabel(module.mode) }}
+              <MiuixText
+                :color="
+                  module.blacklisted || module.mode === 'ignore' ? 'error' : 'success'
+                "
+              >
+                {{
+                  module.blacklisted ? t("modules.blacklisted") : modeLabel(module.mode)
+                }}
               </MiuixText>
               <MiuixIcon
                 :icon="expanded[module.id] ? ExpandLess : ExpandMore"
@@ -173,6 +179,10 @@ onMounted(() => moduleStore.ensureModulesLoaded());
             </span>
           </template>
         </MiuixBasicComponent>
+
+        <p v-if="module.blacklisted" class="module-blacklist-notice">
+          {{ t("modules.blacklistReason") }}
+        </p>
 
         <Transition name="module-details">
           <div v-if="expanded[module.id]" class="module-details">
@@ -311,6 +321,16 @@ onMounted(() => moduleStore.ensureModulesLoaded());
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.module-blacklist-notice {
+  margin: 0 16px 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--m-color-error-container, rgba(186, 26, 26, 0.12));
+  color: var(--m-color-on-error-container, #410002);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .module-details {

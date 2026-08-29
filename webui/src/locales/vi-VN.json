@@ -110,6 +110,8 @@
     "clearErrorsSuccess": "Đã xóa lỗi mount",
     "mountError": "Lỗi mount",
     "suggestIgnore": "Mô-đun này chứa các lệnh mount trong tệp .sh. Hãy cân nhắc đặt chế độ thành \"Bỏ qua\".",
+    "blacklisted": "Nằm trong danh sách đen",
+    "blacklistReason": "Mô-đun này đã bị đưa vào danh sách đen vì cộng đồng nhiều lần phản ánh rằng nó tự xử lý việc mount.",
     "title": "Modules",
     "desc": "Module list from the last startup snapshot.",
     "scanning": "Scanning...",

@@ -126,6 +126,8 @@
     "mountError": "Erreur de montage",
     "mountErrorSummary": "Modules concernés : {count}",
     "suggestIgnore": "Suggérer d'ignorer ce module",
+    "blacklisted": "Sur liste noire",
+    "blacklistReason": "Ce module a été ajouté à la liste noire, car la communauté a signalé à plusieurs reprises qu’il gérait lui-même les montages.",
     "authorLabel": "Auteur",
     "descriptionLabel": "Description",
     "unknownLabel": "Inconnu",
