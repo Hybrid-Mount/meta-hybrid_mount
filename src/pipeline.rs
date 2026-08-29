@@ -32,7 +32,7 @@ use crate::scanner::ModuleRecord;
 use crate::scanner::list_modules;
 use crate::state::MountStatistics;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::state::{RunState, app_modules, write_scan_ret};
+use crate::state::{RunState, app_modules, mounted_module_ids_for_snapshot, write_scan_ret};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
 
@@ -413,12 +413,13 @@ fn execute_mount_phases(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn verify_targets_restored(
+fn mountinfo_mismatches(
     baseline: &crate::sys::mountinfo::MountSnapshot,
     mounted: &MountedTargets,
-) -> Result<()> {
+) -> Result<(Vec<String>, Vec<String>)> {
     let current = crate::sys::mountinfo::MountSnapshot::read()?;
-    let mut mismatches = Vec::new();
+    let mut leftover = Vec::new();
+    let mut missing = Vec::new();
 
     for target in &mounted.paths {
         let root = Path::new(target);
@@ -427,23 +428,44 @@ fn verify_targets_restored(
 
         for (path, ids) in &after {
             if before.get(path) != Some(ids) {
-                mismatches.push(format!("leftover={}", path.display()));
+                leftover.push(path.display().to_string());
             }
         }
         for path in before.keys() {
             if !after.contains_key(path) {
-                mismatches.push(format!("missing={}", path.display()));
+                missing.push(path.display().to_string());
             }
         }
     }
 
-    if mismatches.is_empty() {
-        Ok(())
-    } else {
-        Err(Error::msg(format!(
-            "mountinfo differs from pre-execution baseline: {}",
-            mismatches.join(", ")
-        )))
+    leftover.sort();
+    leftover.dedup();
+    missing.sort();
+    missing.dedup();
+    Ok((leftover, missing))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug, Default)]
+struct RollbackSummary {
+    status: String,
+    leftover_targets: Vec<String>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl RollbackSummary {
+    fn clean() -> Self {
+        Self {
+            status: "clean".to_owned(),
+            leftover_targets: Vec::new(),
+        }
+    }
+
+    fn unverified() -> Self {
+        Self {
+            status: "unverified".to_owned(),
+            leftover_targets: Vec::new(),
+        }
     }
 }
 
@@ -452,7 +474,7 @@ fn rollback_mount_pipeline(
     transaction: crate::sys::transaction::MountTransaction<'_>,
     mounted: &MountedTargets,
     baseline: &crate::sys::mountinfo::MountSnapshot,
-) {
+) -> RollbackSummary {
     let report = transaction.rollback();
     for failure in &report.failures {
         log::error!(
@@ -461,25 +483,76 @@ fn rollback_mount_pipeline(
             failure.error
         );
     }
-    if let Err(err) = verify_targets_restored(baseline, mounted) {
-        log::error!("rollback verification failed: {err}");
+
+    match mountinfo_mismatches(baseline, mounted) {
+        Ok((leftover, missing)) => {
+            for target in &leftover {
+                log::error!("rollback left an uncleaned mount target: {target}");
+            }
+            for target in &missing {
+                log::error!("rollback removed a pre-existing mount target: {target}");
+            }
+            if report.failures.is_empty() && leftover.is_empty() && missing.is_empty() {
+                RollbackSummary::clean()
+            } else {
+                RollbackSummary {
+                    status: "incomplete".to_owned(),
+                    leftover_targets: leftover,
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("rollback verification unavailable: {err}");
+            RollbackSummary::unverified()
+        }
     }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn persist_mount_failure_state(state: &mut RunState) {
+fn persist_mount_failure_state(
+    state: &mut RunState,
+    failed_stage: &str,
+    rollback: &RollbackSummary,
+) {
     state.mount_point = PathBuf::new();
     state.active_mounts.clear();
     state.overlay_active_mounts.clear();
     state.magic_active_mounts.clear();
+    state.confirmed_active_mounts.clear();
     state.mount_stats = MountStatistics {
         total_mounts: 1,
         failed_mounts: 1,
         ..MountStatistics::default()
     };
+    state.failed_stage = Some(failed_stage.to_owned());
+    state.rollback_status = Some(rollback.status.clone());
+    state.leftover_mount_targets = rollback.leftover_targets.clone();
     if let Err(state_err) = state.save() {
         log::warn!("failed to persist mount failure statistics: {state_err}");
     }
+}
+
+/// 回滚后必须把 `scan.ret` 恢复到“全部未挂载”，避免 WebUI 显示
+/// 回滚前曾经成功的挂载结果。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn persist_unmounted_module_snapshot(modules: &[ModuleRecord], config: &Config, plan: &MountPlan) {
+    let mount_errors = crate::state::collect_mount_error_modules(&config.moduledir);
+    let snapshot = app_modules(modules, config, plan, &mount_errors, &BTreeSet::new());
+    if let Err(err) = write_scan_ret(&snapshot) {
+        log::error!("failed to restore unmounted module snapshot: {err}");
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn confirmed_mount_targets(
+    targets: &[String],
+    snapshot: &crate::sys::mountinfo::MountSnapshot,
+) -> Vec<String> {
+    targets
+        .iter()
+        .filter(|target| snapshot.contains(Path::new(target)))
+        .cloned()
+        .collect()
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -566,10 +639,13 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // WebUI can still show the scanned modules and their planned modes when a
     // device rejects one overlay operation.
     let initial_mount_errors = crate::state::collect_mount_error_modules(&config.moduledir);
-    let mut initial_app_modules = app_modules(&modules, &config, &plan, &initial_mount_errors);
-    for module in &mut initial_app_modules {
-        module.is_mounted = false;
-    }
+    let initial_app_modules = app_modules(
+        &modules,
+        &config,
+        &plan,
+        &initial_mount_errors,
+        &BTreeSet::new(),
+    );
     write_scan_ret(&initial_app_modules)?;
     log::info!(
         "module snapshot saved: modules={}",
@@ -610,18 +686,62 @@ fn run_mount_pipeline_impl() -> Result<()> {
                     plan.overlay_module_ids.join(","),
                     plan.magic_module_ids.join(",")
                 );
-                rollback_mount_pipeline(transaction, &mounted, &baseline);
-                persist_mount_failure_state(&mut state);
+                let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+                persist_mount_failure_state(&mut state, "mount_execution", &rollback);
+                persist_unmounted_module_snapshot(&modules, &config, &plan);
                 return Err(err);
             }
         };
 
+    // `is_mounted` comes from mountinfo-confirmed targets, never from the plan.
+    // Executor attempt counts stay in `mount_stats` and are never copied into
+    // `active_mounts` as proof of still being mounted.
+    let final_mountinfo = match crate::sys::mountinfo::MountSnapshot::read() {
+        Ok(snapshot) => snapshot,
+        Err(err) => {
+            log::error!("final mountinfo confirmation failed: {err}");
+            let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+            persist_mount_failure_state(&mut state, "mountinfo_confirm", &rollback);
+            persist_unmounted_module_snapshot(&modules, &config, &plan);
+            return Err(err);
+        }
+    };
+    let confirmed_overlay_targets = confirmed_mount_targets(&active_mounts, &final_mountinfo);
+    let confirmed_magic_targets =
+        confirmed_mount_targets(&magic_stats.active_mounts, &final_mountinfo);
+    let confirmed_active_mounts =
+        merge_active_mounts(&confirmed_overlay_targets, &confirmed_magic_targets);
+    let attempted_active_mounts = merge_active_mounts(&active_mounts, &magic_stats.active_mounts);
+    if confirmed_active_mounts != attempted_active_mounts {
+        log::warn!(
+            "executor targets not fully confirmed by mountinfo: executed={}, confirmed={}",
+            attempted_active_mounts.join(","),
+            confirmed_active_mounts.join(",")
+        );
+    }
+
     let mount_error_modules = crate::state::collect_mount_error_modules(&config.moduledir);
-    let app_modules = app_modules(&modules, &config, &plan, &mount_error_modules);
+    let mut mounted_module_ids = mounted_module_ids_for_snapshot(
+        &modules,
+        &plan,
+        &confirmed_overlay_targets,
+        &confirmed_magic_targets,
+    );
+    // Symlink/whiteout-only magic modules have successful execution results
+    // but no mount target; include them from the executor stats.
+    mounted_module_ids.extend(magic_stats.mounted_module_ids.iter().cloned());
+    let app_modules = app_modules(
+        &modules,
+        &config,
+        &plan,
+        &mount_error_modules,
+        &mounted_module_ids,
+    );
     if let Err(err) = write_scan_ret(&app_modules) {
         log::error!("module snapshot save failed, rolling back mounts: {err}");
-        rollback_mount_pipeline(transaction, &mounted, &baseline);
-        persist_mount_failure_state(&mut state);
+        let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+        persist_mount_failure_state(&mut state, "module_snapshot_save", &rollback);
+        persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
 
@@ -630,9 +750,10 @@ fn run_mount_pipeline_impl() -> Result<()> {
         .map(|module| (module.clone(), "mount_error marker present".to_owned()))
         .collect();
 
-    state.active_mounts = merge_active_mounts(&active_mounts, &magic_stats.active_mounts);
-    state.overlay_active_mounts = active_mounts;
-    state.magic_active_mounts = magic_stats.active_mounts.clone();
+    state.active_mounts = confirmed_active_mounts.clone();
+    state.overlay_active_mounts = confirmed_overlay_targets;
+    state.magic_active_mounts = confirmed_magic_targets;
+    state.confirmed_active_mounts = confirmed_active_mounts;
     state.mount_stats = pipeline_stats(
         overlay_dir_mounts,
         shallow_overlay_mounts,
@@ -642,23 +763,50 @@ fn run_mount_pipeline_impl() -> Result<()> {
     );
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;
+    state.failed_stage = None;
+    state.rollback_status = Some("pending_commit".to_owned());
+    state.leftover_mount_targets.clear();
     if !config.disable_umount {
         state.mount_point = PathBuf::new();
     }
     if let Err(err) = state.save() {
         log::error!("final state save failed, rolling back mounts: {err}");
-        rollback_mount_pipeline(transaction, &mounted, &baseline);
-        persist_mount_failure_state(&mut state);
+        let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+        persist_mount_failure_state(&mut state, "state_save", &rollback);
+        persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
 
     if let Err(err) = transaction.commit(config.disable_umount) {
         log::error!("mount transaction commit failed: {err}");
-        if let Err(verify_err) = verify_targets_restored(&baseline, &mounted) {
-            log::error!("post-commit rollback verification failed: {verify_err}");
-        }
-        persist_mount_failure_state(&mut state);
+        let rollback = match mountinfo_mismatches(&baseline, &mounted) {
+            Ok((leftover, missing)) => {
+                for target in &leftover {
+                    log::error!("post-commit leftover mount target: {target}");
+                }
+                for target in &missing {
+                    log::error!("post-commit missing pre-existing mount target: {target}");
+                }
+                RollbackSummary {
+                    status: "incomplete".to_owned(),
+                    leftover_targets: leftover,
+                }
+            }
+            Err(verify_err) => {
+                log::error!("post-commit rollback verification unavailable: {verify_err}");
+                RollbackSummary::unverified()
+            }
+        };
+        persist_mount_failure_state(&mut state, "mount_transaction_commit", &rollback);
+        persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
+    }
+
+    state.rollback_status = Some("committed".to_owned());
+    state.failed_stage = None;
+    state.leftover_mount_targets.clear();
+    if let Err(err) = state.save() {
+        log::error!("post-commit state save failed, mounts remain active: {err}");
     }
 
     crate::module_status::update_description(

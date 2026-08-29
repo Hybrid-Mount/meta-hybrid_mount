@@ -22,7 +22,7 @@ pub fn run(args: &[String]) -> Result<()> {
         Some("modules") => state::handle_modules(),
         Some("status") => state::handle_status(),
         Some("version") => {
-            println!("{{ \"version\": \"{}\" }}", env!("CARGO_PKG_VERSION"));
+            println!("{}", version_payload());
             Ok(())
         }
         Some("install-state") => state::handle_install_state(),
@@ -30,6 +30,10 @@ pub fn run(args: &[String]) -> Result<()> {
         Some("emulated-soft-reboot") => emulated_soft_reboot(),
         Some(command) => Err(Error::msg(format!("unknown command: {command}"))),
     }
+}
+
+fn version_payload() -> String {
+    format!("{{ \"version\": \"{}\" }}", env!("CARGO_PKG_VERSION"))
 }
 
 fn emulated_soft_reboot() -> Result<()> {
@@ -58,6 +62,7 @@ mod tests {
     #[test]
     fn version_command_matches_contract_shape() {
         run(&["version".to_owned()]).unwrap();
+        assert_eq!(version_payload(), r#"{ "version": "6.1.0" }"#);
     }
 
     #[test]

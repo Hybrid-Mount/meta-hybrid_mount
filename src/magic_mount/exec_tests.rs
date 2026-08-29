@@ -511,3 +511,29 @@ fn operation_faults_fail_before_mount_syscalls() {
 
     crate::sys::faults::reset();
 }
+
+#[test]
+fn magic_stats_track_successful_modules_without_mount_syscalls() {
+    let mut tree = MountTree::default();
+    tree.insert(
+        "hosts",
+        MountSource {
+            module_id: ModuleId::try_from("hosts_mod").unwrap(),
+            relative: "hosts".to_owned(),
+            source_path: PathBuf::from("/data/adb/modules/hosts_mod/hosts"),
+            file_type: NodeFileType::RegularFile,
+            replace: false,
+            backend: MountMode::Magic,
+        },
+    );
+
+    let node = tree.root.children.get("hosts").unwrap();
+    let mut stats = MagicMountStats::default();
+    record_module_success(&mut stats, node);
+    record_module_success(&mut stats, node);
+
+    assert_eq!(
+        stats.mounted_module_ids,
+        BTreeSet::from(["hosts_mod".to_owned()])
+    );
+}

@@ -111,6 +111,7 @@ impl<'tree, 'stats, 'mount> MagicMount<'tree, 'stats, 'mount> {
             NodeFileType::Directory => self.mount_directory(),
             NodeFileType::Whiteout => {
                 log::debug!("file {} is removed", self.path.display());
+                record_module_success(self.stats, self.node);
                 Ok(MagicMountResult::new(MagicOperation::Whiteout, &self.path))
             }
         }
@@ -139,6 +140,7 @@ impl MagicMount<'_, '_, '_> {
         })?;
 
         self.stats.mounted_symlinks = self.stats.mounted_symlinks.saturating_add(1);
+        record_module_success(self.stats, self.node);
         Ok(MagicMountResult::new(MagicOperation::Symlink, &self.path))
     }
 
@@ -182,6 +184,7 @@ impl MagicMount<'_, '_, '_> {
         }
 
         self.stats.mounted_files = self.stats.mounted_files.saturating_add(1);
+        record_module_success(self.stats, self.node);
         let result = MagicMountResult::new(MagicOperation::Bind, &self.path);
         record_mount_target(self.stats, &mut *self.on_mount, &result, target);
         Ok(result)
@@ -322,6 +325,7 @@ impl MagicMount<'_, '_, '_> {
             } else {
                 MagicOperation::Move
             };
+            record_module_success(self.stats, self.node);
             let result = MagicMountResult::new(operation, &self.path);
             record_mount_target(self.stats, &mut *self.on_mount, &result, &self.path);
 
@@ -413,6 +417,17 @@ pub struct MagicMountStats {
     pub ignored_files: u32,
     /// Successful module-controlled bind and directory mount targets.
     pub active_mounts: Vec<String>,
+    /// Modules with at least one successfully executed magic operation
+    /// (bind/move/replace/symlink/whiteout), used for `scan.ret.is_mounted`.
+    pub mounted_module_ids: BTreeSet<String>,
+}
+
+fn record_module_success(stats: &mut MagicMountStats, node: &MountNode) {
+    if let Some(source) = node.source_for(MountMode::Magic) {
+        stats
+            .mounted_module_ids
+            .insert(source.module_id.to_string());
+    }
 }
 
 /// 完整 magic mount 入口:消费共享树 → 建 staging tmpfs → 执行 → 汇总。

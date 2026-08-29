@@ -63,7 +63,52 @@ pub struct ModeStats {
     pub magicmount: usize,
 }
 
+/// `run/state.json` 的来源状态。损坏状态必须能在 `status` JSON 中查询到，
+/// 不能只打日志后静默回退默认值。
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StateLoadKind {
+    #[default]
+    Missing,
+    Loaded,
+    Corrupt,
+    IoError,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StateLoadInfo {
+    pub kind: StateLoadKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+impl StateLoadInfo {
+    pub fn loaded() -> Self {
+        Self {
+            kind: StateLoadKind::Loaded,
+            detail: None,
+        }
+    }
+
+    fn corrupt(detail: impl Into<String>) -> Self {
+        Self {
+            kind: StateLoadKind::Corrupt,
+            detail: Some(detail.into()),
+        }
+    }
+
+    fn io_error(detail: impl Into<String>) -> Self {
+        Self {
+            kind: StateLoadKind::IoError,
+            detail: Some(detail.into()),
+        }
+    }
+}
+
 /// 启动时生成的挂载状态快照(替代常驻实时状态)。
+///
+/// 新增字段全部带 serde default，旧 `run/state.json` 与旧 WebUI 客户端
+/// 可以继续读取；失败诊断字段只在失败时序列化。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RunState {
@@ -80,10 +125,24 @@ pub struct RunState {
     pub overlay_active_mounts: Vec<String>,
     /// Successful Magic Mount bind and directory targets from the same boot snapshot.
     pub magic_active_mounts: Vec<String>,
+    /// Final mountinfo-confirmed targets; executor attempts stay in `mount_stats`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub confirmed_active_mounts: Vec<String>,
     pub mount_error_modules: Vec<String>,
     pub mount_error_reasons: BTreeMap<String, String>,
     pub mount_stats: MountStatistics,
     pub mode_stats: ModeStats,
+    /// 本次 `status` 输出的状态文件来源;缺省 `missing` 兼容旧客户端。
+    pub state_load: StateLoadInfo,
+    /// 失败阶段,如 `mount_execution`、`state_save`、`mount_transaction_commit`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failed_stage: Option<String>,
+    /// `pending_commit` / `committed` / `clean` / `incomplete` / `unverified`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollback_status: Option<String>,
+    /// 回滚确认后仍然残留的挂载目标。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub leftover_mount_targets: Vec<String>,
 }
 
 impl RunState {
@@ -116,12 +175,44 @@ impl RunState {
     }
 
     pub fn load_or_default() -> Self {
-        match fs::read_to_string(defs::STATE_PATH) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
-                log::warn!("failed to parse state file, using default: {err}");
-                Self::default()
-            }),
-            Err(_) => Self::default(),
+        Self::load_from(Path::new(defs::STATE_PATH))
+    }
+
+    pub(crate) fn load_from(path: &Path) -> Self {
+        let text = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                return Self::default();
+            }
+            Err(err) => {
+                let state = Self {
+                    state_load: StateLoadInfo::io_error(format!("read {}: {err}", path.display())),
+                    ..Self::default()
+                };
+                log::warn!(
+                    "state file read failed, using default with diagnostic: path={}, error={err}",
+                    path.display()
+                );
+                return state;
+            }
+        };
+
+        match serde_json::from_str::<Self>(&text) {
+            Ok(mut state) => {
+                state.state_load = StateLoadInfo::loaded();
+                state
+            }
+            Err(err) => {
+                let state = Self {
+                    state_load: StateLoadInfo::corrupt(format!("parse {}: {err}", path.display())),
+                    ..Self::default()
+                };
+                log::warn!(
+                    "state file is corrupt, using default with diagnostic: path={}, error={err}",
+                    path.display()
+                );
+                state
+            }
         }
     }
 
@@ -152,10 +243,15 @@ impl RunState {
             active_mounts,
             overlay_active_mounts,
             magic_active_mounts,
+            confirmed_active_mounts: Vec::new(),
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
             mount_stats,
             mode_stats,
+            state_load: StateLoadInfo::loaded(),
+            failed_stage: None,
+            rollback_status: None,
+            leftover_mount_targets: Vec::new(),
         }
     }
 
@@ -237,12 +333,16 @@ pub fn build_install_state(
     }
 }
 
-/// 由模块清单 + 配置 + 计划生成 `scan.ret` 条目。
+/// 由模块清单 + 配置 + 计划 + 最终成功挂载目标生成 `scan.ret` 条目。
+///
+/// `mounted_module_ids` 必须来自执行结果，而不是计划选择；
+/// 空集合表示“尚未挂载”或“全部回滚”。
 pub fn app_modules(
     modules: &[ModuleRecord],
     config: &Config,
     plan: &MountPlan,
     mount_errors: &[String],
+    mounted_module_ids: &BTreeSet<String>,
 ) -> Vec<AppModule> {
     modules
         .iter()
@@ -267,7 +367,7 @@ pub fn app_modules(
                 author: module.author.clone(),
                 description: module.description.clone(),
                 mode: mode.as_str().to_owned(),
-                is_mounted: module.mountable() && mode != Mode::Ignore,
+                is_mounted: mounted_module_ids.contains(module.id.as_str()),
                 enabled: !module.disabled,
                 source_path: module.source_path.to_string_lossy().into_owned(),
                 suggest_ignore: mount_error.is_some(),
@@ -276,6 +376,57 @@ pub fn app_modules(
             }
         })
         .collect()
+}
+
+/// 用最终成功挂载目标反推真正挂载成功的模块。
+///
+/// 计划里的 `overlay_module_ids`/`magic_module_ids` 只是“被选择”，
+/// 不能冒充 `is_mounted`。这里以执行阶段产出的目标列表为输入：
+/// - 目录级 overlay 目标读取该节点自身贡献；
+/// - shallow overlay 目标读取其整棵子树贡献；
+/// - magic 目标读取该节点自身的 magic 来源。
+pub fn mounted_module_ids_for_snapshot(
+    modules: &[ModuleRecord],
+    plan: &MountPlan,
+    overlay_targets: &[String],
+    magic_targets: &[String],
+) -> BTreeSet<String> {
+    let mut mounted = BTreeSet::new();
+
+    for target in overlay_targets {
+        if plan.overlay_files.contains_key(target) {
+            mounted.extend(
+                plan.tree
+                    .module_ids_for_subtree(Mode::Overlay, target)
+                    .into_iter()
+                    .map(ModuleId::to_string),
+            );
+        } else {
+            mounted.extend(
+                plan.tree
+                    .module_ids_for_target(Mode::Overlay, target)
+                    .into_iter()
+                    .map(ModuleId::to_string),
+            );
+        }
+    }
+
+    for target in magic_targets {
+        mounted.extend(
+            plan.tree
+                .module_ids_for_target(Mode::Magic, target)
+                .into_iter()
+                .map(ModuleId::to_string),
+        );
+    }
+
+    // 只报告本机实际扫描到的模块，过滤树中残留的无效/未扫描 id。
+    let scanned = modules
+        .iter()
+        .map(|module| module.id.as_str())
+        .collect::<BTreeSet<_>>();
+    mounted.retain(|module| scanned.contains(module.as_str()));
+    mounted
 }
 
 fn app_module_rules(config: &Config, module_id: &ModuleId) -> AppModuleRules {
@@ -374,7 +525,7 @@ fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppMod
         MountPlan::default()
     });
     let mount_errors = collect_mount_error_modules(&config.moduledir);
-    let mut snapshot = app_modules(modules, config, &plan, &mount_errors);
+    let mut snapshot = app_modules(modules, config, &plan, &mount_errors, &BTreeSet::new());
     for module in &mut snapshot {
         module.is_mounted = false;
     }
@@ -494,6 +645,7 @@ pub fn handle_clear_mount_errors() -> Result<()> {
     let removed = clear_mount_error_markers(&config.moduledir);
 
     let mut state = RunState::load_or_default();
+    state.state_load = StateLoadInfo::loaded();
     state.mount_error_modules = collect_mount_error_modules(&config.moduledir);
     state.mount_error_reasons = state
         .mount_error_modules
@@ -513,8 +665,12 @@ pub fn handle_clear_mount_errors() -> Result<()> {
         }
     }
 
-    println!("{}", serde_json::json!({ "ok": true, "removed": removed }));
+    println!("{}", clear_errors_payload(removed));
     Ok(())
+}
+
+fn clear_errors_payload(removed: usize) -> String {
+    serde_json::json!({ "ok": true, "removed": removed }).to_string()
 }
 
 fn clear_app_module_errors(modules: &mut [AppModule]) {
@@ -567,7 +723,13 @@ mod tests {
             },
         );
 
-        let list = app_modules(&modules, &config, &test_plan(), &[]);
+        let list = app_modules(
+            &modules,
+            &config,
+            &test_plan(),
+            &[],
+            &BTreeSet::from(["overlay_mod".to_owned(), "magic_mod".to_owned()]),
+        );
 
         assert_eq!(list[0].mode, "overlay");
         assert!(list[0].is_mounted);
@@ -587,7 +749,13 @@ mod tests {
             overlay_module_ids: vec![ModuleId::try_from("switchable").unwrap()],
             ..MountPlan::default()
         };
-        let mut snapshot = app_modules(&modules, &boot_config, &plan, &[]);
+        let mut snapshot = app_modules(
+            &modules,
+            &boot_config,
+            &plan,
+            &[],
+            &BTreeSet::from(["switchable".to_owned()]),
+        );
 
         let mut edited_config = Config::default();
         edited_config.rules.insert(
@@ -610,7 +778,13 @@ mod tests {
         let config = Config::default();
         let plan = MountPlan::default();
 
-        let list = app_modules(&modules, &config, &plan, &["bad_mod".to_owned()]);
+        let list = app_modules(
+            &modules,
+            &config,
+            &plan,
+            &["bad_mod".to_owned()],
+            &BTreeSet::new(),
+        );
 
         assert_eq!(
             list[0].mount_error,
@@ -650,6 +824,7 @@ mod tests {
             &Config::default(),
             &MountPlan::default(),
             &["bad_mod".to_owned()],
+            &BTreeSet::new(),
         );
 
         clear_app_module_errors(&mut list);
@@ -824,5 +999,249 @@ mod tests {
             state.mount_error_reasons["overlay_mod"],
             "mount_error marker present"
         );
+    }
+
+    #[test]
+    fn app_modules_mounted_flags_follow_executed_targets_not_plan() {
+        let modules = [record("overlay_mod"), record("magic_mod")];
+        let config = Config::default();
+        let plan = test_plan();
+        let mount_errors: &[String] = &[];
+
+        let planned = app_modules(&modules, &config, &plan, mount_errors, &BTreeSet::new());
+        assert!(!planned[0].is_mounted);
+        assert!(!planned[1].is_mounted);
+
+        let overlay_only = app_modules(
+            &modules,
+            &config,
+            &plan,
+            mount_errors,
+            &BTreeSet::from(["overlay_mod".to_owned()]),
+        );
+        assert!(overlay_only[0].is_mounted);
+        assert!(!overlay_only[1].is_mounted);
+    }
+
+    #[test]
+    fn mounted_module_ids_derive_from_executed_targets_in_the_shared_tree() {
+        let modules = [record("overlay_mod"), record("magic_mod")];
+        let mut plan = test_plan();
+        plan.tree.insert(
+            "/system",
+            crate::mount_tree::MountSource {
+                module_id: ModuleId::try_from("overlay_mod").unwrap(),
+                relative: "system".to_owned(),
+                source_path: PathBuf::from("/data/adb/modules/overlay_mod/system"),
+                file_type: crate::mount_tree::NodeFileType::Directory,
+                replace: false,
+                backend: Mode::Overlay,
+            },
+        );
+        plan.tree.insert(
+            "/system/etc/hosts",
+            crate::mount_tree::MountSource {
+                module_id: ModuleId::try_from("magic_mod").unwrap(),
+                relative: "system/etc/hosts".to_owned(),
+                source_path: PathBuf::from("/data/adb/modules/magic_mod/system/etc/hosts"),
+                file_type: crate::mount_tree::NodeFileType::RegularFile,
+                replace: false,
+                backend: Mode::Magic,
+            },
+        );
+
+        let mounted = mounted_module_ids_for_snapshot(
+            &modules,
+            &plan,
+            &["/system".to_owned()],
+            &["/system/etc/hosts".to_owned()],
+        );
+
+        assert_eq!(
+            mounted,
+            BTreeSet::from(["magic_mod".to_owned(), "overlay_mod".to_owned()])
+        );
+
+        let only_failed_targets = mounted_module_ids_for_snapshot(
+            &modules,
+            &plan,
+            &["/vendor".to_owned()],
+            &["/system/etc/absent".to_owned()],
+        );
+        assert!(only_failed_targets.is_empty());
+    }
+
+    #[test]
+    fn load_state_distinguishes_missing_from_corrupt() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-state-load-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let missing_path = dir.join("missing.json");
+        let missing = RunState::load_from(&missing_path);
+        assert_eq!(missing.state_load.kind, StateLoadKind::Missing);
+        assert!(!missing_path.exists());
+
+        let corrupt_path = dir.join("corrupt.json");
+        fs::write(&corrupt_path, "{not-json").unwrap();
+        let corrupt = RunState::load_from(&corrupt_path);
+        assert_eq!(corrupt.state_load.kind, StateLoadKind::Corrupt);
+        assert!(corrupt.state_load.detail.is_some());
+
+        fs::write(&corrupt_path, "{}").unwrap();
+        let loaded = RunState::load_from(&corrupt_path);
+        assert_eq!(loaded.state_load.kind, StateLoadKind::Loaded);
+        assert!(loaded.state_load.detail.is_none());
+
+        let io_path = dir.join("directory-as-state.json");
+        fs::create_dir_all(&io_path).unwrap();
+        let io_error = RunState::load_from(&io_path);
+        assert_eq!(io_error.state_load.kind, StateLoadKind::IoError);
+        assert!(io_error.state_load.detail.is_some());
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn status_wire_snapshot_is_stable_for_legacy_webui_clients() {
+        let state = RunState {
+            timestamp: 12,
+            pid: 34,
+            storage_mode: "ext4".to_owned(),
+            mount_point: PathBuf::new(),
+            overlay_modules: vec!["alpha".to_owned()],
+            magic_modules: vec!["beta".to_owned()],
+            skip_mount_modules: vec!["gamma".to_owned()],
+            active_mounts: vec!["/system".to_owned()],
+            overlay_active_mounts: vec!["/system".to_owned()],
+            magic_active_mounts: Vec::new(),
+            confirmed_active_mounts: vec!["/system".to_owned()],
+            mount_error_modules: Vec::new(),
+            mount_error_reasons: BTreeMap::new(),
+            mount_stats: MountStatistics {
+                total_mounts: 1,
+                successful_mounts: 1,
+                overlayfs_mounts: 1,
+                ..MountStatistics::default()
+            },
+            mode_stats: ModeStats {
+                overlayfs: 1,
+                magicmount: 1,
+            },
+            state_load: StateLoadInfo::loaded(),
+            failed_stage: Some("mount_execution".to_owned()),
+            rollback_status: Some("clean".to_owned()),
+            leftover_mount_targets: Vec::new(),
+        };
+
+        let json = serde_json::to_string_pretty(&state).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // Old WebUI normalization only reads the existing fields; new diagnostic
+        // fields are additive and must not rename or remove old keys.
+        assert_eq!(value["timestamp"], 12);
+        assert_eq!(value["active_mounts"][0], "/system");
+        assert_eq!(value["confirmed_active_mounts"][0], "/system");
+        assert_eq!(value["failed_stage"], "mount_execution");
+        assert_eq!(value["rollback_status"], "clean");
+        assert_eq!(value["state_load"]["kind"], "loaded");
+
+        let legacy: RunState =
+            serde_json::from_str(r#"{"timestamp":1,"active_mounts":["/system"]}"#).unwrap();
+        assert_eq!(legacy.state_load.kind, StateLoadKind::Missing);
+        assert_eq!(legacy.overlay_active_mounts, Vec::<String>::new());
+        assert_eq!(legacy.confirmed_active_mounts, Vec::<String>::new());
+    }
+
+    #[test]
+    fn status_wire_snapshot_distinguishes_failure_rollback_and_incomplete() {
+        let clean = RunState {
+            failed_stage: Some("mount_execution".to_owned()),
+            rollback_status: Some("clean".to_owned()),
+            ..RunState::default()
+        };
+        let incomplete = RunState {
+            failed_stage: Some("state_save".to_owned()),
+            rollback_status: Some("incomplete".to_owned()),
+            leftover_mount_targets: vec!["/system".to_owned()],
+            ..RunState::default()
+        };
+
+        let clean_json = serde_json::to_value(&clean).unwrap();
+        assert_eq!(clean_json["failed_stage"], "mount_execution");
+        assert_eq!(clean_json["rollback_status"], "clean");
+
+        let incomplete_json = serde_json::to_value(&incomplete).unwrap();
+        assert_eq!(incomplete_json["failed_stage"], "state_save");
+        assert_eq!(incomplete_json["rollback_status"], "incomplete");
+        assert_eq!(incomplete_json["leftover_mount_targets"][0], "/system");
+    }
+
+    #[test]
+    fn app_module_wire_snapshot_is_stable() {
+        let module = AppModule {
+            id: ModuleId::try_from("hosts").unwrap(),
+            name: "Hosts".to_owned(),
+            version: "1".to_owned(),
+            author: "author".to_owned(),
+            description: "description".to_owned(),
+            mode: "overlay".to_owned(),
+            is_mounted: true,
+            enabled: true,
+            source_path: "/data/adb/modules/hosts".to_owned(),
+            mount_error: None,
+            suggest_ignore: false,
+            rules: AppModuleRules {
+                default_mode: Some("magic".to_owned()),
+                paths: BTreeMap::from([("system/etc/hosts".to_owned(), "overlay".to_owned())]),
+            },
+        };
+
+        assert_eq!(
+            serde_json::to_string_pretty(&module).unwrap(),
+            r#"{
+  "id": "hosts",
+  "name": "Hosts",
+  "version": "1",
+  "author": "author",
+  "description": "description",
+  "mode": "overlay",
+  "is_mounted": true,
+  "enabled": true,
+  "source_path": "/data/adb/modules/hosts",
+  "mount_error": null,
+  "suggest_ignore": false,
+  "rules": {
+    "default_mode": "magic",
+    "paths": {
+      "system/etc/hosts": "overlay"
+    }
+  }
+}"#
+        );
+    }
+
+    #[test]
+    fn install_state_wire_snapshot_is_stable() {
+        let state = build_install_state(true, true, true, true, "KSU");
+
+        assert_eq!(
+            serde_json::to_string_pretty(&state).unwrap(),
+            r#"{
+  "installed": true,
+  "self_module": true,
+  "binary": true,
+  "config_exists": true,
+  "overlay_supported": true,
+  "mount_source": "KSU",
+  "compatible": true
+}"#
+        );
+    }
+
+    #[test]
+    fn clear_errors_wire_snapshot_is_stable() {
+        assert_eq!(clear_errors_payload(3), r#"{"ok":true,"removed":3}"#);
     }
 }

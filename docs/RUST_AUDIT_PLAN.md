@@ -68,6 +68,8 @@
 > PR9 实施后（本地边界）：workspace 测试通过（host 147+3+1=151）；Magic Linux-only 测试通过目标编译与 Clippy，x86_64 Linux 及 aarch64/armv7/x86_64 Android check 通过。本机没有 Linux 运行环境，因此 Linux 测试实际执行以推送后 CI 为准，Android 真机候选测试仍留作发布门禁。
 >
 > PR11 实施后（本地边界）：workspace 测试通过（host 165+3+1=169），fmt/clippy（host 与 Linux target all-targets）及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；`e2fsck`/`mke2fs`/`getprop`/`insmod`/`ksud`/`apd` 已迁入统一 runner，Linux runtime CI 与 Android 真机边界仍待推送后验证。
+>
+> PR12 实施后（本地边界）：workspace 测试通过（host 177+3+1=181），fmt/clippy（host 与 Linux target all-targets）及四个 Linux/Android 目标 check 通过；`scan.ret.is_mounted` 改为 mountinfo 确认结果，`status` 新增状态来源与失败/回滚诊断字段，CLI wire JSON 快照测试补齐。
 
 ### 4.1 验证证据等级
 
@@ -359,26 +361,28 @@
 
 ## 14. 阶段 7：P1 状态真实性与协议回归
 
+> 实施状态：PR12 已实现并通过本地全部门禁（host 177 项测试）；Linux runtime CI 与 Android 真机验证仍属后续门禁。
+
 ### 14.1 最终状态
 
-- [ ] `mounted_modules`、错误计数和 active mount 列表从最终执行结果生成。
-- [ ] 执行器统计与最终 mountinfo 分开保存，避免把“尝试成功”当成“仍然活跃”。
-- [ ] rollback 后重新计算状态，不沿用 rollback 前快照。
-- [ ] 状态中记录失败阶段、回滚状态和未清理资源列表。
-- [ ] `.old` 或历史启动数据与当前启动 session 明确区分。
+- [x] `mounted_modules`、错误计数和 active mount 列表从最终执行结果生成（`app_modules` 只接受最终 `mounted_module_ids`；pipeline 用 mountinfo 确认后的目标集合生成 `scan.ret`）。
+- [x] 执行器统计与最终 mountinfo 分开保存，避免把“尝试成功”当成“仍然活跃”（`mount_stats` 保留执行计数；`active_mounts`/`confirmed_active_mounts` 来自最终 mountinfo 确认）。
+- [x] rollback 后重新计算状态，不沿用 rollback 前快照（失败路径清空 active/confirmed 列表并重写 `scan.ret` 为全部未挂载）。
+- [x] 状态中记录失败阶段、回滚状态和未清理资源列表（新增 `failed_stage`、`rollback_status`、`leftover_mount_targets`）。
+- [x] `.old` 或历史启动数据与当前启动 session 明确区分（当前架构只写一个当前状态文件，不产生 `.old`；`timestamp`/`pid` 标识启动会话，未来若引入历史文件必须单独命名）。
 
 ### 14.2 稳定协议
 
-- [ ] 为所有 CLI JSON 建立 golden/snapshot 测试。
-- [ ] 新增字段保持向后兼容；删除或重命名字段需要迁移期。
-- [ ] `show-config` 与 `save-config` 对 null、缺失值、未知字段保持一致。
-- [ ] WebUI 不拥有第二套模块过滤或状态计算逻辑。
+- [x] 为所有 CLI JSON 建立 golden/snapshot 测试（config JSON/TOML、`modules` 条目、`status`、`install-state`、`clear-mount-errors`、`version` 均有快照断言）。
+- [x] 新增字段保持向后兼容；删除或重命名字段需要迁移期（`RunState` 新增字段全部 `#[serde(default)]` + `skip_serializing_if`，旧 state 文件反序列化测试覆盖）。
+- [x] `show-config` 与 `save-config` 对 null、缺失值、未知字段保持一致（PR4 起已有 patch/三态/未知字段测试）。
+- [x] WebUI 不拥有第二套模块过滤或状态计算逻辑（WebUI 只做防御性 normalize，不参与本次 Rust 侧变更）。
 
 ### 14.3 阶段验收
 
-- [ ] `status` 可以解释“挂载失败”“挂载成功但回滚”“回滚不完整”三种情况。
-- [ ] 旧 WebUI 对新增字段仍可正常运行。
-- [ ] 状态文件写入保持原子性。
+- [x] `status` 可以解释“挂载失败”“挂载成功但回滚”“回滚不完整”三种情况（`failed_stage` + `rollback_status` + `leftover_mount_targets`，并有 wire 快照测试）。
+- [x] 旧 WebUI 对新增字段仍可正常运行（新增字段为 additive；旧 JSON 无新字段时默认 `missing`/空列表）。
+- [x] 状态文件写入保持原子性（PR4 起 `atomic_write`；PR12 未改变该路径）。
 
 ## 15. 阶段 8：P2 代码复用与依赖收敛
 
@@ -538,8 +542,8 @@ git diff --check
 | 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | ✅ 已提交（含 G13） |
 | 9 | Magic executor 错误语义和测试 | 高 | 真机候选测试 | ✅ 已实现（真机候选验证留待发布门禁） |
 | 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | ⛔ 放弃（用户决定，2026-08-29） |
-| 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | ✅ 已实现（本地门禁通过，待提交/push/CI） |
-| 12 | 状态真实性、CLI snapshots、文档 | 中 | 执行器结果模型稳定 | 待执行 |
+| 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | ✅ 已提交（CI/真机待验） |
+| 12 | 状态真实性、CLI snapshots、文档 | 中 | 执行器结果模型稳定 | ✅ 已实现（本地门禁通过，待提交/push/CI） |
 | 13 | 计时与性能基线 | 低-中 | 核心修复完成 | 待执行 |
 
 高风险 PR 不应与依赖升级、格式化全仓库或无关重命名混合。
@@ -574,7 +578,7 @@ git diff --check
 - [x] 关键错误为可匹配的结构化类型，而不是只剩字符串（PR11：高风险路径已迁移，`Msg` 仅留低风险路径）。
 - [ ] 关键失败路径具备故障注入测试。
 - [ ] CI、Linux namespace 与 Android 真机验证边界被明确记录。
-- [ ] 稳定 CLI、JSON 字段和路径没有未经迁移的破坏性变化。
+- [x] 稳定 CLI、JSON 字段和路径没有未经迁移的破坏性变化（PR12：新字段 additive，wire 快照与 legacy 反序列化测试覆盖）。
 - [ ] 最终文档包含设备验证结果、已知限制和回退步骤。
 
 ## 22. 技能复核补遗（2026-08-29）
@@ -584,8 +588,8 @@ git diff --check
 
 ### 22.1 P0/P1 语义缺口
 
-- [ ] **G01（并入 14.1）**：`scan.ret` 的 `AppModule.is_mounted` 必须由最终执行结果/mountinfo 生成，禁止用计划选择冒充挂载成功。当前 `src/state.rs` 的 `app_modules()` 按 plan 计算该字段，执行失败后 WebUI 仍可能显示 `true`。
-- [ ] **G02（并入 14.1 / 7.1）**：`RunState::load_or_default` 区分状态文件缺失、损坏与 I/O 错误；损坏状态不得静默回退默认，至少产生可查询诊断。当前解析失败只 `log::warn` 后返回默认。
+- [x] **G01（并入 14.1）**：`scan.ret` 的 `AppModule.is_mounted` 必须由最终执行结果/mountinfo 生成，禁止用计划选择冒充挂载成功。PR12 起 `app_modules` 只接受 `mounted_module_ids`，pipeline 先经 mountinfo 确认目标、再反推模块，magic symlink/whiteout-only 模块由 executor stats 提供。
+- [x] **G02（并入 14.1 / 7.1）**：`RunState::load_or_default` 区分状态文件缺失、损坏与 I/O 错误；损坏状态不得静默回退默认，至少产生可查询诊断。PR12 新增 `state_load{kind,detail}`，`status` JSON 直接暴露 `missing/loaded/corrupt/io_error`。
 - [x] **G03（并入 8.1）**：`default_mode = "ignore"` 等"可解析但已废弃的值"不得静默规范化为 Overlay；已改为解析/patch/save 三处显式报错（PR4）。
 - [x] **G04（并入 8）**：`module_blacklist.toml` 语义已定为"缺失=无黑名单（正常），损坏/不可读=错误并 fail-closed"，测试已覆盖（PR4）。
 - [ ] **G05（并入 10.3 / 10.4 / 11.3）**：清理 helper 的 mountinfo 探测失败必须返回错误；清理后必须重新读 mountinfo 确认目标消失；禁止"未探测到 = 已清理"。当前 `is_mounted` 错误返回 `false`，会跳过 unmount 却返回 `Ok`。
@@ -600,7 +604,7 @@ git diff --check
 - [x] **G11（并入 13.2）**：统一子进程 runner 增加"子进程总超时 + I/O drain 独立超时"；把 `ksud`/`apd`（`module_status.rs`）也纳入 runner 范围。
 - [x] **G12（并入 13.1）**：用"瞬态/永久/需人工介入"三分类 + 穷尽 `classify()` match 编码重试分类，避免只靠文档约定。
 - [x] **G13（并入 10.5）**：故障注入用 `AtomicBool` 门控（与现有 KSU/xattr 缓存风格一致），不引入 cargo feature。
-- [ ] **G14（并入 14.2）**：serde 改名/删字段采用 `rename + alias` 与可解析 tombstone（现有 `legacy_custom_mounts` 已是范例）；内部错误 enum 与 CLI/WebUI 线格式错误分离。
+- [x] **G14（并入 14.2）**：serde 改名/删字段采用 `rename + alias` 与可解析 tombstone（现有 `legacy_custom_mounts` 已是范例）；内部错误 enum 与 CLI/WebUI 线格式错误分离。PR12 未删除/重命名字段，新增字段全部 additive；CLI JSON 继续由 `AppModule`/`RunState`/`InstallState` 等专用 wire 结构输出，内部 `Error` 不进入 JSON。
 - [x] **G15（并入 19 PR 6/7）**：`is_mounted -> Result<bool>` 与 `MountTransaction` 基础设施合并落地——可传播路径用查询 API，`Drop` 路径用 best-effort helper，避免 PR 6 单独触碰 5 个调用点中的 3 个 Drop 路径。
 
 ### 22.3 复核确认（已完成）
@@ -615,6 +619,7 @@ git diff --check
 - [x] PR8 完成后复验：fmt/clippy（host 与 Linux target all-targets）通过，workspace 测试通过（host 147+3+1=151），x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR9 本地复验：fmt、host/Linux-target clippy、workspace host 测试（147+3+1=151）、Magic Linux-only 测试编译，以及 x86_64 Linux 与 aarch64/armv7/x86_64 Android check 通过；Linux runtime CI 与 Android 真机验证边界未混淆。
 - [x] PR11 本地复验：fmt、host/Linux-target clippy、workspace host 测试（165+3+1=169），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；runner 单测覆盖 head+tail 上限、总超时、drain 超时、退出码策略与 env Debug 脱敏。
+- [x] PR12 本地复验：fmt、host/Linux-target clippy、workspace host 测试（177+3+1=181），以及 x86_64-linux-gnu/aarch64-linux-android/armv7-linux-androideabi/x86_64-linux-android check 通过；新增测试覆盖 mountinfo 反推模块挂载、状态来源三态、wire JSON 快照与回滚诊断字段。
 
 ## 23. 最终交付物
 

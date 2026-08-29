@@ -214,7 +214,6 @@ impl MountTree {
         });
     }
 
-    #[cfg(test)]
     pub fn find(&self, target: &str) -> Option<&MountNode> {
         let mut node = &self.root;
         for component in target
@@ -226,6 +225,39 @@ impl MountTree {
             node = node.children.get(component)?;
         }
         Some(node)
+    }
+
+    /// 成功挂载目标对应的模块贡献(只统计该目标节点自身来源)。
+    pub fn module_ids_for_target(&self, backend: Mode, target: &str) -> BTreeSet<&ModuleId> {
+        self.find(target)
+            .map(|node| {
+                node.sources
+                    .iter()
+                    .filter(|source| source.backend == backend)
+                    .map(|source| &source.module_id)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// 目录级挂载目标下所有后端贡献模块(用于 shallow overlay 等父目标)。
+    pub fn module_ids_for_subtree(&self, backend: Mode, target: &str) -> BTreeSet<&ModuleId> {
+        let mut ids = BTreeSet::new();
+        if let Some(node) = self.find(target) {
+            fn collect<'a>(node: &'a MountNode, backend: Mode, ids: &mut BTreeSet<&'a ModuleId>) {
+                ids.extend(
+                    node.sources
+                        .iter()
+                        .filter(|source| source.backend == backend)
+                        .map(|source| &source.module_id),
+                );
+                for child in node.children.values() {
+                    collect(child, backend, ids);
+                }
+            }
+            collect(node, backend, &mut ids);
+        }
+        ids
     }
 
     pub fn has_backend(&self, backend: Mode) -> bool {
@@ -374,6 +406,75 @@ mod tests {
                 .map(ModuleId::as_str)
                 .collect::<BTreeSet<_>>(),
             BTreeSet::from(["m"])
+        );
+    }
+
+    #[test]
+    fn target_module_ids_report_only_that_node_sources() {
+        let mut tree = MountTree::default();
+        tree.insert(
+            "/system/etc",
+            source(
+                "alpha",
+                "system/etc",
+                NodeFileType::Directory,
+                Mode::Overlay,
+            ),
+        );
+        tree.insert(
+            "/system/etc/hosts",
+            source(
+                "beta",
+                "system/etc/hosts",
+                NodeFileType::RegularFile,
+                Mode::Overlay,
+            ),
+        );
+
+        assert_eq!(
+            tree.module_ids_for_target(Mode::Overlay, "/system/etc")
+                .into_iter()
+                .map(ModuleId::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["alpha"])
+        );
+        assert_eq!(
+            tree.module_ids_for_target(Mode::Overlay, "/system/etc/hosts")
+                .into_iter()
+                .map(ModuleId::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["beta"])
+        );
+    }
+
+    #[test]
+    fn subtree_module_ids_collect_backend_descendants() {
+        let mut tree = MountTree::default();
+        tree.insert(
+            "/system/etc/a",
+            source(
+                "alpha",
+                "system/etc/a",
+                NodeFileType::RegularFile,
+                Mode::Overlay,
+            ),
+        );
+        tree.insert(
+            "/system/etc/b",
+            source(
+                "beta",
+                "system/etc/b",
+                NodeFileType::RegularFile,
+                Mode::Overlay,
+            ),
+        );
+
+        assert_eq!(
+            tree.module_ids_for_subtree(Mode::Overlay, "/system/etc")
+                .into_iter()
+                .map(ModuleId::as_str)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["alpha", "beta"])
         );
     }
 }
