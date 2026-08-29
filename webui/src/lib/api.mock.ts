@@ -44,7 +44,7 @@ export const MockAPI: AppAPI = {
       {
         id: "youtube-revanced",
         name: "YouTube ReVanced",
-        version: "18.20.39",
+        version: "v18.20.39",
         author: "ReVanced Team",
         description: "YouTube ReVanced Module",
         mode: "magic" as const,

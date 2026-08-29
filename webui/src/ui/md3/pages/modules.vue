@@ -141,7 +141,7 @@ onMounted(() => moduleStore.ensureModulesLoaded());
             <span class="module-name">{{ module.name || module.id }}</span>
             <span v-if="expanded[module.id]" class="module-id">{{ module.id }}</span>
             <span class="module-meta">
-              <span class="version-badge">v{{ module.version || "-" }}</span>
+              <span class="version-badge">{{ module.version || "-" }}</span>
               <span>{{ module.author || t("modules.unknownLabel") }}</span>
             </span>
           </span>

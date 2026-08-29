@@ -151,7 +151,7 @@ onMounted(() => moduleStore.ensureModulesLoaded());
         <MiuixBasicComponent
           class="module-header"
           :title="module.name || module.id"
-          :summary="`${module.id} · v${module.version} · ${module.author}`"
+          :summary="`${module.id} · ${module.version || '-'} · ${module.author}`"
           clickable
           role="button"
           tabindex="0"
