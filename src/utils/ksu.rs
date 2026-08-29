@@ -77,6 +77,9 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
 
 /// 提交尝试卸载列表(`MNT_DETACH`),流水线结束后调用。
 pub fn commit_unmount_list() -> Result<()> {
+    if crate::sys::faults::should_fail_ksu_commit() {
+        return Err(Error::msg("injected KernelSU try-umount commit failure"));
+    }
     if !is_active() {
         return Ok(());
     }
@@ -92,4 +95,42 @@ pub fn commit_unmount_list() -> Result<()> {
         .umount()
         .map_err(|err| Error::msg(format!("commit KernelSU try-umount list: {err}")))?;
     Ok(())
+}
+
+/// 清空内核 try-umount 列表与本进程注册历史,仅用于失败回滚。
+pub fn clear_unmount_list() -> Result<()> {
+    if !is_active() {
+        return Ok(());
+    }
+
+    TRY_UMOUNT_LIST
+        .get_or_init(|| Mutex::new(TryUmount::new()))
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .wipe()
+        .map_err(|err| Error::msg(format!("wipe KernelSU try-umount list: {err}")))?;
+
+    if let Some(history) = REGISTERED_PATHS.get() {
+        history
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
+    }
+    Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ksu_commit_failure_injection_is_one_shot() {
+        crate::sys::faults::enable_ksu_commit_failure();
+        let err = commit_unmount_list().unwrap_err();
+        assert!(err.to_string().contains("injected KernelSU"), "{err}");
+        crate::sys::faults::reset();
+
+        assert!(commit_unmount_list().is_ok());
+        assert!(clear_unmount_list().is_ok());
+    }
 }

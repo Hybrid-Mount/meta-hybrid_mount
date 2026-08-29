@@ -88,8 +88,14 @@ pub struct RunState {
 
 impl RunState {
     pub fn save(&self) -> Result<()> {
+        self.save_to(Path::new(defs::STATE_PATH))
+    }
+
+    pub(crate) fn save_to(&self, path: &Path) -> Result<()> {
+        if crate::sys::faults::should_fail_state_save() {
+            return Err(crate::errors::Error::msg("injected state save failure"));
+        }
         let json = serde_json::to_string_pretty(self)?;
-        let path = Path::new(defs::STATE_PATH);
         crate::sys::fs::atomic_write(path, json.as_bytes())
     }
 
@@ -704,6 +710,25 @@ mod tests {
         let invalid_json = json.replace(r#""id":"hosts""#, r#""id":"1bad""#);
         let err = serde_json::from_str::<AppModule>(&invalid_json).unwrap_err();
         assert!(err.to_string().contains("Invalid module ID"), "{err}");
+    }
+
+    #[test]
+    fn state_save_failure_injection_is_one_shot() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-state-fault-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("state.json");
+        let state = RunState::default();
+
+        crate::sys::faults::enable_state_save_failure();
+        let err = state.save_to(&path).unwrap_err();
+        assert!(err.to_string().contains("injected state save"), "{err}");
+        crate::sys::faults::reset();
+
+        state.save_to(&path).unwrap();
+        assert!(path.exists());
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

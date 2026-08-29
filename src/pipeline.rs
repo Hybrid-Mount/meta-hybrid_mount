@@ -110,51 +110,22 @@ pub fn staged_overlay_path(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-struct OverlayStorageGuard {
-    handle: crate::storage::StorageHandle,
-    cleanup: bool,
+#[derive(Debug, Default)]
+struct MountedTargets {
+    paths: Vec<String>,
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-impl OverlayStorageGuard {
-    fn new(handle: crate::storage::StorageHandle, cleanup: bool) -> Self {
-        Self { handle, cleanup }
-    }
-
-    fn handle(&self) -> &crate::storage::StorageHandle {
-        &self.handle
-    }
-
-    fn retain(&mut self) {
-        self.cleanup = false;
-    }
-
-    fn teardown(mut self) -> Result<()> {
-        if !self.cleanup {
-            return Ok(());
-        }
-
-        crate::storage::teardown(&self.handle)?;
-        self.cleanup = false;
-        Ok(())
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl Drop for OverlayStorageGuard {
-    fn drop(&mut self) {
-        if !self.cleanup {
-            log::info!(
-                "storage teardown skipped: mode={}, mount_point={}, reason=disable_umount",
-                self.handle.mode().as_str(),
-                self.handle.mount_point().display()
-            );
-            return;
-        }
-        if let Err(err) = crate::storage::teardown(&self.handle) {
-            log::warn!("storage teardown failed: {err}");
-        }
-    }
+fn register_mounted_target(
+    transaction: &mut crate::sys::transaction::MountTransaction<'_>,
+    mounted: &mut MountedTargets,
+    target: &str,
+) {
+    let path = PathBuf::from(target);
+    transaction.register_rollback_only(format!("mount:{target}"), move || {
+        crate::sys::mount::rollback_mount_target(&path)
+    });
+    mounted.paths.push(target.to_owned());
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -194,6 +165,12 @@ impl MagicStagingGuard {
             cleanup_tmp_root(&self.path)?;
         } else {
             cleanup_tmp_root_best_effort(&self.path)?;
+        }
+        if crate::sys::faults::should_fail_staging_remove() {
+            return Err(Error::msg(format!(
+                "injected magic staging remove failure: path={}",
+                self.path.display()
+            )));
         }
         match fs::remove_dir_all(&self.path) {
             Ok(()) => {}
@@ -319,6 +296,193 @@ fn prepare_overlay_storage(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+type MountExecutionResult = (usize, usize, Vec<String>, exec::MagicMountStats);
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn execute_mount_phases(
+    config: &Config,
+    modules: &[ModuleRecord],
+    plan: &mut MountPlan,
+    mount_source: &str,
+    state: &mut RunState,
+    transaction: &mut crate::sys::transaction::MountTransaction<'_>,
+    mounted: &mut MountedTargets,
+) -> Result<MountExecutionResult> {
+    let needs_overlay_storage = !plan.overlay_ops.is_empty() || !plan.overlay_files.is_empty();
+    let needs_runtime_temp = needs_overlay_storage || !plan.magic_module_ids.is_empty();
+
+    let mut runtime_temp = needs_runtime_temp
+        .then(crate::sys::temp::RuntimeTempDir::create)
+        .transpose()?;
+    let transient_root = runtime_temp
+        .as_ref()
+        .map(|session| session.path().to_path_buf());
+    let retain_runtime = config.disable_umount && needs_overlay_storage;
+    if retain_runtime && let Some(session) = runtime_temp.as_mut() {
+        session.keep();
+    }
+    if let Some(session) = runtime_temp.take() {
+        if retain_runtime {
+            transaction
+                .register_retainable("runtime_temp", move || session.cleanup_unconditional());
+        } else {
+            transaction.register("runtime_temp", move || session.cleanup_unconditional());
+        }
+    }
+
+    let storage_root = if needs_overlay_storage {
+        let session_root = transient_root
+            .as_deref()
+            .ok_or_else(|| Error::msg("overlay storage requires a runtime temporary session"))?;
+        let mount_base = crate::sys::temp::create_random_dir(session_root)?;
+        let force_ext4 = matches!(config.overlay_mode, OverlayMode::Ext4);
+        let handle = crate::storage::setup(
+            &mount_base,
+            &config.moduledir,
+            force_ext4,
+            mount_source,
+            config.disable_umount,
+        )
+        .map_err(|err| {
+            Error::msg(format!(
+                "initialize overlay storage: requested_mode={}, mount_point={}: {err}",
+                config.overlay_mode.as_str(),
+                mount_base.display()
+            ))
+        })?;
+        let storage_mode = handle.mode().as_str().to_owned();
+        let storage_root = handle.mount_point().to_path_buf();
+        transaction
+            .register_retainable("overlay_storage", move || crate::storage::teardown(&handle));
+        state.storage_mode = storage_mode;
+        state.mount_point = storage_root.clone();
+        state.save()?;
+        log::info!(
+            "storage state saved: requested_mode={}, actual_mode={}, mount_point={}",
+            config.overlay_mode.as_str(),
+            state.storage_mode,
+            state.mount_point.display()
+        );
+        prepare_overlay_storage(modules, plan, &storage_root)?;
+        Some(storage_root)
+    } else {
+        log::info!("overlay storage skipped: reason=no_overlay_operations");
+        None
+    };
+
+    let magic_work_dir = if plan.magic_module_ids.is_empty() {
+        log::info!("magic staging skipped: reason=no_magic_modules");
+        None
+    } else {
+        let session_root = transient_root
+            .as_deref()
+            .ok_or_else(|| Error::msg("magic mount requires a runtime temporary session"))?;
+        let staging_path = crate::sys::temp::create_random_dir(session_root)?;
+        let staging = MagicStagingGuard::mount(staging_path.clone(), mount_source)?;
+        let staging_path = staging.path().to_path_buf();
+        transaction.register("magic_staging", move || staging.cleanup());
+        Some(crate::sys::temp::create_random_dir(&staging_path)?)
+    };
+
+    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts) = mount_overlay_phase(
+        plan,
+        config,
+        storage_root.as_deref(),
+        transient_root.as_deref(),
+        mount_source,
+        transaction,
+        mounted,
+    )?;
+    let magic_stats = mount_magic_phase(
+        config,
+        plan,
+        mount_source,
+        magic_work_dir.as_deref(),
+        transaction,
+        mounted,
+    )?;
+
+    crate::utils::ksu::commit_unmount_list()?;
+
+    Ok((
+        overlay_dir_mounts,
+        shallow_overlay_mounts,
+        active_mounts,
+        magic_stats,
+    ))
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn verify_targets_restored(
+    baseline: &crate::sys::mountinfo::MountSnapshot,
+    mounted: &MountedTargets,
+) -> Result<()> {
+    let current = crate::sys::mountinfo::MountSnapshot::read()?;
+    let mut mismatches = Vec::new();
+
+    for target in &mounted.paths {
+        let root = Path::new(target);
+        let before = baseline.subtree_ids(root);
+        let after = current.subtree_ids(root);
+
+        for (path, ids) in &after {
+            if before.get(path) != Some(ids) {
+                mismatches.push(format!("leftover={}", path.display()));
+            }
+        }
+        for path in before.keys() {
+            if !after.contains_key(path) {
+                mismatches.push(format!("missing={}", path.display()));
+            }
+        }
+    }
+
+    if mismatches.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::msg(format!(
+            "mountinfo differs from pre-execution baseline: {}",
+            mismatches.join(", ")
+        )))
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rollback_mount_pipeline(
+    transaction: crate::sys::transaction::MountTransaction<'_>,
+    mounted: &MountedTargets,
+    baseline: &crate::sys::mountinfo::MountSnapshot,
+) {
+    let report = transaction.rollback();
+    for failure in &report.failures {
+        log::error!(
+            "rollback action failed: action={}, error={}",
+            failure.label,
+            failure.error
+        );
+    }
+    if let Err(err) = verify_targets_restored(baseline, mounted) {
+        log::error!("rollback verification failed: {err}");
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn persist_mount_failure_state(state: &mut RunState) {
+    state.mount_point = PathBuf::new();
+    state.active_mounts.clear();
+    state.overlay_active_mounts.clear();
+    state.magic_active_mounts.clear();
+    state.mount_stats = MountStatistics {
+        total_mounts: 1,
+        failed_mounts: 1,
+        ..MountStatistics::default()
+    };
+    if let Err(state_err) = state.save() {
+        log::warn!("failed to persist mount failure statistics: {state_err}");
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn run_mount_pipeline_impl() -> Result<()> {
     utils::ksu::init();
 
@@ -423,119 +587,22 @@ fn run_mount_pipeline_impl() -> Result<()> {
         state.magic_modules.len()
     );
 
-    let execution_result: Result<_> = (|| {
-        let needs_runtime_temp = !plan.overlay_ops.is_empty()
-            || !plan.overlay_files.is_empty()
-            || !plan.magic_module_ids.is_empty();
-        let mut runtime_temp = needs_runtime_temp
-            .then(crate::sys::temp::RuntimeTempDir::create)
-            .transpose()?;
-        let transient_root = runtime_temp
-            .as_ref()
-            .map(|session| session.path().to_path_buf());
-
-        let mut overlay_storage = if plan.overlay_ops.is_empty() && plan.overlay_files.is_empty() {
-            log::info!("overlay storage skipped: reason=no_overlay_operations");
-            None
-        } else {
-            let session = runtime_temp.as_ref().ok_or_else(|| {
-                Error::msg("overlay storage requires a runtime temporary session")
-            })?;
-            let mount_base = session.allocate_dir()?;
-            let force_ext4 = matches!(config.overlay_mode, OverlayMode::Ext4);
-            let handle = crate::storage::setup(
-                &mount_base,
-                &config.moduledir,
-                force_ext4,
-                &mount_source,
-                config.disable_umount,
-            )
-            .map_err(|err| {
-                Error::msg(format!(
-                    "initialize overlay storage: requested_mode={}, mount_point={}: {err}",
-                    config.overlay_mode.as_str(),
-                    mount_base.display()
-                ))
-            })?;
-            let guard = OverlayStorageGuard::new(handle, true);
-            state.storage_mode = guard.handle().mode().as_str().to_owned();
-            state.mount_point = guard.handle().mount_point().to_path_buf();
-            state.save()?;
-            log::info!(
-                "storage state saved: requested_mode={}, actual_mode={}, mount_point={}",
-                config.overlay_mode.as_str(),
-                state.storage_mode,
-                state.mount_point.display()
-            );
-            prepare_overlay_storage(&modules, &mut plan, guard.handle().mount_point())?;
-            Some(guard)
-        };
-
-        let magic_staging = if plan.magic_module_ids.is_empty() {
-            log::info!("magic staging skipped: reason=no_magic_modules");
-            None
-        } else {
-            let session = runtime_temp
-                .as_ref()
-                .ok_or_else(|| Error::msg("magic mount requires a runtime temporary session"))?;
-            let path = session.allocate_dir()?;
-            Some(MagicStagingGuard::mount(path, &mount_source)?)
-        };
-        let magic_work_dir = magic_staging
-            .as_ref()
-            .map(|staging| crate::sys::temp::create_random_dir(staging.path()))
-            .transpose()?;
-        let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts) = mount_overlay_phase(
-            &plan,
-            &config,
-            overlay_storage
-                .as_ref()
-                .map(|storage| storage.handle().mount_point()),
-            transient_root.as_deref(),
-            &mount_source,
-        )?;
-        let magic_stats =
-            mount_magic_phase(&config, &plan, &mount_source, magic_work_dir.as_deref())?;
-
-        // Commit the KernelSU try-unmount list. This registers future cleanup;
-        // it does not unmount the entries immediately.
-        utils::ksu::commit_unmount_list()?;
-
-        if let Some(staging) = magic_staging {
-            staging.cleanup()?;
-        }
-
-        let retain_storage = config.disable_umount && overlay_storage.is_some();
-        if retain_storage {
-            if let Some(storage) = overlay_storage.as_mut() {
-                storage.retain();
-            }
-            runtime_temp
-                .as_mut()
-                .ok_or_else(|| Error::msg("retained overlay storage requires a runtime session"))?
-                .keep();
-        } else {
-            if let Some(storage) = overlay_storage.take() {
-                storage.teardown()?;
-            }
-            state.mount_point = PathBuf::new();
-            if let Some(session) = runtime_temp.take() {
-                session.cleanup()?;
-            }
-        }
-        drop(overlay_storage);
-        drop(runtime_temp);
-
-        Ok((
-            overlay_dir_mounts,
-            shallow_overlay_mounts,
-            active_mounts,
-            magic_stats,
-        ))
-    })();
-
+    let baseline = crate::sys::mountinfo::MountSnapshot::read()?;
+    let mut transaction = crate::sys::transaction::MountTransaction::new();
+    transaction.register_rollback_only("ksu_try_umount_list", || {
+        crate::utils::ksu::clear_unmount_list()
+    });
+    let mut mounted = MountedTargets::default();
     let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats) =
-        match execution_result {
+        match execute_mount_phases(
+            &config,
+            &modules,
+            &mut plan,
+            &mount_source,
+            &mut state,
+            &mut transaction,
+            &mut mounted,
+        ) {
             Ok(result) => result,
             Err(err) => {
                 log::error!(
@@ -543,19 +610,20 @@ fn run_mount_pipeline_impl() -> Result<()> {
                     plan.overlay_module_ids.join(","),
                     plan.magic_module_ids.join(",")
                 );
-                state.mount_point = PathBuf::new();
-                state.mount_stats.total_mounts = 1;
-                state.mount_stats.failed_mounts = 1;
-                if let Err(state_err) = state.save() {
-                    log::warn!("failed to persist mount failure statistics: {state_err}");
-                }
+                rollback_mount_pipeline(transaction, &mounted, &baseline);
+                persist_mount_failure_state(&mut state);
                 return Err(err);
             }
         };
 
     let mount_error_modules = crate::state::collect_mount_error_modules(&config.moduledir);
     let app_modules = app_modules(&modules, &config, &plan, &mount_error_modules);
-    write_scan_ret(&app_modules)?;
+    if let Err(err) = write_scan_ret(&app_modules) {
+        log::error!("module snapshot save failed, rolling back mounts: {err}");
+        rollback_mount_pipeline(transaction, &mounted, &baseline);
+        persist_mount_failure_state(&mut state);
+        return Err(err);
+    }
 
     let mount_error_reasons = mount_error_modules
         .iter()
@@ -574,7 +642,24 @@ fn run_mount_pipeline_impl() -> Result<()> {
     );
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;
-    state.save()?;
+    if !config.disable_umount {
+        state.mount_point = PathBuf::new();
+    }
+    if let Err(err) = state.save() {
+        log::error!("final state save failed, rolling back mounts: {err}");
+        rollback_mount_pipeline(transaction, &mounted, &baseline);
+        persist_mount_failure_state(&mut state);
+        return Err(err);
+    }
+
+    if let Err(err) = transaction.commit(config.disable_umount) {
+        log::error!("mount transaction commit failed: {err}");
+        if let Err(verify_err) = verify_targets_restored(&baseline, &mounted) {
+            log::error!("post-commit rollback verification failed: {verify_err}");
+        }
+        persist_mount_failure_state(&mut state);
+        return Err(err);
+    }
 
     crate::module_status::update_description(
         &state.storage_mode,
@@ -902,46 +987,6 @@ fn build_overlay_execution_plan(plan: &MountPlan) -> Result<OverlayExecutionPlan
     Ok((direct_operations, shallow))
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", test))]
-fn overlay_rollback_order(active_mounts: &[String]) -> Vec<&Path> {
-    // A later parent overlay can hide an earlier child overlay, and the same
-    // target can legitimately be overlaid more than once. Peel mounts in the
-    // exact reverse application order so each earlier layer becomes visible
-    // before its own rollback attempt. Do not sort or deduplicate this list.
-    active_mounts
-        .iter()
-        .rev()
-        .map(String::as_str)
-        .map(Path::new)
-        .collect()
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn rollback_overlay_mounts(active_mounts: &[String]) -> Result<()> {
-    let snapshot = crate::sys::mountinfo::MountSnapshot::read()
-        .map_err(|err| Error::msg(format!("read mountinfo for overlay rollback: {err}")))?;
-    let mut failures = Vec::new();
-    for target in overlay_rollback_order(active_mounts) {
-        if !snapshot.contains(target) {
-            continue;
-        }
-        if let Err(err) = unmount(target, UnmountFlags::DETACH) {
-            failures.push(format!("{}: {err}", target.display()));
-        } else {
-            log::info!("overlay rollback complete: target={}", target.display());
-        }
-    }
-
-    if failures.is_empty() {
-        Ok(())
-    } else {
-        Err(Error::msg(format!(
-            "overlay rollback incomplete: {}",
-            failures.join("; ")
-        )))
-    }
-}
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_overlay_phase(
     plan: &MountPlan,
@@ -949,100 +994,105 @@ fn mount_overlay_phase(
     storage_root: Option<&Path>,
     transient_root: Option<&Path>,
     effective_mount_source: &str,
+    transaction: &mut crate::sys::transaction::MountTransaction<'_>,
+    mounted: &mut MountedTargets,
 ) -> Result<(usize, usize, Vec<String>)> {
-    use crate::overlayfs::overlayfs::mount_overlay;
+    use crate::overlayfs::overlayfs::{MountEffect, mount_overlay};
 
     let mut overlay_dir_mounts = 0;
     let mut shallow_overlay_mounts = 0;
     let mut active_mounts = Vec::new();
+    let mut on_effect = |effect: MountEffect| match effect {
+        MountEffect::Target(target) => register_mounted_target(transaction, mounted, &target),
+        MountEffect::Staging(path) => transaction
+            .register("intermediate_overlay_staging", move || {
+                crate::overlayfs::overlayfs::cleanup_staging_mount(path)
+            }),
+    };
 
-    let phase_result = (|| -> Result<()> {
-        let (direct_operations, shallow) = build_overlay_execution_plan(plan)?;
+    let (direct_operations, shallow) = build_overlay_execution_plan(plan)?;
 
-        for operation_index in direct_operations {
-            let op = &plan.overlay_ops[operation_index];
-            let lowerdirs = op
-                .lowerdirs
-                .iter()
-                .map(|path| path.to_string_lossy().into_owned())
-                .collect::<Vec<_>>();
+    for operation_index in direct_operations {
+        let op = &plan.overlay_ops[operation_index];
+        let lowerdirs = op
+            .lowerdirs
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
 
-            let staging_root = transient_root
-                .ok_or_else(|| Error::msg("overlay mount requires a runtime temporary session"))?;
-            let mount_source = overlay_mount_source(&op.target, effective_mount_source);
-            let register_unmountable = !config.disable_umount;
+        let staging_root = transient_root
+            .ok_or_else(|| Error::msg("overlay mount requires a runtime temporary session"))?;
+        let mount_source = overlay_mount_source(&op.target, effective_mount_source);
+        let register_unmountable = !config.disable_umount;
+        log::debug!(
+            "overlay apply start: index={}, partition={}, target={}, source={}, layers={}, register_unmountable={}",
+            operation_index,
+            op.partition,
+            op.target,
+            mount_source,
+            lowerdirs.len(),
+            register_unmountable
+        );
+        for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
             log::debug!(
-                "overlay apply start: index={}, partition={}, target={}, source={}, layers={}, register_unmountable={}",
+                "overlay apply lowerdir: operation={}, layer={}, path={}, exists={}, is_dir={}, mount={}",
                 operation_index,
-                op.partition,
-                op.target,
-                mount_source,
-                lowerdirs.len(),
-                register_unmountable
+                layer_index,
+                lowerdir.display(),
+                lowerdir.exists(),
+                lowerdir.is_dir(),
+                describe_path_mount(lowerdir)
             );
-            for (layer_index, lowerdir) in op.lowerdirs.iter().enumerate() {
-                log::debug!(
-                    "overlay apply lowerdir: operation={}, layer={}, path={}, exists={}, is_dir={}, mount={}",
-                    operation_index,
-                    layer_index,
-                    lowerdir.display(),
-                    lowerdir.exists(),
-                    lowerdir.is_dir(),
-                    describe_path_mount(lowerdir)
-                );
-            }
-            mount_overlay(
-                &op.target,
-                &lowerdirs,
-                None,
-                None,
-                staging_root,
-                mount_source,
-                register_unmountable,
-            )
-            .map_err(|err| {
-                Error::msg(format!(
-                    "overlay mount failed: partition={}, target={}: {err}",
-                    op.partition, op.target
-                ))
-            })?;
-            if register_unmountable {
-                utils::ksu::send_unmountable(Path::new(&op.target));
-            }
-            log::debug!(
-                "overlay apply complete: index={}, target={}, target_mount={}",
-                operation_index,
-                op.target,
-                describe_path_mount(Path::new(&op.target))
-            );
-            active_mounts.push(op.target.clone());
-            overlay_dir_mounts += 1;
         }
+        if crate::sys::faults::should_fail_next_overlay_mount() {
+            return Err(Error::msg(format!(
+                "injected overlay mount failure: target={}",
+                op.target
+            )));
+        }
+        mount_overlay(
+            &op.target,
+            &lowerdirs,
+            None,
+            None,
+            staging_root,
+            mount_source,
+            register_unmountable,
+            &mut on_effect,
+        )
+        .map_err(|err| {
+            Error::msg(format!(
+                "overlay mount failed: partition={}, target={}: {err}",
+                op.partition, op.target
+            ))
+        })?;
+        if register_unmountable {
+            utils::ksu::send_unmountable(Path::new(&op.target));
+        }
+        log::debug!(
+            "overlay apply complete: index={}, target={}, target_mount={}",
+            operation_index,
+            op.target,
+            describe_path_mount(Path::new(&op.target))
+        );
+        active_mounts.push(op.target.clone());
+        overlay_dir_mounts += 1;
+    }
 
-        if !shallow.is_empty() {
-            let storage_root = storage_root
-                .ok_or_else(|| Error::msg("shallow overlays require prepared overlay storage"))?;
-            shallow_overlay_mounts = mount_overlay_files(
-                &shallow,
-                config,
-                storage_root,
-                transient_root.ok_or_else(|| {
-                    Error::msg("shallow overlay requires a runtime temporary session")
-                })?,
-                effective_mount_source,
-                &mut active_mounts,
-            )?;
-        }
-        Ok(())
-    })();
-
-    if let Err(err) = phase_result {
-        if let Err(rollback_err) = rollback_overlay_mounts(&active_mounts) {
-            log::error!(
-                "overlay rollback incomplete: original_error={err}, rollback_error={rollback_err}"
-            );
-        }
-        return Err(err);
+    if !shallow.is_empty() {
+        let storage_root = storage_root
+            .ok_or_else(|| Error::msg("shallow overlays require prepared overlay storage"))?;
+        shallow_overlay_mounts = mount_overlay_files(
+            &shallow,
+            config,
+            storage_root,
+            transient_root.ok_or_else(|| {
+                Error::msg("shallow overlay requires a runtime temporary session")
+            })?,
+            effective_mount_source,
+            &mut active_mounts,
+            &mut on_effect,
+        )?;
     }
 
     active_mounts.sort();
@@ -1058,6 +1108,7 @@ fn mount_overlay_files(
     transient_root: &Path,
     effective_mount_source: &str,
     active_mounts: &mut Vec<String>,
+    on_effect: &mut dyn FnMut(crate::overlayfs::overlayfs::MountEffect),
 ) -> Result<usize> {
     use crate::overlayfs::overlayfs::mount_overlay;
 
@@ -1101,6 +1152,12 @@ fn mount_overlay_files(
 
         let mount_source = overlay_mount_source(&target_string, effective_mount_source);
         let register_unmountable = !config.disable_umount;
+        if crate::sys::faults::should_fail_next_overlay_mount() {
+            return Err(Error::msg(format!(
+                "injected shallow overlay mount failure: target={}",
+                target.display()
+            )));
+        }
         mount_overlay(
             &target_string,
             &lowerdirs,
@@ -1109,6 +1166,7 @@ fn mount_overlay_files(
             transient_root,
             mount_source,
             register_unmountable,
+            on_effect,
         )
         .map_err(|err| {
             Error::msg(format!(
@@ -1194,6 +1252,8 @@ fn mount_magic_phase(
     plan: &MountPlan,
     mount_source: &str,
     work_dir: Option<&Path>,
+    transaction: &mut crate::sys::transaction::MountTransaction<'_>,
+    mounted: &mut MountedTargets,
 ) -> Result<exec::MagicMountStats> {
     if plan.magic_module_ids.is_empty() {
         return Ok(exec::MagicMountStats::default());
@@ -1205,11 +1265,13 @@ fn mount_magic_phase(
         plan.magic_module_ids.join(","),
         !config.disable_umount
     );
+    let mut on_mount = |target: &str| register_mounted_target(transaction, mounted, target);
     let stats = exec::magic_mount(
         &plan.tree,
         mount_source,
         work_dir.ok_or_else(|| Error::msg("magic mount work directory is unavailable"))?,
         !config.disable_umount,
+        &mut on_mount,
     )?;
     log::info!(
         "magic mount phase complete: files={}, symlinks={}, ignored={}",
@@ -1387,24 +1449,6 @@ mod tests {
     }
 
     #[test]
-    fn overlay_rollback_reverses_application_order_without_deduplication() {
-        let active_mounts = vec![
-            "/product/etc".to_owned(),
-            "/product".to_owned(),
-            "/product".to_owned(),
-        ];
-
-        assert_eq!(
-            overlay_rollback_order(&active_mounts),
-            vec![
-                Path::new("/product"),
-                Path::new("/product"),
-                Path::new("/product/etc"),
-            ]
-        );
-    }
-
-    #[test]
     fn default_mount_source_follows_the_active_root_backend() {
         assert_eq!(effective_mount_source("KSU", true), "KSU");
         assert_eq!(effective_mount_source("KSU", false), "APatch");
@@ -1421,6 +1465,85 @@ mod tests {
     fn regular_overlay_partition_keeps_configured_mount_source() {
         assert_eq!(overlay_mount_source("/system", "KSU"), "KSU");
         assert_eq!(overlay_mount_source("/product", "APatch"), "APatch");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn injected_overlay_failure_rolls_back_previous_mount_target() {
+        use crate::plan::OverlayOperation;
+
+        if unsafe { libc::unshare(libc::CLONE_NEWNS) } != 0 {
+            eprintln!(
+                "skipping overlay rollback test: unshare failed: {}",
+                std::io::Error::last_os_error()
+            );
+            return;
+        }
+
+        let root = std::env::temp_dir().join(format!(
+            "hybrid-mount-overlay-rollback-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let first = root.join("first");
+        let second = root.join("second");
+        let lower = root.join("lower");
+        let staging = root.join("staging");
+        std::fs::create_dir_all(&first).unwrap();
+        std::fs::create_dir_all(&second).unwrap();
+        std::fs::create_dir_all(&lower).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+
+        let mut plan = MountPlan::default();
+        plan.overlay_ops.push(OverlayOperation {
+            partition: "system".to_owned(),
+            target: first.to_string_lossy().into_owned(),
+            lowerdirs: vec![lower.clone()],
+        });
+        plan.overlay_ops.push(OverlayOperation {
+            partition: "system".to_owned(),
+            target: second.to_string_lossy().into_owned(),
+            lowerdirs: vec![lower.clone()],
+        });
+
+        let mut transaction = crate::sys::transaction::MountTransaction::new();
+        let mut mounted = MountedTargets::default();
+        crate::sys::faults::enable_overlay_mount_failure_after(1);
+        let result = mount_overlay_phase(
+            &plan,
+            &Config::default(),
+            None,
+            Some(&staging),
+            "overlay",
+            &mut transaction,
+            &mut mounted,
+        );
+        crate::sys::faults::reset();
+
+        match result {
+            Err(err) if err.to_string().contains("injected overlay mount failure") => {}
+            Err(err) => {
+                eprintln!("skipping overlay rollback assertion: {err}");
+                let _ = std::fs::remove_dir_all(&root);
+                return;
+            }
+            Ok(_) => panic!("injected overlay mount failure was not triggered"),
+        }
+
+        assert_eq!(mounted.paths.len(), 1);
+        assert_eq!(mounted.paths[0], first.to_string_lossy().into_owned());
+        let report = transaction.rollback();
+        assert!(
+            report.failures.is_empty(),
+            "rollback failures: {:?}",
+            report.failures
+        );
+
+        let snapshot = crate::sys::mountinfo::MountSnapshot::read().unwrap();
+        assert!(!snapshot.contains(&first));
+        assert!(!snapshot.contains(&second));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

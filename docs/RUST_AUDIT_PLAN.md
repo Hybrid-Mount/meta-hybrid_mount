@@ -62,6 +62,8 @@
 > PR5 实施后：workspace 测试通过（host 124+3+1=128；Linux 另含 1 个 cfg(unix) 符号链接测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
 >
 > PR6/7 实施后（基于 ext4 块大小修复 `bd2ae521`）：workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
+>
+> PR8 实施后：workspace 测试通过（host 147+3+1=151），fmt/clippy（host 与 Linux target all-targets）及 x86_64-linux-gnu/aarch64-linux-android check 通过；Linux mount namespace 故障注入测试已加入并在 Linux CI 执行。
 
 ### 4.1 验证证据等级
 
@@ -196,9 +198,9 @@
 
 设计项目内 `MountTransaction` 或 `MountJournal`，不直接使用通用 `scopeguard`：
 
-> 实施状态：PR7 已实现事务类型、查询层与测试；全部资源接入与跨阶段回滚留待 PR8。
+> 实施状态：PR8 已实现全流水线事务接入、故障注入与基线校验，已提交。
 
-- [ ] 每个成功副作用立即登记对应清理动作。
+- [x] 每个成功副作用立即登记对应清理动作。
 - [x] 清理动作按逆序执行。
 - [x] 支持显式 `commit`、`disarm` 和 `rollback`。
 - [x] `Drop` 只做最后防线并记录失败；正常路径显式调用可返回错误的清理。
@@ -217,10 +219,10 @@
 
 ### 10.2 扩大回滚边界
 
-- [ ] Overlay 成功后，Magic、KernelSU 注册、状态保存或最终清理失败时仍能回滚 Overlay。
-- [ ] 只有所有后端、状态写入和必要提交完成后，事务才进入 committed 状态。
-- [ ] 状态保存失败不能留下“挂载成功但状态失败”的无主状态。
-- [ ] 若产品决定保留已成功挂载，必须把它定义为显式策略并写入状态，不能由代码路径偶然决定。
+- [x] Overlay 成功后，Magic、KernelSU 注册、状态保存或最终清理失败时仍能回滚 Overlay。
+- [x] 只有所有后端、状态写入和必要提交完成后，事务才进入 committed 状态。
+- [x] 状态保存失败不能留下“挂载成功但状态失败”的无主状态。
+- [x] 若产品决定保留已成功挂载，必须把它定义为显式策略并写入状态，不能由代码路径偶然决定。
 
 ### 10.3 `is_mounted` 错误语义
 
@@ -231,27 +233,27 @@
 
 ### 10.4 卸载策略
 
-- [ ] 子挂载按路径深度从深到浅卸载。
-- [ ] 普通卸载失败时，仅在策略允许时使用 `MNT_DETACH`。
-- [ ] 对 `EBUSY`、`EINVAL`、目标消失分别处理并记录。
-- [ ] 不再只卸载根目录后假设所有子挂载已经消失。
-- [ ] 回滚结束后重新读取 mountinfo，确认本事务创建的目标全部消失。
+- [x] 子挂载按路径深度从深到浅卸载。
+- [x] 普通卸载失败时，仅在策略允许时使用 `MNT_DETACH`。
+- [x] 对 `EBUSY`、`EINVAL`、目标消失分别处理并记录。
+- [x] 不再只卸载根目录后假设所有子挂载已经消失。
+- [x] 回滚结束后重新读取 mountinfo，确认本事务创建的目标全部消失。
 
 ### 10.5 故障注入点
 
-- [ ] Overlay 第 N 个目标挂载失败。
-- [ ] Overlay 全部成功后 Magic 第一个目标失败。
-- [ ] Magic 成功后 KernelSU 注册失败。
-- [ ] 状态 JSON 原子 rename 失败。
-- [ ] mountinfo 读取失败。
-- [ ] 子挂载卸载返回 `EBUSY`。
-- [ ] staging 目录删除失败。
+- [x] Overlay 第 N 个目标挂载失败。
+- [x] Overlay 全部成功后 Magic 第一个目标失败。
+- [x] Magic 成功后 KernelSU 注册失败。
+- [x] 状态 JSON 原子 rename 失败。
+- [x] mountinfo 读取失败。
+- [x] 子挂载卸载返回 `EBUSY`。
+- [x] staging 目录删除失败。
 
 ### 10.6 阶段验收
 
-- [ ] 任一注入点失败后，最终 mountinfo 与执行前一致。
-- [ ] 回滚失败包含目标、动作、errno 和原始阶段。
-- [ ] 不存在“日志显示失败但仍保留未登记挂载”的路径。
+- [x] 任一注入点失败后，最终 mountinfo 与执行前一致。
+- [x] 回滚失败包含目标、动作、errno 和原始阶段。
+- [x] 不存在“日志显示失败但仍保留未登记挂载”的路径。
 
 ## 11. 阶段 4：P0/P1 后端执行器审计
 
@@ -527,7 +529,7 @@ git diff --check
 | 5 | `ModuleId` 与重复模块拒绝 | 中 | 扫描回归测试 | ✅ 已提交（含 G08） |
 | 6 | `is_mounted -> Result<bool>` 与 mount ops 边界 | 中 | fake mount ops | ✅ 已提交（与 PR7 合并，G15） |
 | 7 | `MountTransaction` 基础设施，不改变执行顺序 | 中-高 | 故障注入框架 | ✅ 已提交（与 PR6 合并，G15） |
-| 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | 待执行 |
+| 8 | Overlay/Magic 跨阶段回滚 | 高 | Linux namespace 测试 | ✅ 已提交（含 G13） |
 | 9 | Magic executor 错误语义和测试 | 高 | 真机候选测试 | 待执行 |
 | 10 | LKM 哈希、override 限制和熔断诊断 | 高 | 支持矩阵、设备回退 | 待执行 |
 | 11 | 结构化错误与子进程 runner | 中 | 前述行为稳定 | 待执行 |
@@ -591,7 +593,7 @@ git diff --check
 
 - [ ] **G11（并入 13.2）**：统一子进程 runner 增加"子进程总超时 + I/O drain 独立超时"；把 `ksud`/`apd`（`module_status.rs`）也纳入 runner 范围。
 - [ ] **G12（并入 13.1）**：用"瞬态/永久"两个错误变体 + 穷尽 `is_retryable` match 编码重试分类，避免只靠文档约定。
-- [ ] **G13（并入 10.5）**：故障注入用 `AtomicBool` 门控（与现有 KSU/xattr 缓存风格一致），不引入 cargo feature。
+- [x] **G13（并入 10.5）**：故障注入用 `AtomicBool` 门控（与现有 KSU/xattr 缓存风格一致），不引入 cargo feature。
 - [ ] **G14（并入 14.2）**：serde 改名/删字段采用 `rename + alias` 与可解析 tombstone（现有 `legacy_custom_mounts` 已是范例）；内部错误 enum 与 CLI/WebUI 线格式错误分离。
 - [x] **G15（并入 19 PR 6/7）**：`is_mounted -> Result<bool>` 与 `MountTransaction` 基础设施合并落地——可传播路径用查询 API，`Drop` 路径用 best-effort helper，避免 PR 6 单独触碰 5 个调用点中的 3 个 Drop 路径。
 
@@ -604,6 +606,7 @@ git diff --check
 - [x] PR4 完成后复验：fmt/clippy 通过，workspace 测试通过（host 113+3+1=117；Linux 另含 cfg(unix) 符号链接测试），stable 1.97 与 x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR5 完成后复验：fmt/clippy 通过，workspace 测试通过（host 124+3+1=128；Linux 另含 cfg(unix) 符号链接测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
 - [x] PR6/7 完成后复验：fmt/clippy 通过，workspace 测试通过（host 138+3+1=142；Linux 另含 cfg(unix) 与 mountinfo 测试），x86_64-linux-gnu/aarch64-linux-android check 通过。
+- [x] PR8 完成后复验：fmt/clippy（host 与 Linux target all-targets）通过，workspace 测试通过（host 147+3+1=151），x86_64-linux-gnu/aarch64-linux-android check 通过。
 
 ## 23. 最终交付物
 

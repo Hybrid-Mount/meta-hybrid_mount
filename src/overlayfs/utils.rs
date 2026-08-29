@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! OverlayFS 与 ext4 的底层挂载原语(仅 Linux/Android)。
-//!
-//! `umount_dir` 是**立即卸载**(rustix `unmount` 系统调用),
-//! 与 KernelSU try-umount 列表注册严格区分。
 
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
@@ -12,8 +9,8 @@ use loopdev::LoopControl;
 use rustix::fd::AsFd;
 use rustix::fs::CWD;
 use rustix::mount::{
-    FsMountFlags, FsOpenFlags, MountAttrFlags, MountFlags, MoveMountFlags, UnmountFlags,
-    fsconfig_create, fsconfig_set_string, fsmount, fsopen, mount, move_mount, unmount,
+    FsMountFlags, FsOpenFlags, MountAttrFlags, MountFlags, MoveMountFlags, fsconfig_create,
+    fsconfig_set_string, fsmount, fsopen, mount, move_mount,
 };
 
 use crate::errors::{Error, Result};
@@ -22,12 +19,6 @@ use crate::sys::fs::check_kernel_config;
 /// 检查内核是否编译了 overlayfs(`CONFIG_OVERLAY_FS=y`)。
 pub fn is_overlay_supported() -> Result<bool> {
     check_kernel_config("CONFIG_OVERLAY_FS")
-}
-
-/// 立即卸载路径(空 flags)。用于回滚与清理,不是注册列表。
-pub fn umount_dir(path: &Path) -> Result<()> {
-    unmount(path, UnmountFlags::empty())
-        .map_err(|err| Error::msg(format!("unmount {}: {err}", path.display())))
 }
 
 /// fsopen("overlay") 主路径:fsconfig → fsmount → move_mount。

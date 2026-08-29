@@ -69,6 +69,7 @@ impl RuntimeTempDir {
         &self.root
     }
 
+    #[cfg(test)]
     pub fn allocate_dir(&self) -> Result<PathBuf> {
         create_random_dir(&self.root)
     }
@@ -77,7 +78,9 @@ impl RuntimeTempDir {
         self.cleanup = false;
     }
 
-    pub fn cleanup(mut self) -> Result<()> {
+    /// Remove regardless of the `keep` flag, for transaction rollback paths.
+    pub fn cleanup_unconditional(mut self) -> Result<()> {
+        self.cleanup = true;
         self.remove_now()
     }
 

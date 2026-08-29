@@ -2,6 +2,7 @@
 
 //! 系统辅助层:文件系统、挂载与 nuke。
 
+pub mod faults;
 pub mod fs;
 pub mod mountinfo;
 pub mod temp;

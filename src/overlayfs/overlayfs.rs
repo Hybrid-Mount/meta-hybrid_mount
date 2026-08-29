@@ -4,7 +4,7 @@
 //! - fsopen("overlay") 主路径,传统 `mount(2)` 转义 fallback;
 //! - lowerdir 超过 64 层时,尾部层先叠成 staging 再作为新层;
 //! - 根挂载后按 `/proc/self/mountinfo` 的子挂载逐个重建 overlay,
-//!   失败时立即 `unmount` 回滚根挂载。
+//!   失败时交由流水线事务回滚已登记目标。
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;
@@ -27,44 +27,26 @@ use rustix::mount::{
 };
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[derive(Default)]
-struct StagingMountGuard {
-    transaction: Option<crate::sys::transaction::MountTransaction<'static>>,
+#[derive(Debug)]
+pub enum MountEffect {
+    Target(String),
+    Staging(PathBuf),
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-impl StagingMountGuard {
-    fn track(&mut self, path: PathBuf) {
-        self.transaction
-            .get_or_insert_with(crate::sys::transaction::MountTransaction::new)
-            .register("intermediate_overlay_staging", move || {
-                cleanup_staging_mount(path)
-            });
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl Drop for StagingMountGuard {
-    fn drop(&mut self) {
-        if let Some(transaction) = self.transaction.take() {
-            let report = transaction.rollback();
-            if !report.failures.is_empty() {
-                log::warn!(
-                    "intermediate overlay staging rollback incomplete: failures={}",
-                    report.failures.len()
-                );
-            }
-        }
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
+pub(crate) fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
     if crate::sys::mount::is_mounted_best_effort(&path)
         && let Err(err) = unmount(&path, UnmountFlags::DETACH)
     {
         return Err(Error::msg(format!(
             "detach intermediate overlay staging failed: path={}, error={err}",
+            path.display()
+        )));
+    }
+
+    if crate::sys::faults::should_fail_staging_remove() {
+        return Err(Error::msg(format!(
+            "injected intermediate overlay staging remove failure: path={}",
             path.display()
         )));
     }
@@ -254,6 +236,7 @@ fn mount_overlay_core(
 
 /// 把 lowerdirs + lowest 叠到 dest;超过 64 层时先做 staging。
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
 pub fn mount_overlayfs(
     lower_dirs: &[String],
     lowest: &str,
@@ -262,23 +245,23 @@ pub fn mount_overlayfs(
     dest: &Path,
     staging_root: &Path,
     mount_source: &str,
+    on_effect: &mut dyn FnMut(MountEffect),
 ) -> Result<()> {
     let mut current_layers = lower_dirs.to_vec();
     current_layers.push(lowest.to_owned());
-    let mut staging_mounts = StagingMountGuard::default();
 
     for chunk in plan_staging_chunks(&current_layers) {
         let staging_dir = crate::sys::temp::create_random_dir(staging_root)?;
-        staging_mounts.track(staging_dir.clone());
         mount_overlay_core(&chunk.layers, None, None, &staging_dir, mount_source)?;
         log::debug!(
             "staging layer created: path={}, input_layers={}",
             staging_dir.display(),
             chunk.layers.len()
         );
-
+        let staging_layer = staging_dir.to_string_lossy().into_owned();
+        on_effect(MountEffect::Staging(staging_dir));
         current_layers = current_layers[..chunk.remaining_layers].to_vec();
-        current_layers.push(staging_dir.to_string_lossy().into_owned());
+        current_layers.push(staging_layer);
     }
 
     mount_overlay_core(
@@ -338,6 +321,7 @@ pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
 fn mount_overlay_child(
     mount_point: &str,
     relative: &str,
@@ -346,12 +330,18 @@ fn mount_overlay_child(
     staging_root: &Path,
     mount_source: &str,
     register_unmountable: bool,
+    on_effect: &mut dyn FnMut(MountEffect),
 ) -> Result<()> {
     if !module_roots
         .iter()
         .any(|lower| Path::new(&format!("{lower}{relative}")).exists())
     {
-        return bind_mount(Path::new(stock_root), Path::new(mount_point));
+        bind_mount(Path::new(stock_root), Path::new(mount_point))?;
+        if register_unmountable {
+            send_unmountable(Path::new(mount_point));
+        }
+        on_effect(MountEffect::Target(mount_point.to_owned()));
+        return Ok(());
     }
 
     if !Path::new(stock_root).is_dir() {
@@ -381,6 +371,7 @@ fn mount_overlay_child(
         Path::new(mount_point),
         staging_root,
         mount_source,
+        on_effect,
     )
     .map_err(|err| {
         Error::msg(format!(
@@ -390,11 +381,13 @@ fn mount_overlay_child(
     if register_unmountable {
         send_unmountable(Path::new(mount_point));
     }
+    on_effect(MountEffect::Target(mount_point.to_owned()));
     Ok(())
 }
 
-/// 挂载根 overlay 并重建其子挂载点;任一子挂载失败时立即卸载根回滚。
+/// 挂载根 overlay 并重建其子挂载点;失败时由流水线事务回滚已登记目标。
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
 pub fn mount_overlay(
     root: &str,
     module_roots: &[String],
@@ -403,6 +396,7 @@ pub fn mount_overlay(
     staging_root: &Path,
     mount_source: &str,
     register_unmountable: bool,
+    on_effect: &mut dyn FnMut(MountEffect),
 ) -> Result<()> {
     log::debug!("overlay mount root: target={root}");
 
@@ -419,6 +413,7 @@ pub fn mount_overlay(
         root_path,
         staging_root,
         mount_source,
+        on_effect,
     );
 
     if let Err(err) = root_result {
@@ -426,6 +421,7 @@ pub fn mount_overlay(
             "mount overlayfs for root failed: {err}"
         )));
     }
+    on_effect(MountEffect::Target(root.to_owned()));
 
     for mount_point in &mount_seq {
         let Some(relative) = child_relative_path(root, mount_point) else {
@@ -444,11 +440,11 @@ pub fn mount_overlay(
             staging_root,
             mount_source,
             register_unmountable,
+            on_effect,
         ) {
             log::warn!(
-                "child mount failed, reverting root: mount_point={mount_point}, error={err}"
+                "child mount failed, deferring rollback: mount_point={mount_point}, error={err}"
             );
-            utils::umount_dir(root_path)?;
             return Err(err);
         }
     }
@@ -519,5 +515,23 @@ mod tests {
         assert_eq!(child_relative_path("/system", "/system"), None);
         assert_eq!(child_relative_path("/system", "/product"), None);
         assert_eq!(child_relative_path("/system", "/system_ext/app"), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn injected_staging_remove_failure_is_reported() {
+        let path = std::env::temp_dir().join(format!(
+            "hybrid-mount-overlay-staging-fault-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+
+        crate::sys::faults::enable_staging_remove_failure();
+        let err = cleanup_staging_mount(path.clone()).unwrap_err();
+        crate::sys::faults::reset();
+
+        assert!(err.to_string().contains("injected"), "{err}");
+        std::fs::remove_dir_all(&path).ok();
     }
 }

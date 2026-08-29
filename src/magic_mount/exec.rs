@@ -24,16 +24,17 @@ use crate::errors::{Error, Result};
 use crate::mount_tree::{MountNode, MountTree, NodeFileType};
 use crate::utils::{ensure_dir_exists, lgetfilecon, lsetfilecon};
 
-pub struct MagicMount<'tree, 'stats> {
+pub struct MagicMount<'tree, 'stats, 'mount> {
     node: &'tree MountNode,
     path: PathBuf,
     work_dir_path: PathBuf,
     has_tmpfs: bool,
     umount: bool,
     stats: &'stats mut MagicMountStats,
+    on_mount: &'mount mut dyn FnMut(&str),
 }
 
-impl<'tree, 'stats> MagicMount<'tree, 'stats> {
+impl<'tree, 'stats, 'mount> MagicMount<'tree, 'stats, 'mount> {
     pub fn new(
         node: &'tree MountNode,
         path: &Path,
@@ -41,6 +42,7 @@ impl<'tree, 'stats> MagicMount<'tree, 'stats> {
         has_tmpfs: bool,
         umount: bool,
         stats: &'stats mut MagicMountStats,
+        on_mount: &'mount mut dyn FnMut(&str),
     ) -> Self {
         Self {
             node,
@@ -49,10 +51,17 @@ impl<'tree, 'stats> MagicMount<'tree, 'stats> {
             has_tmpfs,
             umount,
             stats,
+            on_mount,
         }
     }
 
     pub fn do_mount(&mut self) -> Result<()> {
+        if crate::sys::faults::should_fail_next_magic_mount() {
+            return Err(Error::msg(format!(
+                "injected magic mount failure: target={}",
+                self.path.display()
+            )));
+        }
         let file_type = self.node.file_type_for(MountMode::Magic).ok_or_else(|| {
             Error::msg(format!(
                 "magic node has no selected source: {}",
@@ -71,7 +80,7 @@ impl<'tree, 'stats> MagicMount<'tree, 'stats> {
     }
 }
 
-impl MagicMount<'_, '_> {
+impl MagicMount<'_, '_, '_> {
     fn mount_symlink(&mut self) -> Result<()> {
         let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootSymlink {
@@ -133,9 +142,9 @@ impl MagicMount<'_, '_> {
         }
 
         self.stats.mounted_files = self.stats.mounted_files.saturating_add(1);
-        self.stats
-            .active_mounts
-            .push(self.path.to_string_lossy().into_owned());
+        let target = self.path.to_string_lossy().into_owned();
+        self.stats.active_mounts.push(target.clone());
+        (self.on_mount)(&target);
         Ok(())
     }
 
@@ -244,6 +253,7 @@ impl MagicMount<'_, '_> {
                 has_tmpfs,
                 self.umount,
                 &mut *self.stats,
+                &mut *self.on_mount,
             )
             .do_mount();
 
@@ -281,9 +291,9 @@ impl MagicMount<'_, '_> {
                     self.path.display()
                 ))
             })?;
-            self.stats
-                .active_mounts
-                .push(self.path.to_string_lossy().into_owned());
+            let target = self.path.to_string_lossy().into_owned();
+            self.stats.active_mounts.push(target.clone());
+            (self.on_mount)(&target);
 
             // 降为 private,减少 peer group 数量。
             if let Err(err) = mount_change(
@@ -331,6 +341,7 @@ impl MagicMount<'_, '_> {
                     has_tmpfs,
                     self.umount,
                     &mut *self.stats,
+                    &mut *self.on_mount,
                 )
                 .do_mount()
             } else if has_tmpfs {
@@ -372,6 +383,7 @@ pub fn magic_mount(
     mount_source: &str,
     work_dir: &Path,
     umount: bool,
+    on_mount: &mut dyn FnMut(&str),
 ) -> Result<MagicMountStats> {
     if !tree.has_backend(MountMode::Magic) {
         log::info!("no modules selected for magic mount, skipping");
@@ -405,6 +417,7 @@ pub fn magic_mount(
         false,
         umount,
         &mut stats,
+        on_mount,
     )
     .do_mount()?;
 
@@ -509,4 +522,49 @@ fn clone_symlink(source: &Path, target: &Path) -> Result<()> {
         link.display()
     );
     Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use crate::module_id::ModuleId;
+    use crate::mount_tree::{MountSource, MountTree};
+
+    #[test]
+    fn injected_magic_mount_failure_fires_before_side_effects() {
+        let root =
+            std::env::temp_dir().join(format!("hybrid-mount-magic-fault-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("source");
+        fs::write(&source, "data").unwrap();
+
+        let mut tree = MountTree::default();
+        tree.insert(
+            "hosts",
+            MountSource {
+                module_id: ModuleId::try_from("m").unwrap(),
+                relative: "hosts".to_owned(),
+                source_path: source,
+                file_type: NodeFileType::RegularFile,
+                replace: false,
+                backend: MountMode::Magic,
+            },
+        );
+        let node = tree.root.children.get("hosts").unwrap();
+        let mut stats = MagicMountStats::default();
+        let mut calls = 0;
+        let mut on_mount = |_: &str| calls += 1;
+
+        crate::sys::faults::enable_next_magic_mount_failure();
+        let mut mount =
+            MagicMount::new(node, &root, &root, false, false, &mut stats, &mut on_mount);
+        let err = mount.do_mount().unwrap_err();
+        crate::sys::faults::reset();
+
+        assert!(err.to_string().contains("injected magic mount"), "{err}");
+        assert_eq!(calls, 0);
+        assert_eq!(stats.mounted_files, 0);
+        fs::remove_dir_all(&root).ok();
+    }
 }
