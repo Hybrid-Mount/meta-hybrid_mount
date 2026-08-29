@@ -383,6 +383,17 @@ fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
 }
 
 #[test]
+fn bundled_blacklist_contains_move_certificate() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("module")
+        .join(defs::MODULE_BLACKLIST_FILE_NAME);
+
+    let blacklist = read_module_blacklist(&path).unwrap();
+
+    assert!(blacklist.contains(&module_id("MoveCertificate")));
+}
+
+#[test]
 fn invalid_blacklist_module_id_fails_closed_with_path_context() {
     let dir = test_dir("module-blacklist-invalid-id");
     let path = dir.join("config.toml");

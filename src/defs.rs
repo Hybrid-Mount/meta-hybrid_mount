@@ -32,12 +32,12 @@ pub const IGNORE_UNMOUNT_PARTITIONS: &[&str] = &[
 
 /// Partition roots supported by both the installer and the mount pipeline.
 /// Runtime discovery still filters this list to roots that exist on-device.
+/// `/apex` is intentionally excluded because apexd owns its activation tree.
 pub const MANAGED_PARTITIONS: &[&str] = &[
     "odm",
     "product",
     "system_ext",
     "vendor",
-    "apex",
     "mi_ext",
     "my_bigball",
     "my_carrier",
@@ -68,3 +68,30 @@ pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 /// 扩展属性名(目录替换标记与 SELinux 上下文)。
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
 pub const SELINUX_XATTR: &str = "security.selinux";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apex_is_excluded_from_managed_partition_policy() {
+        assert!(!MANAGED_PARTITIONS.contains(&"apex"));
+
+        let metainstall = include_str!("../module/metainstall.sh");
+        let Some(partitions) = metainstall
+            .lines()
+            .find(|line| line.starts_with("MANAGED_PARTITIONS="))
+        else {
+            panic!("metainstall.sh is missing MANAGED_PARTITIONS");
+        };
+        let Some((_, partitions)) = partitions.split_once('=') else {
+            panic!("metainstall.sh has an invalid MANAGED_PARTITIONS assignment");
+        };
+        let installer_partitions = partitions
+            .trim_matches('"')
+            .split_whitespace()
+            .collect::<Vec<_>>();
+
+        assert_eq!(installer_partitions, MANAGED_PARTITIONS);
+    }
+}
