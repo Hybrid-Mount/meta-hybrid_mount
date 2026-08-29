@@ -156,7 +156,18 @@ export function normalizeModule(raw: Record<string, unknown>): Module {
   };
 }
 
-function normalizeStatus(payload: Record<string, unknown>): RunState {
+const normalizeStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map(String) : [];
+
+export function normalizeStatus(payload: Record<string, unknown>): RunState {
+  const overlayActiveMounts = normalizeStringArray(payload.overlay_active_mounts);
+  const magicActiveMounts = normalizeStringArray(payload.magic_active_mounts);
+  const activeMounts = [
+    ...normalizeStringArray(payload.active_mounts),
+    ...overlayActiveMounts,
+    ...magicActiveMounts,
+  ];
+
   return {
     timestamp: Number(payload.timestamp ?? 0),
     pid: Number(payload.pid ?? 0),
@@ -171,9 +182,9 @@ function normalizeStatus(payload: Record<string, unknown>): RunState {
     skip_mount_modules: Array.isArray(payload.skip_mount_modules)
       ? payload.skip_mount_modules.map(String)
       : [],
-    active_mounts: Array.isArray(payload.active_mounts)
-      ? payload.active_mounts.map(String)
-      : [],
+    active_mounts: [...new Set(activeMounts)].sort(),
+    overlay_active_mounts: [...new Set(overlayActiveMounts)].sort(),
+    magic_active_mounts: [...new Set(magicActiveMounts)].sort(),
     mount_error_modules: Array.isArray(payload.mount_error_modules)
       ? payload.mount_error_modules.map(String)
       : [],

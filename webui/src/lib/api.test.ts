@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { createConfigPayload, normalizeConfigPayload, normalizeModule } from "./api";
+import {
+  createConfigPayload,
+  normalizeConfigPayload,
+  normalizeModule,
+  normalizeStatus,
+} from "./api";
 import type { AppConfig } from "./types";
 
 describe("WebUI configuration contract", () => {
@@ -77,5 +82,33 @@ describe("WebUI configuration contract", () => {
     const config = normalizeConfigPayload({ default_mode: "ignore" });
 
     expect(config.default_mode).toBe("overlay");
+  });
+
+  it("merges and deduplicates active mounts from both backends", () => {
+    const status = normalizeStatus({
+      timestamp: 1,
+      active_mounts: ["/system", "/system/etc/hosts"],
+      overlay_active_mounts: ["/system"],
+      magic_active_mounts: ["/system/etc/hosts", "/vendor/etc/audio.xml"],
+    });
+
+    expect(status.active_mounts).toEqual([
+      "/system",
+      "/system/etc/hosts",
+      "/vendor/etc/audio.xml",
+    ]);
+    expect(status.overlay_active_mounts).toEqual(["/system"]);
+    expect(status.magic_active_mounts).toEqual([
+      "/system/etc/hosts",
+      "/vendor/etc/audio.xml",
+    ]);
+  });
+
+  it("defaults backend-specific mount lists for older snapshots", () => {
+    const status = normalizeStatus({ timestamp: 1, active_mounts: ["/system"] });
+
+    expect(status.active_mounts).toEqual(["/system"]);
+    expect(status.overlay_active_mounts).toEqual([]);
+    expect(status.magic_active_mounts).toEqual([]);
   });
 });

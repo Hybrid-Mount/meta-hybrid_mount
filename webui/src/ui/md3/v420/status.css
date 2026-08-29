@@ -252,6 +252,32 @@
   opacity: 1;
 }
 
+.mount-details {
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  padding-top: 12px;
+}
+
+.mount-details summary {
+  color: var(--md-sys-color-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mount-path-list {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.mount-path-list code {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .skeleton-col {
   display: flex;
   flex-direction: column;

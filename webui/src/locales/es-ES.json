@@ -50,7 +50,12 @@
     "compatible": "Compatible",
     "incompatible": "Incompatible",
     "modeStats": "Estadísticas",
-    "mountCount": "{count} montajes"
+    "mountCount": "{count} montajes",
+    "moduleCount": "{count} modules",
+    "magicOperationCount": "{files} file mounts · {symlinks} links",
+    "noActiveMounts": "No active mount targets in this startup snapshot",
+    "mountTargetCount": "{count} targets",
+    "mountDetails": "View {count} mount targets"
   },
   "config": {
     "moduledir": "Dir. Módulos",

@@ -79,6 +79,8 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 
 WebUI 不持有第二套业务协议：配置与状态请求都映射到以上命令。状态是启动快照，不是 daemon 提供的实时流。
 
+`status` 中的 `active_mounts` 是 OverlayFS 与 Magic Mount 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts` 与 `magic_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。
+
 ## 共享节点树契约
 
 scanner 对每个模块源节点只读记录类型、源路径和 `.replace` 标记；planner 将其映射到真实目标路径并标注 `overlay`、`magic` 或 `ignore`。同一目标可以保留多个同后端模块贡献，用于 OverlayFS lowerdir 优先级；跨后端的普通目录可作为共享结构节点，文件、类型或 `.replace` 冲突仍在规划阶段报错。

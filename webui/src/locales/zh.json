@@ -57,7 +57,12 @@
     "compatible": "兼容",
     "incompatible": "不兼容",
     "modeStats": "模式统计",
-    "mountCount": "{count} 个挂载"
+    "mountCount": "{count} 个挂载",
+    "moduleCount": "{count} 个模块",
+    "magicOperationCount": "{files} 个文件挂载 · {symlinks} 个链接",
+    "noActiveMounts": "本次启动没有活动挂载点",
+    "mountTargetCount": "{count} 个目标",
+    "mountDetails": "查看 {count} 个挂载点"
   },
   "config": {
     "title": "配置",

@@ -5,6 +5,11 @@ import { useI18n } from "vue-i18n";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { configStore } from "../../../lib/stores/configStore";
+import {
+  activeMountState,
+  groupActiveMounts,
+  uniqueActiveMounts,
+} from "../../../lib/statusMounts";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import { ICONS } from "../icons";
 
@@ -19,10 +24,11 @@ const magicCount = computed(() => sysStore.state?.mode_stats.magicmount ?? 0);
 const overlayMountCount = computed(
   () => sysStore.state?.mount_stats.overlayfs_mounts ?? 0,
 );
-const magicMountCount = computed(
-  () =>
-    (sysStore.state?.mount_stats.files_mounted ?? 0) +
-    (sysStore.state?.mount_stats.symlinks_created ?? 0),
+const magicFileMountCount = computed(
+  () => sysStore.state?.mount_stats.files_mounted ?? 0,
+);
+const magicSymlinkCount = computed(
+  () => sysStore.state?.mount_stats.symlinks_created ?? 0,
 );
 const modeTotal = computed(() => overlayCount.value + magicCount.value);
 const overlayWidth = computed(() =>
@@ -31,7 +37,13 @@ const overlayWidth = computed(() =>
 const magicWidth = computed(() =>
   modeTotal.value ? `${(magicCount.value / modeTotal.value) * 100}%` : "0%",
 );
-const activeMounts = computed(() => [...new Set(sysStore.state?.active_mounts ?? [])]);
+const activeMounts = computed(() =>
+  uniqueActiveMounts(sysStore.state?.active_mounts ?? []),
+);
+const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
+const activeMountStatus = computed(() =>
+  activeMountState(sysStore.state, activeMounts.value),
+);
 
 async function refresh(): Promise<void> {
   await Promise.all([
@@ -97,15 +109,22 @@ onMounted(refresh);
           <div class="legend-item">
             <span class="legend-dot dot-overlay" />
             <span>
-              {{ t("config.modeOverlay") }}: {{ overlayCount }} ·
+              {{ t("config.modeOverlay") }}:
+              {{ t("status.moduleCount", { count: overlayCount }) }} ·
               {{ t("status.mountCount", { count: overlayMountCount }) }}
             </span>
           </div>
           <div class="legend-item">
             <span class="legend-dot dot-magic" />
             <span>
-              {{ t("config.modeMagic") }}: {{ magicCount }} ·
-              {{ t("status.mountCount", { count: magicMountCount }) }}
+              {{ t("config.modeMagic") }}:
+              {{ t("status.moduleCount", { count: magicCount }) }} ·
+              {{
+                t("status.magicOperationCount", {
+                  files: magicFileMountCount,
+                  symlinks: magicSymlinkCount,
+                })
+              }}
             </span>
           </div>
         </div>
@@ -132,18 +151,31 @@ onMounted(refresh);
 
         <div class="card-title card-title-spaced">{{ t("status.activeMounts") }}</div>
         <div class="partition-list">
-          <span v-if="activeMounts.length === 0" class="partition-chip">
+          <span v-if="activeMountStatus === 'not-ready'" class="partition-chip">
             {{ t("status.notReady") }}
           </span>
-          <span
-            v-for="mount in activeMounts"
-            v-else
-            :key="mount"
-            class="partition-chip active"
-          >
-            {{ mount }}
+          <span v-else-if="activeMountStatus === 'empty'" class="partition-chip">
+            {{ t("status.noActiveMounts") }}
           </span>
+          <template v-else>
+            <span
+              v-for="group in activeMountGroups"
+              :key="group.root"
+              class="partition-chip active"
+            >
+              {{ group.root }} ·
+              {{ t("status.mountTargetCount", { count: group.count }) }}
+            </span>
+          </template>
         </div>
+        <details v-if="activeMountStatus === 'active'" class="mount-details">
+          <summary>
+            {{ t("status.mountDetails", { count: activeMounts.length }) }}
+          </summary>
+          <div class="mount-path-list">
+            <code v-for="mount in activeMounts" :key="mount">{{ mount }}</code>
+          </div>
+        </details>
       </section>
     </div>
 

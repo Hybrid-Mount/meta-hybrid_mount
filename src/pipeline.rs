@@ -6,7 +6,8 @@
 //! 挂载与 shallow staging 只写运行目录,模块源目录只读。
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -69,6 +70,17 @@ pub fn pipeline_stats(
         overlayfs_mounts: overlay_dir_mounts + shallow_overlay_mounts,
         ignored_entries,
     }
+}
+
+/// Merge successful targets from both backends into the stable WebUI contract.
+pub fn merge_active_mounts(overlay: &[String], magic: &[String]) -> Vec<String> {
+    overlay
+        .iter()
+        .chain(magic)
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 /// 文件级 overlay 规则的 shallow 目录规划:每个源文件一个独立层目录。
@@ -546,7 +558,9 @@ fn run_mount_pipeline_impl() -> Result<()> {
         .map(|module| (module.clone(), "mount_error marker present".to_owned()))
         .collect();
 
-    state.active_mounts = active_mounts;
+    state.active_mounts = merge_active_mounts(&active_mounts, &magic_stats.active_mounts);
+    state.overlay_active_mounts = active_mounts;
+    state.magic_active_mounts = magic_stats.active_mounts.clone();
     state.mount_stats = pipeline_stats(
         overlay_dir_mounts,
         shallow_overlay_mounts,
@@ -1188,6 +1202,21 @@ mod tests {
         assert_eq!(stats.ignored_entries, 5);
         assert_eq!(stats.total_mounts, 19);
         assert_eq!(stats.successful_mounts, 19);
+    }
+
+    #[test]
+    fn active_mounts_merge_backends_in_sorted_deduplicated_order() {
+        let overlay = vec!["/vendor".to_owned(), "/system".to_owned()];
+        let magic = vec!["/system".to_owned(), "/system/etc/hosts".to_owned()];
+
+        assert_eq!(
+            merge_active_mounts(&overlay, &magic),
+            vec![
+                "/system".to_owned(),
+                "/system/etc/hosts".to_owned(),
+                "/vendor".to_owned(),
+            ]
+        );
     }
 
     #[test]

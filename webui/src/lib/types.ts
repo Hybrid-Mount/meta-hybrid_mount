@@ -64,6 +64,8 @@ export interface RunState {
   magic_modules: string[];
   skip_mount_modules: string[];
   active_mounts: string[];
+  overlay_active_mounts: string[];
+  magic_active_mounts: string[];
   mount_error_modules: string[];
   mount_error_reasons: Record<string, string>;
   mount_stats: MountStatistics;

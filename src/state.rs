@@ -72,7 +72,12 @@ pub struct RunState {
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
     pub skip_mount_modules: Vec<String>,
+    /// Deduplicated OverlayFS and Magic Mount targets for existing WebUI clients.
     pub active_mounts: Vec<String>,
+    /// Successful OverlayFS targets from the same boot snapshot.
+    pub overlay_active_mounts: Vec<String>,
+    /// Successful Magic Mount bind and directory targets from the same boot snapshot.
+    pub magic_active_mounts: Vec<String>,
     pub mount_error_modules: Vec<String>,
     pub mount_error_reasons: BTreeMap<String, String>,
     pub mount_stats: MountStatistics,
@@ -104,6 +109,8 @@ impl RunState {
         magic_modules: Vec<String>,
         skip_mount_modules: Vec<String>,
         active_mounts: Vec<String>,
+        overlay_active_mounts: Vec<String>,
+        magic_active_mounts: Vec<String>,
         mount_stats: MountStatistics,
         mode_stats: ModeStats,
     ) -> Self {
@@ -119,6 +126,8 @@ impl RunState {
             magic_modules,
             skip_mount_modules,
             active_mounts,
+            overlay_active_mounts,
+            magic_active_mounts,
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
             mount_stats,
@@ -150,6 +159,8 @@ impl RunState {
             plan.overlay_module_ids.clone(),
             plan.magic_module_ids.clone(),
             skip_mount_modules,
+            Vec::new(),
+            Vec::new(),
             Vec::new(),
             MountStatistics::default(),
             ModeStats {
@@ -665,7 +676,9 @@ mod tests {
             vec!["a".to_owned()],
             vec!["b".to_owned()],
             vec!["c".to_owned()],
+            vec!["/system".to_owned(), "/vendor/lib/demo.so".to_owned()],
             vec!["/system".to_owned()],
+            vec!["/vendor/lib/demo.so".to_owned()],
             MountStatistics {
                 overlayfs_mounts: 1,
                 ..MountStatistics::default()
@@ -681,6 +694,28 @@ mod tests {
         assert_eq!(parsed.overlay_modules, vec!["a".to_owned()]);
         assert_eq!(parsed.magic_modules, vec!["b".to_owned()]);
         assert_eq!(parsed.storage_mode, "ext4");
+        assert_eq!(
+            parsed.active_mounts,
+            vec!["/system".to_owned(), "/vendor/lib/demo.so".to_owned()]
+        );
+        assert_eq!(parsed.overlay_active_mounts, vec!["/system".to_owned()]);
+        assert_eq!(
+            parsed.magic_active_mounts,
+            vec!["/vendor/lib/demo.so".to_owned()]
+        );
+    }
+
+    #[test]
+    fn legacy_run_state_defaults_backend_specific_mount_lists() {
+        let json = r#"{
+            "timestamp": 1,
+            "active_mounts": ["/system"]
+        }"#;
+
+        let parsed: RunState = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.active_mounts, vec!["/system".to_owned()]);
+        assert!(parsed.overlay_active_mounts.is_empty());
+        assert!(parsed.magic_active_mounts.is_empty());
     }
 
     #[test]

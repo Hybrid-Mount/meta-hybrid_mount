@@ -57,7 +57,12 @@
     "compatible": "Compatible",
     "incompatible": "Incompatible",
     "modeStats": "Mode Statistics",
-    "mountCount": "{count} mounts"
+    "mountCount": "{count} mounts",
+    "moduleCount": "{count} modules",
+    "magicOperationCount": "{files} file mounts · {symlinks} links",
+    "noActiveMounts": "No active mount targets in this startup snapshot",
+    "mountTargetCount": "{count} targets",
+    "mountDetails": "View {count} mount targets"
   },
   "config": {
     "title": "Configuration",

@@ -15,6 +15,11 @@ import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { configStore } from "../../../lib/stores/configStore";
+import {
+  activeMountState,
+  groupActiveMounts,
+  uniqueActiveMounts,
+} from "../../../lib/statusMounts";
 
 const { t } = useI18n();
 
@@ -24,12 +29,23 @@ const mountedCount = computed(
   () => moduleStore.modules.filter((module) => module.is_mounted).length,
 );
 const overlayMountCount = computed(() => state.value?.mount_stats.overlayfs_mounts ?? 0);
-const magicMountCount = computed(
-  () =>
-    (state.value?.mount_stats.files_mounted ?? 0) +
-    (state.value?.mount_stats.symlinks_created ?? 0),
+const magicFileMountCount = computed(() => state.value?.mount_stats.files_mounted ?? 0);
+const magicSymlinkCount = computed(() => state.value?.mount_stats.symlinks_created ?? 0);
+const activeMounts = computed(() => uniqueActiveMounts(state.value?.active_mounts ?? []));
+const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
+const activeMountStatus = computed(() =>
+  activeMountState(state.value, activeMounts.value),
 );
-const activeMounts = computed(() => [...new Set(state.value?.active_mounts ?? [])]);
+const activeMountSummary = computed(() => {
+  if (activeMountStatus.value === "not-ready") return t("status.notReady");
+  if (activeMountStatus.value === "empty") return t("status.noActiveMounts");
+  return activeMountGroups.value
+    .map(
+      (group) =>
+        `${group.root} · ${t("status.mountTargetCount", { count: group.count })}`,
+    )
+    .join(", ");
+});
 const statusKind = computed<"checking" | "normal" | "abnormal">(() => {
   if (!statusCheckFinished.value) return "checking";
 
@@ -151,14 +167,25 @@ onMounted(async () => {
       >
         <template #end>
           <MiuixText class="backend-row__count">
-            {{ t("status.mountCount", { count: magicMountCount }) }}
+            {{
+              t("status.magicOperationCount", {
+                files: magicFileMountCount,
+                symlinks: magicSymlinkCount,
+              })
+            }}
           </MiuixText>
         </template>
       </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.activeMounts')"
-        :summary="activeMounts.join(', ') || t('status.notReady')"
+        :summary="activeMountSummary"
       />
+      <details v-if="activeMountStatus === 'active'" class="mount-details">
+        <summary>{{ t("status.mountDetails", { count: activeMounts.length }) }}</summary>
+        <div class="mount-path-list">
+          <code v-for="mount in activeMounts" :key="mount">{{ mount }}</code>
+        </div>
+      </details>
     </MiuixCard>
 
     <MiuixSmallTitle :text="t('status.sysInfoTitle')" />
@@ -350,6 +377,31 @@ onMounted(async () => {
 
 .backend-row__count {
   white-space: nowrap;
+}
+
+.mount-details {
+  margin: 0 16px 14px;
+  color: var(--m-color-on-surface-variant);
+}
+
+.mount-details summary {
+  color: var(--m-color-primary);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mount-path-list {
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  margin-top: 10px;
+  overflow: auto;
+}
+
+.mount-path-list code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 @keyframes status-spin {

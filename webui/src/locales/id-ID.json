@@ -50,7 +50,12 @@
     "compatible": "Compatible",
     "incompatible": "Incompatible",
     "modeStats": "Statistik",
-    "mountCount": "{count} mount"
+    "mountCount": "{count} mount",
+    "moduleCount": "{count} modules",
+    "magicOperationCount": "{files} file mounts · {symlinks} links",
+    "noActiveMounts": "No active mount targets in this startup snapshot",
+    "mountTargetCount": "{count} targets",
+    "mountDetails": "View {count} mount targets"
   },
   "config": {
     "moduledir": "Direktori Modul",

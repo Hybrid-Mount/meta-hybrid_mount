@@ -13,7 +13,6 @@ use std::collections::BTreeSet;
 use std::fs::{self, DirEntry};
 use std::os::unix::fs::{MetadataExt, symlink};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
 
 use rustix::fs::{Gid, Mode, Uid, chmod, chown};
 use rustix::mount::{
@@ -25,25 +24,23 @@ use crate::errors::{Error, Result};
 use crate::mount_tree::{MountNode, MountTree, NodeFileType};
 use crate::utils::{ensure_dir_exists, lgetfilecon, lsetfilecon};
 
-static MOUNTED_FILES: AtomicU32 = AtomicU32::new(0);
-static IGNORED_FILES: AtomicU32 = AtomicU32::new(0);
-static MOUNTED_SYMLINKS: AtomicU32 = AtomicU32::new(0);
-
-pub struct MagicMount<'a> {
-    node: &'a MountNode,
+pub struct MagicMount<'tree, 'stats> {
+    node: &'tree MountNode,
     path: PathBuf,
     work_dir_path: PathBuf,
     has_tmpfs: bool,
     umount: bool,
+    stats: &'stats mut MagicMountStats,
 }
 
-impl<'a> MagicMount<'a> {
+impl<'tree, 'stats> MagicMount<'tree, 'stats> {
     pub fn new(
-        node: &'a MountNode,
+        node: &'tree MountNode,
         path: &Path,
         work_dir_path: &Path,
         has_tmpfs: bool,
         umount: bool,
+        stats: &'stats mut MagicMountStats,
     ) -> Self {
         Self {
             node,
@@ -51,6 +48,7 @@ impl<'a> MagicMount<'a> {
             work_dir_path: work_dir_path.join(&node.name),
             has_tmpfs,
             umount,
+            stats,
         }
     }
 
@@ -73,8 +71,8 @@ impl<'a> MagicMount<'a> {
     }
 }
 
-impl MagicMount<'_> {
-    fn mount_symlink(&self) -> Result<()> {
+impl MagicMount<'_, '_> {
+    fn mount_symlink(&mut self) -> Result<()> {
         let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootSymlink {
                 path: self.path.display().to_string(),
@@ -94,11 +92,11 @@ impl MagicMount<'_> {
             ))
         })?;
 
-        MOUNTED_SYMLINKS.fetch_add(1, Ordering::Relaxed);
+        self.stats.mounted_symlinks = self.stats.mounted_symlinks.saturating_add(1);
         Ok(())
     }
 
-    fn mount_regular_file(&self) -> Result<()> {
+    fn mount_regular_file(&mut self) -> Result<()> {
         let Some(module_path) = self.node.module_path_for(MountMode::Magic) else {
             return Err(Error::MountRootFile {
                 path: self.path.display().to_string(),
@@ -134,7 +132,10 @@ impl MagicMount<'_> {
             log::warn!("make file {} read-only: {err}", target.display());
         }
 
-        MOUNTED_FILES.fetch_add(1, Ordering::Relaxed);
+        self.stats.mounted_files = self.stats.mounted_files.saturating_add(1);
+        self.stats
+            .active_mounts
+            .push(self.path.to_string_lossy().into_owned());
         Ok(())
     }
 
@@ -185,7 +186,7 @@ impl MagicMount<'_> {
                             "cannot create tmpfs on {}, ignored child: {name}",
                             self.path.display()
                         );
-                        IGNORED_FILES.fetch_add(1, Ordering::Relaxed);
+                        self.stats.ignored_files = self.stats.ignored_files.saturating_add(1);
                         skipped_children.insert(name.clone());
                         continue;
                     }
@@ -242,6 +243,7 @@ impl MagicMount<'_> {
                 &self.work_dir_path,
                 has_tmpfs,
                 self.umount,
+                &mut *self.stats,
             )
             .do_mount();
 
@@ -279,6 +281,9 @@ impl MagicMount<'_> {
                     self.path.display()
                 ))
             })?;
+            self.stats
+                .active_mounts
+                .push(self.path.to_string_lossy().into_owned());
 
             // 降为 private,减少 peer group 数量。
             if let Err(err) = mount_change(
@@ -299,7 +304,7 @@ impl MagicMount<'_> {
     /// 处理实际目录中已有的条目:命中收集树的走 magic mount,
     /// 其余条目在 tmpfs 场景下 mirror 进 staging。
     fn mount_path(
-        &self,
+        &mut self,
         has_tmpfs: bool,
         skipped_children: &BTreeSet<String>,
     ) -> Result<BTreeSet<String>> {
@@ -325,6 +330,7 @@ impl MagicMount<'_> {
                     &self.work_dir_path,
                     has_tmpfs,
                     self.umount,
+                    &mut *self.stats,
                 )
                 .do_mount()
             } else if has_tmpfs {
@@ -351,11 +357,13 @@ impl MagicMount<'_> {
 }
 
 /// magic mount 一次执行的统计(供 `run/state.json` 快照)。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MagicMountStats {
     pub mounted_files: u32,
     pub mounted_symlinks: u32,
     pub ignored_files: u32,
+    /// Successful module-controlled bind and directory mount targets.
+    pub active_mounts: Vec<String>,
 }
 
 /// 完整 magic mount 入口:消费共享树 → 建 staging tmpfs → 执行 → 汇总。
@@ -369,10 +377,6 @@ pub fn magic_mount(
         log::info!("no modules selected for magic mount, skipping");
         return Ok(MagicMountStats::default());
     }
-
-    MOUNTED_FILES.store(0, Ordering::Relaxed);
-    MOUNTED_SYMLINKS.store(0, Ordering::Relaxed);
-    IGNORED_FILES.store(0, Ordering::Relaxed);
 
     log::debug!(
         "shared mount tree selected for magic execution: {:?}",
@@ -393,17 +397,27 @@ pub fn magic_mount(
     )
     .map_err(|err| Error::msg(format!("make {} private: {err}", work_dir.display())))?;
 
-    MagicMount::new(&tree.root, Path::new("/"), work_dir, false, umount).do_mount()?;
+    let mut stats = MagicMountStats::default();
+    MagicMount::new(
+        &tree.root,
+        Path::new("/"),
+        work_dir,
+        false,
+        umount,
+        &mut stats,
+    )
+    .do_mount()?;
 
-    let files = MOUNTED_FILES.load(Ordering::Relaxed);
-    let symlinks = MOUNTED_SYMLINKS.load(Ordering::Relaxed);
-    log::info!("mounted files: {files}, mounted symlinks: {symlinks}");
+    stats.active_mounts.sort();
+    stats.active_mounts.dedup();
+    log::info!(
+        "mounted files: {}, mounted symlinks: {}, active targets: {}",
+        stats.mounted_files,
+        stats.mounted_symlinks,
+        stats.active_mounts.len()
+    );
 
-    Ok(MagicMountStats {
-        mounted_files: files,
-        mounted_symlinks: symlinks,
-        ignored_files: IGNORED_FILES.load(Ordering::Relaxed),
-    })
+    Ok(stats)
 }
 
 /// 按真实路径(存在时)或模块源路径复制 mode/uid/gid/SELinux 到 staging。

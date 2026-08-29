@@ -57,7 +57,12 @@
     "compatible": "Compatible",
     "incompatible": "Incompatible",
     "modeStats": "模式統計",
-    "mountCount": "{count} 個掛載"
+    "mountCount": "{count} 個掛載",
+    "moduleCount": "{count} 個模組",
+    "magicOperationCount": "{files} 個檔案掛載 · {symlinks} 個連結",
+    "noActiveMounts": "本次啟動沒有活動掛載點",
+    "mountTargetCount": "{count} 個目標",
+    "mountDetails": "查看 {count} 個掛載點"
   },
   "config": {
     "moduledir": "模組路徑",
