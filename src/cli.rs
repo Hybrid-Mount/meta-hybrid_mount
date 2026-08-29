@@ -62,7 +62,10 @@ mod tests {
     #[test]
     fn version_command_matches_contract_shape() {
         run(&["version".to_owned()]).unwrap();
-        assert_eq!(version_payload(), r#"{ "version": "6.1.0" }"#);
+        assert_eq!(
+            version_payload(),
+            format!(r#"{{ "version": "{}" }}"#, env!("CARGO_PKG_VERSION"))
+        );
     }
 
     #[test]
