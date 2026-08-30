@@ -1,4 +1,34 @@
 
+## v6.1.3
+
+
+### <!-- 1 --> Features
+
+- `webui` Show blacklist reasons in modules tab
+
+- `config` Fall back to defaults on load failure
+
+
+
+### <!-- 2 --> Fixes
+
+- Fix umount all mountpoint Currently, only non-overlay mounts should be uninstalled.
+
+- `webui` Localize mount target counts
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- French translation fixes and enhancements
+
+- `webui` Format pnpm lockfile
+
+- French translation fixes and enhancements
+
+
+
+
 ## v6.1.2
 
 
