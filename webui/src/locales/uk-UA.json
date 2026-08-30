@@ -54,8 +54,8 @@
     "moduleCount": "{count} modules",
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
-    "mountTargetCount": "{count} targets",
-    "mountDetails": "View {count} mount targets"
+    "mountTargetCount": "{count} точок монтування | {count} точка монтування | {count} точки монтування | {count} точок монтування",
+    "mountDetails": "Переглянути {count} точок монтування | Переглянути {count} точку монтування | Переглянути {count} точки монтування | Переглянути {count} точок монтування"
   },
   "config": {
     "moduledir": "Каталог модулів",

@@ -54,8 +54,8 @@
     "moduleCount": "{count} modules",
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
-    "mountTargetCount": "{count} targets",
-    "mountDetails": "View {count} mount targets"
+    "mountTargetCount": "{count} destinazione | {count} destinazioni",
+    "mountDetails": "Visualizza {count} destinazione di montaggio | Visualizza {count} destinazioni di montaggio"
   },
   "config": {
     "moduledir": "Directory moduli",

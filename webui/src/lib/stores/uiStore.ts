@@ -2,7 +2,7 @@
 
 import { ref } from "vue";
 import { toast } from "kernelsu";
-import { getSupportedLocales, normalizeLocaleCode, switchLocale } from "../../locales";
+import { getSupportedLocales, switchLocale } from "../../locales";
 import type { UiStyle } from "../types";
 
 const lang = ref("en-US");
@@ -27,9 +27,8 @@ function setToastHandler(handler?: (text: string) => void): void {
 }
 
 async function setLang(code: string): Promise<void> {
-  const normalizedCode = normalizeLocaleCode(code);
-  lang.value = normalizedCode;
-  await switchLocale(normalizedCode);
+  lang.value = code;
+  await switchLocale(code);
 }
 
 function setUiStyle(style: UiStyle): void {
@@ -56,7 +55,7 @@ function setMonetEnabled(enabled: boolean): void {
 
 async function init(): Promise<void> {
   await fetchAvailableLanguages();
-  const requestedLang = normalizeLocaleCode(localStorage.getItem("locale") ?? "en-US");
+  const requestedLang = localStorage.getItem("locale") ?? "en-US";
   const savedLang = availableLanguages.value.some(
     (language) => language.code === requestedLang,
   )

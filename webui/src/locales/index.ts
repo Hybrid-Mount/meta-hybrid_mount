@@ -1,34 +1,47 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { createI18n } from "vue-i18n";
+import { createI18n, type PluralizationRule } from "vue-i18n";
 
 type LocaleMessages = Record<string, unknown>;
 type LocaleModule = { default: LocaleMessages };
 
 const localeModules = import.meta.glob("./*.json", { eager: false });
 
-const LEGACY_LOCALE_ALIASES: Record<string, string> = {
-  en: "en-US",
-  zh: "zh-CN",
-};
-
-const LOCALE_FILE_ALIASES: Record<string, string> = {
-  "en-US": "en",
-  "zh-CN": "zh",
-};
-
 let cachedLocales: { code: string; display: string }[] | null = null;
+
+export const eastSlavicPluralRule: PluralizationRule = (
+  choice,
+  choicesLength,
+  originalRule,
+) => {
+  if (choicesLength !== 4) {
+    return originalRule?.(choice, choicesLength) ?? 0;
+  }
+
+  const count = Math.abs(choice);
+  if (count === 0) return 0;
+
+  const lastDigit = count % 10;
+  const lastTwoDigits = count % 100;
+  if (lastDigit === 1 && lastTwoDigits !== 11) return 1;
+  if (lastDigit >= 2 && lastDigit <= 4 && (lastTwoDigits < 12 || lastTwoDigits > 14)) {
+    return 2;
+  }
+  return 3;
+};
+
+export const pluralizationRules: Record<string, PluralizationRule> = {
+  "ru-RU": eastSlavicPluralRule,
+  "uk-UA": eastSlavicPluralRule,
+};
 
 const i18n = createI18n({
   legacy: false,
   locale: "en-US",
   fallbackLocale: "en-US",
   messages: {},
+  pluralRules: pluralizationRules,
 });
-
-export function normalizeLocaleCode(locale: string): string {
-  return LEGACY_LOCALE_ALIASES[locale] ?? locale;
-}
 
 export async function getSupportedLocales(): Promise<
   { code: string; display: string }[]
@@ -40,7 +53,7 @@ export async function getSupportedLocales(): Promise<
       const match = path.match(/\.\/(.+)\.json$/);
       if (!match) return null;
 
-      const code = normalizeLocaleCode(match[1]);
+      const code = match[1];
       const module = (await loader()) as LocaleModule;
       const lang = module.default.lang;
       const display =
@@ -59,19 +72,17 @@ export async function getSupportedLocales(): Promise<
 }
 
 export async function loadLocale(locale: string): Promise<void> {
-  const normalizedLocale = normalizeLocaleCode(locale);
-  if (i18n.global.availableLocales.includes(normalizedLocale)) return;
+  if (i18n.global.availableLocales.includes(locale)) return;
 
-  const fileCode = LOCALE_FILE_ALIASES[normalizedLocale] ?? normalizedLocale;
-  const path = `./${fileCode}.json`;
+  const path = `./${locale}.json`;
   const loader = localeModules[path];
   if (!loader) {
-    console.error(`Locale "${normalizedLocale}" not found`);
+    console.error(`Locale "${locale}" not found`);
     return;
   }
 
   const module = (await loader()) as LocaleModule;
-  i18n.global.setLocaleMessage(normalizedLocale, module.default);
+  i18n.global.setLocaleMessage(locale, module.default);
 }
 
 export async function preloadFallbackLocale(): Promise<void> {
@@ -79,11 +90,10 @@ export async function preloadFallbackLocale(): Promise<void> {
 }
 
 export async function switchLocale(locale: string): Promise<void> {
-  const normalizedLocale = normalizeLocaleCode(locale);
   await preloadFallbackLocale();
-  await loadLocale(normalizedLocale);
-  i18n.global.locale.value = normalizedLocale;
-  localStorage.setItem("locale", normalizedLocale);
+  await loadLocale(locale);
+  i18n.global.locale.value = locale;
+  localStorage.setItem("locale", locale);
 }
 
 export async function initI18n(preferred?: string): Promise<void> {
@@ -96,7 +106,7 @@ export async function initI18n(preferred?: string): Promise<void> {
   await preloadFallbackLocale();
 
   const savedLocale = localStorage.getItem("locale");
-  let defaultLocale = normalizeLocaleCode(preferred || savedLocale || locales[0].code);
+  let defaultLocale = preferred || savedLocale || locales[0].code;
 
   if (!locales.some((item) => item.code === defaultLocale)) {
     defaultLocale = locales[0].code;

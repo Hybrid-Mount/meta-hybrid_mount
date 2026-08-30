@@ -54,8 +54,8 @@
     "moduleCount": "{count} modules",
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
-    "mountTargetCount": "{count} targets",
-    "mountDetails": "View {count} mount targets"
+    "mountTargetCount": "{count} titik mount",
+    "mountDetails": "Lihat {count} titik mount"
   },
   "config": {
     "moduledir": "Direktori Modul",

@@ -54,8 +54,8 @@
     "moduleCount": "{count} modules",
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
-    "mountTargetCount": "{count} targets",
-    "mountDetails": "View {count} mount targets"
+    "mountTargetCount": "{count} điểm gắn kết",
+    "mountDetails": "Xem {count} điểm gắn kết"
   },
   "config": {
     "moduledir": "Thư mục Mô-đun",

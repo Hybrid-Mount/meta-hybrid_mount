@@ -61,8 +61,8 @@
     "moduleCount": "{count} modül",
     "magicOperationCount": "{files} dosya bağlaması · {symlinks} sembolik bağlantı",
     "noActiveMounts": "Bu başlangıç anlık görüntüsünde etkin bağlama hedefi yok",
-    "mountTargetCount": "{count} hedef",
-    "mountDetails": "{count} bağlama hedefini görüntüle"
+    "mountTargetCount": "{count} bağlama noktası",
+    "mountDetails": "{count} bağlama noktasını görüntüle"
   },
   "config": {
     "title": "Yapılandırma",

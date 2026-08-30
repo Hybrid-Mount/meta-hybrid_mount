@@ -61,8 +61,8 @@
     "moduleCount": "{count} module(s)",
     "magicOperationCount": "{files} montage(s) de fichier · {symlinks} lien(s)",
     "noActiveMounts": "Aucune cible de montage active dans cet instantané de démarrage",
-    "mountTargetCount": "{count} cible(s)",
-    "mountDetails": "{count} cible(s) de montage"
+    "mountTargetCount": "{count} cible | {count} cible | {count} cibles",
+    "mountDetails": "Afficher {count} cible de montage | Afficher {count} cible de montage | Afficher {count} cibles de montage"
   },
   "config": {
     "title": "Configuration",
