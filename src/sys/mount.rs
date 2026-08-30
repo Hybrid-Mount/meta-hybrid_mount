@@ -157,6 +157,7 @@ pub fn emulated_soft_reboot(source: &str) -> Result<()> {
     let mut mount_points = mountinfo
         .into_iter()
         .filter(|entry| entry.mount_source.as_deref() == Some(source))
+        .filter(|entry| entry.fs_type != "overlay")
         .map(|entry| entry.mount_point)
         .collect::<Vec<_>>();
     mount_points.sort_by(|left, right| {
