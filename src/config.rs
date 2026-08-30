@@ -107,7 +107,7 @@ pub struct Config {
     pub(crate) module_blacklist: BTreeSet<ModuleId>,
 
     /// 主配置文件不存在时使用默认值；仅用于 `show-config` 的诊断展示，
-    /// 不写入 TOML。配置文件存在但损坏/不可读时，`load_or_default` 返回错误。
+    /// 不写入 TOML。配置文件损坏/不可读时同样回退默认值，但不标记为缺失。
     #[serde(skip)]
     pub config_missing: bool,
 
@@ -154,7 +154,7 @@ impl Config {
     }
 
     /// WebUI 配置响应。运行时能力只用于控制选项可见性，不持久化到 TOML。
-    /// `config_missing` 让 WebUI 区分"从未创建配置"与"配置损坏"。
+    /// `config_missing` 让 WebUI 识别主配置文件是否缺失。
     pub fn to_webui_json(&self, tmpfs_xattr_supported: bool) -> Result<String> {
         #[derive(Serialize)]
         struct WebUiConfig<'a> {
@@ -192,7 +192,8 @@ impl Config {
     }
 
     /// 读取配置：文件不存在时使用默认值并标记 `config_missing`；
-    /// 文件存在但损坏、无权限或黑名单不可用时返回错误，绝不伪装成缺失。
+    /// 主配置损坏、不可读或不受支持时记录警告并使用默认值，不覆盖原文件。
+    /// 独立模块黑名单损坏或不可读时仍然返回错误，保持 fail-closed。
     pub fn load_or_default(path: &Path) -> Result<Self> {
         match Self::load(path) {
             Ok(mut config) => {
@@ -216,7 +217,20 @@ impl Config {
                 config.load_module_blacklists(path)?;
                 Ok(config)
             }
-            Err(err) => Err(err),
+            Err(err) => match &err {
+                Error::ConfigRead { .. }
+                | Error::ConfigParse { .. }
+                | Error::UnsupportedGlobalDefaultMode => {
+                    log::warn!(
+                        "failed to load config, using defaults: path={}, error={err}",
+                        path.display()
+                    );
+                    let mut config = Self::default();
+                    config.load_module_blacklists(path)?;
+                    Ok(config)
+                }
+                _ => Err(err),
+            },
         }
     }
 
@@ -491,7 +505,7 @@ pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
 }
 
 /// `show-config`:输出 JSON 配置。
-/// 配置缺失时输出默认配置并带 `config_missing: true`；损坏/不可读时返回错误。
+/// 配置缺失时输出默认配置并带 `config_missing: true`；损坏/不可读时输出默认配置。
 pub fn handle_show_config() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let tmpfs_xattr_supported = match crate::sys::fs::is_overlay_xattr_supported() {

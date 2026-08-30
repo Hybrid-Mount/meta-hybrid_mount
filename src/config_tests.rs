@@ -331,17 +331,53 @@ fn load_or_default_uses_defaults_and_marks_missing_file() {
 }
 
 #[test]
-fn load_or_default_rejects_corrupt_config_with_path_context() {
+fn load_or_default_uses_defaults_for_corrupt_config_without_overwriting_it() {
     let dir = test_dir("load-or-default-corrupt");
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("config.toml");
-    fs::write(&path, "default_mode = not-valid").unwrap();
+    let corrupt = "default_mode = not-valid";
+    fs::write(&path, corrupt).unwrap();
+    fs::write(
+        dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
+        r#"blacklist = ["blocked"]"#,
+    )
+    .unwrap();
 
-    let err = Config::load_or_default(&path).unwrap_err();
+    let config = Config::load_or_default(&path).unwrap();
 
-    let message = err.to_string();
-    assert!(message.contains(&path.display().to_string()), "{message}");
-    assert!(message.contains("parse config"), "{message}");
+    let mut expected = Config::default();
+    expected.module_blacklist.insert(module_id("blocked"));
+    assert_eq!(config, expected);
+    assert_eq!(fs::read_to_string(&path).unwrap(), corrupt);
+    cleanup(&dir);
+}
+
+#[test]
+fn load_or_default_uses_defaults_for_unsupported_config_without_overwriting_it() {
+    let dir = test_dir("load-or-default-unsupported");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    let unsupported = "default_mode = \"ignore\"\n";
+    fs::write(&path, unsupported).unwrap();
+
+    let config = Config::load_or_default(&path).unwrap();
+
+    assert_eq!(config, Config::default());
+    assert_eq!(fs::read_to_string(&path).unwrap(), unsupported);
+    cleanup(&dir);
+}
+
+#[test]
+fn load_or_default_uses_defaults_when_config_cannot_be_read() {
+    let dir = test_dir("load-or-default-read-error");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("unreadable.toml");
+    fs::create_dir_all(&path).unwrap();
+
+    let config = Config::load_or_default(&path).unwrap();
+
+    assert_eq!(config, Config::default());
+    assert!(path.is_dir());
     cleanup(&dir);
 }
 

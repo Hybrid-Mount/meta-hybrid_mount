@@ -27,7 +27,9 @@ async function loadConfig(): Promise<void> {
       hasLoaded = true;
     } catch (error) {
       console.error("configStore: failed to load config", error);
-      uiStore.showToast("Failed to load config");
+      setConfig(DEFAULT_CONFIG);
+      hasLoaded = true;
+      uiStore.showToast("Failed to load config; using defaults");
     } finally {
       loading.value = false;
       pendingLoad = null;
