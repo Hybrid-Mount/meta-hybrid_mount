@@ -164,7 +164,7 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
     };
     for entry in entries {
         let entry = entry?;
-        // G09: 只删除项目自有的精确文件名；modules.img.bak 等用户备份必须保留。
+        // 只删除项目自有的精确文件名；modules.img.bak 等用户备份必须保留。
         if entry.file_name() != file_name {
             continue;
         }
@@ -297,7 +297,7 @@ fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
     }
 
     if let Err(err) = unmount(target, UnmountFlags::DETACH) {
-        // G06: tmpfs 回退前必须确认 tmpfs 已卸载；卸载失败 fail-closed，
+        // tmpfs 回退前必须确认 tmpfs 已卸载；卸载失败 fail-closed，
         // 不能继续尝试把 ext4 挂到同一个仍被占用的目标上。
         return Err(crate::errors::Error::Storage(Box::new(
             crate::errors::ContextError::new(

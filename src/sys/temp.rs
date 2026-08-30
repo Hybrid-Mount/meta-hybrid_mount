@@ -15,6 +15,11 @@ const MIN_NAME_LEN: usize = 22;
 const NAME_LEN_VARIANTS: usize = 9;
 const CREATE_ATTEMPTS: usize = 32;
 
+#[cfg(any(test, target_os = "linux", target_os = "android"))]
+fn runtime_temp_candidates() -> [&'static Path; 3] {
+    [Path::new("/mnt"), Path::new("/mnt/rw"), Path::new("/tmp")]
+}
+
 /// A private per-run directory. It is removed on drop unless explicitly kept
 /// because `disable_umount` intentionally retains a mount beneath it.
 #[derive(Debug)]
@@ -26,7 +31,7 @@ pub struct RuntimeTempDir {
 impl RuntimeTempDir {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn create() -> Result<Self> {
-        Self::create_in_candidates(&[Path::new("/tmp"), Path::new("/tmp/rw"), Path::new("/mnt")])
+        Self::create_in_candidates(&runtime_temp_candidates())
     }
 
     fn create_in_candidates(candidates: &[&Path]) -> Result<Self> {
@@ -60,7 +65,7 @@ impl RuntimeTempDir {
         }
 
         Err(Error::msg(format!(
-            "no writable runtime temporary base (/tmp, /tmp/rw, /mnt): {}",
+            "no writable runtime temporary base (/mnt, /mnt/rw, /tmp): {}",
             failures.join("; ")
         )))
     }
@@ -182,6 +187,14 @@ fn random_name() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_temp_candidates_prefer_mnt_before_tmp_fallbacks() {
+        assert_eq!(
+            runtime_temp_candidates(),
+            [Path::new("/mnt"), Path::new("/mnt/rw"), Path::new("/tmp")]
+        );
+    }
 
     #[test]
     fn random_names_have_no_project_or_time_signature() {

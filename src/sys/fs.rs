@@ -64,7 +64,7 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         }
 
         fs::rename(&temporary, path)?;
-        // G07: 父目录 fsync 失败按保存失败处理。rename 已经可见，但调用方
+        // 父目录 fsync 失败按保存失败处理。rename 已经可见，但调用方
         // 必须知道目录项未持久化，不能把它当成一次成功的原子保存。
         fs::File::open(parent)?.sync_all()?;
         Ok(())

@@ -19,7 +19,7 @@ use crate::module_id::ModuleId;
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::{ModuleRecord, list_modules};
 
-/// `modules` 命令输出的模块条目(交互契约参考上游 scanner JSON)。
+/// `modules` 命令输出的模块条目及其 JSON 交互契约。
 /// `id` 在反序列化时仍然验证;线格式保持普通 JSON 字符串。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppModule {
@@ -904,7 +904,6 @@ mod tests {
         let removed = clear_mount_error_markers(&root);
         assert_eq!(removed, 1);
         assert!(collect_mount_error_modules(&root).is_empty());
-        // system 内容未被触碰
         assert_eq!(
             fs::read_to_string(module.join("system/etc/hosts")).unwrap(),
             "data"

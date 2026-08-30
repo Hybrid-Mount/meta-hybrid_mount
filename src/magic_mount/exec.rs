@@ -2,7 +2,7 @@
 
 //! Magic Mount 挂载执行(仅 Linux/Android)。
 //!
-//! 语义对齐参考项目 `8b85c9e`:
+//! 核心语义：
 //! - 文件直接 bind + 只读 remount;符号链接克隆到 staging;
 //! - 目录在需要挂子项或 `replace` 时建立 tmpfs skeleton,
 //!   mirror 原目录的其余条目,最后只读 remount 并 mount-move 到目标;

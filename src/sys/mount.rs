@@ -136,8 +136,8 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `emulated-soft-reboot`:立即卸载 mountinfo 中 source 为指定值的所有挂载点
-/// (参考项目行为,用于模拟软重启前的挂载清理)。
+/// `emulated-soft-reboot`:立即卸载 mountinfo 中 source 为指定值的所有挂载点，
+/// 用于模拟软重启前的挂载清理。
 pub fn emulated_soft_reboot(source: &str) -> Result<()> {
     let process = Process::myself().map_err(|source| {
         Error::Mount(Box::new(ContextError::new(

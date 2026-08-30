@@ -35,7 +35,7 @@ pub enum MountEffect {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
-    // G05: 正常清理路径不得把 mountinfo 查询失败当成“未挂载”。
+    // 正常清理路径不得把 mountinfo 查询失败当成“未挂载”。
     if crate::sys::mount::is_mounted(&path)?
         && let Err(err) = unmount(&path, UnmountFlags::DETACH)
         && !matches!(err, rustix::io::Errno::NOENT | rustix::io::Errno::INVAL)

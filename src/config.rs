@@ -326,7 +326,7 @@ impl Config {
 
     /// 加载随包发布与用户持久化的模块黑名单。
     ///
-    /// 语义（G04）：文件**缺失** = 无对应来源的黑名单，属于正常状态；
+    /// 文件**缺失** = 无对应来源的黑名单，属于正常状态；
     /// 文件存在但**损坏或不可读** = 错误，调用方必须 fail-closed，
     /// 防止用户明确屏蔽的模块因解析失败而重新参与挂载。
     fn load_module_blacklists(&mut self, config_path: &Path) -> Result<()> {
@@ -475,7 +475,7 @@ where
     deserializer.deserialize_option(OptionalModeClearVisitor)
 }
 
-/// 从 `["--payload", "<hex>", ...]` 中取出 payload(参考项目方式)。
+/// 从 `["--payload", "<hex>", ...]` 中取出 payload。
 pub fn parse_payload_arg(args: &[String]) -> Result<&str> {
     args.windows(2)
         .find_map(|window| (window[0] == "--payload").then_some(window[1].as_str()))

@@ -1393,7 +1393,6 @@ mod tests {
             result.overlay_ops[0].lowerdirs,
             vec![module.join("system/etc")]
         );
-        // 源目录结构与内容不变
         assert_eq!(fs::read_to_string(&hosts).unwrap(), "127.0.0.1 localhost");
         assert_eq!(scanned, crate::scanner::list_modules(&root, &[]).unwrap());
 

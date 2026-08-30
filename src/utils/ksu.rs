@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! KernelSU 尝试卸载列表集成(注册行为对齐参考项目 `8b85c9e`;
-//! 去重与忽略分区对齐本仓库 v4.2.0 `umount_mgr`)。
+//! KernelSU 尝试卸载列表集成。
+//! 去重与忽略分区延续本仓库 v4.2.0 `umount_mgr` 语义。
 //!
 //! 注意语义边界:这里只把挂载点**注册**进内核列表,不做立即卸载;
 //! 立即卸载必须走 rustix 的 `unmount` 系统调用。

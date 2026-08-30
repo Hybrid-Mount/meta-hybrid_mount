@@ -3,8 +3,7 @@
 //! 模块清单的只读扫描(供 planner 与 CLI 使用)。
 //!
 //! 只读取并记录,绝不写回模块目录。
-//! 行为参考上游 `scanner.rs`(module.prop 必填字段、disable/remove/skip_mount、
-//! system/额外分区存在性)。
+//! 识别 `module.prop`、disable/remove/skip_mount 标记与 system/额外分区内容。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;

@@ -14,7 +14,7 @@ use rustix::fs::{XattrFlags, lgetxattr, lsetxattr};
 use crate::defs;
 use crate::errors::{Error, Result};
 
-/// 创建目录并确认结果是目录(参考项目 `ensure_dir_exists` 行为)。
+/// 创建目录并确认结果是目录。
 pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
     std::fs::create_dir_all(dir)?;
     if dir.is_dir() {
