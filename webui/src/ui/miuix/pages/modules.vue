@@ -106,6 +106,16 @@ function toggleModule(moduleId: string): void {
   expanded.value[moduleId] = !expanded.value[moduleId];
 }
 
+function enableModuleDetails(element: Element): void {
+  element.removeAttribute("aria-hidden");
+  element.removeAttribute("inert");
+}
+
+function disableModuleDetails(element: Element): void {
+  element.setAttribute("aria-hidden", "true");
+  element.setAttribute("inert", "");
+}
+
 onMounted(() => moduleStore.ensureModulesLoaded());
 </script>
 
@@ -184,55 +194,65 @@ onMounted(() => moduleStore.ensureModulesLoaded());
           {{ t("modules.blacklistReason") }}
         </p>
 
-        <Transition name="module-details">
-          <div v-if="expanded[module.id]" class="module-details">
-            <MiuixBasicComponent
-              v-if="module.mount_error"
-              :title="t('modules.mountError')"
-              :summary="module.mount_error"
-            />
-            <MiuixBasicComponent
-              v-if="module.suggest_ignore"
-              :title="t('modules.suggestIgnore')"
-            />
-            <div class="rule-row">
-              <span>{{ t("config.moduleDefault") }}</span>
-              <MiuixSelectField
-                compact
-                class="rule-mode-select"
-                :label="t('config.moduleDefault')"
-                :model-value="ruleFor(module).default_mode ?? ''"
-                :options="defaultModeOptions"
-                @update:model-value="
-                  ruleFor(module).default_mode = $event ? ($event as MountMode) : null
-                "
-              />
-            </div>
-            <div
-              v-for="(mode, path) in ruleFor(module).paths"
-              :key="path"
-              class="rule-row"
-            >
-              <span class="path">{{ path }}</span>
-              <MiuixSelectField
-                compact
-                class="rule-mode-select"
-                :label="String(path)"
-                :model-value="mode"
-                :options="ruleModeOptions"
-                @update:model-value="ruleFor(module).paths[path] = $event as MountMode"
-              />
-            </div>
-            <div class="module-actions">
-              <MiuixIconButton
-                class="module-icon-action save-module-button"
-                :title="t('modules.save')"
-                :aria-label="t('modules.save')"
-                :disabled="savingModule === module.id"
-                @click="saveModuleRules(module)"
-              >
-                <IconCheck class="check-icon" />
-              </MiuixIconButton>
+        <Transition
+          name="module-details"
+          @before-enter="enableModuleDetails"
+          @before-leave="disableModuleDetails"
+        >
+          <div v-if="expanded[module.id]" class="module-details-wrapper">
+            <div class="module-details-inner">
+              <div class="module-details">
+                <MiuixBasicComponent
+                  v-if="module.mount_error"
+                  :title="t('modules.mountError')"
+                  :summary="module.mount_error"
+                />
+                <MiuixBasicComponent
+                  v-if="module.suggest_ignore"
+                  :title="t('modules.suggestIgnore')"
+                />
+                <div class="rule-row">
+                  <span>{{ t("config.moduleDefault") }}</span>
+                  <MiuixSelectField
+                    compact
+                    class="rule-mode-select"
+                    :label="t('config.moduleDefault')"
+                    :model-value="ruleFor(module).default_mode ?? ''"
+                    :options="defaultModeOptions"
+                    @update:model-value="
+                      ruleFor(module).default_mode = $event ? ($event as MountMode) : null
+                    "
+                  />
+                </div>
+                <div
+                  v-for="(mode, path) in ruleFor(module).paths"
+                  :key="path"
+                  class="rule-row"
+                >
+                  <span class="path">{{ path }}</span>
+                  <MiuixSelectField
+                    compact
+                    class="rule-mode-select"
+                    :label="String(path)"
+                    :model-value="mode"
+                    :options="ruleModeOptions"
+                    @update:model-value="
+                      ruleFor(module).paths[path] = $event as MountMode
+                    "
+                  />
+                </div>
+                <div class="module-actions">
+                  <MiuixIconButton
+                    class="module-icon-action save-module-button"
+                    :title="t('modules.save')"
+                    :aria-label="t('modules.save')"
+                    :disabled="savingModule === module.id"
+                    @click="saveModuleRules(module)"
+                  >
+                    <IconCheck class="check-icon" />
+                  </MiuixIconButton>
+                </div>
+              </div>
             </div>
           </div>
         </Transition>
@@ -338,6 +358,16 @@ onMounted(() => moduleStore.ensureModulesLoaded());
   border-top: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.08));
 }
 
+.module-details-wrapper {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.module-details-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
@@ -396,15 +426,34 @@ onMounted(() => moduleStore.ensureModulesLoaded());
 
 .module-details-enter-active,
 .module-details-leave-active {
+  transition: grid-template-rows 280ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.module-details-enter-active .module-details,
+.module-details-leave-active .module-details {
   transition:
-    opacity 160ms ease,
-    transform 160ms ease;
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .module-details-enter-from,
 .module-details-leave-to {
+  grid-template-rows: 0fr;
+}
+
+.module-details-enter-from .module-details,
+.module-details-leave-to .module-details {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .module-details-enter-active,
+  .module-details-leave-active,
+  .module-details-enter-active .module-details,
+  .module-details-leave-active .module-details {
+    transition-duration: 0.01ms;
+  }
 }
 
 @media (max-width: 560px) {

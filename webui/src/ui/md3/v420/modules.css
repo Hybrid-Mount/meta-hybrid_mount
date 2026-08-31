@@ -306,36 +306,44 @@
   color: var(--md-sys-color-on-tertiary-container);
 }
 
-/* 动画核心样式 */
 .module-body-wrapper {
   display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.module-card.expanded .module-body-wrapper {
   grid-template-rows: 1fr;
 }
 
+.module-expand-enter-active,
+.module-expand-leave-active {
+  transition: grid-template-rows 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.module-expand-enter-from,
+.module-expand-leave-to {
+  grid-template-rows: 0fr;
+}
+
 .module-body-inner {
+  min-height: 0;
   overflow: hidden;
 }
 
 .module-body-content {
   padding: 0 16px 16px 16px;
   border-top: 1px solid var(--md-sys-color-outline-variant);
-  opacity: 0;
-  transform: translateY(-8px);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.module-expand-enter-active .module-body-content,
+.module-expand-leave-active .module-body-content {
   transition:
     opacity 0.2s ease,
     transform 0.2s ease;
-  transition-delay: 0s;
 }
 
-.module-card.expanded .module-body-content {
-  opacity: 1;
-  transform: translateY(0);
-  transition-delay: 0.1s;
+.module-expand-enter-from .module-body-content,
+.module-expand-leave-to .module-body-content {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .body-section {

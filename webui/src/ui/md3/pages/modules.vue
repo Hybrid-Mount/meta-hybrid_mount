@@ -73,6 +73,16 @@ async function clearErrors(): Promise<void> {
   uiStore.showToast(t("modules.clearedCount", { count: removed }));
 }
 
+function enableModuleDetails(element: Element): void {
+  element.removeAttribute("aria-hidden");
+  element.removeAttribute("inert");
+}
+
+function disableModuleDetails(element: Element): void {
+  element.setAttribute("aria-hidden", "true");
+  element.setAttribute("inert", "");
+}
+
 onMounted(() => moduleStore.ensureModulesLoaded());
 </script>
 
@@ -158,111 +168,117 @@ onMounted(() => moduleStore.ensureModulesLoaded());
           {{ t("modules.blacklistReason") }}
         </p>
 
-        <div v-if="expanded[module.id]" class="module-body-wrapper">
-          <div class="module-body-inner">
-            <div class="module-body-content">
-              <section
-                v-if="module.mount_error || module.suggest_ignore"
-                class="body-section"
-              >
-                <p v-if="module.mount_error" class="status-warning">
-                  {{ t("modules.mountError") }}: {{ module.mount_error }}
-                </p>
-                <p v-if="module.suggest_ignore" class="suggest-ignore-hint">
-                  {{ t("modules.suggestIgnore") }}
-                </p>
-              </section>
-
-              <section class="body-section">
-                <span class="section-label">{{ t("config.moduleDefault") }}</span>
-                <div class="strategy-selector">
-                  <button
-                    type="button"
-                    class="strategy-option"
-                    :class="{ selected: ruleFor(module).default_mode === null }"
-                    @click="ruleFor(module).default_mode = null"
-                  >
-                    <span class="opt-title">{{ t("config.inherit") }}</span>
-                  </button>
-                  <button
-                    v-for="mode in modeOptions"
-                    :key="mode"
-                    type="button"
-                    class="strategy-option"
-                    :class="{ selected: ruleFor(module).default_mode === mode }"
-                    @click="ruleFor(module).default_mode = mode"
-                  >
-                    <span class="opt-title">{{ modeLabels[mode] }}</span>
-                  </button>
-                </div>
-              </section>
-
-              <section class="body-section">
-                <span class="section-label">{{ t("config.paths") }}</span>
-                <div
-                  v-for="(mode, path) in ruleFor(module).paths"
-                  :key="path"
-                  class="rule-path-row module-path-row"
+        <Transition
+          name="module-expand"
+          @before-enter="enableModuleDetails"
+          @before-leave="disableModuleDetails"
+        >
+          <div v-if="expanded[module.id]" class="module-body-wrapper">
+            <div class="module-body-inner">
+              <div class="module-body-content">
+                <section
+                  v-if="module.mount_error || module.suggest_ignore"
+                  class="body-section"
                 >
-                  <span class="rule-path-label">{{ path }}</span>
-                  <Md3SelectField
-                    compact
-                    :label="String(path)"
-                    :model-value="mode"
-                    :options="modeSelectOptions"
-                    @update:model-value="
-                      ruleFor(module).paths[path] = $event as MountMode
-                    "
-                  />
-                  <md-icon-button
-                    :aria-label="t('common.close')"
-                    @click="delete ruleFor(module).paths[path]"
+                  <p v-if="module.mount_error" class="status-warning">
+                    {{ t("modules.mountError") }}: {{ module.mount_error }}
+                  </p>
+                  <p v-if="module.suggest_ignore" class="suggest-ignore-hint">
+                    {{ t("modules.suggestIgnore") }}
+                  </p>
+                </section>
+
+                <section class="body-section">
+                  <span class="section-label">{{ t("config.moduleDefault") }}</span>
+                  <div class="strategy-selector">
+                    <button
+                      type="button"
+                      class="strategy-option"
+                      :class="{ selected: ruleFor(module).default_mode === null }"
+                      @click="ruleFor(module).default_mode = null"
+                    >
+                      <span class="opt-title">{{ t("config.inherit") }}</span>
+                    </button>
+                    <button
+                      v-for="mode in modeOptions"
+                      :key="mode"
+                      type="button"
+                      class="strategy-option"
+                      :class="{ selected: ruleFor(module).default_mode === mode }"
+                      @click="ruleFor(module).default_mode = mode"
+                    >
+                      <span class="opt-title">{{ modeLabels[mode] }}</span>
+                    </button>
+                  </div>
+                </section>
+
+                <section class="body-section">
+                  <span class="section-label">{{ t("config.paths") }}</span>
+                  <div
+                    v-for="(mode, path) in ruleFor(module).paths"
+                    :key="path"
+                    class="rule-path-row module-path-row"
                   >
-                    <md-icon
-                      ><svg viewBox="0 0 24 24"><path :d="ICONS.delete" /></svg
-                    ></md-icon>
-                  </md-icon-button>
-                </div>
-                <div class="rule-path-row module-path-row new-path-row">
-                  <input
-                    v-model="newPaths[module.id]"
-                    class="md3-input-native"
-                    :placeholder="t('config.pathPlaceholder')"
-                  />
-                  <Md3SelectField
-                    compact
-                    :label="t('config.defaultMode')"
-                    :model-value="newModes[module.id] ?? 'overlay'"
-                    :options="modeSelectOptions"
-                    @update:model-value="newModes[module.id] = $event as MountMode"
-                  />
+                    <span class="rule-path-label">{{ path }}</span>
+                    <Md3SelectField
+                      compact
+                      :label="String(path)"
+                      :model-value="mode"
+                      :options="modeSelectOptions"
+                      @update:model-value="
+                        ruleFor(module).paths[path] = $event as MountMode
+                      "
+                    />
+                    <md-icon-button
+                      :aria-label="t('common.close')"
+                      @click="delete ruleFor(module).paths[path]"
+                    >
+                      <md-icon
+                        ><svg viewBox="0 0 24 24"><path :d="ICONS.delete" /></svg
+                      ></md-icon>
+                    </md-icon-button>
+                  </div>
+                  <div class="rule-path-row module-path-row new-path-row">
+                    <input
+                      v-model="newPaths[module.id]"
+                      class="md3-input-native"
+                      :placeholder="t('config.pathPlaceholder')"
+                    />
+                    <Md3SelectField
+                      compact
+                      :label="t('config.defaultMode')"
+                      :model-value="newModes[module.id] ?? 'overlay'"
+                      :options="modeSelectOptions"
+                      @update:model-value="newModes[module.id] = $event as MountMode"
+                    />
+                    <md-filled-tonal-icon-button
+                      :title="t('config.addPathRule')"
+                      :aria-label="t('config.addPathRule')"
+                      @click="addPath(module)"
+                    >
+                      <md-icon
+                        ><svg viewBox="0 0 24 24"><path :d="ICONS.add" /></svg
+                      ></md-icon>
+                    </md-filled-tonal-icon-button>
+                  </div>
+                </section>
+
+                <div class="module-actions">
                   <md-filled-tonal-icon-button
-                    :title="t('config.addPathRule')"
-                    :aria-label="t('config.addPathRule')"
-                    @click="addPath(module)"
+                    class="module-icon-action save-module-action"
+                    :title="t('modules.save')"
+                    :aria-label="t('modules.save')"
+                    @click="saveRules(module)"
                   >
                     <md-icon
-                      ><svg viewBox="0 0 24 24"><path :d="ICONS.add" /></svg
+                      ><svg viewBox="0 0 24 24"><path :d="ICONS.save" /></svg
                     ></md-icon>
                   </md-filled-tonal-icon-button>
                 </div>
-              </section>
-
-              <div class="module-actions">
-                <md-filled-tonal-icon-button
-                  class="module-icon-action save-module-action"
-                  :title="t('modules.save')"
-                  :aria-label="t('modules.save')"
-                  @click="saveRules(module)"
-                >
-                  <md-icon
-                    ><svg viewBox="0 0 24 24"><path :d="ICONS.save" /></svg
-                  ></md-icon>
-                </md-filled-tonal-icon-button>
               </div>
             </div>
           </div>
-        </div>
+        </Transition>
       </article>
     </section>
 
