@@ -5,7 +5,7 @@
 //!
 //! 挂载与 shallow staging 只写运行目录,模块源目录只读。
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -253,6 +253,7 @@ fn log_backend_capabilities() {
 fn prepare_overlay_storage(
     modules: &[ModuleRecord],
     plan: &mut MountPlan,
+    execution_plan: &mut OverlayExecutionPlan,
     storage_root: &Path,
 ) -> Result<()> {
     log::info!(
@@ -284,6 +285,11 @@ fn prepare_overlay_storage(
             *source = staged_overlay_path(source, modules, storage_root)?;
         }
     }
+    for sources in execution_plan.1.values_mut() {
+        for source in sources {
+            source.source = staged_overlay_path(&source.source, modules, storage_root)?;
+        }
+    }
 
     let normalized_layers = normalize_direct_overlay_layer_metadata(plan)?;
 
@@ -312,6 +318,19 @@ fn execute_mount_phases(
 ) -> Result<MountExecutionResult> {
     let needs_overlay_storage = !plan.overlay_ops.is_empty() || !plan.overlay_files.is_empty();
     let needs_runtime_temp = needs_overlay_storage || !plan.magic_module_ids.is_empty();
+    let mut overlay_execution_plan = build_overlay_execution_plan(plan)?;
+    let storage_sizing_paths = overlay_storage_sizing_paths(modules, plan, &overlay_execution_plan);
+    let shallow_copy_count = overlay_execution_plan
+        .1
+        .values()
+        .map(Vec::len)
+        .sum::<usize>();
+    log::info!(
+        "overlay storage sizing inputs: overlay_module_roots={}, shallow_copy_roots={}, total_paths={}",
+        plan.overlay_module_ids.len(),
+        shallow_copy_count,
+        storage_sizing_paths.len()
+    );
 
     let mut runtime_temp = needs_runtime_temp
         .then(crate::sys::temp::RuntimeTempDir::create)
@@ -341,7 +360,7 @@ fn execute_mount_phases(
         let force_ext4 = matches!(config.overlay_mode, OverlayMode::Ext4);
         let handle = crate::storage::setup(
             &mount_base,
-            &config.moduledir,
+            &storage_sizing_paths,
             force_ext4,
             mount_source,
             config.disable_umount,
@@ -366,7 +385,7 @@ fn execute_mount_phases(
             state.storage_mode,
             state.mount_point.display()
         );
-        prepare_overlay_storage(modules, plan, &storage_root)?;
+        prepare_overlay_storage(modules, plan, &mut overlay_execution_plan, &storage_root)?;
         Some(storage_root)
     } else {
         log::info!("overlay storage skipped: reason=no_overlay_operations");
@@ -390,7 +409,10 @@ fn execute_mount_phases(
 
     let overlay_phase = PhaseTimer::start("overlay");
     let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts) = mount_overlay_phase(
-        plan,
+        OverlayPlans {
+            mount: plan,
+            execution: &overlay_execution_plan,
+        },
         config,
         storage_root.as_deref(),
         transient_root.as_deref(),
@@ -977,18 +999,48 @@ fn managed_partition_names() -> Vec<String> {
         .collect()
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShallowOverlaySource {
     source: PathBuf,
     destination_relative: PathBuf,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 type ShallowOverlaySources = BTreeMap<PathBuf, Vec<ShallowOverlaySource>>;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 type OverlayExecutionPlan = (Vec<usize>, ShallowOverlaySources);
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+struct OverlayPlans<'a> {
+    mount: &'a MountPlan,
+    execution: &'a OverlayExecutionPlan,
+}
+
+/// Size the initial prepared tree once per participating module and every
+/// shallow source once more. Duplicate paths are intentional because each one
+/// represents another materialization inside the same staging filesystem.
+#[cfg(unix)]
+fn overlay_storage_sizing_paths(
+    modules: &[ModuleRecord],
+    plan: &MountPlan,
+    execution_plan: &OverlayExecutionPlan,
+) -> Vec<PathBuf> {
+    let mut paths = modules
+        .iter()
+        .filter(|module| plan.overlay_module_ids.contains(&module.id))
+        .map(|module| module.source_path.clone())
+        .collect::<Vec<_>>();
+    paths.extend(
+        execution_plan
+            .1
+            .values()
+            .flatten()
+            .map(|source| source.source.clone()),
+    );
+    paths
+}
 
 #[cfg(unix)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1124,7 +1176,7 @@ fn normalize_direct_overlay_layer_metadata(plan: &MountPlan) -> Result<usize> {
     })
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 fn build_overlay_execution_plan(plan: &MountPlan) -> Result<OverlayExecutionPlan> {
     let mut direct_operations = Vec::new();
     let mut shallow = ShallowOverlaySources::new();
@@ -1203,7 +1255,7 @@ fn build_overlay_execution_plan(plan: &MountPlan) -> Result<OverlayExecutionPlan
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn mount_overlay_phase(
-    plan: &MountPlan,
+    plans: OverlayPlans<'_>,
     config: &Config,
     storage_root: Option<&Path>,
     transient_root: Option<&Path>,
@@ -1213,6 +1265,7 @@ fn mount_overlay_phase(
 ) -> Result<(usize, usize, Vec<String>)> {
     use crate::overlayfs::overlayfs::{MountEffect, mount_overlay};
 
+    let plan = plans.mount;
     let mut overlay_dir_mounts = 0;
     let mut shallow_overlay_mounts = 0;
     let mut active_mounts = Vec::new();
@@ -1224,9 +1277,9 @@ fn mount_overlay_phase(
             }),
     };
 
-    let (direct_operations, shallow) = build_overlay_execution_plan(plan)?;
+    let (direct_operations, shallow) = plans.execution;
 
-    for operation_index in direct_operations {
+    for &operation_index in direct_operations {
         let op = &plan.overlay_ops[operation_index];
         let lowerdirs = op
             .lowerdirs
@@ -1297,7 +1350,7 @@ fn mount_overlay_phase(
         let storage_root = storage_root
             .ok_or_else(|| Error::msg("shallow overlays require prepared overlay storage"))?;
         shallow_overlay_mounts = mount_overlay_files(
-            &shallow,
+            shallow,
             config,
             storage_root,
             transient_root.ok_or_else(|| {
@@ -1554,6 +1607,45 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn overlay_storage_sizing_counts_each_shallow_source_again() {
+        let module_id = crate::module_id::ModuleId::try_from("overlay_mod").unwrap();
+        let module_root = PathBuf::from("/data/adb/modules/overlay_mod");
+        let shallow_source = module_root.join("system/priv-app/large.apk");
+        let modules = [ModuleRecord {
+            id: module_id.clone(),
+            name: "Overlay".to_owned(),
+            version: "1".to_owned(),
+            author: "a".to_owned(),
+            description: "d".to_owned(),
+            disabled: false,
+            skip_mount: false,
+            has_mount_files: true,
+            source_path: module_root.clone(),
+            entries: Vec::new(),
+        }];
+        let plan = MountPlan {
+            overlay_module_ids: vec![module_id],
+            ..MountPlan::default()
+        };
+        let execution_plan = (
+            Vec::new(),
+            BTreeMap::from([(
+                PathBuf::from("/system/priv-app"),
+                vec![ShallowOverlaySource {
+                    source: shallow_source.clone(),
+                    destination_relative: PathBuf::from("large.apk"),
+                }],
+            )]),
+        );
+
+        assert_eq!(
+            overlay_storage_sizing_paths(&modules, &plan, &execution_plan),
+            vec![module_root, shallow_source]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn existing_overlay_directory_stays_direct() {
         let fixture = std::env::temp_dir().join(format!(
             "hybrid-mount-existing-overlay-target-{}",
@@ -1723,9 +1815,13 @@ mod tests {
 
         let mut transaction = crate::sys::transaction::MountTransaction::new();
         let mut mounted = MountedTargets::default();
+        let execution_plan = build_overlay_execution_plan(&plan).unwrap();
         crate::sys::faults::enable_overlay_mount_failure_after(1);
         let result = mount_overlay_phase(
-            &plan,
+            OverlayPlans {
+                mount: &plan,
+                execution: &execution_plan,
+            },
             &Config::default(),
             None,
             Some(&staging),

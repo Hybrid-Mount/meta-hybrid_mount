@@ -165,21 +165,21 @@ pub fn planned_image_size(data_bytes: u64, entries: u64) -> u64 {
 pub(super) fn setup_ext4_image(
     target: &Path,
     img_path: &Path,
-    source_paths: &[PathBuf],
+    sizing_paths: &[PathBuf],
 ) -> Result<StorageHandle> {
     log::info!("storage backend select: mode=ext4");
 
-    let usage = calculate_total_size(source_paths)?;
+    let usage = calculate_total_size(sizing_paths)?;
     let image_size = planned_image_size(usage.total(), usage.entries());
     let block_size = select_ext4_block_size(image_size);
 
     log::info!(
-        "ext4 image plan: source_bytes={}, source_entries={}, image_bytes={}, block_size={}, source_roots={}",
+        "ext4 image plan: source_bytes={}, source_entries={}, image_bytes={}, block_size={}, sizing_paths={}",
         usage.total(),
         usage.entries(),
         image_size,
         block_size,
-        source_paths.len()
+        sizing_paths.len()
     );
 
     // set_len creates the same sparse image that upstream creates with truncate.
@@ -216,7 +216,7 @@ pub(super) fn setup_ext4_image(
 #[cfg(unix)]
 fn calculate_total_size(paths: &[PathBuf]) -> Result<SizeCounter> {
     let mut counter = SizeCounter::default();
-    let mut stack: Vec<PathBuf> = paths.iter().filter(|path| path.exists()).cloned().collect();
+    let mut stack = paths.to_vec();
 
     while let Some(current) = stack.pop() {
         let metadata = match fs::symlink_metadata(&current) {
@@ -450,6 +450,35 @@ mod tests {
         let counter = calculate_total_size(std::slice::from_ref(&dir)).unwrap();
         assert_eq!(counter.entries(), 5);
         assert_eq!(counter.total(), 6 * EXT4_BLOCK_SIZE_BYTES + 2 * 1024 * 1024);
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn calculate_total_size_counts_repeated_shallow_source_as_another_copy() {
+        let dir = std::env::temp_dir().join(format!(
+            "hybrid-mount-ext4-shallow-size-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let sparse = dir.join("large.apk");
+        fs::File::create(&sparse)
+            .unwrap()
+            .set_len(100 * 1024 * 1024)
+            .unwrap();
+
+        let usage = calculate_total_size(&[sparse.clone(), sparse]).unwrap();
+
+        assert_eq!(
+            (
+                usage.total(),
+                usage.entries(),
+                planned_image_size(usage.total(), usage.entries()),
+            ),
+            (200 * 1024 * 1024, 2, 268 * 1024 * 1024)
+        );
 
         fs::remove_dir_all(&dir).ok();
     }

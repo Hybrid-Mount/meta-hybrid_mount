@@ -119,29 +119,21 @@ pub fn escape_mount_option_value(value: &str) -> String {
     escaped
 }
 
-/// 一次 staging 拆分计划:`remaining_layers` 是拆分后剩余层数,
-/// `layers` 是本次要先叠成 staging 的尾部层。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StagingChunk {
-    pub remaining_layers: usize,
-    pub layers: Vec<String>,
-}
-
-/// 把超过 64 层的 lowerdir 序列拆成多个 staging 步骤(v4.2.0 拆分语义)。
-pub fn plan_staging_chunks(layers: &[String]) -> Vec<StagingChunk> {
-    let mut current = layers.to_vec();
-    let mut chunks = Vec::new();
-
-    while current.len() > MAX_LAYERS {
-        let split_idx = current.len().saturating_sub(MAX_LAYERS - 1);
-        let staging_layers = current.drain(split_idx..).collect();
-        chunks.push(StagingChunk {
-            remaining_layers: current.len(),
-            layers: staging_layers,
-        });
+/// Collapse low-priority tails until one OverlayFS mount can hold the result.
+/// Each generated staging layer is inserted immediately so the next iteration
+/// includes it instead of planning against stale original inputs.
+fn collapse_staging_layers<E>(
+    current_layers: &mut Vec<String>,
+    mut create_staging_layer: impl FnMut(&[String]) -> std::result::Result<String, E>,
+) -> std::result::Result<(), E> {
+    while current_layers.len() > MAX_LAYERS {
+        let split_idx = current_layers.len() - (MAX_LAYERS - 1);
+        let staging_layers = current_layers.split_off(split_idx);
+        let staging_layer = create_staging_layer(&staging_layers)?;
+        current_layers.push(staging_layer);
     }
 
-    chunks
+    Ok(())
 }
 
 /// 计算根挂载点下子挂载的相对路径;非子孙路径返回 `None`。
@@ -258,19 +250,18 @@ pub fn mount_overlayfs(
     let mut current_layers = lower_dirs.to_vec();
     current_layers.push(lowest.to_owned());
 
-    for chunk in plan_staging_chunks(&current_layers) {
+    collapse_staging_layers(&mut current_layers, |staging_layers| {
         let staging_dir = crate::sys::temp::create_random_dir(staging_root)?;
-        mount_overlay_core(&chunk.layers, None, None, &staging_dir, mount_source)?;
+        mount_overlay_core(staging_layers, None, None, &staging_dir, mount_source)?;
         log::debug!(
             "staging layer created: path={}, input_layers={}",
             staging_dir.display(),
-            chunk.layers.len()
+            staging_layers.len()
         );
         let staging_layer = staging_dir.to_string_lossy().into_owned();
         on_effect(MountEffect::Staging(staging_dir));
-        current_layers = current_layers[..chunk.remaining_layers].to_vec();
-        current_layers.push(staging_layer);
-    }
+        Ok::<_, Error>(staging_layer)
+    })?;
 
     mount_overlay_core(
         &current_layers,
@@ -487,17 +478,45 @@ mod tests {
 
     #[test]
     fn layers_within_limit_need_no_staging() {
-        let layers: Vec<String> = (0..MAX_LAYERS).map(layer).collect();
-        assert!(plan_staging_chunks(&layers).is_empty());
+        let mut layers: Vec<String> = (0..MAX_LAYERS).map(layer).collect();
+        let mut staging_steps = 0;
+
+        collapse_staging_layers(&mut layers, |_| {
+            staging_steps += 1;
+            Ok::<_, std::convert::Infallible>(String::new())
+        })
+        .unwrap();
+
+        assert_eq!(staging_steps, 0);
     }
 
     #[test]
     fn layer_count_boundaries_match_the_64_layer_contract() {
-        for (count, expected_chunks) in [(0, 0), (1, 0), (63, 0), (64, 0), (65, 1), (128, 2)] {
-            let layers: Vec<String> = (0..count).map(layer).collect();
+        for (count, expected_steps) in [
+            (0, 0),
+            (1, 0),
+            (63, 0),
+            (64, 0),
+            (65, 1),
+            (126, 1),
+            (127, 2),
+            (128, 2),
+        ] {
+            let mut layers: Vec<String> = (0..count).map(layer).collect();
+            let mut chunk_sizes = Vec::new();
+            collapse_staging_layers(&mut layers, |staging_layers| {
+                chunk_sizes.push(staging_layers.len());
+                Ok::<_, std::convert::Infallible>(format!("/staging-{}", chunk_sizes.len()))
+            })
+            .unwrap();
+
             assert_eq!(
-                plan_staging_chunks(&layers).len(),
-                expected_chunks,
+                (
+                    chunk_sizes.len(),
+                    chunk_sizes.iter().all(|size| *size <= MAX_LAYERS),
+                    layers.len() <= MAX_LAYERS,
+                ),
+                (expected_steps, true, true),
                 "unexpected staging plan for {count} layers"
             );
         }
@@ -505,25 +524,43 @@ mod tests {
 
     #[test]
     fn one_extra_layer_splits_one_chunk() {
-        let layers: Vec<String> = (0..MAX_LAYERS + 1).map(layer).collect();
-        let chunks = plan_staging_chunks(&layers);
+        let mut layers: Vec<String> = (0..=MAX_LAYERS).map(layer).collect();
+        let mut staging_inputs = Vec::new();
+        collapse_staging_layers(&mut layers, |staging_layers| {
+            staging_inputs.push(staging_layers.to_vec());
+            Ok::<_, std::convert::Infallible>("/staging-0".to_owned())
+        })
+        .unwrap();
 
-        assert_eq!(chunks.len(), 1);
-        assert_eq!(chunks[0].remaining_layers, 2);
-        assert_eq!(chunks[0].layers.len(), MAX_LAYERS - 1);
-        assert_eq!(chunks[0].layers[0], layer(2));
+        assert_eq!(
+            (layers, staging_inputs),
+            (
+                vec![layer(0), layer(1), "/staging-0".to_owned()],
+                vec![(2..=MAX_LAYERS).map(layer).collect::<Vec<_>>()],
+            )
+        );
     }
 
     #[test]
-    fn many_layers_split_repeatedly() {
-        let layers: Vec<String> = (0..MAX_LAYERS * 2).map(layer).collect();
-        let chunks = plan_staging_chunks(&layers);
+    fn repeated_staging_preserves_every_layer_in_order() {
+        for count in 0..=MAX_LAYERS * 4 {
+            let original = (0..count)
+                .map(|index| format!("[{index}]"))
+                .collect::<Vec<_>>();
+            let expected = original.concat();
+            let mut reduced = original;
 
-        assert_eq!(chunks.len(), 2);
-        assert_eq!(chunks[0].remaining_layers, MAX_LAYERS + 1);
-        assert_eq!(chunks[0].layers.len(), MAX_LAYERS - 1);
-        assert_eq!(chunks[1].remaining_layers, 2);
-        assert_eq!(chunks[1].layers.len(), MAX_LAYERS - 1);
+            collapse_staging_layers(&mut reduced, |staging_layers| {
+                Ok::<_, std::convert::Infallible>(staging_layers.concat())
+            })
+            .unwrap();
+
+            assert_eq!(
+                reduced.concat(),
+                expected,
+                "staging changed layer coverage or order for {count} layers"
+            );
+        }
     }
 
     #[test]

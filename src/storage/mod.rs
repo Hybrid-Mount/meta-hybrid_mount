@@ -79,14 +79,14 @@ impl StorageHandle {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn setup(
     mnt_base: &Path,
-    moduledir: &Path,
+    sizing_paths: &[PathBuf],
     force_ext4: bool,
     mount_source: &str,
     disable_umount: bool,
 ) -> Result<StorageHandle> {
     setup_with_sources(
         mnt_base,
-        &[moduledir.to_path_buf()],
+        sizing_paths,
         force_ext4,
         mount_source,
         disable_umount,
@@ -97,17 +97,17 @@ pub fn setup(
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn setup_with_sources(
     mnt_base: &Path,
-    source_paths: &[PathBuf],
+    sizing_paths: &[PathBuf],
     force_ext4: bool,
     mount_source: &str,
     disable_umount: bool,
     img_path: &Path,
 ) -> Result<StorageHandle> {
     log::info!(
-        "storage setup start: mount_point={}, requested_mode={}, sources={}, image={}",
+        "storage setup start: mount_point={}, requested_mode={}, sizing_paths={}, image={}",
         mnt_base.display(),
         if force_ext4 { "ext4" } else { "tmpfs" },
-        source_paths.len(),
+        sizing_paths.len(),
         img_path.display()
     );
     reset_image_files(img_path)?;
@@ -125,7 +125,7 @@ pub fn setup_with_sources(
         return Ok(handle);
     }
 
-    let handle = ext4::setup_ext4_image(mnt_base, img_path, source_paths)?;
+    let handle = ext4::setup_ext4_image(mnt_base, img_path, sizing_paths)?;
     finalize_mount_setup(mnt_base, disable_umount);
     log::info!(
         "storage setup complete: mode={}, mount_point={}",
@@ -138,7 +138,7 @@ pub fn setup_with_sources(
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn setup_with_sources(
     _mnt_base: &Path,
-    _source_paths: &[PathBuf],
+    _sizing_paths: &[PathBuf],
     _force_ext4: bool,
     _mount_source: &str,
     _disable_umount: bool,
