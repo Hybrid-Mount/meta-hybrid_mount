@@ -263,17 +263,6 @@ onMounted(() => moduleStore.ensureModulesLoaded());
       v-if="!moduleStore.loading && filteredModules.length === 0"
       :title="t('modules.empty')"
     />
-
-    <div class="actions">
-      <MiuixIconButton
-        class="module-icon-action reload-modules-button"
-        :title="t('modules.reload')"
-        :aria-label="t('modules.reload')"
-        @click="moduleStore.loadModules()"
-      >
-        <MiuixIcon :icon="Refresh" :size="22" />
-      </MiuixIconButton>
-    </div>
   </div>
 </template>
 

@@ -1,9 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { MiuixButton, MiuixDialog, MiuixIcon } from "miuix-vue";
-import { IconCheck } from "miuix-vue";
-import { ExpandMore } from "miuix-vue/icons";
+import { h, computed, ref, type FunctionalComponent } from "vue";
+import { MiuixButton, MiuixDialog, MiuixRadioButtonPreference } from "miuix-vue";
 
 export interface MiuixSelectOption {
   value: string;
@@ -31,6 +29,65 @@ const props = withDefaults(
 const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
+
+interface IconPath {
+  d: string;
+  /**
+   * Per-path opacity for multi-color icons.
+   */
+  opacity?: number;
+  fillRule?: "evenodd" | "nonzero";
+}
+
+interface IconSpec {
+  /**
+   * Intrinsic width/height in dp (→ px).
+   */
+  width: number;
+  height: number;
+  /**
+   * ViewBox dimensions.
+   */
+  vw: number;
+  vh: number;
+  paths: IconPath[];
+}
+
+function makeIcon(name: string, spec: IconSpec): FunctionalComponent {
+  const comp: FunctionalComponent = () =>
+    h(
+      "svg",
+      {
+        xmlns: "http://www.w3.org/2000/svg",
+        width: spec.width,
+        height: spec.height,
+        viewBox: `0 0 ${spec.vw} ${spec.vh}`,
+        fill: "currentColor",
+      },
+      spec.paths.map((p) =>
+        h("path", {
+          d: p.d,
+          "fill-rule": p.fillRule ?? "evenodd",
+          "clip-rule": p.fillRule ?? "evenodd",
+          ...(p.opacity != null ? { "fill-opacity": p.opacity } : {}),
+        }),
+      ),
+    );
+  comp.displayName = name;
+  return comp;
+}
+
+const IconArrowRight = makeIcon("ArrowRight", {
+  width: 10,
+  height: 16,
+  vw: 10,
+  vh: 16,
+  paths: [
+    {
+      d: "M1.65 1.469 C1.929 1.19 2.381 1.19 2.66 1.469 L8.721 7.53 C9 7.809 9 8.261 8.721 8.54 L2.66 14.601 C2.381 14.88 1.929 14.88 1.65 14.601 C1.371 14.322 1.371 13.87 1.65 13.591 L7.205 8.035 L1.65 2.479 C1.371 2.2 1.371 1.748 1.65 1.469 Z",
+    },
+  ],
+});
 
 const open = ref(false);
 const selectedOption = computed(
@@ -60,27 +117,19 @@ function select(option: MiuixSelectOption): void {
         <span v-if="summary">{{ summary }}</span>
       </span>
       <span class="trigger-value">{{ selectedOption?.label ?? "-" }}</span>
-      <MiuixIcon :icon="ExpandMore" :size="18" aria-hidden="true" />
+      <span><IconArrowRight /></span>
     </button>
 
     <MiuixDialog v-model="open" :title="label" @close="open = false">
       <div class="select-options">
-        <button
+        <MiuixRadioButtonPreference
           v-for="option in options"
-          :key="option.value"
-          type="button"
-          class="select-option"
-          :class="{ selected: option.value === modelValue }"
+          :model-value="option.value === modelValue"
+          :title="option.label"
+          :summary="option.description"
+          @select="select(option)"
           :disabled="option.disabled"
-          :aria-pressed="option.value === modelValue"
-          @click="select(option)"
-        >
-          <span class="option-copy">
-            <strong>{{ option.label }}</strong>
-            <span v-if="option.description">{{ option.description }}</span>
-          </span>
-          <IconCheck v-if="option.value === modelValue" class="option-check" />
-        </button>
+        />
       </div>
       <div class="dialog-actions">
         <MiuixButton @click="open = false">{{ $t("common.close") }}</MiuixButton>

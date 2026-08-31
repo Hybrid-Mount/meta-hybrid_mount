@@ -7,10 +7,10 @@ import {
   MiuixSmallTitle,
   MiuixBasicComponent,
   MiuixText,
-  MiuixIcon,
-  MiuixIconButton,
 } from "miuix-vue";
-import { Refresh } from "miuix-vue/icons";
+import { Motion, AnimatePresence } from "motion-v";
+
+import StatusCard from "../components/StatusCard.vue";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
@@ -22,6 +22,7 @@ import {
 } from "../../../lib/statusMounts";
 
 const { t } = useI18n();
+const expandSpring = { type: "spring" as const, stiffness: 400, damping: 40 };
 
 const state = computed(() => sysStore.state);
 const statusCheckFinished = ref(sysStore.hasLoaded);
@@ -29,8 +30,11 @@ const mountedCount = computed(
   () => moduleStore.modules.filter((module) => module.is_mounted).length,
 );
 const overlayMountCount = computed(() => state.value?.mount_stats.overlayfs_mounts ?? 0);
+const showoverlaymodule = ref(false);
 const magicFileMountCount = computed(() => state.value?.mount_stats.files_mounted ?? 0);
 const magicSymlinkCount = computed(() => state.value?.mount_stats.symlinks_created ?? 0);
+const showmagicmodule = ref(false);
+const expandMountPath = ref(false);
 const activeMounts = computed(() => uniqueActiveMounts(state.value?.active_mounts ?? []));
 const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
 const activeMountStatus = computed(() =>
@@ -96,25 +100,13 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <MiuixCard class="status-banner">
-      <div class="status-banner__content" :class="`status-banner--${statusKind}`">
-        <div class="status-banner__copy">
-          <MiuixText class="status-banner__title">{{ statusTitle }}</MiuixText>
-          <MiuixText class="status-banner__summary">{{ statusSummary }}</MiuixText>
-        </div>
-        <MiuixText v-if="state?.storage_mode" class="status-banner__mode">
-          {{ state.storage_mode.toUpperCase() }}
-        </MiuixText>
-        <div class="status-banner__symbol" aria-hidden="true" />
-      </div>
-    </MiuixCard>
-
-    <MiuixCard class="card">
-      <MiuixBasicComponent
-        :title="t('status.modelLabel')"
-        :summary="sysStore.device.model || '-'"
-      />
-    </MiuixCard>
+    <StatusCard
+      class="status-banner"
+      :status="statusKind"
+      :label="statusTitle"
+      :summary="statusSummary"
+      :description="state?.storage_mode.toUpperCase()"
+    ></StatusCard>
 
     <div class="card-row">
       <MiuixCard show-indication press-feedback="sink" class="grow">
@@ -152,44 +144,57 @@ onMounted(async () => {
       <MiuixBasicComponent
         class="backend-row"
         :title="t('status.overlayModules')"
-        :summary="state?.overlay_modules.join(', ') || '0'"
-      >
-        <template #end>
-          <MiuixText class="backend-row__count">
-            {{ t("status.mountCount", { count: overlayMountCount }) }}
-          </MiuixText>
-        </template>
-      </MiuixBasicComponent>
+        :summary="
+          showoverlaymodule
+            ? state?.overlay_modules.join(', ') || '0'
+            : t('status.mountCount', { count: overlayMountCount })
+        "
+        clickable
+        @click="showoverlaymodule = !showoverlaymodule"
+      />
       <MiuixBasicComponent
         class="backend-row"
         :title="t('status.magicModules')"
-        :summary="state?.magic_modules.join(', ') || '0'"
-      >
-        <template #end>
-          <MiuixText class="backend-row__count">
-            {{
-              t("status.magicOperationCount", {
+        :summary="
+          showmagicmodule
+            ? state?.magic_modules.join(', ') || '0'
+            : t('status.magicOperationCount', {
                 files: magicFileMountCount,
                 symlinks: magicSymlinkCount,
               })
-            }}
-          </MiuixText>
-        </template>
-      </MiuixBasicComponent>
+        "
+        clickable
+        @click="showmagicmodule = !showmagicmodule"
+      />
       <MiuixBasicComponent
         :title="t('status.activeMounts')"
         :summary="activeMountSummary"
+        clickable
+        @click="expandMountPath = !expandMountPath"
       />
-      <details v-if="activeMountStatus === 'active'" class="mount-details">
-        <summary>{{ t("status.mountDetails", { count: activeMounts.length }) }}</summary>
-        <div class="mount-path-list">
-          <code v-for="mount in activeMounts" :key="mount">{{ mount }}</code>
-        </div>
-      </details>
+      <AnimatePresence :initial="false">
+        <Motion
+          v-if="activeMountStatus === 'active' && expandMountPath"
+          class="ex-mount-details"
+          style="margin: 0 16px 14px"
+          :initial="{ height: 0, opacity: 0 }"
+          :animate="{ height: 'auto', opacity: 1 }"
+          :exit="{ height: 0, opacity: 0 }"
+          :transition="expandSpring"
+        >
+          <div class="mount-path-list">
+            <code v-for="mount in activeMounts" :key="mount">{{ mount }}</code>
+          </div>
+        </Motion>
+      </AnimatePresence>
     </MiuixCard>
 
     <MiuixSmallTitle :text="t('status.sysInfoTitle')" />
     <MiuixCard class="card">
+      <MiuixBasicComponent
+        :title="t('status.modelLabel')"
+        :summary="sysStore.device.model || '-'"
+      />
       <MiuixBasicComponent
         :title="t('status.kernelLabel')"
         :summary="sysStore.systemInfo.kernel"
@@ -203,17 +208,6 @@ onMounted(async () => {
         :summary="sysStore.device.android"
       />
     </MiuixCard>
-
-    <div class="actions">
-      <MiuixIconButton
-        :title="t('common.refresh')"
-        :aria-label="t('common.refresh')"
-        :disabled="sysStore.loading"
-        @click="sysStore.loadStatus()"
-      >
-        <MiuixIcon :icon="Refresh" :size="22" />
-      </MiuixIconButton>
-    </div>
   </div>
 </template>
 
@@ -223,7 +217,6 @@ onMounted(async () => {
 }
 
 .status-banner :deep(.m-card) {
-  --m-card-color: transparent;
   border-radius: var(--m-radius-md, 16px);
 }
 
