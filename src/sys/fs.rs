@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::config::Mode as MountMode;
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(unix)]
 use crate::errors::Error;
 use crate::errors::Result;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -342,15 +342,23 @@ fn clone_entry_metadata(
 /// Unlike ordinary module-entry staging, every part of this metadata is
 /// required: a private 0700 directory or a wrongly labeled OverlayFS root can
 /// make an entire Android partition inaccessible after the mount.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()> {
-    let metadata = fs::symlink_metadata(source)?;
+#[cfg(unix)]
+fn directory_metadata(source: &Path) -> Result<fs::Metadata> {
+    // Follow the final symlink: Android partition layouts may expose a stock
+    // overlay target such as /system/media as a symlink to the real directory.
+    let metadata = fs::metadata(source)?;
     if !metadata.file_type().is_dir() {
         return Err(Error::msg(format!(
             "overlay layer metadata source is not a directory: {}",
             source.display()
         )));
     }
+    Ok(metadata)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = directory_metadata(source)?;
 
     chown(
         destination,
@@ -597,6 +605,27 @@ mod tests {
         assert!(!staged_etc.join("magic.conf").exists());
         assert_eq!(stats.files, 1);
         assert_eq!(stats.symlinks, 1);
+
+        remove_path(&fixture).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_metadata_follows_symlink_to_stock_directory() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = std::env::temp_dir().join(format!(
+            "hybrid-mount-directory-metadata-symlink-{}",
+            std::process::id()
+        ));
+        let stock = fixture.join("stock/media");
+        let target = fixture.join("target/media");
+        remove_path(&fixture).unwrap();
+        std::fs::create_dir_all(&stock).unwrap();
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        symlink("../stock/media", &target).unwrap();
+
+        assert!(directory_metadata(&target).unwrap().is_dir());
 
         remove_path(&fixture).unwrap();
     }
