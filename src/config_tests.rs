@@ -382,6 +382,136 @@ fn load_or_default_uses_defaults_when_config_cannot_be_read() {
 }
 
 #[test]
+fn load_for_boot_accepts_valid_config() {
+    let dir = test_dir("load-for-boot-valid");
+    let path = dir.join("config.toml");
+    let expected = Config {
+        default_mode: Mode::Magic,
+        ..Config::default()
+    };
+    expected.save(&path).unwrap();
+
+    let loaded = Config::load_for_boot(&path).unwrap();
+
+    assert_eq!(loaded, expected);
+    cleanup(&dir);
+}
+
+#[test]
+fn load_for_boot_uses_defaults_only_when_main_config_is_genuinely_missing() {
+    let dir = test_dir("load-for-boot-missing");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    fs::write(
+        dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
+        r#"blacklist = ["blocked"]"#,
+    )
+    .unwrap();
+
+    let loaded = Config::load_for_boot(&path).unwrap();
+    let mut expected = Config {
+        config_missing: true,
+        ..Config::default()
+    };
+    expected.module_blacklist.insert(module_id("blocked"));
+
+    assert_eq!(loaded, expected);
+    cleanup(&dir);
+}
+
+#[test]
+fn load_for_boot_rejects_missing_config_parent() {
+    let dir = test_dir("load-for-boot-missing-parent");
+    let path = dir.join("missing-parent/config.toml");
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(
+            err,
+            Error::ConfigRead {
+                path: ref error_path,
+                ref source,
+            } if error_path == &path && source.kind() == std::io::ErrorKind::NotFound
+        ),
+        "{err}"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn load_for_boot_rejects_corrupt_config_without_overwriting_it() {
+    let dir = test_dir("load-for-boot-corrupt");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    let corrupt = "default_mode = not-valid";
+    fs::write(&path, corrupt).unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(err, Error::ConfigParse { path: ref error_path, .. } if error_path == &path)
+            && fs::read_to_string(&path).unwrap() == corrupt,
+        "{err}"
+    );
+    cleanup(&dir);
+}
+
+#[test]
+fn load_for_boot_rejects_unsupported_config() {
+    let dir = test_dir("load-for-boot-unsupported");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    fs::write(&path, "default_mode = \"ignore\"\n").unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
+    cleanup(&dir);
+}
+
+#[test]
+fn load_for_boot_rejects_unreadable_main_config() {
+    let dir = test_dir("load-for-boot-unreadable");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    fs::create_dir_all(&path).unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(err, Error::ConfigRead { path: ref error_path, .. } if error_path == &path),
+        "{err}"
+    );
+    cleanup(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn load_for_boot_rejects_dangling_config_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let dir = test_dir("load-for-boot-dangling-symlink");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    symlink("missing-target", &path).unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(
+            err,
+            Error::ConfigRead {
+                path: ref error_path,
+                ref source,
+            } if error_path == &path && source.kind() == std::io::ErrorKind::NotFound
+        ),
+        "{err}"
+    );
+    cleanup(&dir);
+}
+
+#[test]
 fn load_wraps_read_errors_with_path_context() {
     let dir = test_dir("load-read-error");
     fs::create_dir_all(&dir).unwrap();

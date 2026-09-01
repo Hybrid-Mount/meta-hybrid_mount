@@ -2,7 +2,7 @@
 
 > 审查日期：2026-08-31  
 > 审查提交：`070af486709b9b6504b58c2b01c0c49f49a067a3`（`dev`）  
-> 修复状态更新：2026-09-01（HM-RUST-001、HM-RUST-002 已修复，尚未提交）  
+> 修复状态更新：2026-09-02（HM-RUST-001、HM-RUST-002 已推送；HM-RUST-003 已修复）
 > 审查范围：整个 Cargo workspace（`hybrid-mount`、`xtask`、`tools/notify`）  
 > 规模：39 个 Rust 文件，约 15,508 行（含测试）
 
@@ -10,11 +10,11 @@
 
 当前后端的总体工程质量明显高于一般启动期挂载工具：规划与执行分层清楚，模块源目录按只读输入处理，错误路径有事务式回滚，子进程输出有界，配置/状态采用原子替换，并且已有较丰富的单元测试与故障注入。
 
-本次审查最初确认了 **4 个 P1、8 个 P2、2 个 P3** 问题。截至 2026-09-01，**HM-RUST-001、HM-RUST-002 已修复**，当前剩余 **2 个 P1、8 个 P2、2 个 P3**。发布前建议继续修复其余 P1：
+本次审查最初确认了 **4 个 P1、8 个 P2、2 个 P3** 问题。截至 2026-09-02，**HM-RUST-001、HM-RUST-002、HM-RUST-003 已修复**，当前剩余 **1 个 P1、8 个 P2、2 个 P3**。发布前建议继续修复其余 P1：
 
 1. ✅ OverlayFS 多级 staging 层覆盖问题已修复，并补充 0-256 层顺序/完整性测试。
 2. ✅ ext4 容量规划已显式计入每个 shallow source 的再次物化，并补充 100 MiB 稀疏文件回归测试。
-3. 启动路径在配置损坏/不可读时继续使用默认规则挂载，可能重新启用原本被 `ignore` 的模块或路径。
+3. ✅ 启动配置改为 boot-only fail-closed；损坏、不可读、unsupported、dangling symlink 与缺失父目录均在扫描前终止。
 4. LKM 启动熔断标记在 `insmod` 前没有同步父目录，掉电/内核崩溃后不能保证标记持久化，存在重复崩溃风险。
 
 未发现 P0 问题。以当前提交直接发布的主要风险不是普通 Rust 内存安全，而是挂载层组合、磁盘容量、启动失败策略和设备级恢复语义。
@@ -36,7 +36,7 @@
 | 检查 | 结果 |
 | --- | --- |
 | `cargo fmt --all -- --check` | 通过 |
-| `cargo test --workspace --all-targets --locked` | 通过：204/204（主 crate 199，notify 4，xtask 1） |
+| `cargo test --workspace --all-targets --locked` | 通过：212/212（主 crate 207，notify 4，xtask 1） |
 | `cargo test --workspace --doc --locked` | 通过；当前 0 个 doc test |
 | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | 通过 |
 | aarch64 Android Clippy（`-D warnings`） | 通过 |
@@ -70,7 +70,7 @@ config.toml
 | --- | --- | --- | --- |
 | HM-RUST-001 | P1（已修复） | 改为逐次折叠并立即插回 staging 输出，保留全部层及顺序 | `src/overlayfs/overlayfs.rs:122-136, 250-264, 479-563` |
 | HM-RUST-002 | P1（已修复） | 容量输入保留重复 shallow source，按实际再物化次数计费 | `src/pipeline.rs:319-388, 1025-1043`; `src/storage/ext4.rs:165-251, 459-485` |
-| HM-RUST-003 | P1 | 损坏/不可读配置在启动期回退默认挂载，而非 fail-closed | `src/config.rs:194-231`; `src/pipeline.rs:584-607` |
+| HM-RUST-003 | P1（已修复） | boot loader 仅对真正缺失的配置使用默认值，其余错误在扫描前终止并写失败快照 | `src/config.rs:191-264`; `src/pipeline.rs:601-627`; `src/state.rs:141-149, 312-329` |
 | HM-RUST-004 | P1 | LKM 熔断标记缺少父目录 fsync，崩溃后可能丢失 | `src/sys/nuke.rs:168-220` |
 | HM-RUST-005 | P2 | 跟随目录符号链接取 stat，却不跟随地读取 SELinux xattr | `src/sys/fs.rs:346-390`; `src/magic_mount/exec.rs:489-520`; `src/utils/mod.rs:31-72` |
 | HM-RUST-006 | P2 | Overlay 子挂载检查用 `is_dir/exists` 跟随模块符号链接 | `src/overlayfs/overlayfs.rs:333-393` |
@@ -156,13 +156,17 @@ config.toml
 
 ### HM-RUST-003（P1）：启动配置错误时采用危险默认值继续挂载
 
+**状态：已于 2026-09-02 修复。**
+
+新增 boot-only `Config::load_for_boot`：只有父目录真实可访问且最终配置文件确实不存在时才加载默认值和黑名单；损坏 TOML、不支持的全局模式、读取错误、dangling symlink、缺失/异常父目录及 blacklist 错误都会保留结构化错误并在模块扫描前终止。`load_or_default` 仍供 WebUI 显示、配置修复和状态查询使用，原容错行为保持不变。
+
 **触发条件**
 
 `config.toml` 存在但 TOML 损坏、不受支持或读取失败（权限、I/O 等）。
 
 **证据**
 
-`Config::load_or_default` 对上述错误记录 warning 后返回 `Config::default()`；启动流水线直接使用它扫描、规划并挂载。缺失配置使用默认值是合理的首次启动语义，但“已有配置损坏”和“配置从未存在”被赋予了近似相同的执行结果。
+原实现中，`Config::load_or_default` 对上述错误记录 warning 后返回 `Config::default()`；启动流水线直接使用它扫描、规划并挂载。缺失配置使用默认值是合理的首次启动语义，但“已有配置损坏”和“配置从未存在”被赋予了近似相同的执行结果。
 
 **影响**
 
@@ -172,11 +176,12 @@ config.toml
 
 独立 blacklist 已选择 fail-closed，因此主配置的 fail-open 行为与项目已有安全策略不一致。
 
-**建议**
+**已实施修复**
 
-- 拆分接口：查询命令可以 `load_for_display_or_default`；无参数启动必须 `load_for_boot`。
-- 启动语义建议为：文件缺失 -> 默认；文件存在但损坏/不可读 -> 不执行任何挂载，持久化 `failed_stage=config` 和错误摘要。
-- 若产品必须继续启动，最低限度也应采用全局 `ignore` 的安全计划，而不是 Overlay 默认值。
+- 无参数启动只调用严格 `load_for_boot`；查询和修复命令继续调用容错 `load_or_default`。
+- 配置错误时创建全新的空 `RunState`，记录 `failed_stage=config`、`failure_reason` 和 `rollback_status=clean`，不继承旧活动挂载。
+- 同时把 `scan.ret` 原子替换为空数组，避免上一轮模块的 `is_mounted=true` 缓存残留。
+- 7 个 strict loader 测试覆盖有效、真正缺失、损坏、不支持、不可读、dangling symlink 和缺失父目录；原有 4 个容错加载与 6 个 blacklist 测试继续通过。
 
 ### HM-RUST-004（P1）：LKM 启动熔断标记没有完整落盘保证
 
@@ -421,7 +426,7 @@ Magic-only 或空计划仍显示“Ext4 运行中”，容易误导设备排障�
 
 1. ✅ HM-RUST-001 已完成：多级 staging 改为逐次闭环折叠，并增加覆盖集合/顺序回归测试。
 2. ✅ HM-RUST-002 已完成：容量输入消费执行计划并按 shallow source 的重复物化次数计费。
-3. 为启动配置引入严格 fail-closed API（HM-RUST-003）。
+3. ✅ HM-RUST-003 已完成：boot-only 严格加载、失败状态持久化和旧模块快照失效均已实现。
 4. 在任何 LKM 加载前完整持久化 boot guard（HM-RUST-004）。
 
 ### 第二批：设备可靠性

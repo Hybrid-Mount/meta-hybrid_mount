@@ -191,32 +191,70 @@ impl Config {
         Ok(config)
     }
 
+    fn finish_loaded(mut config: Self) -> Self {
+        if !config.legacy_custom_mounts.is_empty() {
+            log::warn!(
+                "obsolete custom mount entries are ignored; configure module path rules instead"
+            );
+        }
+        config.legacy_custom_mounts.clear();
+        config
+    }
+
+    fn defaults_for_missing(path: &Path) -> Result<Self> {
+        log::info!(
+            "config file missing, using defaults: path={}",
+            path.display()
+        );
+        let mut config = Self {
+            config_missing: true,
+            ..Self::default()
+        };
+        config.load_module_blacklists(path)?;
+        Ok(config)
+    }
+
+    fn main_config_is_genuinely_missing(path: &Path) -> bool {
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        fs::symlink_metadata(path).is_err_and(|err| err.kind() == ErrorKind::NotFound)
+            && fs::metadata(parent).is_ok_and(|metadata| metadata.is_dir())
+    }
+
+    fn load_or_missing_tolerant(path: &Path) -> Result<Self> {
+        match Self::load(path) {
+            Ok(config) => Ok(Self::finish_loaded(config)),
+            Err(Error::ConfigRead { source, .. }) if source.kind() == ErrorKind::NotFound => {
+                Self::defaults_for_missing(path)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Boot-time loader: a genuinely absent main config uses defaults, while
+    /// corrupt, unsupported, unreadable, dangling-symlink, and blacklist errors
+    /// abort before module scanning or mount planning begins.
+    pub fn load_for_boot(path: &Path) -> Result<Self> {
+        match Self::load(path) {
+            Ok(config) => Ok(Self::finish_loaded(config)),
+            Err(Error::ConfigRead { source, .. })
+                if source.kind() == ErrorKind::NotFound
+                    && Self::main_config_is_genuinely_missing(path) =>
+            {
+                Self::defaults_for_missing(path)
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     /// 读取配置：文件不存在时使用默认值并标记 `config_missing`；
     /// 主配置损坏、不可读或不受支持时记录警告并使用默认值，不覆盖原文件。
     /// 独立模块黑名单损坏或不可读时仍然返回错误，保持 fail-closed。
     pub fn load_or_default(path: &Path) -> Result<Self> {
-        match Self::load(path) {
-            Ok(mut config) => {
-                if !config.legacy_custom_mounts.is_empty() {
-                    log::warn!(
-                        "obsolete custom mount entries are ignored; configure module path rules instead"
-                    );
-                }
-                config.legacy_custom_mounts.clear();
-                Ok(config)
-            }
-            Err(Error::ConfigRead { source, .. }) if source.kind() == ErrorKind::NotFound => {
-                log::info!(
-                    "config file missing, using defaults: path={}",
-                    path.display()
-                );
-                let mut config = Self {
-                    config_missing: true,
-                    ..Self::default()
-                };
-                config.load_module_blacklists(path)?;
-                Ok(config)
-            }
+        match Self::load_or_missing_tolerant(path) {
+            Ok(config) => Ok(config),
             Err(err) => match &err {
                 Error::ConfigRead { .. }
                 | Error::ConfigParse { .. }

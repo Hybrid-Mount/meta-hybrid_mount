@@ -141,6 +141,9 @@ pub struct RunState {
     /// 失败阶段,如 `mount_execution`、`state_save`、`mount_transaction_commit`。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failed_stage: Option<String>,
+    /// 启动失败的可展示原因；旧快照缺省为 `None`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_reason: Option<String>,
     /// `pending_commit` / `committed` / `clean` / `incomplete` / `unverified`。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_status: Option<String>,
@@ -254,6 +257,7 @@ impl RunState {
             mode_stats,
             state_load: StateLoadInfo::loaded(),
             failed_stage: None,
+            failure_reason: None,
             rollback_status: None,
             leftover_mount_targets: Vec::new(),
         }
@@ -300,6 +304,27 @@ impl RunState {
         );
         state.mount_error_modules = mount_error_modules;
         state.mount_error_reasons = mount_error_reasons;
+        state
+    }
+
+    /// Build a fresh fail-closed snapshot for errors that occur before any
+    /// mount side effect or module snapshot can be created.
+    pub fn from_startup_failure(stage: &str, reason: impl Into<String>) -> Self {
+        let mut state = Self::new(
+            "none".to_owned(),
+            PathBuf::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            MountStatistics::default(),
+            ModeStats::default(),
+        );
+        state.failed_stage = Some(stage.to_owned());
+        state.failure_reason = Some(reason.into());
+        state.rollback_status = Some("clean".to_owned());
         state
     }
 }
@@ -1042,6 +1067,39 @@ mod tests {
     }
 
     #[test]
+    fn startup_failure_state_contains_no_stale_mount_success() {
+        let state = RunState::from_startup_failure("config", "parse config failed");
+        let wire = serde_json::to_value(&state).unwrap();
+
+        assert_eq!(
+            (
+                state.storage_mode.as_str(),
+                state.failed_stage.as_deref(),
+                state.failure_reason.as_deref(),
+                state.rollback_status.as_deref(),
+                state.mount_stats.total_mounts,
+                state.mount_stats.failed_mounts,
+                state.active_mounts,
+                state.overlay_modules,
+                state.magic_modules,
+                wire["failure_reason"].as_str(),
+            ),
+            (
+                "none",
+                Some("config"),
+                Some("parse config failed"),
+                Some("clean"),
+                0,
+                0,
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Some("parse config failed"),
+            )
+        );
+    }
+
+    #[test]
     fn app_modules_mounted_flags_follow_executed_targets_not_plan() {
         let modules = [record("overlay_mod"), record("magic_mod")];
         let config = Config::default();
@@ -1171,6 +1229,7 @@ mod tests {
             },
             state_load: StateLoadInfo::loaded(),
             failed_stage: Some("mount_execution".to_owned()),
+            failure_reason: None,
             rollback_status: Some("clean".to_owned()),
             leftover_mount_targets: Vec::new(),
         };

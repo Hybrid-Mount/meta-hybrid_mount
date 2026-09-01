@@ -598,16 +598,33 @@ fn log_phase_failure<T>(phase: &'static str, result: Result<T>) -> Result<T> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+fn persist_startup_failure_state(stage: &str, error: &Error) {
+    let state = RunState::from_startup_failure(stage, error.to_string());
+    if let Err(state_err) = state.save() {
+        log::error!("failed to persist {stage} startup failure state: {state_err}");
+    }
+    if let Err(snapshot_err) = write_scan_ret(&[]) {
+        log::error!("failed to clear module snapshot after {stage} failure: {snapshot_err}");
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn run_mount_pipeline_impl() -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
     startup.finish();
 
     let config_phase = PhaseTimer::start("config");
-    let config = log_phase_failure(
+    let config = match log_phase_failure(
         "config",
-        Config::load_or_default(Path::new(defs::CONFIG_PATH)),
-    )?;
+        Config::load_for_boot(Path::new(defs::CONFIG_PATH)),
+    ) {
+        Ok(config) => config,
+        Err(err) => {
+            persist_startup_failure_state("config", &err);
+            return Err(err);
+        }
+    };
     let ksu_active = utils::ksu::is_active();
     let mount_source = effective_mount_source(&config.mountsource, ksu_active).to_owned();
     log::info!(
