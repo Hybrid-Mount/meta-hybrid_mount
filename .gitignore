@@ -21,6 +21,9 @@ module/bin/
 Thumbs.db
 Desktop.ini
 
+# Claude Code
+.claude/
+
 # Local diagnostics
 *.tar.gz
 KernelSU_bugreport_*

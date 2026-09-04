@@ -612,6 +612,13 @@ fn persist_startup_failure_state(stage: &str, error: &Error) {
 fn run_mount_pipeline_impl() -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
+
+    // 清理陈旧的临时文件
+    let runtime_dir = Path::new(defs::RUNTIME_DIR);
+    if let Err(err) = crate::sys::fs::cleanup_stale_atomic_temp_files(runtime_dir) {
+        log::warn!("failed to cleanup stale temp files: {err}");
+    }
+
     startup.finish();
 
     let config_phase = PhaseTimer::start("config");

@@ -721,6 +721,91 @@ fn payload_arg_requires_marker_and_rejects_invalid_hex() {
     assert_eq!(decode_payload_arg("7b7d").unwrap(), "{}");
 }
 
+#[test]
+fn valid_mountsource_accepted() {
+    // 测试已知来源
+    let config = Config {
+        mountsource: "KSU".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_ok());
+
+    let config = Config {
+        mountsource: "APatch".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_ok());
+
+    let config = Config {
+        mountsource: "overlay".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_ok());
+
+    // 测试绝对路径
+    let config = Config {
+        mountsource: "/data/adb/custom".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_ok());
+
+    let config = Config {
+        mountsource: "/system/bin/mount".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_ok());
+}
+
+#[test]
+fn invalid_mountsource_rejected() {
+    // 非法字符
+    let config = Config {
+        mountsource: "invalid!@#".to_owned(),
+        ..Config::default()
+    };
+    let err = config.validate_mountsource().unwrap_err();
+    assert!(err.to_string().contains("invalid mountsource"));
+
+    // 相对路径
+    let config = Config {
+        mountsource: "relative/path".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_err());
+
+    // 单个斜杠
+    let config = Config {
+        mountsource: "/".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_err());
+
+    // 空字符串
+    let config = Config {
+        mountsource: "".to_owned(),
+        ..Config::default()
+    };
+    assert!(config.validate_mountsource().is_err());
+}
+
+#[test]
+fn boot_loader_validates_mountsource() {
+    let dir = test_dir("mountsource-validation");
+    let path = dir.join("config.toml");
+    fs::create_dir_all(&dir).unwrap();
+
+    // 有效配置
+    fs::write(&path, r#"mountsource = "KSU""#).unwrap();
+    assert!(Config::load_for_boot(&path).is_ok());
+
+    // 无效配置
+    fs::write(&path, r#"mountsource = "invalid!@#""#).unwrap();
+    let err = Config::load_for_boot(&path).unwrap_err();
+    assert!(err.to_string().contains("invalid mountsource"));
+
+    cleanup(&dir);
+}
+
 fn test_dir(tag: &str) -> PathBuf {
     std::env::temp_dir().join(format!("hybrid-mount-{tag}-{}", std::process::id()))
 }

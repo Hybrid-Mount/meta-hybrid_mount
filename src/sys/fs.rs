@@ -7,7 +7,7 @@ use std::path::Path;
 #[cfg(unix)]
 use std::fs::{self, OpenOptions};
 #[cfg(unix)]
-use std::io::Write;
+use std::io::{self, Write};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt, symlink};
 #[cfg(unix)]
@@ -28,6 +28,16 @@ use crate::mount_tree::{MountNode, MountTree, NodeFileType};
 
 #[cfg(unix)]
 static ATOMIC_WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// Persist the directory entry that names `path`.
+#[cfg(unix)]
+pub fn sync_parent_directory(path: &Path) -> io::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::File::open(parent)?.sync_all()
+}
 
 /// Replace a file without exposing a truncated intermediate state.
 #[cfg(unix)]
@@ -66,7 +76,7 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         fs::rename(&temporary, path)?;
         // 父目录 fsync 失败按保存失败处理。rename 已经可见，但调用方
         // 必须知道目录项未持久化，不能把它当成一次成功的原子保存。
-        fs::File::open(parent)?.sync_all()?;
+        sync_parent_directory(path)?;
         Ok(())
     })();
 
@@ -74,6 +84,96 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         let _ = fs::remove_file(&temporary);
     }
     result
+}
+
+/// 清理指定目录下的陈旧临时文件
+///
+/// 删除以下临时文件：
+/// 1. 当前进程的残留（进程重启后）
+/// 2. 其他进程超过 24 小时的残留
+pub fn cleanup_stale_atomic_temp_files(dir: &Path) -> Result<()> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(Error::msg(format!(
+                "read directory for temp file cleanup {}: {err}",
+                dir.display()
+            )));
+        }
+    };
+
+    let current_pid = std::process::id();
+    let stale_threshold = std::time::SystemTime::now()
+        .checked_sub(std::time::Duration::from_secs(86400)) // 24 小时
+        .unwrap_or(std::time::UNIX_EPOCH);
+
+    let mut cleaned = 0;
+    let mut failed = 0;
+
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+
+        // 匹配模式: .<name>.<pid>.<seq>.tmp
+        if !name.starts_with('.') || !name.ends_with(".tmp") {
+            continue;
+        }
+
+        let parts: Vec<&str> = name.split('.').collect();
+        if parts.len() < 4 {
+            continue;
+        }
+
+        // 提取 PID
+        let pid = parts[parts.len() - 3].parse::<u32>().ok();
+
+        // 删除条件：
+        // 1. 当前进程的残留（进程重启）
+        // 2. 其他进程的超过 24 小时的残留
+        let should_remove = if let Some(file_pid) = pid {
+            file_pid == current_pid
+        } else {
+            false
+        };
+
+        let should_remove = should_remove
+            || entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .map(|t| t < stale_threshold)
+                .unwrap_or(false);
+
+        if should_remove {
+            match fs::remove_file(entry.path()) {
+                Ok(()) => {
+                    log::info!(
+                        "cleaned up stale atomic temp file: {}",
+                        entry.path().display()
+                    );
+                    cleaned += 1;
+                }
+                Err(err) => {
+                    log::warn!(
+                        "failed to remove stale atomic temp file {}: {err}",
+                        entry.path().display()
+                    );
+                    failed += 1;
+                }
+            }
+        }
+    }
+
+    if cleaned > 0 {
+        log::info!(
+            "atomic temp file cleanup: cleaned={}, failed={}, dir={}",
+            cleaned,
+            failed,
+            dir.display()
+        );
+    }
+
+    Ok(())
 }
 
 #[cfg(not(unix))]
@@ -84,6 +184,12 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, content)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn cleanup_stale_atomic_temp_files(_dir: &Path) -> Result<()> {
+    // 非 Unix 平台不需要清理
     Ok(())
 }
 

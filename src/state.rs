@@ -640,7 +640,7 @@ pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
     modules
 }
 
-/// 清除模块 `mount_error` 标记,返回删除数量。只动模块根标记,不碰 system。
+/// 清除模块 `mount_error` 标记，返回删除数量。只删除标记文件，不递归删除目录。
 pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
     let mut removed = 0;
     let Ok(entries) = fs::read_dir(moduledir) else {
@@ -654,23 +654,39 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
         if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
             continue;
         }
-        let Ok(children) = fs::read_dir(entry.path()) else {
-            continue;
-        };
-        for child in children.filter_map(std::result::Result::ok) {
-            if !child
-                .file_name()
-                .to_string_lossy()
-                .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
-            {
-                continue;
+        let marker_path = entry.path().join(defs::MOUNT_ERROR_FILE_NAME);
+
+        // 检查是否存在且为文件
+        match fs::symlink_metadata(&marker_path) {
+            Ok(metadata) if metadata.is_file() => {
+                // 只删除文件，不递归删除目录
+                if fs::remove_file(&marker_path).is_ok() {
+                    removed += 1;
+                    log::info!("cleared mount_error marker: {}", marker_path.display());
+                }
             }
-            match crate::sys::fs::remove_path(&child.path()) {
-                Ok(()) => removed += 1,
-                Err(err) => log::warn!(
-                    "failed to remove mount error marker {}: {err}",
-                    child.path().display()
-                ),
+            Ok(metadata) if metadata.is_dir() => {
+                // 如果是目录，记录警告但不删除
+                log::warn!(
+                    "mount_error is a directory, not a marker file: {}",
+                    marker_path.display()
+                );
+            }
+            Ok(_) => {
+                // 符号链接或其他类型，记录警告
+                log::warn!(
+                    "mount_error is not a regular file: {}",
+                    marker_path.display()
+                );
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // 标记不存在，跳过
+            }
+            Err(err) => {
+                log::warn!(
+                    "failed to check mount_error marker {}: {err}",
+                    marker_path.display()
+                );
             }
         }
     }

@@ -238,7 +238,11 @@ impl Config {
     /// abort before module scanning or mount planning begins.
     pub fn load_for_boot(path: &Path) -> Result<Self> {
         match Self::load(path) {
-            Ok(config) => Ok(Self::finish_loaded(config)),
+            Ok(config) => {
+                let config = Self::finish_loaded(config);
+                config.validate_mountsource()?;
+                Ok(config)
+            }
             Err(Error::ConfigRead { source, .. })
                 if source.kind() == ErrorKind::NotFound
                     && Self::main_config_is_genuinely_missing(path) =>
@@ -247,6 +251,29 @@ impl Config {
             }
             Err(err) => Err(err),
         }
+    }
+
+    /// 校验 mountsource 配置有效性
+    pub fn validate_mountsource(&self) -> Result<()> {
+        const KNOWN_SOURCES: &[&str] = &["KSU", "APatch", "overlay"];
+
+        // 允许已知来源
+        if KNOWN_SOURCES.contains(&self.mountsource.as_str()) {
+            return Ok(());
+        }
+
+        // 允许绝对路径（用于自定义挂载源）
+        if self.mountsource.starts_with('/') {
+            let path = Path::new(&self.mountsource);
+            if path.is_absolute() && path.components().count() > 1 {
+                return Ok(());
+            }
+        }
+
+        Err(Error::msg(format!(
+            "invalid mountsource '{}': must be 'KSU', 'APatch', 'overlay', or an absolute path",
+            self.mountsource
+        )))
     }
 
     /// 读取配置：文件不存在时使用默认值并标记 `config_missing`；
