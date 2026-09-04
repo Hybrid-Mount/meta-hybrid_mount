@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  createApi,
   createConfigPayload,
   normalizeConfigPayload,
   normalizeModule,
@@ -10,6 +11,14 @@ import {
 import type { AppConfig } from "./types";
 
 describe("WebUI configuration contract", () => {
+  it("rejects production API calls when the manager bridge is unavailable", async () => {
+    const api = createApi(false, false);
+
+    await expect(api.loadConfig()).rejects.toThrow(
+      "KernelSU/APatch WebUI bridge is unavailable",
+    );
+  });
+
   it("marks full editor saves as rule replacements", () => {
     const config: AppConfig = {
       moduledir: "/data/adb/modules",

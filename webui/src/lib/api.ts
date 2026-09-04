@@ -13,7 +13,6 @@ import type {
   SystemInfo,
   DeviceInfo,
 } from "./types";
-import { MockAPI } from "./api.mock";
 import { DEFAULT_CONFIG, PATHS } from "./constants";
 
 interface KsuExecResult {
@@ -25,6 +24,11 @@ interface KsuExecResult {
 type KsuExec = (cmd: string) => Promise<KsuExecResult>;
 
 let ksuExec: KsuExec | null = null;
+let developmentApi: AppAPI | null = null;
+
+if (import.meta.env.DEV) {
+  developmentApi = (await import("./api.mock")).MockAPI;
+}
 
 try {
   const ksu = await import("kernelsu").catch(() => null);
@@ -33,7 +37,7 @@ try {
   ksuExec = null;
 }
 
-const shouldUseMock = import.meta.env.DEV || !ksuExec;
+export const BRIDGE_UNAVAILABLE_MESSAGE = "KernelSU/APatch WebUI bridge is unavailable";
 
 function stringToHex(str: string): string {
   const bytes = new TextEncoder().encode(str);
@@ -374,4 +378,36 @@ const RealAPI: AppAPI = {
   },
 };
 
-export const API: AppAPI = shouldUseMock ? MockAPI : RealAPI;
+const unavailable = async (): Promise<never> => {
+  throw new Error(BRIDGE_UNAVAILABLE_MESSAGE);
+};
+
+const UnavailableAPI: AppAPI = {
+  loadConfig: unavailable,
+  saveConfig: unavailable,
+  genConfig: unavailable,
+  saveModuleRules: unavailable,
+  scanModules: unavailable,
+  getStatus: unavailable,
+  getInstallState: unavailable,
+  clearMountErrors: unavailable,
+  getSystemInfo: unavailable,
+  getDeviceStatus: unavailable,
+  getVersion: unavailable,
+  openLink: unavailable,
+  reboot: unavailable,
+};
+
+export function createApi(
+  isDevelopment: boolean,
+  hasBridge: boolean,
+  mockApi: AppAPI | null = developmentApi,
+): AppAPI {
+  if (isDevelopment) {
+    if (!mockApi) throw new Error("Development Mock API is unavailable");
+    return mockApi;
+  }
+  return hasBridge ? RealAPI : UnavailableAPI;
+}
+
+export const API: AppAPI = createApi(import.meta.env.DEV, ksuExec !== null);
