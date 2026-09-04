@@ -1,4 +1,38 @@
 
+## v6.1.4
+
+
+### <!-- 1 --> Features
+
+- `webui` Animate module expansion
+
+
+
+### <!-- 2 --> Fixes
+
+- 修正文档中的描述和注释，确保语义清晰
+
+- `module` 修正黑名单中的拼写错误
+
+- Follow symlinks for overlay target metadata
+
+- Preserve overlay staging and size shallow copies
+
+- Fail closed on invalid boot config
+
+- `webui` Fail closed without manager bridge
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Redesign SelectField & status page
+
+- Reduce feedback latency
+
+
+
+
 ## v6.1.3
 
 
