@@ -63,6 +63,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           cache-all-crates: true
+          cache-on-failure: true
 
       - name: Build package
         run: |
@@ -85,47 +86,16 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
-  notify:
-    needs: build
-    if: github.event_name != 'pull_request'
-    name: Notify packages
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        shell: bash
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          filter: "tree:0"
-
-      - name: Trust checkout directory
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-all-crates: true
-
-      - name: Download package artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: notify-output
-          pattern: Hybrid-Mount-*
-          merge-multiple: true
-
       - name: Notify Telegram
+        if: github.event_name != 'pull_request'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
+          rm -rf notify-output
+          mkdir notify-output
+          cp "$ARTIFACT_ZIP" notify-output/
           cargo xtask notify \
             --output notify-output \
             --label "日常耕作 🌱 (Daily Tilling) - ${{ github.ref_name }}" \

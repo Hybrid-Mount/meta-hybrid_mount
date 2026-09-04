@@ -9,6 +9,10 @@ on:
     branches: ["**"]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   checks: write
   contents: read
@@ -48,18 +52,6 @@ jobs:
       - name: Unit tests
         run: cargo test --workspace
 
-      - name: Android target checks
-        run: |
-          set -euo pipefail
-          rustup target add \
-            aarch64-linux-android \
-            armv7-linux-androideabi \
-            x86_64-linux-android \
-            --toolchain nightly
-          for target in aarch64-linux-android armv7-linux-androideabi x86_64-linux-android; do
-            cargo check -p hybrid-mount --target "$target"
-          done
-
       - name: Gate banned symbols
         run: |
           set -euo pipefail
@@ -96,6 +88,44 @@ jobs:
       - name: Test installer platform split
         run: sh tests/shell/customize_lkm.sh
 
+  android-target-checks:
+    name: Android check (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-linux-android
+          - armv7-linux-androideabi
+          - x86_64-linux-android
+    container:
+      image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          filter: "tree:0"
+
+      - name: Trust checkout directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: android-${{ matrix.target }}
+          cache-on-failure: true
+
+      - name: Check Android target
+        run: |
+          rustup target add "${{ matrix.target }}" --toolchain nightly
+          cargo check -p hybrid-mount --target "${{ matrix.target }}"
+
   webui-lints:
     runs-on: ubuntu-latest
     container:
@@ -129,13 +159,20 @@ jobs:
             pnpm-${{ runner.os }}-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint, test and build
+        run: |
+          set -uo pipefail
+          pnpm lint &
+          lint_pid=$!
+          pnpm test &
+          test_pid=$!
+          pnpm build &
+          build_pid=$!
 
-      - name: Typecheck tests
-        run: pnpm test
-
-      - name: Build
-        run: pnpm build
+          status=0
+          for pid in "$lint_pid" "$test_pid" "$build_pid"; do
+            wait "$pid" || status=1
+          done
+          exit "$status"

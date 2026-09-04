@@ -208,40 +208,33 @@ const ANDROID_ARCHS: &[AndroidArch] = &[
     },
 ];
 
-fn ensure_android_target(arch: &AndroidArch) -> Result<()> {
-    let root = workspace_root()?;
-    run_command(
-        "rustup",
-        &["target", "add", arch.rust_target, "--toolchain", "nightly"],
-        &root,
-    )
+fn rustup_target_args() -> Vec<&'static str> {
+    let mut args = vec!["target", "add"];
+    args.extend(ANDROID_ARCHS.iter().map(|arch| arch.rust_target));
+    args.extend(["--toolchain", "nightly"]);
+    args
+}
+
+fn cargo_ndk_args(release: bool) -> Vec<&'static str> {
+    let mut args = vec!["+nightly", "ndk"];
+    for arch in ANDROID_ARCHS {
+        args.extend(["-t", arch.ndk_abi]);
+    }
+    args.extend(["--platform", "26", "build", "--bin", "hybrid-mount"]);
+    if release {
+        args.push("--release");
+    }
+    args
 }
 
 fn compile_binaries(release: bool) -> Result<Vec<(String, PathBuf)>> {
     let root = workspace_root()?;
     let profile = if release { "release" } else { "debug" };
+    run_command("rustup", &rustup_target_args(), &root)?;
+    run_command("cargo", &cargo_ndk_args(release), &root)?;
+
     let mut binaries = Vec::new();
-
     for arch in ANDROID_ARCHS {
-        ensure_android_target(arch)?;
-
-        let mut args = vec![
-            "+nightly",
-            "ndk",
-            "-t",
-            arch.ndk_abi,
-            "--platform",
-            "26",
-            "build",
-            "--bin",
-            "hybrid-mount",
-        ];
-        if release {
-            args.push("--release");
-        }
-
-        run_command("cargo", &args, &root)?;
-
         let binary = root
             .join("target")
             .join(arch.rust_target)
@@ -338,4 +331,44 @@ fn write_update_json(
     )?;
     println!("update.json written for {version}");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn android_build_uses_one_multitarget_cargo_ndk_invocation() {
+        assert_eq!(
+            rustup_target_args(),
+            [
+                "target",
+                "add",
+                "aarch64-linux-android",
+                "armv7-linux-androideabi",
+                "x86_64-linux-android",
+                "--toolchain",
+                "nightly",
+            ]
+        );
+        assert_eq!(
+            cargo_ndk_args(true),
+            [
+                "+nightly",
+                "ndk",
+                "-t",
+                "arm64-v8a",
+                "-t",
+                "armeabi-v7a",
+                "-t",
+                "x86_64",
+                "--platform",
+                "26",
+                "build",
+                "--bin",
+                "hybrid-mount",
+                "--release",
+            ]
+        );
+    }
 }
