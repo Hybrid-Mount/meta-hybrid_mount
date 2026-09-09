@@ -13,5 +13,5 @@ workspace = true
 
 [dependencies]
 anyhow = "1.0.102"
-tgbot = "0.46.0"
+tgbot = "0.48.0"
 tokio = { version = "1.52.1", features = ["rt-multi-thread"] }
