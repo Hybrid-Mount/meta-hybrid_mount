@@ -167,12 +167,7 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
         let mut has_mount_files = false;
         let mut entries = Vec::new();
         let mut partitions = BTreeSet::from(["system".to_owned()]);
-        partitions.extend(
-            extra_partitions
-                .iter()
-                .filter(|partition| partition.as_str() != "system")
-                .cloned(),
-        );
+        partitions.extend(extra_partitions.iter().cloned());
         for partition in partitions {
             let partition_dir = path.join(&partition);
             // `Path::is_dir` follows symlinks.  Magisk-style modules commonly
@@ -304,7 +299,6 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
 
     let mut out = Vec::new();
     walk(partition_dir, partition_dir, partition, &mut out);
-    out.sort_by(|left, right| left.relative.cmp(&right.relative));
     out
 }
 

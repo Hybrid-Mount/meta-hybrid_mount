@@ -21,11 +21,6 @@ const E2FSCK_TIMEOUT: Duration = Duration::from_secs(300);
 /// v4.2.0 兼容语义:退出码 0..=3 视为成功,4 及以上失败,被 signal 终止失败。
 pub const E2FSCK_COMPATIBLE_EXIT_CODES: &[i32] = &[0, 1, 2, 3];
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub const fn e2fsck_exit_code_is_compatible(code: i32) -> bool {
-    matches!(code, 0..=3)
-}
-
 /// 从 `/proc/self/mountinfo` 判断路径是否为挂载点。
 pub fn is_mounted(path: &Path) -> Result<bool> {
     Ok(MountSnapshot::read()?.contains(path))
@@ -194,14 +189,10 @@ mod tests {
     #[test]
     fn e2fsck_exit_code_contract_accepts_zero_through_three() {
         for code in 0..=3 {
-            assert!(
-                e2fsck_exit_code_is_compatible(code),
-                "code {code} should pass"
-            );
             assert!(E2FSCK_COMPATIBLE_EXIT_CODES.contains(&code));
         }
         for code in [4, 8, 255] {
-            assert!(!e2fsck_exit_code_is_compatible(code));
+            assert!(!E2FSCK_COMPATIBLE_EXIT_CODES.contains(&code));
         }
     }
 

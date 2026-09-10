@@ -8,8 +8,8 @@
 import { MiuixCard, MiuixBasicComponent, MiuixText } from "miuix-vue";
 
 interface Props {
-  status: "normal" | "checking" | "abnormal";
-  label: string;
+  status?: "normal" | "checking" | "abnormal";
+  label?: string;
   description?: string;
   summary?: string;
 }

@@ -75,12 +75,6 @@ impl<'a> MountTransaction<'a> {
         });
     }
 
-    /// Discard every cleanup while keeping the side effects.
-    #[allow(dead_code)]
-    pub fn disarm(mut self) {
-        self.finished = true;
-    }
-
     /// Run cleanup actions in reverse order; `retain_resources` skips only
     /// retainable actions. Rollback-only actions are discarded on success,
     /// but run when any cleanup action fails.
@@ -266,18 +260,6 @@ mod tests {
                 .to_string()
                 .contains("first cleanup failed")
         );
-    }
-
-    #[test]
-    fn disarm_skips_all_cleanup_actions() {
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let mut transaction = MountTransaction::new();
-        transaction.register("first", record(&calls, "first", Ok(())));
-        transaction.register("second", record(&calls, "second", Ok(())));
-
-        transaction.disarm();
-
-        assert!(calls.lock().unwrap().is_empty());
     }
 
     #[test]

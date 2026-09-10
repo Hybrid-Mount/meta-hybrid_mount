@@ -85,36 +85,11 @@ export async function loadLocale(locale: string): Promise<void> {
   i18n.global.setLocaleMessage(locale, module.default);
 }
 
-export async function preloadFallbackLocale(): Promise<void> {
-  await loadLocale("en-US");
-}
-
 export async function switchLocale(locale: string): Promise<void> {
-  await preloadFallbackLocale();
+  await loadLocale("en-US");
   await loadLocale(locale);
   i18n.global.locale.value = locale;
   localStorage.setItem("locale", locale);
-}
-
-export async function initI18n(preferred?: string): Promise<void> {
-  const locales = await getSupportedLocales();
-  if (locales.length === 0) {
-    console.error("No locale files found!");
-    return;
-  }
-
-  await preloadFallbackLocale();
-
-  const savedLocale = localStorage.getItem("locale");
-  let defaultLocale = preferred || savedLocale || locales[0].code;
-
-  if (!locales.some((item) => item.code === defaultLocale)) {
-    defaultLocale = locales[0].code;
-  }
-
-  await loadLocale(defaultLocale);
-  i18n.global.locale.value = defaultLocale;
-  localStorage.setItem("locale", defaultLocale);
 }
 
 export default i18n;

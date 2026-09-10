@@ -20,11 +20,6 @@ export interface AppConfig {
   rules: Record<string, ModuleRule>;
 }
 
-export interface ModuleRulesView {
-  default_mode: MountMode | null;
-  paths: Record<string, MountMode>;
-}
-
 export interface Module {
   id: string;
   name: string;
@@ -38,7 +33,7 @@ export interface Module {
   source_path: string;
   mount_error: string | null;
   suggest_ignore: boolean;
-  rules: ModuleRulesView;
+  rules: ModuleRule;
 }
 
 export interface MountStatistics {

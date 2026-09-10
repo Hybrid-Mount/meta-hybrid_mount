@@ -290,12 +290,6 @@ impl CommandSpec {
         self
     }
 
-    #[allow(dead_code)] // cwd 能力是 runner 契约的一部分，当前生产调用点都在默认工作目录
-    pub fn cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
-        self.cwd = Some(cwd.into());
-        self
-    }
-
     pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.envs.push((key.into(), value.into()));
         self
@@ -306,20 +300,8 @@ impl CommandSpec {
         self
     }
 
-    #[allow(dead_code)] // 默认值已满足当前调用点；保留显式覆盖能力
-    pub fn drain_timeout(mut self, drain_timeout: Duration) -> Self {
-        self.drain_timeout = drain_timeout;
-        self
-    }
-
     pub fn capture(mut self, capture: CaptureMode) -> Self {
         self.capture = capture;
-        self
-    }
-
-    #[allow(dead_code)] // 默认容量已满足当前调用点；保留显式覆盖能力
-    pub fn output_capacity(mut self, max_bytes: usize) -> Self {
-        self.max_output_bytes = max_bytes;
         self
     }
 
