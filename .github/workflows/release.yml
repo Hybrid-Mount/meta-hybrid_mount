@@ -54,9 +54,6 @@ jobs:
           cache-on-failure: true
 
       - name: Build release package
-        env:
-          HYBRID_MOUNT_SIGN_KEY: ${{ secrets.SIGNING_KEY }}
-          HYBRID_MOUNT_SIGN_CERT: ${{ secrets.SIGNING_CERT }}
         run: |
           set -euo pipefail
           rm -rf output
