@@ -121,19 +121,28 @@ impl NotificationContext<'_> {
             bytes_to_mib(artifact.size_bytes)
         );
 
+        self.bot
+            .execute(self.build_single_artifact_action(artifact, index).await?)
+            .await?;
+        Ok(())
+    }
+
+    async fn build_single_artifact_action(
+        &self,
+        artifact: &Artifact,
+        index: usize,
+    ) -> Result<SendDocument> {
         let caption = self.caption_for_artifact(artifact, index);
         let mut action = SendDocument::new(
             self.chat_id.to_owned(),
             InputFile::path(artifact.path.clone()).await?,
-        )
-        .with_caption_parse_mode(ParseMode::Html);
+        );
 
         if let Some(topic_id) = self.request.topic_id {
             action = action.with_message_thread_id(topic_id);
         }
 
-        self.bot.execute(action.with_caption(&caption)).await?;
-        Ok(())
+        Ok(action.with_caption((caption, ParseMode::Html)))
     }
 
     async fn send_artifact_group(&self, artifacts: &[Artifact]) -> Result<()> {
@@ -175,17 +184,16 @@ impl NotificationContext<'_> {
 
         for artifact in leading {
             let file = InputFile::path(artifact.path.clone()).await?;
-            let info = InputMediaDocument::default().with_disable_content_type_detection(true);
-            items.push(MediaGroupItem::for_document(file, info));
+            let document = InputMediaDocument::from(file).with_disable_content_type_detection(true);
+            items.push(document.into());
         }
 
-        items.push(MediaGroupItem::for_document(
-            InputFile::path(last.path.clone()).await?,
-            InputMediaDocument::default()
+        items.push(
+            InputMediaDocument::from(InputFile::path(last.path.clone()).await?)
                 .with_disable_content_type_detection(true)
-                .with_caption_parse_mode(ParseMode::Html)
-                .with_caption(caption.to_owned()),
-        ));
+                .with_caption((caption, ParseMode::Html))
+                .into(),
+        );
         Ok(items)
     }
 
@@ -422,6 +430,58 @@ mod tests {
         );
         assert!(caption.contains("Hybrid Mount"));
         assert!(caption.contains("2/3"));
+    }
+
+    #[test]
+    fn upgraded_api_builds_single_and_group_uploads_with_html_captions() -> Result<()> {
+        use tgbot::api::Method;
+
+        let output_dir = make_temp_output_dir()?;
+        File::create(output_dir.join("first.zip"))?;
+        File::create(output_dir.join("second.zip"))?;
+        let artifacts = find_zip_files(&output_dir)?;
+        let request = NotifyRequest::new(&output_dir, "test").with_topic_id(Some(42));
+        // Construct and serialize requests only; no Telegram calls or secrets.
+        let bot = Client::new("test-token")?;
+        let context = NotificationContext {
+            bot: &bot,
+            chat_id: "123",
+            request: &request,
+            branch_name: "test",
+            artifact_count: artifacts.len(),
+            safe_commit_msg: "fix &amp; verify",
+            commit_link: "https://example.com/commit/test",
+        };
+        tokio::runtime::Runtime::new()?.block_on(async {
+            let single = context
+                .build_single_artifact_action(&artifacts[0], 0)
+                .await?;
+            let payload = format!("{:?}", single.into_payload()?);
+            assert!(payload.contains("sendDocument"));
+            assert!(payload.contains("HTML"));
+            assert!(payload.contains("message_thread_id"));
+            assert!(payload.contains("42"));
+            assert!(payload.contains("fix &amp; verify"));
+
+            let items = context
+                .build_media_group_items(&artifacts, "<b>group</b>")
+                .await?;
+            let group = SendMediaGroup::new("123", MediaGroup::new(items)?);
+            let payload = format!("{:?}", group.into_payload()?);
+            assert!(payload.contains("sendMediaGroup"));
+            assert_eq!(payload.matches("String(\"document\")").count(), 2);
+            assert_eq!(payload.matches("<b>group</b>").count(), 1);
+            assert!(payload.contains("HTML"));
+            assert_eq!(
+                payload
+                    .matches("\"disable_content_type_detection\": Bool(true)")
+                    .count(),
+                2
+            );
+            Ok::<_, anyhow::Error>(())
+        })?;
+        fs::remove_dir_all(output_dir)?;
+        Ok(())
     }
 
     fn make_temp_output_dir() -> Result<PathBuf> {
