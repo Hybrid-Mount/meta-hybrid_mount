@@ -9,7 +9,7 @@
 //! back merely because concealment is unavailable.
 
 use std::fs::{self, OpenOptions};
-use std::io::{ErrorKind, Write};
+use std::io::{self, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -171,10 +171,33 @@ impl LkmAttemptGuard {
     }
 
     fn arm_at(marker_path: &Path, lkm_path: &Path, mount_path: &Path) -> Result<Self, String> {
-        if let Some(parent) = marker_path.parent() {
+        Self::arm_at_with_sync(
+            marker_path,
+            lkm_path,
+            mount_path,
+            crate::sys::fs::sync_parent_directory,
+        )
+    }
+
+    fn arm_at_with_sync(
+        marker_path: &Path,
+        lkm_path: &Path,
+        mount_path: &Path,
+        mut sync_parent: impl FnMut(&Path) -> io::Result<()>,
+    ) -> Result<Self, String> {
+        if let Some(parent) = marker_path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
             fs::create_dir_all(parent).map_err(|err| {
                 format!(
                     "create LKM boot-guard directory {}: {err}",
+                    parent.display()
+                )
+            })?;
+            sync_parent(parent).map_err(|err| {
+                format!(
+                    "sync LKM boot-guard directory entry {}: {err}",
                     parent.display()
                 )
             })?;
@@ -216,6 +239,13 @@ impl LkmAttemptGuard {
                 marker_path.display()
             ));
         }
+        if let Err(err) = sync_parent(marker_path) {
+            drop(guard);
+            return Err(format!(
+                "sync LKM boot-guard parent for {}: {err}",
+                marker_path.display()
+            ));
+        }
 
         Ok(guard)
     }
@@ -224,7 +254,14 @@ impl LkmAttemptGuard {
 impl Drop for LkmAttemptGuard {
     fn drop(&mut self) {
         match fs::remove_file(&self.marker_path) {
-            Ok(()) => {}
+            Ok(()) => {
+                if let Err(err) = crate::sys::fs::sync_parent_directory(&self.marker_path) {
+                    log::warn!(
+                        "failed to persist LKM boot guard removal {}: {err}",
+                        self.marker_path.display()
+                    );
+                }
+            }
             Err(err) if err.kind() == ErrorKind::NotFound => {}
             Err(err) => log::warn!(
                 "failed to clear LKM boot guard {}: {err}",
@@ -470,6 +507,45 @@ mod tests {
 
         drop(guard);
         assert!(!marker.exists());
+        fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn lkm_attempt_guard_aborts_when_marker_parent_sync_fails() {
+        use std::cell::Cell;
+
+        let root = std::env::temp_dir().join(format!(
+            "hybrid-mount-lkm-guard-sync-fail-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        let marker = root.join("guard");
+        let sync_calls = Cell::new(0);
+        let marker_was_visible = Cell::new(false);
+
+        let err = LkmAttemptGuard::arm_at_with_sync(
+            &marker,
+            Path::new("/module/nuke.ko"),
+            Path::new("/mnt/staging"),
+            |path| {
+                let call = sync_calls.get() + 1;
+                sync_calls.set(call);
+                if call == 2 {
+                    marker_was_visible.set(path == marker && marker.is_file());
+                    return Err(io::Error::other("injected marker parent sync failure"));
+                }
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            sync_calls.get() == 2
+                && marker_was_visible.get()
+                && !marker.exists()
+                && err.contains("sync LKM boot-guard parent"),
+            "{err}"
+        );
         fs::remove_dir(root).unwrap();
     }
 }

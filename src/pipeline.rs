@@ -613,10 +613,13 @@ fn run_mount_pipeline_impl() -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
 
-    // 清理陈旧的临时文件
-    let runtime_dir = Path::new(defs::RUNTIME_DIR);
-    if let Err(err) = crate::sys::fs::cleanup_stale_atomic_temp_files(runtime_dir) {
-        log::warn!("failed to cleanup stale temp files: {err}");
+    // 配置和 scan.ret 共用持久化目录；state.json 位于 run 子目录。
+    for path in [defs::CONFIG_PATH, defs::STATE_PATH] {
+        if let Some(directory) = Path::new(path).parent()
+            && let Err(err) = crate::sys::fs::cleanup_stale_atomic_temp_files(directory)
+        {
+            log::warn!("failed to cleanup stale temp files: {err}");
+        }
     }
 
     startup.finish();

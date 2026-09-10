@@ -42,6 +42,11 @@ pub fn sync_parent_directory(path: &Path) -> io::Result<()> {
 /// Replace a file without exposing a truncated intermediate state.
 #[cfg(unix)]
 pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
+    atomic_write_with_sequence(path, content, &ATOMIC_WRITE_SEQUENCE)
+}
+
+#[cfg(unix)]
+fn atomic_write_with_sequence(path: &Path, content: &[u8], sequence: &AtomicU64) -> Result<()> {
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
@@ -52,26 +57,33 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("file");
-    let sequence = ATOMIC_WRITE_SEQUENCE.fetch_add(1, AtomicOrdering::Relaxed);
-    let temporary = parent.join(format!(
-        ".{file_name}.{}.{}.tmp",
-        std::process::id(),
-        sequence
-    ));
-
-    let result = (|| -> Result<()> {
-        let mut file = OpenOptions::new()
+    let mut attempts = 0;
+    let (temporary, mut file) = loop {
+        let next = sequence.fetch_add(1, AtomicOrdering::Relaxed);
+        let temporary = parent.join(format!(".{file_name}.{}.{next}.tmp", std::process::id()));
+        attempts += 1;
+        match OpenOptions::new()
             .create_new(true)
             .write(true)
-            .open(&temporary)?;
+            .open(&temporary)
+        {
+            Ok(file) => break (temporary, file),
+            // A reused PID can collide with crash residue. Only clean up a
+            // temporary file after this call has created it successfully.
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists && attempts < 32 => continue,
+            Err(err) => return Err(err.into()),
+        }
+    };
+
+    let result = (|| -> Result<()> {
         file.write_all(content)?;
-        file.sync_all()?;
 
         match fs::metadata(path) {
             Ok(metadata) => fs::set_permissions(&temporary, metadata.permissions())?,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.into()),
         }
+        file.sync_all()?;
 
         fs::rename(&temporary, path)?;
         // 父目录 fsync 失败按保存失败处理。rename 已经可见，但调用方
@@ -86,11 +98,9 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
     result
 }
 
-/// 清理指定目录下的陈旧临时文件
-///
-/// 删除以下临时文件：
-/// 1. 当前进程的残留（进程重启后）
-/// 2. 其他进程超过 24 小时的残留
+/// 清理超过 24 小时、符合原子写命名规则的普通临时文件。
+/// 当前进程的文件可能仍在写入，必须保留。
+#[cfg(unix)]
 pub fn cleanup_stale_atomic_temp_files(dir: &Path) -> Result<()> {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -111,40 +121,40 @@ pub fn cleanup_stale_atomic_temp_files(dir: &Path) -> Result<()> {
     let mut cleaned = 0;
     let mut failed = 0;
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = entry?;
         let file_name = entry.file_name();
-        let name = file_name.to_string_lossy();
-
-        // 匹配模式: .<name>.<pid>.<seq>.tmp
-        if !name.starts_with('.') || !name.ends_with(".tmp") {
+        let Some(name) = file_name.to_str() else {
             continue;
-        }
-
-        let parts: Vec<&str> = name.split('.').collect();
-        if parts.len() < 4 {
-            continue;
-        }
-
-        // 提取 PID
-        let pid = parts[parts.len() - 3].parse::<u32>().ok();
-
-        // 删除条件：
-        // 1. 当前进程的残留（进程重启）
-        // 2. 其他进程的超过 24 小时的残留
-        let should_remove = if let Some(file_pid) = pid {
-            file_pid == current_pid
-        } else {
-            false
         };
 
-        let should_remove = should_remove
-            || entry
-                .metadata()
-                .and_then(|m| m.modified())
-                .map(|t| t < stale_threshold)
-                .unwrap_or(false);
-
-        if should_remove {
+        let Some(stem) = name
+            .strip_prefix('.')
+            .and_then(|name| name.strip_suffix(".tmp"))
+        else {
+            continue;
+        };
+        let mut parts = stem.rsplitn(3, '.');
+        let (Some(sequence), Some(pid), Some(original_name)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        if original_name.is_empty()
+            || !pid.bytes().all(|byte| byte.is_ascii_digit())
+            || !sequence.bytes().all(|byte| byte.is_ascii_digit())
+            || sequence.parse::<u64>().is_err()
+        {
+            continue;
+        }
+        let Ok(pid) = pid.parse::<u32>() else {
+            continue;
+        };
+        if pid == current_pid {
+            continue;
+        }
+        let metadata = entry.metadata()?;
+        if metadata.is_file() && metadata.modified()? < stale_threshold {
             match fs::remove_file(entry.path()) {
                 Ok(()) => {
                     log::info!(
@@ -598,6 +608,82 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn atomic_write_retries_collisions_without_removing_existing_entries() {
+        use std::os::unix::fs::symlink;
+
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-collision-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("state.json");
+        let candidate =
+            |sequence| dir.join(format!(".state.json.{}.{sequence}.tmp", std::process::id()));
+        fs::write(candidate(0), b"residue").unwrap();
+        fs::create_dir(candidate(1)).unwrap();
+        symlink(dir.join("missing"), candidate(2)).unwrap();
+
+        atomic_write_with_sequence(&target, b"new state", &AtomicU64::new(0)).unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"new state");
+        assert_eq!(fs::read(candidate(0)).unwrap(), b"residue");
+        assert!(candidate(1).is_dir());
+        assert!(candidate(2).is_symlink());
+        assert!(!candidate(3).exists());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_bounds_collision_retries_and_preserves_original_content() {
+        let dir = std::env::temp_dir().join(format!(
+            "hybrid-mount-collision-limit-{}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("state.json");
+        fs::write(&target, b"original").unwrap();
+        for sequence in 0..32 {
+            fs::write(
+                dir.join(format!(".state.json.{}.{sequence}.tmp", std::process::id())),
+                b"residue",
+            )
+            .unwrap();
+        }
+
+        let err =
+            atomic_write_with_sequence(&target, b"replacement", &AtomicU64::new(0)).unwrap_err();
+
+        let Error::Io(source) = err else {
+            panic!("collision must return an I/O error");
+        };
+        assert_eq!(source.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&target).unwrap(), b"original");
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 33);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_preserves_existing_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-atomic-mode-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("config.toml");
+        fs::write(&target, b"original").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
+
+        atomic_write(&target, b"replacement").unwrap();
+
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn atomic_write_removes_temp_file_when_rename_fails() {
         let dir =
             std::env::temp_dir().join(format!("hybrid-mount-atomic-fail-{}", std::process::id()));
@@ -638,6 +724,62 @@ mod tests {
 
         assert_eq!(std::fs::read(&parent_file).unwrap(), b"occupied");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_temp_cleanup_preserves_current_process_writes() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-temp-active-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let active = dir.join(format!(".state.json.{}.0.tmp", std::process::id()));
+        fs::write(&active, b"in progress").unwrap();
+
+        cleanup_stale_atomic_temp_files(&dir).unwrap();
+
+        assert!(active.is_file(), "cleanup must not remove an active write");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stale_temp_cleanup_removes_only_old_atomic_regular_files() {
+        use std::fs::FileTimes;
+        use std::os::unix::fs::symlink;
+        use std::time::{Duration, SystemTime};
+
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-temp-stale-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let old = SystemTime::now() - Duration::from_secs(2 * 86400);
+        let stale = ".state.json.4294967295.1.tmp";
+        let unrelated = [
+            ".notes.backup.tmp",
+            ".state.json.invalid.1.tmp",
+            ".state.json.4294967295.invalid.tmp",
+            ".4294967295.1.tmp",
+        ];
+        for name in std::iter::once(stale).chain(unrelated) {
+            let file = fs::File::create(dir.join(name)).unwrap();
+            file.set_times(FileTimes::new().set_modified(old)).unwrap();
+        }
+        let recent = dir.join(".state.json.4294967295.2.tmp");
+        fs::write(&recent, b"recent").unwrap();
+        let link = dir.join(".state.json.4294967295.3.tmp");
+        symlink(dir.join(unrelated[0]), &link).unwrap();
+        let directory = dir.join(".state.json.4294967295.4.tmp");
+        fs::create_dir(&directory).unwrap();
+
+        cleanup_stale_atomic_temp_files(&dir).unwrap();
+
+        assert!(!dir.join(stale).exists());
+        for name in unrelated {
+            assert!(dir.join(name).is_file(), "unrelated file removed: {name}");
+        }
+        assert!(recent.is_file());
+        assert!(link.is_symlink());
+        assert!(directory.is_dir());
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
