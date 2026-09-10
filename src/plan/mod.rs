@@ -168,9 +168,9 @@ impl PlanBuilder {
             if existing.mode != mode && !shareable_directories {
                 return Err(Error::PlanConflict {
                     target: target.to_owned(),
-                    first_backend: mode_name(existing.mode).to_owned(),
+                    first_backend: existing.mode.as_str().to_owned(),
                     first_source: existing.source.clone(),
-                    second_backend: mode_name(mode).to_owned(),
+                    second_backend: mode.as_str().to_owned(),
                     second_source: source,
                 });
             }
@@ -538,14 +538,6 @@ fn map_target(relative: &str, promoted: &BTreeSet<String>) -> (String, String) {
         (parts[0].to_owned(), format!("/{relative}"))
     } else {
         ("system".to_owned(), format!("/{relative}"))
-    }
-}
-
-fn mode_name(mode: Mode) -> &'static str {
-    match mode {
-        Mode::Overlay => "overlay",
-        Mode::Magic => "magic",
-        Mode::Ignore => "ignore",
     }
 }
 

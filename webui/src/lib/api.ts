@@ -118,8 +118,6 @@ export function createConfigPayload(config: AppConfig): Record<string, unknown> 
     overlay_mode: config.overlay_mode,
     disable_umount: config.disable_umount,
     default_mode: config.default_mode,
-    replace_rules: true,
-    rules: config.rules,
   };
 }
 

@@ -2,12 +2,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import {
-  MiuixCard,
-  MiuixSmallTitle,
-  MiuixBasicComponent,
-  MiuixText,
-} from "miuix-vue";
+import { MiuixCard, MiuixSmallTitle, MiuixBasicComponent, MiuixText } from "miuix-vue";
 import { Motion, AnimatePresence } from "motion-v";
 
 import StatusCard from "../components/StatusCard.vue";

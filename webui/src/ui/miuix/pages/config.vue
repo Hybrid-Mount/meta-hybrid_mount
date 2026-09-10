@@ -14,7 +14,6 @@ import {
   IconCheck,
 } from "miuix-vue";
 import { Reset } from "miuix-vue/icons";
-import { getSupportedLocales } from "../../../locales";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
 import type { DefaultMountMode } from "../../../lib/types";
@@ -45,7 +44,12 @@ const overlayOptions = computed<MiuixSelectOption[]>(() => {
   return options;
 });
 
-const languageOptions = ref<MiuixSelectOption[]>([]);
+const languageOptions = computed<MiuixSelectOption[]>(() =>
+  uiStore.availableLanguages.map((language) => ({
+    value: language.code,
+    label: language.display,
+  })),
+);
 const resetRequested = ref(false);
 
 const uiStyleValue = computed({
@@ -109,14 +113,7 @@ async function reset(): Promise<void> {
   uiStore.showToast(ok ? t("config.resetSuccess") : t("config.resetFailed"));
 }
 
-onMounted(async () => {
-  await configStore.ensureConfigLoaded();
-  const locales = await getSupportedLocales();
-  languageOptions.value = locales.map((locale) => ({
-    value: locale.code,
-    label: locale.display,
-  }));
-});
+onMounted(() => configStore.ensureConfigLoaded());
 </script>
 
 <template>

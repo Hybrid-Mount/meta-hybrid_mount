@@ -41,7 +41,7 @@ module/metamount.sh
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
 - `src/sys/`、`src/utils/`：挂载、文件系统、随机临时目录、SELinux xattr 与 KernelSU 接口。
 - `webui/`：Vue 3 双界面，通过 `kernelsu.exec` 调用同一个 Rust 二进制。
-- `xtask/`：WebUI 构建、Android 交叉编译、module.prop 生成、签名和 ZIP 打包。
+- `xtask/`：WebUI 构建、Android 交叉编译、module.prop 生成和 ZIP 打包。
 
 ## 稳定路径与数据
 

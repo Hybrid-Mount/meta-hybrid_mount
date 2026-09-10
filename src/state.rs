@@ -564,11 +564,7 @@ fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppMod
         MountPlan::default()
     });
     let mount_errors = collect_mount_error_modules(&config.moduledir);
-    let mut snapshot = app_modules(modules, config, &plan, &mount_errors, &BTreeSet::new());
-    for module in &mut snapshot {
-        module.is_mounted = false;
-    }
-    snapshot
+    app_modules(modules, config, &plan, &mount_errors, &BTreeSet::new())
 }
 
 /// `status`:输出 `run/state.json`(缺失时输出默认快照)。
@@ -654,39 +650,38 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
         if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
             continue;
         }
-        let marker_path = entry.path().join(defs::MOUNT_ERROR_FILE_NAME);
+        let Ok(children) = fs::read_dir(entry.path()) else {
+            continue;
+        };
+        for child in children.filter_map(std::result::Result::ok) {
+            if !child
+                .file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
+            {
+                continue;
+            }
 
-        // 检查是否存在且为文件
-        match fs::symlink_metadata(&marker_path) {
-            Ok(metadata) if metadata.is_file() => {
-                // 只删除文件，不递归删除目录
-                if fs::remove_file(&marker_path).is_ok() {
-                    removed += 1;
-                    log::info!("cleared mount_error marker: {}", marker_path.display());
-                }
-            }
-            Ok(metadata) if metadata.is_dir() => {
-                // 如果是目录，记录警告但不删除
-                log::warn!(
-                    "mount_error is a directory, not a marker file: {}",
-                    marker_path.display()
-                );
-            }
-            Ok(_) => {
-                // 符号链接或其他类型，记录警告
-                log::warn!(
+            let marker_path = child.path();
+            match child.file_type() {
+                Ok(file_type) if file_type.is_file() => match fs::remove_file(&marker_path) {
+                    Ok(()) => {
+                        removed += 1;
+                        log::info!("cleared mount_error marker: {}", marker_path.display());
+                    }
+                    Err(err) => log::warn!(
+                        "failed to remove mount_error marker {}: {err}",
+                        marker_path.display()
+                    ),
+                },
+                Ok(_) => log::warn!(
                     "mount_error is not a regular file: {}",
                     marker_path.display()
-                );
-            }
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                // 标记不存在，跳过
-            }
-            Err(err) => {
-                log::warn!(
+                ),
+                Err(err) => log::warn!(
                     "failed to check mount_error marker {}: {err}",
                     marker_path.display()
-                );
+                ),
             }
         }
     }
@@ -713,7 +708,7 @@ pub fn handle_clear_mount_errors() -> Result<()> {
     if let Ok(text) = fs::read_to_string(defs::SCAN_RET_PATH) {
         match serde_json::from_str::<Vec<AppModule>>(&text) {
             Ok(mut modules) => {
-                clear_app_module_errors(&mut modules);
+                clear_app_module_errors(&mut modules, &state.mount_error_modules);
                 write_scan_ret(&modules)?;
             }
             Err(err) => log::warn!("failed to refresh {}: {err}", defs::SCAN_RET_PATH),
@@ -728,10 +723,13 @@ fn clear_errors_payload(removed: usize) -> String {
     serde_json::json!({ "ok": true, "removed": removed }).to_string()
 }
 
-fn clear_app_module_errors(modules: &mut [AppModule]) {
+fn clear_app_module_errors(modules: &mut [AppModule], remaining_errors: &[String]) {
     for module in modules {
-        module.mount_error = None;
-        module.suggest_ignore = false;
+        module.mount_error = remaining_errors
+            .iter()
+            .any(|id| id == module.id.as_str())
+            .then(|| "mount_error marker present".to_owned());
+        module.suggest_ignore = module.mount_error.is_some();
     }
 }
 
@@ -908,10 +906,67 @@ mod tests {
             &BTreeSet::new(),
         );
 
-        clear_app_module_errors(&mut list);
+        clear_app_module_errors(&mut list, &[]);
 
         assert_eq!(list[0].mount_error, None);
         assert!(!list[0].suggest_ignore);
+    }
+
+    #[test]
+    fn clearing_markers_preserves_non_regular_entries_and_their_cached_errors() {
+        let root = std::env::temp_dir().join(format!(
+            "hybrid-mount-state-remaining-errors-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("cleared_mod")).unwrap();
+        fs::write(root.join("cleared_mod/mount_error"), "").unwrap();
+        fs::create_dir_all(root.join("blocked_mod/mount_error")).unwrap();
+        fs::write(root.join("blocked_mod/mount_error/keep"), "data").unwrap();
+        let modules = [record("cleared_mod"), record("blocked_mod")];
+        let mut list = app_modules(
+            &modules,
+            &Config::default(),
+            &MountPlan::default(),
+            &collect_mount_error_modules(&root),
+            &BTreeSet::new(),
+        );
+
+        assert_eq!(clear_mount_error_markers(&root), 1);
+        let remaining = collect_mount_error_modules(&root);
+        clear_app_module_errors(&mut list, &remaining);
+
+        assert_eq!(remaining, vec!["blocked_mod".to_owned()]);
+        assert_eq!(list[0].mount_error, None);
+        assert!(!list[0].suggest_ignore);
+        assert!(list[1].mount_error.is_some());
+        assert!(list[1].suggest_ignore);
+        assert_eq!(
+            fs::read_to_string(root.join("blocked_mod/mount_error/keep")).unwrap(),
+            "data"
+        );
+        fs::remove_dir_all(root).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clearing_markers_does_not_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "hybrid-mount-state-symlink-errors-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("bad_mod")).unwrap();
+        let target = root.join("keep");
+        fs::write(&target, "data").unwrap();
+        symlink(&target, root.join("bad_mod/Mount_Error")).unwrap();
+
+        assert_eq!(clear_mount_error_markers(&root), 0);
+        assert_eq!(collect_mount_error_modules(&root), vec!["bad_mod"]);
+        assert_eq!(fs::read_to_string(target).unwrap(), "data");
+        fs::remove_dir_all(root).ok();
     }
 
     #[test]

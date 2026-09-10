@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createApp } from "vue";
-import i18n, { initI18n } from "./locales";
+import i18n from "./locales";
 import "./style.css";
 
 import App from "./App.vue";
@@ -23,8 +23,6 @@ function loadOptionalManagerColors(): void {
 
 const init = async () => {
   await uiStore.init();
-  const savedLocale = localStorage.getItem("locale");
-  await initI18n(savedLocale ?? undefined);
   loadOptionalManagerColors();
   app.mount("#app");
 };
