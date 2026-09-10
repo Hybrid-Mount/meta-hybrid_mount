@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import { h, computed, ref, type FunctionalComponent } from "vue";
+import { computed, ref } from "vue";
 import { MiuixButton, MiuixDialog, MiuixRadioButtonPreference } from "miuix-vue";
 
 export interface MiuixSelectOption {
@@ -30,65 +30,6 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
 }>();
 
-interface IconPath {
-  d: string;
-  /**
-   * Per-path opacity for multi-color icons.
-   */
-  opacity?: number;
-  fillRule?: "evenodd" | "nonzero";
-}
-
-interface IconSpec {
-  /**
-   * Intrinsic width/height in dp (→ px).
-   */
-  width: number;
-  height: number;
-  /**
-   * ViewBox dimensions.
-   */
-  vw: number;
-  vh: number;
-  paths: IconPath[];
-}
-
-function makeIcon(name: string, spec: IconSpec): FunctionalComponent {
-  const comp: FunctionalComponent = () =>
-    h(
-      "svg",
-      {
-        xmlns: "http://www.w3.org/2000/svg",
-        width: spec.width,
-        height: spec.height,
-        viewBox: `0 0 ${spec.vw} ${spec.vh}`,
-        fill: "currentColor",
-      },
-      spec.paths.map((p) =>
-        h("path", {
-          d: p.d,
-          "fill-rule": p.fillRule ?? "evenodd",
-          "clip-rule": p.fillRule ?? "evenodd",
-          ...(p.opacity != null ? { "fill-opacity": p.opacity } : {}),
-        }),
-      ),
-    );
-  comp.displayName = name;
-  return comp;
-}
-
-const IconArrowRight = makeIcon("ArrowRight", {
-  width: 10,
-  height: 16,
-  vw: 10,
-  vh: 16,
-  paths: [
-    {
-      d: "M1.65 1.469 C1.929 1.19 2.381 1.19 2.66 1.469 L8.721 7.53 C9 7.809 9 8.261 8.721 8.54 L2.66 14.601 C2.381 14.88 1.929 14.88 1.65 14.601 C1.371 14.322 1.371 13.87 1.65 13.591 L7.205 8.035 L1.65 2.479 C1.371 2.2 1.371 1.748 1.65 1.469 Z",
-    },
-  ],
-});
-
 const open = ref(false);
 const selectedOption = computed(
   () =>
@@ -117,13 +58,22 @@ function select(option: MiuixSelectOption): void {
         <span v-if="summary">{{ summary }}</span>
       </span>
       <span class="trigger-value">{{ selectedOption?.label ?? "-" }}</span>
-      <span><IconArrowRight /></span>
+      <span>
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M1.65 1.469 C1.929 1.19 2.381 1.19 2.66 1.469 L8.721 7.53 C9 7.809 9 8.261 8.721 8.54 L2.66 14.601 C2.381 14.88 1.929 14.88 1.65 14.601 C1.371 14.322 1.371 13.87 1.65 13.591 L7.205 8.035 L1.65 2.479 C1.371 2.2 1.371 1.748 1.65 1.469 Z"
+          />
+        </svg>
+      </span>
     </button>
 
     <MiuixDialog v-model="open" :title="label" @close="open = false">
       <div class="select-options">
         <MiuixRadioButtonPreference
           v-for="option in options"
+          :key="option.value"
           :model-value="option.value === modelValue"
           :title="option.label"
           :summary="option.description"
@@ -174,8 +124,7 @@ function select(option: MiuixSelectOption): void {
   opacity: 0.5;
 }
 
-.trigger-copy,
-.option-copy {
+.trigger-copy {
   min-width: 0;
   display: flex;
   flex: 1;
@@ -187,8 +136,7 @@ function select(option: MiuixSelectOption): void {
   line-height: 22px;
 }
 
-.trigger-copy span,
-.option-copy span {
+.trigger-copy span {
   margin-top: 2px;
   color: var(--m-color-on-surface-variant-summary, rgba(0, 0, 0, 0.6));
   font-size: 13px;
@@ -229,48 +177,6 @@ function select(option: MiuixSelectOption): void {
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
-}
-
-.select-option {
-  width: 100%;
-  min-height: 52px;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 0;
-  border-radius: 16px;
-  color: var(--m-color-on-surface, #1d1b20);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.select-option:hover {
-  background: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
-}
-
-.select-option.selected {
-  color: var(--m-color-on-primary-container, #21005d);
-  background: var(--m-color-primary-container, #eaddff);
-}
-
-.select-option:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.option-copy strong {
-  font-size: 15px;
-  line-height: 20px;
-}
-
-.option-check {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
-  color: currentColor;
 }
 
 .dialog-actions {

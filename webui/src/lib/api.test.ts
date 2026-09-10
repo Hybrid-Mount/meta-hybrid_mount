@@ -19,7 +19,7 @@ describe("WebUI configuration contract", () => {
     );
   });
 
-  it("marks full editor saves as rule replacements", () => {
+  it("saves global settings without overwriting independently edited module rules", () => {
     const config: AppConfig = {
       moduledir: "/data/adb/modules",
       mountsource: "KSU",
@@ -32,11 +32,12 @@ describe("WebUI configuration contract", () => {
       },
     };
 
-    expect(createConfigPayload(config)).toMatchObject({
-      replace_rules: true,
-      rules: {
-        inherited: { default_mode: null, paths: {} },
-      },
+    expect(createConfigPayload(config)).toEqual({
+      moduledir: config.moduledir,
+      mountsource: config.mountsource,
+      overlay_mode: config.overlay_mode,
+      disable_umount: config.disable_umount,
+      default_mode: config.default_mode,
     });
   });
 

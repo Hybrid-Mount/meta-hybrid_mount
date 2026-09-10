@@ -12,7 +12,7 @@ import {
   MiuixIconButton,
   IconCheck,
 } from "miuix-vue";
-import { Delete, ExpandLess, ExpandMore, Refresh } from "miuix-vue/icons";
+import { Delete, ExpandLess, ExpandMore } from "miuix-vue/icons";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
