@@ -108,6 +108,78 @@ custom_mounts = []
 }
 
 #[test]
+fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
+    let dir = test_dir("legacy-daemon-mode");
+    fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("config.toml");
+    // Issue #409: this obsolete key caused strict boot loading to abort.
+    let original = r#"moduledir = "/data/adb/modules"
+mountsource = "KSU"
+overlay_mode = "tmpfs"
+disable_umount = true
+default_mode = "magic"
+daemon_startup_mode = "persistent"
+custom_mounts = []
+
+[rules.demo]
+default_mode = "ignore"
+[rules.demo.paths]
+"system/etc/hosts" = "overlay"
+"#;
+    fs::write(&path, original).unwrap();
+
+    let loaded = Config::load_for_boot(&path).unwrap();
+
+    assert_eq!(loaded.default_mode, Mode::Magic);
+    assert_eq!(loaded.overlay_mode, OverlayMode::Tmpfs);
+    assert!(loaded.disable_umount);
+    assert_eq!(loaded.rules["demo"].default_mode, Some(Mode::Ignore));
+    assert_eq!(
+        loaded.rules["demo"].paths["system/etc/hosts"],
+        Mode::Overlay
+    );
+    assert!(loaded.legacy_daemon_startup_mode.is_none());
+    assert_eq!(Config::load_or_default(&path).unwrap(), loaded);
+    assert_eq!(fs::read_to_string(&path).unwrap(), original);
+
+    loaded.save(&path).unwrap();
+    assert!(
+        !fs::read_to_string(&path)
+            .unwrap()
+            .contains("daemon_startup_mode")
+    );
+    assert_eq!(Config::load_for_boot(&path).unwrap(), loaded);
+    cleanup(&dir);
+}
+
+#[test]
+fn retired_daemon_mode_does_not_allow_unknown_or_malformed_config() {
+    for (name, text) in [
+        (
+            "unknown",
+            "daemon_startup_mode = \"persistent\"\nunknown_setting = true\n",
+        ),
+        ("wrong-type", "daemon_startup_mode = 42\n"),
+        (
+            "malformed",
+            "daemon_startup_mode = \"persistent\"\nrules = [",
+        ),
+    ] {
+        let dir = test_dir(&format!("legacy-daemon-{name}"));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.toml");
+        fs::write(&path, text).unwrap();
+
+        assert!(matches!(
+            Config::load_for_boot(&path),
+            Err(Error::ConfigParse { .. })
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+        cleanup(&dir);
+    }
+}
+
+#[test]
 fn invalid_module_id_rule_key_is_rejected_with_context() {
     let err = Config::from_toml(
         r#"

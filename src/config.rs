@@ -117,6 +117,11 @@ pub struct Config {
     /// of an otherwise valid configuration.
     #[serde(default, rename = "custom_mounts", skip_serializing)]
     pub(crate) legacy_custom_mounts: Vec<toml::Value>,
+
+    /// Upgrade-only input from releases with a persistent daemon. The current
+    /// boot pipeline has no daemon; accepting this retired key preserves rules.
+    #[serde(default, rename = "daemon_startup_mode", skip_serializing)]
+    pub(crate) legacy_daemon_startup_mode: Option<String>,
 }
 
 impl Default for Config {
@@ -131,6 +136,7 @@ impl Default for Config {
             module_blacklist: BTreeSet::new(),
             config_missing: false,
             legacy_custom_mounts: Vec::new(),
+            legacy_daemon_startup_mode: None,
         }
     }
 }
@@ -198,6 +204,9 @@ impl Config {
             );
         }
         config.legacy_custom_mounts.clear();
+        if config.legacy_daemon_startup_mode.take().is_some() {
+            log::info!("ignoring obsolete daemon_startup_mode during configuration upgrade");
+        }
         config
     }
 
