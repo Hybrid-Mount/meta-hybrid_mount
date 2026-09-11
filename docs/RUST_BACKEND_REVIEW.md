@@ -2,7 +2,7 @@
 
 > 审查日期：2026-08-31  
 > 审查提交：`070af486709b9b6504b58c2b01c0c49f49a067a3`（`dev`）  
-> 修复状态更新：2026-09-02（HM-RUST-001、HM-RUST-002 已推送；HM-RUST-003 已修复）
+> 修复状态更新：2026-09-10（HM-RUST-004、010、011 的补充修复已提交到 dev，尚未正式发布）
 > 审查范围：整个 Cargo workspace（`hybrid-mount`、`xtask`、`tools/notify`）  
 > 规模：39 个 Rust 文件，约 15,508 行（含测试）
 
@@ -10,12 +10,12 @@
 
 当前后端的总体工程质量明显高于一般启动期挂载工具：规划与执行分层清楚，模块源目录按只读输入处理，错误路径有事务式回滚，子进程输出有界，配置/状态采用原子替换，并且已有较丰富的单元测试与故障注入。
 
-本次审查最初确认了 **4 个 P1、8 个 P2、2 个 P3** 问题。截至 2026-09-02，**HM-RUST-001、HM-RUST-002、HM-RUST-003 已修复**，当前剩余 **1 个 P1、8 个 P2、2 个 P3**。发布前建议继续修复其余 P1：
+本次审查最初确认了 **4 个 P1、8 个 P2、2 个 P3** 问题。截至 2026-09-10，按当前 dev 记录，**4 个 P1、HM-RUST-010 和 HM-RUST-011 已修复**，剩余 **6 个 P2、2 个 P3**（包括仅部分处理的 HM-RUST-009）。本次没有重新执行完整安全审查；其余条目沿用原审查状态：
 
 1. ✅ OverlayFS 多级 staging 层覆盖问题已修复，并补充 0-256 层顺序/完整性测试。
 2. ✅ ext4 容量规划已显式计入每个 shallow source 的再次物化，并补充 100 MiB 稀疏文件回归测试。
 3. ✅ 启动配置改为 boot-only fail-closed；损坏、不可读、unsupported、dangling symlink 与缺失父目录均在扫描前终止。
-4. LKM 启动熔断标记在 `insmod` 前没有同步父目录，掉电/内核崩溃后不能保证标记持久化，存在重复崩溃风险。
+4. ✅ LKM guard 在 `insmod` 前同步 guard 目录项、marker 内容与 marker 目录项；任一步失败都会中止加载。
 
 未发现 P0 问题。以当前提交直接发布的主要风险不是普通 Rust 内存安全，而是挂载层组合、磁盘容量、启动失败策略和设备级恢复语义。
 
@@ -71,14 +71,14 @@ config.toml
 | HM-RUST-001 | P1（已修复） | 改为逐次折叠并立即插回 staging 输出，保留全部层及顺序 | `src/overlayfs/overlayfs.rs:122-136, 250-264, 479-563` |
 | HM-RUST-002 | P1（已修复） | 容量输入保留重复 shallow source，按实际再物化次数计费 | `src/pipeline.rs:319-388, 1025-1043`; `src/storage/ext4.rs:165-251, 459-485` |
 | HM-RUST-003 | P1（已修复） | boot loader 仅对真正缺失的配置使用默认值，其余错误在扫描前终止并写失败快照 | `src/config.rs:191-264`; `src/pipeline.rs:601-627`; `src/state.rs:141-149, 312-329` |
-| HM-RUST-004 | P1 | LKM 熔断标记缺少父目录 fsync，崩溃后可能丢失 | `src/sys/nuke.rs:168-220` |
+| HM-RUST-004 | P1（已修复） | `insmod` 前完整持久化 guard 目录和 marker，失败时 fail-closed | `src/sys/fs.rs:31-40`; `src/sys/nuke.rs:164-267, 514-552` |
 | HM-RUST-005 | P2 | 跟随目录符号链接取 stat，却不跟随地读取 SELinux xattr | `src/sys/fs.rs:346-390`; `src/magic_mount/exec.rs:489-520`; `src/utils/mod.rs:31-72` |
 | HM-RUST-006 | P2 | Overlay 子挂载检查用 `is_dir/exists` 跟随模块符号链接 | `src/overlayfs/overlayfs.rs:333-393` |
 | HM-RUST-007 | P2 | 成功挂载目标反推模块时漏掉 reroute/结构父节点的子树贡献 | `src/state.rs:389-429`; `src/pipeline.rs:1128-1189` |
 | HM-RUST-008 | P2 | LKM fallback 在首个可执行候选未产生效果时提前结束 | `src/sys/nuke.rs:111-160` |
-| HM-RUST-009 | P2 | `mountsource` 未校验，软重启命令可卸载无关的同 source 挂载 | `src/config.rs:86-103, 288-293`; `src/sys/mount.rs:139-184` |
-| HM-RUST-010 | P2 | 清理 `mount_error` 会递归删除同名目录，而非只 unlink 标记文件 | `src/state.rs:618-653`; `src/sys/fs.rs:90-97` |
-| HM-RUST-011 | P2 | 原子写临时名为 PID+进程内序号，崩溃残留可阻塞后续启动写入 | `src/sys/fs.rs:41-75` |
+| HM-RUST-009 | P2（部分处理） | `mountsource` 未校验，软重启命令可卸载无关的同 source 挂载 | `src/config.rs:86-103, 288-293`; `src/sys/mount.rs:139-184` |
+| HM-RUST-010 | P2（已修复） | 仅删除普通文件，保留异常类型及其错误快照 | `src/state.rs:618-653`; `src/sys/fs.rs:90-97` |
+| HM-RUST-011 | P2（已修复） | 撞名时换序号重试，最多 32 次；仅清理本次创建的临时文件 | `src/sys/fs.rs:41-75` |
 | HM-RUST-012 | P2 | 扫描记录的节点类型在 staging 时未重新核对，存在 scan/use 竞态 | `src/scanner.rs:280-301`; `src/sys/fs.rs:138-179` |
 | HM-RUST-013 | P3 | Magic 目录挂载和 whiteout 没有进入最终统计 | `src/magic_mount/exec.rs:108-116, 193-350, 412-430`; `src/pipeline.rs:56-74` |
 | HM-RUST-014 | P3 | Magic-only 运行仍显示配置中的 `ext4/tmpfs` 为实际存储模式 | `src/state.rs:264-303`; `src/pipeline.rs:335-375`; `src/module_status.rs:45-53` |
@@ -185,23 +185,29 @@ config.toml
 
 ### HM-RUST-004（P1）：LKM 启动熔断标记没有完整落盘保证
 
+**状态：已于 2026-09-02 修复。**
+
+`LkmAttemptGuard` 现在在返回 armed 状态前依次同步新建 guard 目录在其父目录中的目录项、marker 文件内容、marker 在 guard 目录中的目录项。任一同步失败都会删除 marker 并返回错误，`try_lkm_nuke_inner` 因此在候选 `insmod` 循环前终止。正常删除 marker 后也 best-effort 同步父目录，降低成功执行后出现假熔断的概率。
+
 **触发条件**
 
 非 KSU 环境选择兼容 LKM，设备在 `insmod` 期间内核崩溃或突然断电。
 
 **证据**
 
-`LkmAttemptGuard::arm_at` 使用 `create_new` 创建标记，写入内容并 `marker.sync_all()`，随后立即允许 `insmod`。它没有打开并 fsync 标记文件的父目录。文件 fsync 不能跨文件系统地保证“新目录项”已经持久化；这正是 `sys::fs::atomic_write` 在 rename 后额外同步父目录的原因。
+原 `LkmAttemptGuard::arm_at` 使用 `create_new` 创建标记，写入内容并 `marker.sync_all()`，随后立即允许 `insmod`。它没有打开并 fsync 标记文件的父目录。文件 fsync 不能跨文件系统地保证“新目录项”已经持久化；这正是 `sys::fs::atomic_write` 在 rename 后额外同步父目录的原因。
 
 **影响**
 
 若内核崩溃后新建目录项丢失，下次启动看不到 `lkm_boot_guard`，会再次加载同一不兼容 LKM，熔断机制无法阻止重复 boot crash。
 
-**建议**
+**已实施修复**
 
-- 在 `marker.sync_all()` 后、调用任何 `insmod` 前，对父目录执行 `File::open(parent)?.sync_all()`。
-- 保留当前 `create_new` 的排他语义。
-- 删除标记后同步父目录属于可选优化；删除未持久化只会安全地 fail-closed，不会造成重复崩溃。
+- 提取并复用 `sys::fs::sync_parent_directory`；原子状态写与 LKM guard 使用同一目录耐久性原语。
+- `create_dir_all` 后同步 guard 目录的父目录，覆盖 guard 目录本轮新建的情况。
+- `marker.sync_all()` 后同步 marker 父目录，成功后才允许执行任何 LKM candidate。
+- 注入第二次目录同步失败的测试确认：marker 已创建可见，但 guard 返回错误、marker 被清理，无法到达 `insmod`。
+- Drop 删除 marker 后 best-effort 同步目录；失败只记录 warning，保持安全的 fail-closed 倾向。
 
 ### HM-RUST-005（P2）：符号链接目录的 SELinux 元数据来源不一致
 
@@ -282,6 +288,8 @@ mountinfo 和 `active_mounts` 显示成功，但 `scan.ret.is_mounted` 仍为 `f
 
 ### HM-RUST-009（P2）：软重启卸载范围受未校验 mount source 控制
 
+**2026-09-10 状态：部分处理，仍待修复。** 提交 `244512a6` 新增了 `validate_mountsource`，但生产调用仅在 `Config::load_for_boot`。`cli::emulated_soft_reboot` 使用 `load_or_default`，未调用该校验；允许任意绝对路径也未限定卸载目标属于本项目。不能仅依据提交说明将此项关闭。以下为原始发现。
+
 **触发条件**
 
 配置把 `mountsource` 设为通用 source 名（例如 `tmpfs`、`none` 或其他服务正在使用的值），随后调用 `emulated-soft-reboot`。
@@ -302,6 +310,8 @@ mountinfo 和 `active_mounts` 显示成功，但 `scan.ret.is_mounted` 仍为 `f
 
 ### HM-RUST-010（P2）：清理错误标记可能递归删除目录
 
+**2026-09-10 状态：已在 dev 修复。** 保留大小写不敏感匹配，只对普通文件调用 `remove_file`，不跟随符号链接；清理后依据仍存在的标记刷新缓存错误。目录内容保留、符号链接保留及缓存一致性测试通过。以下为原始发现。
+
 **触发条件**
 
 模块根下存在大小写任意的 `mount_error` **目录**，而不是普通标记文件。
@@ -321,6 +331,8 @@ mountinfo 和 `active_mounts` 显示成功，但 `scan.ret.is_mounted` 仍为 `f
 - 增加同名目录、symlink、FIFO 的回归测试。
 
 ### HM-RUST-011（P2）：原子写 crash residue 可造成持续写失败
+
+**2026-09-10 状态：已在 dev 修复。** 原子写遇到 `AlreadyExists` 后换序号重试，最多尝试 32 个候选；其他错误立即返回。碰撞文件、目录和符号链接均保留，失败清理只针对本次成功创建的文件。旧权限在文件 fsync 前设置，再 rename 并同步父目录。新增回归覆盖连续碰撞、重试耗尽时保留原文件与全部残留、替换时保留权限；32 次全碰撞仍会返回错误，不无限等待。24 小时清理只作为辅助，不能替代写入时处理碰撞。以下为原始发现。
 
 **触发条件**
 
@@ -427,7 +439,7 @@ Magic-only 或空计划仍显示“Ext4 运行中”，容易误导设备排障�
 1. ✅ HM-RUST-001 已完成：多级 staging 改为逐次闭环折叠，并增加覆盖集合/顺序回归测试。
 2. ✅ HM-RUST-002 已完成：容量输入消费执行计划并按 shallow source 的重复物化次数计费。
 3. ✅ HM-RUST-003 已完成：boot-only 严格加载、失败状态持久化和旧模块快照失效均已实现。
-4. 在任何 LKM 加载前完整持久化 boot guard（HM-RUST-004）。
+4. ✅ HM-RUST-004 已完成：任何 LKM 加载前完整持久化 boot guard，目录同步失败即中止。
 
 ### 第二批：设备可靠性
 
