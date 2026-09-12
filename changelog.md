@@ -1,4 +1,42 @@
 
+## v6.2.0
+
+
+### <!-- 2 --> Fixes
+
+- P2 high-priority security and stability fixes - HM-RUST-009: Add mountsource configuration validation * Prevent config injection via malformed mountsource values * Accept only known sources (KSU, APatch, overlay) or absolute paths * Add 3 new test cases for validation logic - HM-RUST-011: Implement stale temp file cleanup on startup * Auto-cleanup orphaned .tmp files from previous crashes * Prevent disk space exhaustion from accumulated temp files * Clear current process remnants + 24-hour-old files - HM-RUST-010: Fix mount_error marker cleanup to be file-only * Remove only marker files, never recursively delete directories * Prevent accidental data loss from unexpected directory structures * Add type checking and enhanced logging Tests: All 216 tests pass (+6 new) Security: 3 attack vectors blocked Stability: Improved crash recovery Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+
+- Make runtime writes and boot guards resilient
+
+- `webui` Align contracts and clean up Miuix components
+
+- `config` Accept retired daemon setting during upgrades Preserve active configuration and module rules when daemon_startup_mode remains from an older release. Continue rejecting unknown fields and malformed values. Refs #409.
+
+- `notify` Upgrade to tgbot 0.48 and migrate document uploads Upgrade tgbot to 0.48 and migrate single-document and media-group uploads to the new caption and conversion APIs. Preserve HTML formatting and topic routing, with offline request-construction regression coverage. All PR checks passed.
+
+- `notify` Avoid quoted multipart fields in tgbot 0.48 Pin tgbot to 0.46 until its flattened multipart serialization is fixed. Replace Debug-only payload assertions with loopback HTTP tests for document and media-group uploads.
+
+
+
+### <!-- 3 --> Documentation
+
+- Record PR fixes and issue 409 resolution
+
+- Remove completed development log and retain pending validation
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Remove redundant backend helpers
+
+- Align build documentation and maintenance tooling
+
+- `webui` Update compatible dependencies and normalize lockfile Update the seven compatible WebUI dependencies and normalize the lockfile to repository formatting. WebUI lint, all 69 tests, type checks, production build, Android checks and dependency audits passed.
+
+
+
+
 ## v6.1.4
 
 
