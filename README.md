@@ -1,28 +1,29 @@
 # Hybrid Mount
 
-Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在启动阶段扫描其他模块，按全局、模块和路径规则，为每一项选择 OverlayFS、Magic Mount 或忽略，并且始终把模块源目录当作只读输入。
+<img src="icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-## 功能
+Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
 
-- OverlayFS 与 Magic Mount 可按模块、按路径混用。
-- 路径规则优先于模块默认值，模块默认值优先于全局默认值。
-- OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
-- ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
-- Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- WebUI 提供 MD3（默认）与 Miuix 两套界面。
-- 支持 arm64、armv7 与 x86_64，安装脚本会自动选择对应二进制。
+## Features
 
-## 安装
+- OverlayFS and Magic Mount can be mixed per module and per path.
+- Path rules take precedence over module defaults, and module defaults take precedence over the global default.
+- OverlayFS supports both tmpfs and ext4 storage modes.
+- For ext4 staging, KernelSU uses the official ioctl to hide sysfs nodes; APatch and other non-KSU environments use the bundled LKM compatibility fallback by default.
+- Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
+- The WebUI provides MD3 (default) and Miuix interfaces.
+- arm64, armv7, and x86_64 are supported; the installer automatically selects the matching binary.
 
-从 [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载 ZIP，并在 KernelSU 或 APatch 管理器中安装。首次安装可用音量键选择默认后端；升级时会保留 `/data/adb/hybrid-mount/config.toml`。
+## Installation
 
-## 配置
+Download the ZIP from [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) and install it with the KernelSU or APatch manager. On first installation, use the volume keys to select the default backend. Upgrades preserve `/data/adb/hybrid-mount/config.toml`.
 
-默认配置：
+## Configuration
+
+Default configuration:
 
 ```toml
 moduledir = "/data/adb/modules"
-mountsource = "KSU"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
 default_mode = "overlay" # overlay | magic
@@ -34,17 +35,17 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端只接受 `overlay` 或 `magic`。同一文件路径不能同时进入两个挂载后端；普通目录可以作为两个后端共享的结构节点，文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
+Rule paths are relative to the module root. Module-level and path-level rules may also use `ignore`; the global default backend accepts only `overlay` or `magic`. The same file path cannot be assigned to both mount backends. Ordinary directories may be shared as structural nodes by both backends, while file, type, and `.replace` conflicts cause the startup planning stage to fail immediately. Configuration changes take effect after reboot.
 
-这套分流不改变项目现有的 `CONFIG_TMPFS_XATTR` 能力判断。KernelSU 安装时会删除模块中的整个 `lkm/` 目录，运行时只使用官方 `NukeExt4Sysfs` ioctl；APatch 等非 KSU 安装保留 LKM，并在 ext4 staging 挂载后默认尝试。随附 `.ko` 仅支持 aarch64；自动选择要求内核线和 Android/GKI 标签精确匹配，未知组合直接拒绝，但预编译 LKM 仍必须在对应真机验证 ABI。若设备在 `insmod` 期间崩溃，持久熔断标记会阻止下次启动再次加载 LKM，同时保留 Hybrid Mount 的其余功能。支持矩阵、校验值、来源与许可见 [`module/lkm/README.md`](module/lkm/README.md)。
+This routing does not change the project's existing `CONFIG_TMPFS_XATTR` capability check. On KernelSU, installation removes the module's entire `lkm/` directory and runtime uses only the official `NukeExt4Sysfs` ioctl. APatch and other non-KSU installations keep the LKM and try it by default after mounting ext4 staging. The bundled `.ko` files support aarch64 only. Automatic selection requires an exact kernel line and Android/GKI tag match; unknown combinations are rejected. Prebuilt LKMs must still be validated for ABI compatibility on the corresponding real device. If the device crashes during `insmod`, a persistent circuit-breaker marker prevents the LKM from loading again on the next boot while preserving the rest of Hybrid Mount. See [`module/lkm/README.md`](module/lkm/README.md) for the support matrix, checksums, sources, and licenses.
 
-## 反馈
+## Feedback
 
-安装和反馈问题前请阅读 [使用须知](USAGE_NOTICE.md)。反馈时请附上 KernelSU/APatch bugreport、模块版本与可复现步骤，可通过 [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) 或 [Telegram 群组](https://t.me/hybridmountchat) 联系我们。
+Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.md). Include the KernelSU/APatch bugreport, module version, and reproduction steps. Contact us through [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) or the [Telegram group](https://t.me/hybridmountchat).
 
-## 语言 / Languages
+## Languages
 
-- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_EN.md)
+- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
 - [Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ES.md)
 - [Français](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_FR.md)
 - [Bahasa Indonesia](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ID.md)
@@ -54,11 +55,11 @@ default_mode = "magic"
 - [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_TR.md)
 - [Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_UK.md)
 - [Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_VI.md)
-- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
+- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
-## 许可证
+## License
 
-- 核心（Rust、module 脚本）：GPL-3.0-only（见 [LICENSE](LICENSE)）。
-- WebUI：Apache-2.0（见 [webui/LICENSE](webui/LICENSE)）。
-- 可选 ext4 sysfs LKM（源码与预编译 `.ko`）：GPL-2.0-only，源自 [Mountify](https://github.com/backslashxx/mountify)；见 [module/lkm/README.md](module/lkm/README.md) 与 [module/lkm/src/LICENSE](module/lkm/src/LICENSE)。
+- Core (Rust and module scripts): GPL-3.0-only (see [`LICENSE`](LICENSE)).
+- WebUI: Apache-2.0 (see [`webui/LICENSE`](webui/LICENSE)).
+- Optional ext4 sysfs LKM (source and prebuilt `.ko` files): GPL-2.0-only, derived from [Mountify](https://github.com/backslashxx/mountify); see [`module/lkm/README.md`](module/lkm/README.md) and [`module/lkm/src/LICENSE`](module/lkm/src/LICENSE).

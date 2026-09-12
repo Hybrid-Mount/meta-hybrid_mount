@@ -1,5 +1,7 @@
 # Hybrid Mount
 
+<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
+
 Hybrid Mount — метамодуль гібридного монтування для KernelSU та APatch. Під час завантаження він сканує інші модулі й для кожного елемента вибирає OverlayFS, Magic Mount або ігнорування відповідно до глобальних правил, правил модуля та шляху. Каталоги вихідних файлів модулів завжди використовуються лише для читання.
 
 ## Можливості
@@ -22,7 +24,6 @@ Hybrid Mount — метамодуль гібридного монтування 
 
 ```toml
 moduledir = "/data/adb/modules"
-mountsource = "KSU"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
 default_mode = "overlay" # overlay | magic
@@ -44,7 +45,7 @@ default_mode = "magic"
 
 ## Мови / Languages
 
-- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_EN.md)
+- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
 - [Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ES.md)
 - [Français](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_FR.md)
 - [Bahasa Indonesia](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ID.md)
@@ -54,7 +55,7 @@ default_mode = "magic"
 - [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_TR.md)
 - [Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_UK.md)
 - [Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_VI.md)
-- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
+- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
 ## Ліцензія
