@@ -123,7 +123,7 @@ onMounted(async () => {
         >
           <template #end>
             <MiuixText>
-              {{ sysStore.installState?.mount_source || configStore.config.mountsource }}
+              {{ sysStore.installState?.mount_source || "-" }}
             </MiuixText>
           </template>
         </MiuixBasicComponent>

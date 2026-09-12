@@ -60,8 +60,6 @@
   "config": {
     "moduledir": "Thư mục Mô-đun",
     "moduledirDesc": "Đặt thư mục nơi các mô-đun được lưu trữ",
-    "mountSource": "Nguồn Gắn kết",
-    "mountSourceDesc": "Không gian tên nguồn gắn kết toàn cầu (ví dụ: KSU)",
     "overlayMode": "Chế độ Overlay",
     "overlayModeDesc": "Chọn chiến lược lưu trữ sao lưu",
     "overlayTmpfs": "Tmpfs",

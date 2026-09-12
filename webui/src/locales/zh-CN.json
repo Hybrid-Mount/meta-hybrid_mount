@@ -68,8 +68,6 @@
     "title": "配置",
     "moduledir": "模块目录",
     "moduledirDesc": "扫描模块使用的目录",
-    "mountSource": "挂载源 (Mount Source)",
-    "mountSourceDesc": "全局挂载源命名空间（如 KSU）",
     "overlayMode": "Overlay 存储模式",
     "overlayModeDesc": "overlayfs 使用的 staging 后端",
     "overlayTmpfs": "Tmpfs",

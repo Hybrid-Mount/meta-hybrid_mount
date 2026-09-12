@@ -60,8 +60,6 @@
   "config": {
     "moduledir": "Directory moduli",
     "moduledirDesc": "Imposta la directory in cui sono archiviati i moduli",
-    "mountSource": "Sorgente di mount",
-    "mountSourceDesc": "Namespace globale della sorgente di mount (es. KSU)",
     "overlayMode": "Modalita overlay",
     "overlayModeDesc": "Seleziona la strategia di archiviazione di supporto",
     "overlayTmpfs": "Tmpfs",

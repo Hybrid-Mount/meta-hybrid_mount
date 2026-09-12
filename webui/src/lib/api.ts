@@ -91,10 +91,6 @@ export function normalizeConfigPayload(payload: Record<string, unknown>): AppCon
       typeof payload.moduledir === "string"
         ? payload.moduledir
         : DEFAULT_CONFIG.moduledir,
-    mountsource:
-      typeof payload.mountsource === "string"
-        ? payload.mountsource
-        : DEFAULT_CONFIG.mountsource,
     overlay_mode:
       requestedOverlayMode === "tmpfs" && !tmpfsXattrSupported
         ? "ext4"
@@ -114,7 +110,6 @@ export function normalizeConfigPayload(payload: Record<string, unknown>): AppCon
 export function createConfigPayload(config: AppConfig): Record<string, unknown> {
   return {
     moduledir: config.moduledir,
-    mountsource: config.mountsource,
     overlay_mode: config.overlay_mode,
     disable_umount: config.disable_umount,
     default_mode: config.default_mode,

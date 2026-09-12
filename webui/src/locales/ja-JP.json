@@ -60,8 +60,6 @@
   "config": {
     "moduledir": "モジュールのディレクトリ",
     "moduledirDesc": "モジュールを保存するディレクトリを設定します",
-    "mountSource": "マウントソース",
-    "mountSourceDesc": "グローバルマウントソースの名前空間 (例: KSU)",
     "overlayMode": "オーバーレイモード",
     "overlayModeDesc": "バックアップ先のストレージを選択してください",
     "overlayTmpfs": "Tmpfs",

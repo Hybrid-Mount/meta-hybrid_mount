@@ -587,7 +587,7 @@ pub fn handle_install_state() -> Result<()> {
 
         ksu::init();
         let supported = is_overlay_supported().unwrap_or(false);
-        let source = if ksu::is_active() { "KSU" } else { "APatch" };
+        let source = crate::pipeline::effective_mount_source(ksu::is_active());
         (supported, source.to_owned())
     };
     #[cfg(not(any(target_os = "linux", target_os = "android")))]

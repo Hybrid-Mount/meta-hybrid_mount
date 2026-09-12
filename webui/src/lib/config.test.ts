@@ -8,7 +8,6 @@ describe("cloneAppConfig", () => {
   it("deep-clones editable module rules without structuredClone", () => {
     const source: AppConfig = {
       moduledir: "/data/adb/modules",
-      mountsource: "KSU",
       overlay_mode: "ext4",
       tmpfs_xattr_supported: false,
       disable_umount: false,

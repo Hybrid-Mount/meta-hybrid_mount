@@ -68,8 +68,6 @@
     "title": "Configuration",
     "moduledir": "Répertoire des modules",
     "moduledirDesc": "Répertoire dans lequel détecter les modules installés",
-    "mountSource": "Source de montage",
-    "mountSourceDesc": "Espace de noms global des sources de montage (par ex. KSU)",
     "overlayMode": "Mode de stockage d'OverlayFS",
     "overlayModeDesc": "Backend du tampon utilisé par OverlayFS",
     "overlayTmpfs": "Tmpfs",

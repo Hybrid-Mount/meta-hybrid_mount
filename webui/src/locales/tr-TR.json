@@ -68,8 +68,6 @@
     "title": "Yapılandırma",
     "moduledir": "Modül Dizini",
     "moduledirDesc": "Modüllerin tarandığı dizin",
-    "mountSource": "Bağlama Kaynağı",
-    "mountSourceDesc": "Genel bağlama kaynağı ad alanı (örn. KSU)",
     "overlayMode": "Overlay Depolama Modu",
     "overlayModeDesc": "OverlayFS tarafından kullanılan hazırlama arka ucu",
     "overlayTmpfs": "Tmpfs",

@@ -11,7 +11,6 @@ fn defaults_match_contract() {
     let config = Config::default();
 
     assert_eq!(config.moduledir, PathBuf::from("/data/adb/modules"));
-    assert_eq!(config.mountsource, "KSU");
     assert_eq!(config.overlay_mode, OverlayMode::Ext4);
     assert!(!config.disable_umount);
     assert_eq!(config.default_mode, Mode::Overlay);
@@ -27,7 +26,6 @@ fn parses_empty_toml_as_defaults() {
 #[test]
 fn default_config_toml_snapshot_is_stable() {
     let expected = r#"moduledir = "/data/adb/modules"
-mountsource = "KSU"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
@@ -72,7 +70,6 @@ default_mode = "ignore"
 fn parses_planned_example() {
     let text = r#"
 moduledir = "/data/adb/modules"
-mountsource = "KSU"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
@@ -114,7 +111,6 @@ fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
     let path = dir.join("config.toml");
     // Issue #409: this obsolete key caused strict boot loading to abort.
     let original = r#"moduledir = "/data/adb/modules"
-mountsource = "KSU"
 overlay_mode = "tmpfs"
 disable_umount = true
 default_mode = "magic"
@@ -264,7 +260,6 @@ fn json_uses_contract_shape() {
         value,
         serde_json::json!({
             "moduledir": "/data/adb/modules",
-            "mountsource": "KSU",
             "overlay_mode": "ext4",
             "disable_umount": false,
             "default_mode": "overlay",
@@ -794,88 +789,41 @@ fn payload_arg_requires_marker_and_rejects_invalid_hex() {
 }
 
 #[test]
-fn valid_mountsource_accepted() {
-    // 测试已知来源
-    let config = Config {
-        mountsource: "KSU".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_ok());
-
-    let config = Config {
-        mountsource: "APatch".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_ok());
-
-    let config = Config {
-        mountsource: "overlay".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_ok());
-
-    // 测试绝对路径
-    let config = Config {
-        mountsource: "/data/adb/custom".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_ok());
-
-    let config = Config {
-        mountsource: "/system/bin/mount".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_ok());
-}
-
-#[test]
-fn invalid_mountsource_rejected() {
-    // 非法字符
-    let config = Config {
-        mountsource: "invalid!@#".to_owned(),
-        ..Config::default()
-    };
-    let err = config.validate_mountsource().unwrap_err();
-    assert!(err.to_string().contains("invalid mountsource"));
-
-    // 相对路径
-    let config = Config {
-        mountsource: "relative/path".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_err());
-
-    // 单个斜杠
-    let config = Config {
-        mountsource: "/".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_err());
-
-    // 空字符串
-    let config = Config {
-        mountsource: "".to_owned(),
-        ..Config::default()
-    };
-    assert!(config.validate_mountsource().is_err());
-}
-
-#[test]
-fn boot_loader_validates_mountsource() {
-    let dir = test_dir("mountsource-validation");
+fn boot_loader_ignores_legacy_mountsource_and_preserves_settings() {
+    let dir = test_dir("legacy-mountsource");
     let path = dir.join("config.toml");
     fs::create_dir_all(&dir).unwrap();
 
-    // 有效配置
-    fs::write(&path, r#"mountsource = "KSU""#).unwrap();
-    assert!(Config::load_for_boot(&path).is_ok());
-
-    // 无效配置
-    fs::write(&path, r#"mountsource = "invalid!@#""#).unwrap();
-    let err = Config::load_for_boot(&path).unwrap_err();
-    assert!(err.to_string().contains("invalid mountsource"));
-
+    for source in ["MIUI", "KSU", "APatch", "overlay", "/data/adb/custom", ""] {
+        fs::write(
+            &path,
+            format!(
+                r#"
+mountsource = "{source}"
+overlay_mode = "ext4"
+disable_umount = true
+default_mode = "magic"
+[rules.example]
+default_mode = "overlay"
+"#
+            ),
+        )
+        .unwrap();
+        let config = Config::load_for_boot(&path).unwrap();
+        assert!(config.disable_umount);
+        assert_eq!(config.default_mode, Mode::Magic);
+        assert_eq!(config.rules.len(), 1);
+        let saved = config.to_toml().unwrap();
+        assert!(!saved.contains("mountsource"));
+        assert!(!config.to_webui_json(false).unwrap().contains("mountsource"));
+        assert_eq!(Config::from_toml(&saved).unwrap(), config);
+    }
     cleanup(&dir);
+}
+
+#[test]
+fn config_patch_rejects_retired_mountsource() {
+    assert!(serde_json::from_str::<ConfigPatch>(r#"{"mountsource":"MIUI"}"#).is_err());
 }
 
 fn test_dir(tag: &str) -> PathBuf {

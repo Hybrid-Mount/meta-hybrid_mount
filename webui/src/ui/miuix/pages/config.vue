@@ -75,11 +75,6 @@ const moduledir = computed({
   set: (value: string) =>
     configStore.setConfig({ ...configStore.config, moduledir: value }),
 });
-const mountSource = computed({
-  get: () => configStore.config.mountsource,
-  set: (value: string) =>
-    configStore.setConfig({ ...configStore.config, mountsource: value }),
-});
 const disableUmount = computed({
   get: () => configStore.config.disable_umount,
   set: (value: boolean) =>
@@ -148,21 +143,6 @@ onMounted(() => configStore.ensureConfigLoaded());
             v-model="moduledir"
             class="preference-input"
             :aria-label="t('config.moduledir')"
-            autocomplete="off"
-            spellcheck="false"
-          />
-        </template>
-      </MiuixBasicComponent>
-      <MiuixBasicComponent
-        class="text-preference"
-        :title="t('config.mountSource')"
-        :summary="t('config.mountSourceDesc')"
-      >
-        <template #end>
-          <input
-            v-model="mountSource"
-            class="preference-input"
-            :aria-label="t('config.mountSource')"
             autocomplete="off"
             spellcheck="false"
           />

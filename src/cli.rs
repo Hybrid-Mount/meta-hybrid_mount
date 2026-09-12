@@ -4,12 +4,7 @@
 //!
 //! 无参数执行完整挂载流水线；其余命令为 WebUI 与诊断工具提供结构化数据。
 
-use std::path::Path;
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::config::Config;
 use crate::config::{handle_gen_config, handle_save_config, handle_show_config};
-use crate::defs;
 use crate::errors::{Error, Result};
 use crate::{pipeline, state};
 
@@ -39,16 +34,13 @@ fn version_payload() -> String {
 fn emulated_soft_reboot() -> Result<()> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
         crate::utils::ksu::init();
-        let source =
-            pipeline::effective_mount_source(&config.mountsource, crate::utils::ksu::is_active());
+        let source = pipeline::effective_mount_source(crate::utils::ksu::is_active());
         crate::sys::mount::emulated_soft_reboot(source)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
-        let _ = Path::new(defs::CONFIG_PATH);
         Err(Error::msg(
             "emulated-soft-reboot is only supported on linux/android",
         ))

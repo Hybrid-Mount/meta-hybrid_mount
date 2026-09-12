@@ -201,12 +201,8 @@ impl Drop for MagicStagingGuard {
     }
 }
 
-pub fn effective_mount_source(configured: &str, ksu_active: bool) -> &str {
-    if !ksu_active && configured == defs::DEFAULT_MOUNT_SOURCE {
-        "APatch"
-    } else {
-        configured
-    }
+pub fn effective_mount_source(ksu_active: bool) -> &'static str {
+    if ksu_active { "KSU" } else { "APatch" }
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -636,15 +632,14 @@ fn run_mount_pipeline_impl() -> Result<()> {
         }
     };
     let ksu_active = utils::ksu::is_active();
-    let mount_source = effective_mount_source(&config.mountsource, ksu_active).to_owned();
+    let mount_source = effective_mount_source(ksu_active);
     log::info!(
         "config info: {}",
         log_phase_failure("config", config.to_toml())?
     );
     log::info!(
-        "runtime: pid={}, configured_mount_source={}, effective_mount_source={}, ksu_ioctl_active={}",
+        "runtime: pid={}, effective_mount_source={}, ksu_ioctl_active={}",
         std::process::id(),
-        config.mountsource,
         mount_source,
         ksu_active
     );
@@ -771,7 +766,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             &config,
             &modules,
             &mut plan,
-            &mount_source,
+            mount_source,
             &mut state,
             &mut transaction,
             &mut mounted,
@@ -1783,9 +1778,8 @@ mod tests {
 
     #[test]
     fn default_mount_source_follows_the_active_root_backend() {
-        assert_eq!(effective_mount_source("KSU", true), "KSU");
-        assert_eq!(effective_mount_source("KSU", false), "APatch");
-        assert_eq!(effective_mount_source("custom", false), "custom");
+        assert_eq!(effective_mount_source(true), "KSU");
+        assert_eq!(effective_mount_source(false), "APatch");
     }
 
     #[test]
@@ -1795,7 +1789,7 @@ mod tests {
     }
 
     #[test]
-    fn regular_overlay_partition_keeps_configured_mount_source() {
+    fn regular_overlay_partition_keeps_backend_mount_source() {
         assert_eq!(overlay_mount_source("/system", "KSU"), "KSU");
         assert_eq!(overlay_mount_source("/product", "APatch"), "APatch");
     }

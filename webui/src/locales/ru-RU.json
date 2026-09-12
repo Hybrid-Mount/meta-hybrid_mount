@@ -60,8 +60,6 @@
   "config": {
     "moduledir": "Путь модулей",
     "moduledirDesc": "Укажите каталог, в котором хранятся модули",
-    "mountSource": "Источник монтирования",
-    "mountSourceDesc": "Глобальное пространство имен (напр. KSU)",
     "overlayMode": "Режим overlay",
     "overlayModeDesc": "Выберите стратегию хранилища",
     "overlayTmpfs": "Tmpfs",

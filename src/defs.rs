@@ -55,8 +55,6 @@ pub const MANAGED_PARTITIONS: &[&str] = &[
     "prism",
 ];
 
-pub const DEFAULT_MOUNT_SOURCE: &str = "KSU";
-
 /// 模块状态标记文件名与目录标记文件。
 pub const MODULE_PROP_FILE_NAME: &str = "module.prop";
 pub const DISABLE_FILE_NAME: &str = "disable";

@@ -91,9 +91,7 @@ onMounted(refresh);
             <svg viewBox="0 0 24 24"><path :d="ICONS.ksu" /></svg>
           </div>
           <span class="metric-value">
-            {{
-              sysStore.installState?.mount_source || configStore.config.mountsource || "-"
-            }}
+            {{ sysStore.installState?.mount_source || "-" }}
           </span>
           <span class="metric-label">{{ t("status.mountSource") }}</span>
         </section>

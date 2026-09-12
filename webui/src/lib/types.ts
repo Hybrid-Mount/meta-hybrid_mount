@@ -12,7 +12,6 @@ export interface ModuleRule {
 
 export interface AppConfig {
   moduledir: string;
-  mountsource: string;
   overlay_mode: OverlayMode;
   tmpfs_xattr_supported: boolean;
   disable_umount: boolean;

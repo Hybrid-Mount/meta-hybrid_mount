@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
 moduledir = "/data/adb/modules"
-mountsource = "KSU"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"

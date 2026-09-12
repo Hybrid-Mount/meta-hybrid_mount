@@ -4,7 +4,6 @@
 //!
 //! ```toml
 //! moduledir = "/data/adb/modules"
-//! mountsource = "KSU"
 //! overlay_mode = "ext4"      # tmpfs | ext4
 //! disable_umount = false
 //! default_mode = "overlay"   # overlay | magic
@@ -87,9 +86,6 @@ pub struct Config {
     #[serde(default = "default_moduledir")]
     pub moduledir: PathBuf,
 
-    #[serde(default = "default_mountsource")]
-    pub mountsource: String,
-
     #[serde(default)]
     pub overlay_mode: OverlayMode,
 
@@ -111,6 +107,11 @@ pub struct Config {
     #[serde(skip)]
     pub config_missing: bool,
 
+    /// Retired input accepted only to preserve settings during upgrades.
+    /// Mount sources now follow the detected root backend.
+    #[serde(default, rename = "mountsource", skip_serializing)]
+    pub(crate) legacy_mountsource: Option<String>,
+
     /// Upgrade-only input from releases that exposed custom bind mounts.
     /// The backend no longer implements that feature; accepting and omitting
     /// this field prevents one obsolete empty array from discarding the rest
@@ -128,13 +129,13 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             moduledir: default_moduledir(),
-            mountsource: default_mountsource(),
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
             default_mode: Mode::default(),
             rules: BTreeMap::new(),
             module_blacklist: BTreeSet::new(),
             config_missing: false,
+            legacy_mountsource: None,
             legacy_custom_mounts: Vec::new(),
             legacy_daemon_startup_mode: None,
         }
@@ -198,6 +199,9 @@ impl Config {
     }
 
     fn finish_loaded(mut config: Self) -> Self {
+        if config.legacy_mountsource.take().is_some() {
+            log::info!("ignoring obsolete mountsource; using the detected root backend");
+        }
         if !config.legacy_custom_mounts.is_empty() {
             log::warn!(
                 "obsolete custom mount entries are ignored; configure module path rules instead"
@@ -249,7 +253,6 @@ impl Config {
         match Self::load(path) {
             Ok(config) => {
                 let config = Self::finish_loaded(config);
-                config.validate_mountsource()?;
                 Ok(config)
             }
             Err(Error::ConfigRead { source, .. })
@@ -260,29 +263,6 @@ impl Config {
             }
             Err(err) => Err(err),
         }
-    }
-
-    /// 校验 mountsource 配置有效性
-    pub fn validate_mountsource(&self) -> Result<()> {
-        const KNOWN_SOURCES: &[&str] = &["KSU", "APatch", "overlay"];
-
-        // 允许已知来源
-        if KNOWN_SOURCES.contains(&self.mountsource.as_str()) {
-            return Ok(());
-        }
-
-        // 允许绝对路径（用于自定义挂载源）
-        if self.mountsource.starts_with('/') {
-            let path = Path::new(&self.mountsource);
-            if path.is_absolute() && path.components().count() > 1 {
-                return Ok(());
-            }
-        }
-
-        Err(Error::msg(format!(
-            "invalid mountsource '{}': must be 'KSU', 'APatch', 'overlay', or an absolute path",
-            self.mountsource
-        )))
     }
 
     /// 读取配置：文件不存在时使用默认值并标记 `config_missing`；
@@ -361,9 +341,6 @@ impl Config {
 
         if let Some(moduledir) = patch.moduledir {
             self.moduledir = moduledir;
-        }
-        if let Some(mountsource) = patch.mountsource {
-            self.mountsource = mountsource;
         }
         if let Some(overlay_mode) = patch.overlay_mode {
             self.overlay_mode = overlay_mode;
@@ -481,9 +458,6 @@ fn read_module_blacklist(path: &Path) -> Result<BTreeSet<ModuleId>> {
 pub struct ConfigPatch {
     #[serde(default)]
     pub moduledir: Option<PathBuf>,
-
-    #[serde(default)]
-    pub mountsource: Option<String>,
 
     #[serde(default)]
     pub overlay_mode: Option<OverlayMode>,
@@ -610,10 +584,6 @@ pub fn handle_gen_config() -> Result<()> {
 
 fn default_moduledir() -> PathBuf {
     PathBuf::from(defs::DEFAULT_MODULE_DIR)
-}
-
-fn default_mountsource() -> String {
-    defs::DEFAULT_MOUNT_SOURCE.to_owned()
 }
 
 #[cfg(test)]

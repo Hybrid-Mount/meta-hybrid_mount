@@ -22,7 +22,6 @@ describe("WebUI configuration contract", () => {
   it("saves global settings without overwriting independently edited module rules", () => {
     const config: AppConfig = {
       moduledir: "/data/adb/modules",
-      mountsource: "KSU",
       overlay_mode: "ext4",
       tmpfs_xattr_supported: false,
       disable_umount: false,
@@ -34,7 +33,6 @@ describe("WebUI configuration contract", () => {
 
     expect(createConfigPayload(config)).toEqual({
       moduledir: config.moduledir,
-      mountsource: config.mountsource,
       overlay_mode: config.overlay_mode,
       disable_umount: config.disable_umount,
       default_mode: config.default_mode,

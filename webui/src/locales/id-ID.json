@@ -60,8 +60,6 @@
   "config": {
     "moduledir": "Direktori Modul",
     "moduledirDesc": "Atur direktori tempat modul disimpan",
-    "mountSource": "Sumber Mount",
-    "mountSourceDesc": "Namespace sumber mount global (contoh: KSU)",
     "overlayMode": "Mode Overlay",
     "overlayModeDesc": "Pilih strategi penyimpanan pendukung",
     "overlayTmpfs": "Tmpfs",

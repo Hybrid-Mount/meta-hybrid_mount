@@ -68,8 +68,6 @@
     "title": "Configuration",
     "moduledir": "Module Directory",
     "moduledirDesc": "Directory scanned for modules",
-    "mountSource": "Mount Source",
-    "mountSourceDesc": "Global mount source namespace (e.g. KSU)",
     "overlayMode": "Overlay Storage Mode",
     "overlayModeDesc": "Staging backend used by overlayfs",
     "overlayTmpfs": "Tmpfs",

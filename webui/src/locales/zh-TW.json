@@ -67,8 +67,6 @@
   "config": {
     "moduledir": "模組路徑",
     "moduledirDesc": "設定模組儲存目錄",
-    "mountSource": "掛載來源",
-    "mountSourceDesc": "全域掛載來源命名空間 (例如 KSU)",
     "overlayMode": "Overlay 模式",
     "overlayModeDesc": "選擇後端儲存策略",
     "overlayTmpfs": "Tmpfs",

@@ -121,14 +121,6 @@ onMounted(() => configStore.ensureConfigLoaded());
             :value="configStore.config.moduledir"
             @input="updateConfig({ moduledir: eventValue($event) })"
           />
-          <md-outlined-text-field
-            data-testid="mount-source-field"
-            class="full-width-field full-span"
-            :label="t('config.mountSource')"
-            :supporting-text="t('config.mountSourceDesc')"
-            :value="configStore.config.mountsource"
-            @input="updateConfig({ mountsource: eventValue($event) })"
-          />
           <Md3SelectField
             :label="t('config.overlayMode')"
             :model-value="configStore.config.overlay_mode"
