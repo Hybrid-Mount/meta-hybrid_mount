@@ -142,7 +142,9 @@ impl NotificationContext<'_> {
             action = action.with_message_thread_id(topic_id);
         }
 
-        Ok(action.with_caption((caption, ParseMode::Html)))
+        Ok(action
+            .with_caption_parse_mode(ParseMode::Html)
+            .with_caption(caption))
     }
 
     async fn send_artifact_group(&self, artifacts: &[Artifact]) -> Result<()> {
@@ -184,16 +186,17 @@ impl NotificationContext<'_> {
 
         for artifact in leading {
             let file = InputFile::path(artifact.path.clone()).await?;
-            let document = InputMediaDocument::from(file).with_disable_content_type_detection(true);
-            items.push(document.into());
+            let document = InputMediaDocument::default().with_disable_content_type_detection(true);
+            items.push(MediaGroupItem::for_document(file, document));
         }
 
-        items.push(
-            InputMediaDocument::from(InputFile::path(last.path.clone()).await?)
+        items.push(MediaGroupItem::for_document(
+            InputFile::path(last.path.clone()).await?,
+            InputMediaDocument::default()
                 .with_disable_content_type_detection(true)
-                .with_caption((caption, ParseMode::Html))
-                .into(),
-        );
+                .with_caption_parse_mode(ParseMode::Html)
+                .with_caption(caption.to_owned()),
+        ));
         Ok(items)
     }
 
@@ -432,62 +435,124 @@ mod tests {
         assert!(caption.contains("2/3"));
     }
 
-    #[test]
-    fn upgraded_api_builds_single_and_group_uploads_with_html_captions() -> Result<()> {
-        use tgbot::api::Method;
-
-        let output_dir = make_temp_output_dir()?;
-        File::create(output_dir.join("first.zip"))?;
-        File::create(output_dir.join("second.zip"))?;
-        let artifacts = find_zip_files(&output_dir)?;
-        let request = NotifyRequest::new(&output_dir, "test").with_topic_id(Some(42));
-        // Construct and serialize requests only; no Telegram calls or secrets.
-        let bot = Client::new("test-token")?;
-        let context = NotificationContext {
-            bot: &bot,
-            chat_id: "123",
-            request: &request,
-            branch_name: "test",
-            artifact_count: artifacts.len(),
-            safe_commit_msg: "fix &amp; verify",
-            commit_link: "https://example.com/commit/test",
-        };
-        tokio::runtime::Runtime::new()?.block_on(async {
-            let single = context
-                .build_single_artifact_action(&artifacts[0], 0)
-                .await?;
-            let payload = format!("{:?}", single.into_payload()?);
-            assert!(payload.contains("sendDocument"));
-            assert!(payload.contains("HTML"));
-            assert!(payload.contains("message_thread_id"));
-            assert!(payload.contains("42"));
-            assert!(payload.contains("fix &amp; verify"));
-
-            let items = context
-                .build_media_group_items(&artifacts, "<b>group</b>")
-                .await?;
-            let group = SendMediaGroup::new("123", MediaGroup::new(items)?);
-            let payload = format!("{:?}", group.into_payload()?);
-            assert!(payload.contains("sendMediaGroup"));
-            assert_eq!(payload.matches("String(\"document\")").count(), 2);
-            assert_eq!(payload.matches("<b>group</b>").count(), 1);
-            assert!(payload.contains("HTML"));
-            assert_eq!(
-                payload
-                    .matches("\"disable_content_type_detection\": Bool(true)")
-                    .count(),
-                2
-            );
-            Ok::<_, anyhow::Error>(())
-        })?;
-        fs::remove_dir_all(output_dir)?;
-        Ok(())
-    }
-
     fn make_temp_output_dir() -> Result<PathBuf> {
         let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let output_dir = env::temp_dir().join(format!("notify-test-{nanos}"));
         fs::create_dir_all(&output_dir)?;
         Ok(output_dir)
+    }
+}
+
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use std::{io::Read, thread, time::Duration};
+
+    fn capture_upload(count: usize) -> Result<String> {
+        let server =
+            tiny_http::Server::http("127.0.0.1:0").map_err(|err| anyhow::anyhow!("{err}"))?;
+        let host = format!("http://{}", server.server_addr());
+        let receiver = thread::spawn(move || -> Result<String> {
+            let mut request = server
+                .recv_timeout(Duration::from_secs(10))?
+                .context("upload not received")?;
+            let mut body = String::new();
+            request
+                .as_reader()
+                .take(1_000_000)
+                .read_to_string(&mut body)?;
+            let message = r#"{"message_id":1,"date":0,"chat":{"id":123,"type":"private","first_name":"Test"}}"#;
+            let result = if count == 1 {
+                message.to_owned()
+            } else {
+                format!("[{message},{message}]")
+            };
+            request.respond(tiny_http::Response::from_string(format!(
+                r#"{{"ok":true,"result":{result}}}"#
+            )))?;
+            Ok(body)
+        });
+        let dir = env::temp_dir().join(format!("notify-wire-{}-{count}", std::process::id()));
+        fs::create_dir_all(&dir)?;
+        for index in 0..count {
+            fs::write(dir.join(format!("artifact-{index}.zip")), b"zip fixture")?;
+        }
+        let artifacts = find_zip_files(&dir)?;
+        let request = NotifyRequest::new(&dir, "wire test").with_topic_id(Some(37));
+        let sent = tokio::runtime::Runtime::new()?.block_on(async {
+            let http = reqwest::Client::builder()
+                .no_proxy()
+                .timeout(Duration::from_secs(10))
+                .build()?;
+            let bot = Client::with_http_client(http, "test-token")
+                .with_host(host)
+                .with_max_retries(0);
+            let context = NotificationContext {
+                bot: &bot,
+                chat_id: "123",
+                request: &request,
+                branch_name: "dev",
+                artifact_count: count,
+                safe_commit_msg: "fix &amp; verify",
+                commit_link: "https://example.com/commit/test",
+            };
+            if count == 1 {
+                context.send_single_artifact(&artifacts[0], 0).await
+            } else {
+                context.send_artifact_group(&artifacts).await
+            }
+        });
+        let received = receiver
+            .join()
+            .map_err(|_| anyhow::anyhow!("mock server panicked"))?;
+        fs::remove_dir_all(dir)?;
+        sent?;
+        received
+    }
+
+    fn field<'a>(body: &'a str, name: &str) -> &'a str {
+        let marker = format!("name=\"{name}\"");
+        body.split("\r\n--")
+            .filter_map(|part| part.split_once("\r\n\r\n"))
+            .find(|(headers, _)| headers.contains(&marker))
+            .map(|(_, value)| value)
+            .unwrap_or_else(|| panic!("missing multipart field {name}"))
+    }
+
+    #[test]
+    fn single_upload_sends_plain_html_parse_mode() -> Result<()> {
+        let body = capture_upload(1)?;
+        assert_eq!(field(&body, "parse_mode"), "HTML");
+        assert_eq!(field(&body, "message_thread_id"), "37");
+        assert_eq!(field(&body, "chat_id"), "123");
+        let expected = build_primary_caption(
+            &NotifyRequest::new("unused", "wire test"),
+            "dev",
+            1,
+            "fix &amp; verify",
+            "https://example.com/commit/test",
+        );
+        assert_eq!(field(&body, "caption"), expected);
+        assert!(body.contains("filename=\"artifact-0.zip\""));
+        assert!(body.contains("zip fixture"));
+        Ok(())
+    }
+
+    #[test]
+    fn group_upload_sends_html_mode_inside_media_json() -> Result<()> {
+        let body = capture_upload(2)?;
+        let media: serde_json::Value = serde_json::from_str(field(&body, "media"))?;
+        assert_eq!(media.as_array().unwrap().len(), 2);
+        assert!(media[0].get("caption").is_none());
+        assert_eq!(media[1]["parse_mode"], "HTML");
+        assert!(
+            media[1]["caption"]
+                .as_str()
+                .unwrap()
+                .contains("fix &amp; verify")
+        );
+        assert_eq!(field(&body, "message_thread_id"), "37");
+        assert_eq!(field(&body, "chat_id"), "123");
+        Ok(())
     }
 }

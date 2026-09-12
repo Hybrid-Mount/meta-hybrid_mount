@@ -42,3 +42,11 @@
 ## 尚未纳入本轮的后端审查条目
 
 HM-RUST-009 仍未闭环：mountsource 校验只在启动入口调用，软重启入口未调用，按 source 卸载也未限制为本项目目标。其余遗留审查条目见 `RUST_BACKEND_REVIEW.md`；本轮没有重新执行完整安全审查。
+
+## 2026-09-12：Telegram 单文件上传回归
+
+PR 检查不执行真实 Telegram 通知。合并后的构建虽然完成打包，却在通知阶段收到 `400 unsupported parse_mode`。
+
+本地 HTTP 接收测试复现了 tgbot 0.48 的 multipart 编码问题：单文件上传将 `parse_mode` 编码成带 JSON 引号的 `"HTML"`，而 Telegram 要求该表单字段为 `HTML`。媒体组的嵌套 JSON 格式正常。上一轮基于 Debug 文本的请求测试无法区分这两种编码，因此没有捕获此问题。
+
+暂将 tgbot 精确固定为 0.46.0，并恢复对应的 caption / document 构造 API。用真实 HTTP 请求测试替换 Debug 文本测试，覆盖单文件的原始 parse_mode、完整 caption、chat_id、话题 ID、文件内容，以及媒体组中的 caption 和格式字段。测试仅访问本机接收端，使用假 token；不读取 secrets，也不发送 Telegram 消息。待上游版本通过这些测试后再升级。
