@@ -11,10 +11,19 @@ pub const MAGIC: u64 = 0x004E_4F4D_4F55_4E54;
 pub const PAYLOAD_LEN: usize = 4096;
 pub const BUFFER_LEN: usize = 4068;
 pub const RULE_HEADER_LEN: usize = 12;
+// NoMount wire 契约：DEL 命令的 6 字节头长度，当前后端只发出 ADD 子集，DEL/GET 系列留给后续版本，规格要求齐全不可删。
+// 用 allow 而非 expect：非 linux/android 目标由 src/main.rs 的 crate 级 allow(dead_code) 覆盖，lint 不触发时
+// expect 会产生 unfulfilled_lint_expectations，从而让宿主 -D warnings 失败。
+#[allow(dead_code)]
 pub const DEL_HEADER_LEN: usize = 6;
 
 pub const FLAG_WHITEOUT: u32 = 1 << 2;
 
+// NoMount wire 契约的完整命令集，当前后端只发出 AddRule/AddUid/ClearRules/GetVersion 子集，
+// DEL/GET 系列（DelRule/DelUid/ClearAll/ClearUids/GetList/GetUids）留给后续版本，命令号取值不可改动。
+// 用 allow 而非 expect：非 linux/android 目标由 src/main.rs 的 crate 级 allow(dead_code) 覆盖，lint 不触发时
+// expect 会产生 unfulfilled_lint_expectations，从而让宿主 -D warnings 失败。
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub enum NmCommand {
