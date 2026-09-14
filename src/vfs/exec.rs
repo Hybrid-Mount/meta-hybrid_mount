@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 把规划结果应用到当前绑定的 Provider，并汇总统计。
-//! 回滚由流水线统一负责（`clear_rules`）。
+//! 回滚由流水线统一负责：对本次下发的规则逐条 DEL_RULE（见 `VfsApplied::rules`）。
 
 use crate::errors::Result;
 use crate::module_id::ModuleId;
 use crate::plan::MountPlan;
 use crate::vfs::backend::VfsKernel;
-use crate::vfs::protocol::encode_rule;
+use crate::vfs::protocol::{EncodedRule, encode_rule};
 use crate::vfs::rule::{VfsAction, build_vfs_rules};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -18,11 +18,18 @@ pub struct VfsExecStats {
     pub whiteouts: usize,
 }
 
+/// 本次下发的结果：统计与逐条回滚所需的规则。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VfsApplied {
+    pub stats: VfsExecStats,
+    pub rules: Vec<EncodedRule>,
+}
+
 pub fn apply_plan(
     kernel: &mut dyn VfsKernel,
     plan: &MountPlan,
     uids: &[u32],
-) -> Result<VfsExecStats> {
+) -> Result<VfsApplied> {
     let rules = build_vfs_rules(&plan.tree);
     let mut encoded = Vec::with_capacity(rules.len());
     let mut active_targets = Vec::with_capacity(rules.len());
@@ -47,15 +54,18 @@ pub fn apply_plan(
         kernel.add_uids(uids)?;
     }
 
-    Ok(VfsExecStats {
-        mounted_module_ids: plan
-            .vfs_module_ids
-            .iter()
-            .map(ModuleId::to_string)
-            .collect(),
-        active_targets,
-        injected,
-        whiteouts,
+    Ok(VfsApplied {
+        stats: VfsExecStats {
+            mounted_module_ids: plan
+                .vfs_module_ids
+                .iter()
+                .map(ModuleId::to_string)
+                .collect(),
+            active_targets,
+            injected,
+            whiteouts,
+        },
+        rules: encoded,
     })
 }
 

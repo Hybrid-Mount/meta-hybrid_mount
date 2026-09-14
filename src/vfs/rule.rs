@@ -41,12 +41,16 @@ fn collect_node(node: &MountNode, target: &str, out: &mut Vec<VfsRule>) {
         format!("{target}/{}", node.name)
     };
 
-    for source in &node.sources {
-        if source.backend != Mode::Vfs {
-            continue;
-        }
+    // 每个目标最多一条规则：VFS 内核按虚拟路径索引规则，同目标多条会互相覆盖甚至
+    // 整批失败。优先级沿用模块顺序语义——node.sources 按 module_id 升序，最后一个
+    // Vfs 来源（模块顺序靠后）获胜，与 Overlay 上层 / 内核 add 覆盖一致。
+    let winner =
+        node.sources.iter().rev().find(|source| {
+            source.backend == Mode::Vfs && source.file_type != NodeFileType::Directory
+        });
+    if let Some(source) = winner {
+        // winner 已排除 Directory，这里的分支只需区分 whiteout 与注入。
         let action = match source.file_type {
-            NodeFileType::Directory => continue,
             NodeFileType::Whiteout => VfsAction::Whiteout {
                 virtual_path: current.clone(),
             },
@@ -54,6 +58,7 @@ fn collect_node(node: &MountNode, target: &str, out: &mut Vec<VfsRule>) {
                 virtual_path: current.clone(),
                 real_path: source.source_path.clone(),
             },
+            NodeFileType::Directory => return,
         };
         out.push(VfsRule {
             action,

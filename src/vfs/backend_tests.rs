@@ -33,7 +33,8 @@ impl VfsKernel for MockKernel<'_> {
         Ok(())
     }
 
-    fn clear_rules(&mut self) -> Result<()> {
+    fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
+        self.applied = self.applied.saturating_sub(rules.len());
         Ok(())
     }
 }

@@ -11,16 +11,13 @@ pub const MAGIC: u64 = 0x004E_4F4D_4F55_4E54;
 pub const PAYLOAD_LEN: usize = 4096;
 pub const BUFFER_LEN: usize = 4068;
 pub const RULE_HEADER_LEN: usize = 12;
-// NoMount wire 契约：DEL 命令的 6 字节头长度，当前后端只发出 ADD 子集，DEL/GET 系列留给后续版本，规格要求齐全不可删。
-// 用 allow 而非 expect：非 linux/android 目标由 src/main.rs 的 crate 级 allow(dead_code) 覆盖，lint 不触发时
-// expect 会产生 unfulfilled_lint_expectations，从而让宿主 -D warnings 失败。
-#[allow(dead_code)]
+// NoMount wire 契约：DEL 命令的 6 字节头长度（u32 uid + u16 v_len，随后是 vpath 字节）。
 pub const DEL_HEADER_LEN: usize = 6;
 
 pub const FLAG_WHITEOUT: u32 = 1 << 2;
 
-// NoMount wire 契约的完整命令集，当前后端只发出 AddRule/AddUid/ClearRules/GetVersion 子集，
-// DEL/GET 系列（DelRule/DelUid/ClearAll/ClearUids/GetList/GetUids）留给后续版本，命令号取值不可改动。
+// NoMount wire 契约的完整命令集，当前后端只发出 AddRule/DelRule/AddUid/GetVersion 子集，
+// 其余（DelUid/ClearAll/ClearRules/ClearUids/GetList/GetUids）留给后续版本，命令号取值不可改动。
 // 用 allow 而非 expect：非 linux/android 目标由 src/main.rs 的 crate 级 allow(dead_code) 覆盖，lint 不触发时
 // expect 会产生 unfulfilled_lint_expectations，从而让宿主 -D warnings 失败。
 #[allow(dead_code)]
@@ -117,6 +114,30 @@ pub fn build_add_rule_payloads(rules: &[EncodedRule], uid: u32) -> Result<Vec<Ve
     Ok(payloads)
 }
 
+pub fn build_del_rule_payloads(paths: &[Vec<u8>], uid: u32) -> Result<Vec<Vec<u8>>> {
+    let mut payloads = Vec::new();
+    let mut buffer: Vec<u8> = Vec::new();
+    for path in paths {
+        let record_len = DEL_HEADER_LEN + path.len();
+        if record_len > BUFFER_LEN {
+            return Err(Error::VfsProtocol {
+                detail: format!("single del rule needs {record_len} bytes"),
+            });
+        }
+        if buffer.len() + record_len > BUFFER_LEN {
+            payloads.push(build_payload(NmCommand::DelRule, uid, &buffer)?);
+            buffer.clear();
+        }
+        buffer.extend_from_slice(&uid.to_le_bytes());
+        buffer.extend_from_slice(&(path.len() as u16).to_le_bytes());
+        buffer.extend_from_slice(path);
+    }
+    if !buffer.is_empty() {
+        payloads.push(build_payload(NmCommand::DelRule, uid, &buffer)?);
+    }
+    Ok(payloads)
+}
+
 pub fn ensure_status(payload: &[u8]) -> Result<()> {
     if payload.len() != PAYLOAD_LEN {
         return Err(Error::VfsProtocol {
@@ -128,6 +149,25 @@ pub fn ensure_status(payload: &[u8]) -> Result<()> {
             detail: "status field is not four bytes".to_owned(),
         })?);
     if status < 0 {
+        return Err(Error::VfsProtocol {
+            detail: format!("kernel returned status {status}"),
+        });
+    }
+    Ok(())
+}
+
+/// 回滚删除时容忍 ENOENT（规则本就不存在）；其它负 status 视为错误。
+pub fn ensure_status_allow_enoent(payload: &[u8]) -> Result<()> {
+    if payload.len() != PAYLOAD_LEN {
+        return Err(Error::VfsProtocol {
+            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
+        });
+    }
+    let status =
+        i32::from_le_bytes(payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
+            detail: "status field is not four bytes".to_owned(),
+        })?);
+    if status < 0 && status != -2 {
         return Err(Error::VfsProtocol {
             detail: format!("kernel returned status {status}"),
         });

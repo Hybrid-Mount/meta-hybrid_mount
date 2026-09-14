@@ -306,8 +306,8 @@ struct Payload { /* magic, cmd, target_uid, status, arg1, data_size, buffer[4068
 
 - 目标路径取 planner 的 `map_target` 结果（含分区提升）。
 - 一个目标的多模块层：VFS 无 lowerdir 叠加概念，同一真实路径只能有一个后端；
-  同后端多模块命中同一目标时，按模块顺序取最后生效者并记录覆盖，策略需与现有
-  `MountNode.sources` 排序对齐（见第 17 节未决点 5）。
+  同后端多模块命中同一目标时，按模块顺序取最后生效者并记录覆盖，策略与现有
+  `MountNode.sources` 排序对齐：每个目标最多下发一条规则（见第 17 节未决点 5，已决）。
 - 目录结构父链（`structural_sources`）不产生 whiteout 或注入。
 
 ---
@@ -340,9 +340,11 @@ VFS 新增：
   遮蔽冲突已在 plan 阶段排除，顺序不再需要动态裁决。
 - `needs_runtime_temp` 需计入 `vfs_module_ids`（若协议实现需要临时页内存）。
 - 回滚：每个成功操作注册进现有 `Transaction`：
-  - 单条：`DEL_RULE`；
-  - 整体：`CLEAR_RULES`；
-  - 启动失败时清理本次下发的规则，不触碰 Provider 的其它状态（如 UID 隔离可独立配置）。
+  - 按本次下发的虚拟路径逐条 `DEL_RULE`（容忍 `ENOENT`：规则本就不存在时内核回写
+    `-ENOENT`，不是回滚失败）；
+  - **不使用 `CLEAR_RULES`**：该命令会清空 Provider 的整张规则表；HM 可能复用
+    设备上已由其它模块安装规则的 NoMount Provider，回滚不得影响它们；
+  - 启动失败时只删除本次下发的规则，不触碰 Provider 的其它状态（如 UID 隔离可独立配置）。
 - Boot 安全：K2 加载与规则下发前写 `/data/adb/hybrid-mount/vfs_boot_guard`，
   成功后删除；遗留标记表示上次启动失败，下次跳过 VFS 后端并保留失败快照。
 
@@ -442,7 +444,10 @@ VFS 新增：
 2. **符号链接源**：上游对真实路径使用 `LOOKUP_FOLLOW`，注入符号链接是否保留链接语义需确认。
 3. **K2 覆盖矩阵**：是否对齐 NoMount 的 5.4–6.16 全量，还是先覆盖 GKI 5.10+ 主流版本。
 4. **严格模式默认值**：`vfs_strict` 默认 false（降级）还是 true（失败）需产品决策。
-5. **同目标多模块 VFS 规则**：最终生效者选择策略需与现有 sources 排序对齐并在文档固化。
+5. ~~**同目标多模块 VFS 规则**：最终生效者选择策略需与现有 sources 排序对齐并在文档固化。~~
+   **已决（本分支）**：同目标只下发一条规则，`node.sources` 中最后一个
+   `backend == vfs` 且非目录的来源（模块顺序靠后）获胜；VFS 内核按虚拟路径索引规则，
+   多条同目标规则会互相覆盖甚至整批失败。
 6. **K1 与 K2 的 wire 层区分**：两者注册同名 key type，探测只能判断“有 Provider 活动”，
    无法直接区分实现来源。候选方案：K2 在 `GET_VERSION` 返回串附带实现标识（需保证
    `nm` CLI 仍可读），或 K2 额外注册独立探测 key type；确定前 `vfs_provider` 以 HM

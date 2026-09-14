@@ -108,6 +108,71 @@ fn ensure_status_rejects_negative_kernel_status() {
 }
 
 #[test]
+fn del_rule_record_encodes_uid_v_len_and_path() {
+    let paths = vec![b"/system/etc/hosts".to_vec()];
+    let pages = build_del_rule_payloads(&paths, 1000).unwrap();
+
+    assert_eq!(pages.len(), 1);
+    assert_eq!(
+        u32::from_le_bytes(pages[0][8..12].try_into().unwrap()),
+        NmCommand::DelRule as u32
+    );
+    assert_eq!(
+        u32::from_le_bytes(pages[0][12..16].try_into().unwrap()),
+        1000
+    );
+    let buffer = &pages[0][28..];
+    assert_eq!(u32::from_le_bytes(buffer[0..4].try_into().unwrap()), 1000);
+    assert_eq!(
+        u16::from_le_bytes(buffer[4..6].try_into().unwrap()),
+        "/system/etc/hosts".len() as u16
+    );
+    assert_eq!(&buffer[6..6 + 17], b"/system/etc/hosts");
+    assert_eq!(
+        u32::from_le_bytes(pages[0][24..28].try_into().unwrap()) as usize,
+        DEL_HEADER_LEN + "/system/etc/hosts".len()
+    );
+}
+
+#[test]
+fn del_rule_payloads_split_when_buffer_is_full() {
+    let path = vec![b'a'; 100];
+    let paths = vec![path; 100];
+    let pages = build_del_rule_payloads(&paths, 0).unwrap();
+
+    assert!(pages.len() > 1);
+    for page in &pages {
+        assert_eq!(page.len(), PAYLOAD_LEN);
+        let data_size = u32::from_le_bytes(page[24..28].try_into().unwrap()) as usize;
+        assert!(data_size <= BUFFER_LEN);
+        assert_eq!(data_size % (DEL_HEADER_LEN + 100), 0);
+    }
+}
+
+#[test]
+fn del_rule_rejects_path_that_does_not_fit_one_page() {
+    let paths = vec![vec![b'a'; BUFFER_LEN + 1 - DEL_HEADER_LEN]];
+    let err = build_del_rule_payloads(&paths, 0).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn ensure_status_allow_enoent_accepts_missing_rule() {
+    let mut page = build_payload(NmCommand::DelRule, 0, &[]).unwrap();
+    page[16..20].copy_from_slice(&(-2_i32).to_le_bytes());
+    assert!(ensure_status_allow_enoent(&page).is_ok());
+}
+
+#[test]
+fn ensure_status_allow_enoent_rejects_other_negative_status() {
+    let mut page = build_payload(NmCommand::DelRule, 0, &[]).unwrap();
+    page[16..20].copy_from_slice(&(-22_i32).to_le_bytes());
+    let err = ensure_status_allow_enoent(&page).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+    assert!(!format!("{err}").is_empty());
+}
+
+#[test]
 fn ensure_consumed_accepts_full_batch_cursor() {
     let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
     page[16..20].copy_from_slice(&0_i32.to_le_bytes());

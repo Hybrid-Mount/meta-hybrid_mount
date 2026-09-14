@@ -42,7 +42,7 @@ use crate::vfs::backend::{
     KeyringKernel, LkmLoader, SUPPORTED_VERSIONS, VfsKernel, select_provider,
 };
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::vfs::exec::VfsExecStats;
+use crate::vfs::exec::{VfsApplied, VfsExecStats};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::cell::RefCell;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1609,6 +1609,33 @@ impl LkmLoader for PendingKernelLoader {
     }
 }
 
+/// 定向回滚闭包：只删除本次 apply_plan 实际下发的规则（VfsApplied::rules）。
+///
+/// 不触碰 Provider 中其它来源的规则（改用 DEL_RULE 而非 CLEAR_RULES）；规则可能
+/// 因为此前不存在而返回 ENOENT，由 remove_rules 容忍。借用失败或内核删除失败
+/// 返回结构化错误，交由事务汇总为清理失败。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rollback_vfs_rules(
+    shared: Rc<RefCell<KeyringKernel>>,
+    applied: Rc<RefCell<VfsApplied>>,
+) -> impl FnOnce() -> Result<()> {
+    move || {
+        let rules = std::mem::take(&mut applied.borrow_mut().rules);
+        let mut kernel = shared.try_borrow_mut().map_err(|err| {
+            log::error!("rollback vfs rules failed to borrow kernel: {err}");
+            Error::Vfs(Box::new(crate::errors::ContextError::new(
+                "rollback vfs rules",
+                None,
+                crate::errors::CausalError::Message(format!("vfs kernel borrow failed: {err}")),
+            )))
+        })?;
+        if rules.is_empty() {
+            return Ok(());
+        }
+        kernel.remove_rules(&rules)
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn apply_vfs_phase(
     config: &Config,
@@ -1652,26 +1679,22 @@ fn apply_vfs_phase(
         Err(err) => return Err(err),
     };
 
-    // 先注册回滚，再借用同一 kernel 执行 apply_plan：apply_plan 非原子，
-    // 中途失败时已下发的规则必须由事务回滚 clear_rules 清理。
+    // 先注册回滚、再借用同一 kernel 执行 apply_plan：apply_plan 非原子，
+    // 中途失败时用共享的 applied 记录删除已下发的那部分规则。回滚始终是定向
+    // 删除，不得清空 Provider 的整张规则表（可能含其它模块预先安装的规则）。
     let shared = Rc::new(RefCell::new(kernel));
-    let rollback = Rc::clone(&shared);
-    transaction.register_rollback_only("vfs_rules", move || {
-        let mut kernel = rollback.try_borrow_mut().map_err(|err| {
-            log::error!("rollback vfs rules failed to borrow kernel: {err}");
-            Error::Vfs(Box::new(crate::errors::ContextError::new(
-                "rollback vfs rules",
-                None,
-                crate::errors::CausalError::Message(format!("vfs kernel borrow failed: {err}")),
-            )))
-        })?;
-        kernel.clear_rules()
-    });
+    let applied = Rc::new(RefCell::new(VfsApplied::default()));
+    transaction.register_rollback_only(
+        "vfs_rules",
+        rollback_vfs_rules(Rc::clone(&shared), Rc::clone(&applied)),
+    );
 
-    let stats = {
+    let outcome = {
         let mut kernel = shared.borrow_mut();
         crate::vfs::exec::apply_plan(&mut *kernel, plan, &config.vfs_isolate_uids)?
     };
+    let stats = outcome.stats.clone();
+    *applied.borrow_mut() = outcome;
 
     state.vfs_provider = Some(provider.as_str().to_owned());
     log::info!(

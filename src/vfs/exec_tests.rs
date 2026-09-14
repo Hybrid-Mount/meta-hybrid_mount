@@ -7,12 +7,13 @@ use crate::module_id::ModuleId;
 use crate::mount_tree::{MountSource, MountTree, NodeFileType};
 use crate::plan::MountPlan;
 use crate::vfs::backend::VfsKernel;
-use crate::vfs::protocol::EncodedRule;
+use crate::vfs::protocol::{EncodedRule, FLAG_WHITEOUT};
 use std::path::PathBuf;
 
 #[derive(Default)]
 struct RecordingKernel {
     applied: usize,
+    removed: usize,
     uids_added: Vec<u32>,
 }
 
@@ -31,7 +32,8 @@ impl VfsKernel for RecordingKernel {
         Ok(())
     }
 
-    fn clear_rules(&mut self) -> Result<()> {
+    fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
+        self.removed += rules.len();
         Ok(())
     }
 }
@@ -66,7 +68,8 @@ fn apply_plan_sends_rules_uids_and_reports_counts() {
     };
     let mut kernel = RecordingKernel::default();
 
-    let stats = apply_plan(&mut kernel, &plan, &[1000]).unwrap();
+    let applied = apply_plan(&mut kernel, &plan, &[1000]).unwrap();
+    let stats = &applied.stats;
 
     assert_eq!(stats.injected, 1);
     assert_eq!(stats.whiteouts, 1);
@@ -79,7 +82,46 @@ fn apply_plan_sends_rules_uids_and_reports_counts() {
         ]
     );
     assert_eq!(kernel.applied, 2);
+    assert_eq!(kernel.removed, 0);
     assert_eq!(kernel.uids_added, vec![1000]);
+    assert_eq!(
+        applied.rules,
+        vec![
+            EncodedRule {
+                flags: FLAG_WHITEOUT,
+                virtual_path: b"/system/etc/hidden.xml".to_vec(),
+                real_path: Vec::new(),
+            },
+            EncodedRule {
+                flags: 0,
+                virtual_path: b"/system/etc/hosts".to_vec(),
+                real_path: b"/data/adb/modules/m/system/etc/hosts".to_vec(),
+            },
+        ]
+    );
+}
+
+#[test]
+fn apply_plan_returns_only_the_rules_it_sent() {
+    let mut tree = MountTree::default();
+    tree.insert(
+        "/system/etc/hosts",
+        source("m", "system/etc/hosts", NodeFileType::RegularFile),
+    );
+    let plan = MountPlan {
+        tree,
+        vfs_module_ids: vec![ModuleId::try_from("m").unwrap()],
+        ..MountPlan::default()
+    };
+    let mut kernel = RecordingKernel::default();
+
+    let applied = apply_plan(&mut kernel, &plan, &[]).unwrap();
+
+    assert_eq!(applied.rules.len(), 1);
+    assert_eq!(applied.rules[0].virtual_path, b"/system/etc/hosts");
+    kernel.remove_rules(&applied.rules).unwrap();
+    assert_eq!(kernel.removed, 1);
+    assert_eq!(kernel.applied, 1);
 }
 
 #[test]

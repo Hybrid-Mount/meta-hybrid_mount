@@ -28,7 +28,8 @@ pub trait VfsKernel {
     fn version(&mut self) -> Result<String>;
     fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()>;
     fn add_uids(&mut self, uids: &[u32]) -> Result<()>;
-    fn clear_rules(&mut self) -> Result<()>;
+    /// 定向删除指定的规则；不触碰 Provider 中其它来源的规则。
+    fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()>;
 }
 
 pub trait LkmLoader {
@@ -87,10 +88,17 @@ impl VfsKernel for KeyringKernel {
         Ok(())
     }
 
-    fn clear_rules(&mut self) -> Result<()> {
-        let request = protocol::build_payload(NmCommand::ClearRules, 0, &[])?;
-        let response = self.exchange(&request)?;
-        protocol::ensure_status(&response)?;
+    fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
+        // DEL_RULE 按虚拟路径索引，只需 vpath；uid 与 ADD 保持一致（当前为 0）。
+        let paths = rules
+            .iter()
+            .map(|rule| rule.virtual_path.clone())
+            .collect::<Vec<_>>();
+        for page in protocol::build_del_rule_payloads(&paths, 0)? {
+            let response = self.exchange(&page)?;
+            // 规则可能已被移除或从未生效：ENOENT 不是回滚失败。
+            protocol::ensure_status_allow_enoent(&response)?;
+        }
         Ok(())
     }
 }

@@ -82,6 +82,42 @@ fn whiteout_becomes_whiteout_rule() {
 }
 
 #[test]
+fn duplicate_targets_emit_one_rule_from_the_last_source() {
+    let mut tree = MountTree::default();
+    tree.insert(
+        "/system/etc/hosts",
+        source(
+            "a_mod",
+            "system/etc/hosts",
+            NodeFileType::RegularFile,
+            Mode::Vfs,
+        ),
+    );
+    tree.insert(
+        "/system/etc/hosts",
+        source(
+            "z_mod",
+            "system/etc/hosts",
+            NodeFileType::RegularFile,
+            Mode::Vfs,
+        ),
+    );
+
+    let rules = build_vfs_rules(&tree);
+
+    assert_eq!(
+        rules,
+        vec![VfsRule {
+            action: VfsAction::Inject {
+                virtual_path: "/system/etc/hosts".to_owned(),
+                real_path: PathBuf::from("/data/adb/modules/z_mod/system/etc/hosts"),
+            },
+            module_id: ModuleId::try_from("z_mod").unwrap(),
+        }]
+    );
+}
+
+#[test]
 fn directory_and_other_backends_produce_no_rules() {
     let mut tree = MountTree::default();
     tree.insert(
