@@ -1645,7 +1645,7 @@ git commit -m "feat(state): expose vfs modules and provider"
 
 **接口：**
 - 依赖输入：任务 4 的 `build_vfs_rules`；任务 6 的 `encode_rule`；任务 8 的 `VfsKernel`；`MountPlan.vfs_module_ids`。
-- 对外产出：`pub struct VfsExecStats { pub mounted_module_ids: Vec<String>, pub injected: usize, pub whiteouts: usize }`（`#[derive(Default)]`）。
+- 对外产出：`pub struct VfsExecStats { pub mounted_module_ids: Vec<String>, pub active_targets: Vec<String>, pub injected: usize, pub whiteouts: usize }`（`#[derive(Default)]`）。
 - 对外产出：`pub fn apply_plan(kernel: &mut dyn VfsKernel, plan: &MountPlan, uids: &[u32]) -> Result<VfsExecStats>`。
 
 - [ ] **步骤 1：编写失败的测试**
