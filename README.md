@@ -2,15 +2,16 @@
 
 <img src="icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
+Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, VFS (NoMount-compatible), or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
 
 ## Features
 
-- OverlayFS and Magic Mount can be mixed per module and per path.
+- OverlayFS, Magic Mount, and VFS (NoMount-compatible) can be mixed per module and per path.
 - Path rules take precedence over module defaults, and module defaults take precedence over the global default.
 - OverlayFS supports both tmpfs and ext4 storage modes.
 - For ext4 staging, KernelSU uses the official ioctl to hide sysfs nodes; APatch and other non-KSU environments use the bundled LKM compatibility fallback by default.
 - Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
+- VFS sends injection rules to a single active kernel provider through the keyring; it requires a compatible kernel or the bundled independent LKM, and is not a real mount.
 - The WebUI provides MD3 (default) and Miuix interfaces.
 - arm64, armv7, and x86_64 are supported; the installer automatically selects the matching binary.
 
@@ -26,7 +27,7 @@ Default configuration:
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic
+default_mode = "overlay" # overlay | magic | vfs
 
 [rules.example_module]
 default_mode = "magic"
@@ -35,7 +36,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-Rule paths are relative to the module root. Module-level and path-level rules may also use `ignore`; the global default backend accepts only `overlay` or `magic`. The same file path cannot be assigned to both mount backends. Ordinary directories may be shared as structural nodes by both backends, while file, type, and `.replace` conflicts cause the startup planning stage to fail immediately. Configuration changes take effect after reboot.
+Rule paths are relative to the module root. Module-level and path-level rules may also use `ignore`; the global default backend accepts `overlay`, `magic`, or `vfs`. `vfs_strict = true` makes startup fail when VFS is unavailable, and `vfs_isolate_uids` lists the UIDs that should see the native filesystem. The same file path cannot be assigned to both mount backends. Ordinary directories may be shared as structural nodes by both backends, while file, type, and `.replace` conflicts cause the startup planning stage to fail immediately. Configuration changes take effect after reboot.
 
 This routing does not change the project's existing `CONFIG_TMPFS_XATTR` capability check. On KernelSU, installation removes the module's entire `lkm/` directory and runtime uses only the official `NukeExt4Sysfs` ioctl. APatch and other non-KSU installations keep the LKM and try it by default after mounting ext4 staging. The bundled `.ko` files support aarch64 only. Automatic selection requires an exact kernel line and Android/GKI tag match; unknown combinations are rejected. Prebuilt LKMs must still be validated for ABI compatibility on the corresponding real device. If the device crashes during `insmod`, a persistent circuit-breaker marker prevents the LKM from loading again on the next boot while preserving the rest of Hybrid Mount. See [`module/lkm/README.md`](module/lkm/README.md) for the support matrix, checksums, sources, and licenses.
 

@@ -6,7 +6,7 @@
 
 - `/data/adb/modules/<id>/system/**` 始终是只读输入，安装、扫描、规划和执行阶段都不得移动、合并或删除其中内容。
 - v4.2.0 中经过长期实机验证的必要设计可作为回归修复的实现基线；直接移植时必须保留关键语义、许可证和原贡献者归属。
-- Magic Mount 行为继续与上游 `meta-magic_mount-rs` 的既定契约核对；混合 planner 允许两个后端共享普通结构目录，同时保证同一实际文件只进入一个后端。
+- Magic Mount 行为继续与上游 `meta-magic_mount-rs` 的既定契约核对；混合 planner 允许 Overlay 与 Magic 两个真实挂载后端共享普通结构目录，同时保证同一实际文件只进入一个后端。
 - 配置字段、CLI 输出和下列稳定路径是 module 脚本与 WebUI 之间的兼容接口，不能只为品牌整理而改名。
 - 仓库保留完整 Git 历史和作者信息；完成后的阶段计划可以删除，但不能据此压平或重写贡献记录。
 
@@ -17,11 +17,12 @@ module/metamount.sh
   → hybrid-mount（无参数）
   → 读取 config.toml
   → 只读扫描模块与受管分区，识别文件/目录/符号链接/.replace/whiteout
-  → 生成一棵带 overlay / magic / ignore 标注的共享节点树
+  → 生成一棵带 overlay / magic / vfs / ignore 标注的共享节点树
   → 从共享树派生互斥的 OverlayFS 操作
   → 预写 scan.ret 与 run/state.json
   → 准备临时 staging
   → 从同一棵树物化并执行 OverlayFS，再执行 Magic Mount
+  → 再执行 VFS 注入（NoMount 兼容 Provider，二选一）
   → 提交 KernelSU try-umount 列表
   → 更新状态快照并清理临时资源
 ```
@@ -32,10 +33,14 @@ module/metamount.sh
 
 - `src/config.rs`：TOML schema、默认值、升级兼容与 WebUI patch 持久化。
 - `src/scanner.rs`：只读读取模块元数据、状态标记，并识别所有可挂载节点类型。
-- `src/mount_tree.rs`：OverlayFS 与 Magic Mount 唯一共享的节点树、模块贡献、结构父链与后端标注。
+- `src/mount_tree.rs`：OverlayFS、Magic Mount 与 VFS 唯一共享的节点树、模块贡献、结构父链与后端标注。
 - `src/plan/`：应用“路径规则 > 模块默认值 > 全局默认值”，在共享树上检测跨后端冲突并派生 Overlay 操作。
 - `src/overlayfs/`：从共享树物化文件、目录、符号链接、opaque `.replace` 与 whiteout，随后执行 64 层分段、子挂载重建与文件级 shallow layer。
 - `src/magic_mount/`：直接消费共享树，执行 tmpfs skeleton、mirror、bind、`.replace` 与 whiteout 语义；不再二次扫描模块目录。
+- `src/vfs/`：NoMount 兼容的 VFS 后端。`rule.rs` 把共享树映射为规则，`protocol.rs`
+  编解码 `nm_payload`，`sys.rs` 通过 keyring `add_key` 发送并维护页对齐缓冲，
+  `backend.rs` 选择唯一活动的内核 Provider（设备已有的 NoMount 或 HM 自有实现，
+  二选一、不并存、不热切换），`exec.rs` 应用规则并统计。
 - `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
@@ -81,11 +86,17 @@ WebUI 不持有第二套业务协议：配置与状态请求都映射到以上�
 
 `status` 中的 `active_mounts` 是 OverlayFS 与 Magic Mount 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts` 与 `magic_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。
 
+`status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（`nomount` 或 `hm`）。这些字段与配置一并由 `src/state.rs` 写入启动快照。
+
 ## 共享节点树契约
 
-scanner 对每个模块源节点只读记录类型、源路径和 `.replace` 标记；planner 将其映射到真实目标路径并标注 `overlay`、`magic` 或 `ignore`。同一目标可以保留多个同后端模块贡献，用于 OverlayFS lowerdir 优先级；跨后端的普通目录可作为共享结构节点，文件、类型或 `.replace` 冲突仍在规划阶段报错。
+scanner 对每个模块源节点只读记录类型、源路径和 `.replace` 标记；planner 将其映射到真实目标路径并标注 `overlay`、`magic`、`vfs` 或 `ignore`。同一目标可以保留多个同后端模块贡献，用于 OverlayFS lowerdir 优先级；跨后端的普通目录可作为共享结构节点，文件、类型或 `.replace` 冲突仍在规划阶段报错。
 
 OverlayFS staging 只物化树中标注为 `overlay` 的节点，因此同模块内的 magic/ignore 子树不会被整目录复制进 lowerdir，Overlay 目录可以安全包含后续由 Magic 处理的子路径。目录 `.replace` 转换为 `trusted.overlay.opaque=y`，whiteout 保留为设备节点，符号链接不跟随。Magic Mount 在 OverlayFS 完成后遍历同一棵树的 `magic` 分支；未被选中但承载选中后代的目录只作为结构父链，不会改变后端归属。由于执行顺序固定为 OverlayFS → Magic Mount，Magic `.replace` 目录若包含 Overlay 后代会在规划阶段报冲突，避免后执行的目录替换遮住先前挂载。
+
+VFS 目标不得存在被 Overlay/Magic 挂载的祖先目录（反之亦然），否则 plan 阶段报
+`PlanConflict`。VFS 不是真实挂载，因此不进入 `active_mounts`，也不参与 KSU
+try-umount 列表；其成功目标记录在 `vfs_active_mounts`。
 
 ## 验证边界
 
