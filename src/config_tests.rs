@@ -833,3 +833,25 @@ fn test_dir(tag: &str) -> PathBuf {
 fn cleanup(dir: &Path) {
     fs::remove_dir_all(dir).ok();
 }
+
+#[test]
+fn vfs_is_accepted_as_global_and_path_mode() {
+    let config = crate::config::Config::from_toml(
+        "default_mode = \"vfs\"\n\n[rules.\"mod_a\".paths]\n\"system/etc/hosts\" = \"vfs\"\n",
+    )
+    .unwrap();
+    assert_eq!(config.default_mode, crate::config::Mode::Vfs);
+    assert_eq!(
+        config.rules[&crate::module_id::ModuleId::try_from("mod_a").unwrap()].paths["system/etc/hosts"],
+        crate::config::Mode::Vfs
+    );
+}
+
+#[test]
+fn vfs_serializes_lowercase() {
+    let toml = crate::config::Config::from_toml("default_mode = \"vfs\"\n")
+        .unwrap()
+        .to_toml()
+        .unwrap();
+    assert!(toml.contains("default_mode = \"vfs\""));
+}

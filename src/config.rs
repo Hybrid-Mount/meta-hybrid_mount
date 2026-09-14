@@ -6,7 +6,7 @@
 //! moduledir = "/data/adb/modules"
 //! overlay_mode = "ext4"      # tmpfs | ext4
 //! disable_umount = false
-//! default_mode = "overlay"   # overlay | magic
+//! default_mode = "overlay"   # overlay | magic | vfs
 //!
 //! [rules."<module_id>"]
 //! default_mode = "magic"
@@ -37,6 +37,7 @@ pub enum Mode {
     #[default]
     Overlay,
     Magic,
+    Vfs,
     Ignore,
 }
 
@@ -45,6 +46,7 @@ impl Mode {
         match self {
             Self::Overlay => "overlay",
             Self::Magic => "magic",
+            Self::Vfs => "vfs",
             Self::Ignore => "ignore",
         }
     }
