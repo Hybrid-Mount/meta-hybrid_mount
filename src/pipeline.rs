@@ -1558,6 +1558,42 @@ fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
     crate::sys::fs::copy_prepared_entry(source, dest)
 }
 
+/// VFS boot guard 的 RAII 守卫：arm 成功后，函数以任何已处理方式返回
+/// （Ok 或 Err）都会在 Drop 中清除 guard；只有硬崩溃（Drop 不执行）才保留
+/// guard 触发下次启动熔断。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+struct VfsBootGuard {
+    path: PathBuf,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl VfsBootGuard {
+    fn arm() -> Result<Self> {
+        let path = PathBuf::from(defs::VFS_BOOT_GUARD_PATH);
+        crate::sys::fs::atomic_write(&path, b"1").map_err(|err| {
+            let cause = match err {
+                Error::Io(source) => crate::errors::CausalError::Io(source),
+                other => crate::errors::CausalError::Message(other.to_string()),
+            };
+            Error::Vfs(Box::new(crate::errors::ContextError::new(
+                "write vfs boot guard",
+                Some(path.clone()),
+                cause,
+            )))
+        })?;
+        Ok(Self { path })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for VfsBootGuard {
+    fn drop(&mut self) {
+        if let Err(err) = fs::remove_file(&self.path) {
+            log::warn!("clear vfs boot guard failed: {err}");
+        }
+    }
+}
+
 /// K2（HM 自有 VFS 内核实现）的加载由内核子系统计划接入；
 /// 用户态此阶段只支持设备已有的 K1 Provider。
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1588,17 +1624,9 @@ fn apply_vfs_phase(
         log::warn!("vfs boot guard present; skipping vfs backend this boot");
         return Ok(VfsExecStats::default());
     }
-    crate::sys::fs::atomic_write(guard, b"1").map_err(|err| {
-        let cause = match err {
-            Error::Io(source) => crate::errors::CausalError::Io(source),
-            other => crate::errors::CausalError::Message(other.to_string()),
-        };
-        Error::Vfs(Box::new(crate::errors::ContextError::new(
-            "write vfs boot guard",
-            Some(guard.to_path_buf()),
-            cause,
-        )))
-    })?;
+    // 写 guard 后，任何已处理返回（Ok 或 Err）都由 VfsBootGuard::drop 清除；
+    // 只有硬崩溃（Drop 不执行）才保留 guard 触发下次启动熔断。
+    let _guard = VfsBootGuard::arm()?;
 
     let mut kernel = KeyringKernel::new()?;
     let loader = PendingKernelLoader;
@@ -1612,21 +1640,28 @@ fn apply_vfs_phase(
         return Ok(VfsExecStats::default());
     };
 
-    let outcome = crate::vfs::exec::apply_plan(&mut kernel, plan, &config.vfs_isolate_uids);
-    if let Err(err) = fs::remove_file(guard) {
-        log::warn!("clear vfs boot guard failed: {err}");
-    }
-    let stats = outcome?;
-
-    state.vfs_provider = Some(provider.as_str().to_owned());
+    // 先注册回滚，再借用同一 kernel 执行 apply_plan：apply_plan 非原子，
+    // 中途失败时已下发的规则必须由事务回滚 clear_rules 清理。
     let shared = Rc::new(RefCell::new(kernel));
     let rollback = Rc::clone(&shared);
     transaction.register_rollback_only("vfs_rules", move || {
-        if let Ok(mut kernel) = rollback.try_borrow_mut() {
-            kernel.clear_rules()?;
-        }
-        Ok(())
+        let mut kernel = rollback.try_borrow_mut().map_err(|err| {
+            log::error!("rollback vfs rules failed to borrow kernel: {err}");
+            Error::Vfs(Box::new(crate::errors::ContextError::new(
+                "rollback vfs rules",
+                None,
+                crate::errors::CausalError::Message(format!("vfs kernel borrow failed: {err}")),
+            )))
+        })?;
+        kernel.clear_rules()
     });
+
+    let stats = {
+        let mut kernel = shared.borrow_mut();
+        crate::vfs::exec::apply_plan(&mut *kernel, plan, &config.vfs_isolate_uids)?
+    };
+
+    state.vfs_provider = Some(provider.as_str().to_owned());
     log::info!(
         "vfs phase complete: provider={}, injected={}, whiteouts={}",
         provider.as_str(),
