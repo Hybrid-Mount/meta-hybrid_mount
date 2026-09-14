@@ -37,6 +37,16 @@ use crate::state::{RunState, app_modules, mounted_module_ids_for_snapshot, write
 use crate::timing::PhaseTimer;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::backend::{
+    KeyringKernel, LkmLoader, SUPPORTED_VERSIONS, VfsKernel, select_provider,
+};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::exec::VfsExecStats;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::cell::RefCell;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::rc::Rc;
 
 /// 无参数启动挂载流水线的统一入口。
 pub fn run_mount_pipeline() -> Result<()> {
@@ -300,7 +310,13 @@ fn prepare_overlay_storage(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-type MountExecutionResult = (usize, usize, Vec<String>, exec::MagicMountStats);
+type MountExecutionResult = (
+    usize,
+    usize,
+    Vec<String>,
+    exec::MagicMountStats,
+    crate::vfs::exec::VfsExecStats,
+);
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn execute_mount_phases(
@@ -429,6 +445,10 @@ fn execute_mount_phases(
     )?;
     magic_phase.finish();
 
+    let vfs_phase = PhaseTimer::start("vfs");
+    let vfs_stats = apply_vfs_phase(config, plan, state, transaction)?;
+    vfs_phase.finish();
+
     crate::utils::ksu::commit_unmount_list()?;
 
     Ok((
@@ -436,6 +456,7 @@ fn execute_mount_phases(
         shallow_overlay_mounts,
         active_mounts,
         magic_stats,
+        vfs_stats,
     ))
 }
 
@@ -761,7 +782,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         crate::utils::ksu::clear_unmount_list()
     });
     let mut mounted = MountedTargets::default();
-    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats) =
+    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats, vfs_stats) =
         match execute_mount_phases(
             &config,
             &modules,
@@ -822,6 +843,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // Symlink/whiteout-only magic modules have successful execution results
     // but no mount target; include them from the executor stats.
     mounted_module_ids.extend(magic_stats.mounted_module_ids.iter().cloned());
+    mounted_module_ids.extend(vfs_stats.mounted_module_ids.iter().cloned());
     let app_modules = app_modules(
         &modules,
         &config,
@@ -846,6 +868,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     state.active_mounts = confirmed_active_mounts.clone();
     state.overlay_active_mounts = confirmed_overlay_targets;
     state.magic_active_mounts = confirmed_magic_targets;
+    state.vfs_active_mounts = vfs_stats.active_targets.clone();
     state.confirmed_active_mounts = confirmed_active_mounts;
     state.mount_stats = pipeline_stats(
         overlay_dir_mounts,
@@ -1533,6 +1556,84 @@ fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
     crate::sys::fs::copy_prepared_entry(source, dest)
+}
+
+/// K2（HM 自有 VFS 内核实现）的加载由内核子系统计划接入；
+/// 用户态此阶段只支持设备已有的 K1 Provider。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+struct PendingKernelLoader;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl LkmLoader for PendingKernelLoader {
+    fn load_hm_vfs(&self) -> Result<()> {
+        log::warn!(
+            "hm vfs kernel implementation is not installed; only an existing nomount provider can be used"
+        );
+        Ok(())
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn apply_vfs_phase(
+    config: &Config,
+    plan: &MountPlan,
+    state: &mut RunState,
+    transaction: &mut crate::sys::transaction::MountTransaction<'_>,
+) -> Result<VfsExecStats> {
+    if plan.vfs_module_ids.is_empty() {
+        return Ok(VfsExecStats::default());
+    }
+    let guard = Path::new(defs::VFS_BOOT_GUARD_PATH);
+    if guard.exists() {
+        log::warn!("vfs boot guard present; skipping vfs backend this boot");
+        return Ok(VfsExecStats::default());
+    }
+    crate::sys::fs::atomic_write(guard, b"1").map_err(|err| {
+        let cause = match err {
+            Error::Io(source) => crate::errors::CausalError::Io(source),
+            other => crate::errors::CausalError::Message(other.to_string()),
+        };
+        Error::Vfs(Box::new(crate::errors::ContextError::new(
+            "write vfs boot guard",
+            Some(guard.to_path_buf()),
+            cause,
+        )))
+    })?;
+
+    let mut kernel = KeyringKernel::new()?;
+    let loader = PendingKernelLoader;
+    let Some(provider) = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, false)? else {
+        if config.vfs_strict {
+            return Err(Error::VfsUnavailable {
+                reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+            });
+        }
+        log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
+        return Ok(VfsExecStats::default());
+    };
+
+    let outcome = crate::vfs::exec::apply_plan(&mut kernel, plan, &config.vfs_isolate_uids);
+    if let Err(err) = fs::remove_file(guard) {
+        log::warn!("clear vfs boot guard failed: {err}");
+    }
+    let stats = outcome?;
+
+    state.vfs_provider = Some(provider.as_str().to_owned());
+    let shared = Rc::new(RefCell::new(kernel));
+    let rollback = Rc::clone(&shared);
+    transaction.register_rollback_only("vfs_rules", move || {
+        if let Ok(mut kernel) = rollback.try_borrow_mut() {
+            kernel.clear_rules()?;
+        }
+        Ok(())
+    });
+    log::info!(
+        "vfs phase complete: provider={}, injected={}, whiteouts={}",
+        provider.as_str(),
+        stats.injected,
+        stats.whiteouts
+    );
+    Ok(stats)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

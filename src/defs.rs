@@ -11,6 +11,10 @@ pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
 pub const MODULE_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/lkm/binaries";
 pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
 
+/// VFS 后端启动熔断标记：本次启动下发规则前写入，成功后清除。
+/// 硬崩溃遗留该标记时，下次启动跳过 vfs 后端。
+pub const VFS_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_boot_guard";
+
 pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
 pub const MODULE_BLACKLIST_FILE_NAME: &str = "module_blacklist.toml";
 pub const MODULE_BLACKLIST_PATH: &str = "/data/adb/hybrid-mount/module_blacklist.toml";
@@ -91,5 +95,11 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(installer_partitions, MANAGED_PARTITIONS);
+    }
+
+    #[test]
+    fn vfs_boot_guard_lives_under_run_directory() {
+        assert!(VFS_BOOT_GUARD_PATH.starts_with("/data/adb/hybrid-mount/"));
+        assert_ne!(VFS_BOOT_GUARD_PATH, LKM_BOOT_GUARD_PATH);
     }
 }
