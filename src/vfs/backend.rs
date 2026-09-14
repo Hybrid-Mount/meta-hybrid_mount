@@ -72,7 +72,8 @@ impl VfsKernel for KeyringKernel {
     fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
         for page in protocol::build_add_rule_payloads(rules, 0)? {
             let response = self.exchange(&page)?;
-            protocol::ensure_status(&response)?;
+            // ADD_RULE 必须整批消费；GET_VERSION 不设置 arg1，仍用 ensure_status。
+            protocol::ensure_consumed(&response)?;
         }
         Ok(())
     }
@@ -99,6 +100,10 @@ impl VfsKernel for KeyringKernel {
 /// 1. 已有可响应且版本受支持的 Provider：直接采用，不加载任何模块；
 /// 2. 否则尝试加载 HM 自有 VFS LKM，再重新探测；
 /// 3. 仍不可用返回 `Ok(None)`，由调用方决定降级或失败。
+///
+/// 注意：当前 `LkmLoader` 为 no-op，K2（HM 自有内核实现）尚未接入，因此“两个实现
+/// 同时可见”的分支不可达。K2 接入时**必须**在此实现同名 key type 的“双可见/二次注册”
+/// 检测并触发 `Error::VfsProviderConflict`；在此之前不得假设该冲突已被覆盖。
 pub fn select_provider(
     kernel: &mut dyn VfsKernel,
     loader: &dyn LkmLoader,

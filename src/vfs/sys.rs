@@ -9,6 +9,23 @@ pub use platform::{PageBuffer, add_key};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub use stub::{PageBuffer, add_key};
 
+/// Linux/Android 的 ECANCELED。NoMount 的 key type preparse 在处理完 payload 后
+/// 故意返回 -ECANCELED（使 key 不被创建），因此该 errno 表示成功。
+pub const LINUX_ECANCELED: i32 = 125;
+
+/// 解释 `add_key` 的原始返回值。
+///
+/// NoMount 的 `nm_key_preparse` 在处理器处理完 payload 后总是返回 -ECANCELED，
+/// 这是它“不创建 key”的正常机制；上游 `nm.c` 完全忽略 `add_key` 的返回值，只读回
+/// payload 里的 `status`。因此当 syscall 返回 -1/ECANCELED 时这里是成功，payload 的
+/// 真实结果由调用方的 `ensure_status` / `ensure_consumed` 判定。
+fn interpret_add_key(ret: i64, errno: i32) -> std::io::Result<()> {
+    if ret < 0 && errno != LINUX_ECANCELED {
+        return Err(std::io::Error::from_raw_os_error(errno));
+    }
+    Ok(())
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod platform {
     use std::io;
@@ -78,7 +95,9 @@ mod platform {
             )
         };
         if ret < 0 {
-            return Err(io::Error::last_os_error());
+            // ECANCELED 表示内核已处理 payload 且刻意不创建 key，属正常完成。
+            let errno = io::Error::last_os_error().raw_os_error().unwrap_or(0);
+            return super::interpret_add_key(ret as i64, errno);
         }
         Ok(())
     }
@@ -120,5 +139,20 @@ mod tests {
     fn page_buffer_exposes_one_payload() {
         let mut page = PageBuffer::new().unwrap();
         assert_eq!(page.as_mut_slice().len(), crate::vfs::protocol::PAYLOAD_LEN);
+    }
+
+    #[test]
+    fn interpret_add_key_treats_ecanceled_as_success() {
+        assert!(interpret_add_key(-1, LINUX_ECANCELED).is_ok());
+    }
+
+    #[test]
+    fn interpret_add_key_rejects_other_errno() {
+        assert!(interpret_add_key(-1, 13).is_err());
+    }
+
+    #[test]
+    fn interpret_add_key_accepts_non_negative_ret() {
+        assert!(interpret_add_key(42, 0).is_ok());
     }
 }

@@ -98,6 +98,14 @@ VFS 目标不得存在被 Overlay/Magic 挂载的祖先目录（反之亦然）�
 `PlanConflict`。VFS 不是真实挂载，因此不进入 `active_mounts`，也不参与 KSU
 try-umount 列表；其成功目标记录在 `vfs_active_mounts`。
 
+本分支 VFS 不支持 `.replace`：planner 对 `replace: true` 的 Vfs 来源在 plan 阶段
+fail-fast（`VfsReplaceUnsupported`），避免 `.replace` 静默退化为“覆盖合并”；目录
+whiteout 语义留待内核子系统与实机验证后再实现。
+
+VFS Provider 二选一：K2（HM 自有内核实现）尚未接入，当前 loader 为 no-op，因此
+“同名 key type 双可见/二次注册”分支不可达。K2 接入时必须在 `select_provider` 实现该
+检测并触发 `VfsProviderConflict`。
+
 ## 验证边界
 
 主机侧可运行 Rust 单元测试、Clippy、WebUI 测试/类型检查和生产构建。Android 三架构编译由 `cargo xtask build` 或 CI 完成。真实 mount、loop、SELinux 与 KernelSU/APatch 交互必须在受支持设备上验证。

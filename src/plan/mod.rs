@@ -67,6 +67,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
 
     ensure_replace_backend_consistency(&builder.tree.root, "")?;
     ensure_vfs_not_shadowed(&builder.tree.root, "", None)?;
+    ensure_vfs_replace_supported(&builder.tree.root, "")?;
     Ok(builder.finish())
 }
 
@@ -528,6 +529,36 @@ fn ensure_vfs_not_shadowed(
     let child_mount = self_mount.or(ancestor_mount);
     for child in node.children.values() {
         ensure_vfs_not_shadowed(child, &current_target, child_mount)?;
+    }
+    Ok(())
+}
+
+/// 本分支 VFS 不支持 `.replace`。
+///
+/// 目录 whiteout 后再注入其子项可能触发上游 `-ENOTDIR`（spec §17.1），在内核子系统
+/// 与实机验证前于 plan 阶段 fail-fast，避免 `.replace` 静默退化为“覆盖合并”。
+fn ensure_vfs_replace_supported(node: &MountNode, target: &str) -> Result<()> {
+    let current_target = if node.name.is_empty() {
+        target.to_owned()
+    } else if target.is_empty() {
+        format!("/{}", node.name)
+    } else {
+        format!("{target}/{}", node.name)
+    };
+
+    if let Some(source) = node
+        .sources
+        .iter()
+        .find(|source| source.backend == Mode::Vfs && source.replace)
+    {
+        return Err(Error::VfsReplaceUnsupported {
+            target: current_target,
+            source_id: format!("{}:{}", source.module_id, source.relative),
+        });
+    }
+
+    for child in node.children.values() {
+        ensure_vfs_replace_supported(child, &current_target)?;
     }
     Ok(())
 }
@@ -1527,5 +1558,18 @@ mod tests {
         let beta = record("beta", &[("system/etc/hosts", false)]);
         let result = plan(&[alpha, beta], &config(Mode::Magic, rules), &[]);
         assert_eq!(result.vfs_module_ids.len(), 1);
+    }
+
+    #[test]
+    fn vfs_replace_directory_is_rejected() {
+        let mut module = record("vfs_replace", &[("system/etc", true)]);
+        module.entries[0].replace = true;
+
+        let err = plan_err(&[module], &config(Mode::Vfs, no_rules()));
+        let Error::VfsReplaceUnsupported { target, source_id } = err else {
+            panic!("unexpected: {err}");
+        };
+        assert_eq!(target, "/system/etc");
+        assert!(source_id.contains("vfs_replace:"), "got: {source_id}");
     }
 }

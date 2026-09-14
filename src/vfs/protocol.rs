@@ -89,6 +89,8 @@ pub fn build_payload(cmd: NmCommand, target_uid: u32, buffer: &[u8]) -> Result<V
     page[0..8].copy_from_slice(&MAGIC.to_le_bytes());
     page[8..12].copy_from_slice(&(cmd as u32).to_le_bytes());
     page[12..16].copy_from_slice(&target_uid.to_le_bytes());
+    // status 哨兵：内核未处理该 payload 时保持 -1，处理后会回写真实结果。
+    page[16..20].copy_from_slice(&(-1_i32).to_le_bytes());
     page[24..28].copy_from_slice(&(buffer.len() as u32).to_le_bytes());
     page[28..28 + buffer.len()].copy_from_slice(buffer);
     Ok(page)
@@ -128,6 +130,27 @@ pub fn ensure_status(payload: &[u8]) -> Result<()> {
     if status < 0 {
         return Err(Error::VfsProtocol {
             detail: format!("kernel returned status {status}"),
+        });
+    }
+    Ok(())
+}
+
+/// 校验 ADD_RULE 响应既成功又完整消费了批内字节。
+///
+/// 内核在 `arg1` 回写已消费的 buffer 字节数，必须等于 `data_size`，否则视为
+/// 部分应用，不能报告成功。
+pub fn ensure_consumed(payload: &[u8]) -> Result<()> {
+    ensure_status(payload)?;
+    let arg1 = u32::from_le_bytes(payload[20..24].try_into().map_err(|_| Error::VfsProtocol {
+        detail: "arg1 field is not four bytes".to_owned(),
+    })?);
+    let data_size =
+        u32::from_le_bytes(payload[24..28].try_into().map_err(|_| Error::VfsProtocol {
+            detail: "data_size field is not four bytes".to_owned(),
+        })?);
+    if arg1 != data_size {
+        return Err(Error::VfsProtocol {
+            detail: format!("kernel consumed {arg1} of {data_size} bytes"),
         });
     }
     Ok(())

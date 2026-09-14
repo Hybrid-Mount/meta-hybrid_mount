@@ -12,7 +12,7 @@ fn payload_has_exact_wire_layout() {
     assert_eq!(&page[0..8], &MAGIC.to_le_bytes());
     assert_eq!(u32::from_le_bytes(page[8..12].try_into().unwrap()), 1);
     assert_eq!(u32::from_le_bytes(page[12..16].try_into().unwrap()), 0);
-    assert_eq!(i32::from_le_bytes(page[16..20].try_into().unwrap()), 0);
+    assert_eq!(i32::from_le_bytes(page[16..20].try_into().unwrap()), -1_i32);
     assert_eq!(u32::from_le_bytes(page[20..24].try_into().unwrap()), 0);
     assert_eq!(u32::from_le_bytes(page[24..28].try_into().unwrap()), 0);
 }
@@ -92,6 +92,8 @@ fn batches_split_when_buffer_is_full() {
 #[test]
 fn parse_version_reads_buffer_and_len() {
     let mut page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
+    // build_payload 的 status 是 -1 哨兵，这里模拟内核已回写成功状态。
+    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
     page[28..30].copy_from_slice(b"20");
     page[24..28].copy_from_slice(&2_u32.to_le_bytes());
     assert_eq!(parse_version(&page).unwrap(), "20");
@@ -102,5 +104,24 @@ fn ensure_status_rejects_negative_kernel_status() {
     let mut page = build_payload(NmCommand::AddRule, 0, &[]).unwrap();
     page[16..20].copy_from_slice(&(-22_i32).to_le_bytes());
     let err = ensure_status(&page).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn ensure_consumed_accepts_full_batch_cursor() {
+    let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
+    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    page[20..24].copy_from_slice(&16_u32.to_le_bytes());
+    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
+    assert!(ensure_consumed(&page).is_ok());
+}
+
+#[test]
+fn ensure_consumed_rejects_partial_batch_cursor() {
+    let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
+    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    page[20..24].copy_from_slice(&8_u32.to_le_bytes());
+    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
+    let err = ensure_consumed(&page).unwrap_err();
     assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
 }

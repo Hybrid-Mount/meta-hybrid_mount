@@ -1630,14 +1630,26 @@ fn apply_vfs_phase(
 
     let mut kernel = KeyringKernel::new()?;
     let loader = PendingKernelLoader;
-    let Some(provider) = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, false)? else {
-        if config.vfs_strict {
-            return Err(Error::VfsUnavailable {
-                reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
-            });
+    let provider = match select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, false) {
+        Ok(Some(provider)) => provider,
+        Ok(None) => {
+            log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
+            if config.vfs_strict {
+                return Err(Error::VfsUnavailable {
+                    reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+                });
+            }
+            return Ok(VfsExecStats::default());
         }
-        log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
-        return Ok(VfsExecStats::default());
+        // 版本不受支持视同 Provider 不可用：默认降级，只有 vfs_strict 才让启动失败。
+        Err(err @ Error::VfsUnsupportedVersion { .. }) => {
+            log::warn!("vfs provider version unsupported, treating provider as unavailable: {err}");
+            if config.vfs_strict {
+                return Err(err);
+            }
+            return Ok(VfsExecStats::default());
+        }
+        Err(err) => return Err(err),
     };
 
     // 先注册回滚，再借用同一 kernel 执行 apply_plan：apply_plan 非原子，

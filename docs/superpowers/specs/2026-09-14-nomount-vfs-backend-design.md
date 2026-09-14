@@ -302,7 +302,7 @@ struct Payload { /* magic, cmd, target_uid, status, arg1, data_size, buffer[4068
 | `Symlink` | injection（语义待第 17 节确认） |
 | `Whiteout` | `--whiteout vpath` |
 | `Directory` | 只作为遍历结构，不产生规则；虚拟拓扑由内核补 |
-| `.replace` 目录 | 先 whiteout 目录，再注入其下条目 |
+| `.replace` 目录 | 先 whiteout 目录，再注入其下条目；当前分支对该路径 fail-fast，whiteout 语义留待实机验证后实现 |
 
 - 目标路径取 planner 的 `map_target` 结果（含分区提升）。
 - 一个目标的多模块层：VFS 无 lowerdir 叠加概念，同一真实路径只能有一个后端；
@@ -437,6 +437,8 @@ VFS 新增：
 1. **whiteout 目录后再注入其子文件**：上游 `nomount_generate_virtual_topology` 在父规则
    非 `IS_DIR` 时返回 `-ENOTDIR`，而 whiteout 规则不带 `IS_DIR`，需实机确认
    `.replace` 目录的实际行为，并据此决定映射策略（目录 whiteout vs 逐子项 whiteout）。
+   当前分支对该路径 fail-fast（plan 阶段报 `VfsReplaceUnsupported`），whiteout 语义
+   留待实机验证后实现。
 2. **符号链接源**：上游对真实路径使用 `LOOKUP_FOLLOW`，注入符号链接是否保留链接语义需确认。
 3. **K2 覆盖矩阵**：是否对齐 NoMount 的 5.4–6.16 全量，还是先覆盖 GKI 5.10+ 主流版本。
 4. **严格模式默认值**：`vfs_strict` 默认 false（降级）还是 true（失败）需产品决策。
