@@ -491,7 +491,7 @@ fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<
 fn ensure_vfs_not_shadowed(
     node: &MountNode,
     target: &str,
-    ancestor_mount: Option<(Mode, &str)>,
+    ancestor_mount: Option<(Mode, &MountSource)>,
 ) -> Result<()> {
     let current_target = if node.name.is_empty() {
         target.to_owned()
@@ -510,7 +510,7 @@ fn ensure_vfs_not_shadowed(
         return Err(Error::PlanConflict {
             target: current_target,
             first_backend: mode.as_str().to_owned(),
-            first_source: source.to_owned(),
+            first_source: format!("{}:{}", source.module_id, source.relative),
             second_backend: Mode::Vfs.as_str().to_owned(),
             second_source: format!("{}:{}", vfs_source.module_id, vfs_source.relative),
         });
@@ -523,7 +523,7 @@ fn ensure_vfs_not_shadowed(
             matches!(source.backend, Mode::Overlay | Mode::Magic)
                 && (source.file_type == NodeFileType::Directory || source.replace)
         })
-        .map(|source| (source.backend, source.relative.as_str()));
+        .map(|source| (source.backend, source));
 
     let child_mount = self_mount.or(ancestor_mount);
     for child in node.children.values() {
@@ -1486,10 +1486,24 @@ mod tests {
         let alpha = record("alpha", &[("system/etc", true)]);
         let beta = record("beta", &[("system/etc/hosts", false)]);
         let err = plan_err(&[alpha, beta], &config(Mode::Magic, rules));
+        let Error::PlanConflict {
+            target,
+            first_source,
+            second_source,
+            ..
+        } = err
+        else {
+            panic!("unexpected: {err}");
+        };
         assert!(
-            matches!(err, Error::PlanConflict { .. }),
-            "unexpected: {err}"
+            first_source.contains("alpha:"),
+            "first_source should name the shadowing module, got: {first_source}"
         );
+        assert!(
+            second_source.contains("beta:"),
+            "second_source should name the shadowed module, got: {second_source}"
+        );
+        assert_eq!(target, "/system/etc/hosts");
     }
 
     #[test]
