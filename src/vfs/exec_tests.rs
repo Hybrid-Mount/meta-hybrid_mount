@@ -50,7 +50,7 @@ fn source(module: &str, relative: &str, file_type: NodeFileType) -> MountSource 
 }
 
 #[test]
-fn apply_plan_sends_rules_uids_and_reports_counts() {
+fn apply_rules_sends_rules_uids_and_reports_counts() {
     let mut tree = MountTree::default();
     tree.insert(
         "/system/etc/hosts",
@@ -68,8 +68,8 @@ fn apply_plan_sends_rules_uids_and_reports_counts() {
     };
     let mut kernel = RecordingKernel::default();
 
-    let applied = apply_plan(&mut kernel, &plan, &[1000]).unwrap();
-    let stats = &applied.stats;
+    let planned = plan_rules(&plan).unwrap();
+    let stats = apply_rules(&mut kernel, &planned, &[1000]).unwrap();
 
     assert_eq!(stats.injected, 1);
     assert_eq!(stats.whiteouts, 1);
@@ -85,7 +85,7 @@ fn apply_plan_sends_rules_uids_and_reports_counts() {
     assert_eq!(kernel.removed, 0);
     assert_eq!(kernel.uids_added, vec![1000]);
     assert_eq!(
-        applied.rules,
+        planned.rules,
         vec![
             EncodedRule {
                 flags: FLAG_WHITEOUT,
@@ -102,7 +102,7 @@ fn apply_plan_sends_rules_uids_and_reports_counts() {
 }
 
 #[test]
-fn apply_plan_returns_only_the_rules_it_sent() {
+fn planned_rules_are_returned_for_rollback() {
     let mut tree = MountTree::default();
     tree.insert(
         "/system/etc/hosts",
@@ -115,17 +115,18 @@ fn apply_plan_returns_only_the_rules_it_sent() {
     };
     let mut kernel = RecordingKernel::default();
 
-    let applied = apply_plan(&mut kernel, &plan, &[]).unwrap();
+    let planned = plan_rules(&plan).unwrap();
+    apply_rules(&mut kernel, &planned, &[]).unwrap();
 
-    assert_eq!(applied.rules.len(), 1);
-    assert_eq!(applied.rules[0].virtual_path, b"/system/etc/hosts");
-    kernel.remove_rules(&applied.rules).unwrap();
+    assert_eq!(planned.rules.len(), 1);
+    assert_eq!(planned.rules[0].virtual_path, b"/system/etc/hosts");
+    kernel.remove_rules(&planned.rules).unwrap();
     assert_eq!(kernel.removed, 1);
     assert_eq!(kernel.applied, 1);
 }
 
 #[test]
-fn apply_plan_skips_uid_call_when_no_isolated_uids() {
+fn apply_rules_skips_uid_call_when_no_isolated_uids() {
     let mut tree = MountTree::default();
     tree.insert(
         "/system/etc/hosts",
@@ -138,7 +139,66 @@ fn apply_plan_skips_uid_call_when_no_isolated_uids() {
     };
     let mut kernel = RecordingKernel::default();
 
-    apply_plan(&mut kernel, &plan, &[]).unwrap();
+    let planned = plan_rules(&plan).unwrap();
+    apply_rules(&mut kernel, &planned, &[]).unwrap();
 
     assert!(kernel.uids_added.is_empty());
+}
+
+/// 下发中途失败的场景：批次在调用内核之前就已完整构建，因此回滚仍能拿到全部
+/// 规则（已生效的前缀必须删除，未生效的由 ENOENT 容忍）。
+#[test]
+fn plan_rules_holds_full_batch_before_any_kernel_call() {
+    #[derive(Default)]
+    struct FailingKernel {
+        applied: usize,
+        rolled_back: usize,
+    }
+
+    impl VfsKernel for FailingKernel {
+        fn version(&mut self) -> Result<String> {
+            Ok("20".to_owned())
+        }
+
+        fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
+            self.applied += rules.len();
+            Err(crate::errors::Error::VfsProtocol {
+                detail: "mid-batch failure".to_owned(),
+            })
+        }
+
+        fn add_uids(&mut self, _uids: &[u32]) -> Result<()> {
+            Ok(())
+        }
+
+        fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
+            self.rolled_back += rules.len();
+            Ok(())
+        }
+    }
+
+    let mut tree = MountTree::default();
+    tree.insert(
+        "/system/etc/hosts",
+        source("m", "system/etc/hosts", NodeFileType::RegularFile),
+    );
+    tree.insert(
+        "/system/etc/hidden.xml",
+        source("m", "system/etc/hidden.xml", NodeFileType::Whiteout),
+    );
+    let plan = MountPlan {
+        tree,
+        vfs_module_ids: vec![ModuleId::try_from("m").unwrap()],
+        ..MountPlan::default()
+    };
+
+    let planned = plan_rules(&plan).unwrap();
+    assert_eq!(planned.rules.len(), 2);
+
+    let mut kernel = FailingKernel::default();
+    assert!(apply_rules(&mut kernel, &planned, &[]).is_err());
+    assert_eq!(kernel.applied, 2);
+
+    kernel.remove_rules(&planned.rules).unwrap();
+    assert_eq!(kernel.rolled_back, 2);
 }

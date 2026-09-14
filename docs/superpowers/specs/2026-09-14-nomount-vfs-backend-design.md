@@ -340,8 +340,9 @@ VFS 新增：
   遮蔽冲突已在 plan 阶段排除，顺序不再需要动态裁决。
 - `needs_runtime_temp` 需计入 `vfs_module_ids`（若协议实现需要临时页内存）。
 - 回滚：每个成功操作注册进现有 `Transaction`：
-  - 按本次下发的虚拟路径逐条 `DEL_RULE`（容忍 `ENOENT`：规则本就不存在时内核回写
-    `-ENOENT`，不是回滚失败）；
+  - **下发前先构建并登记本次完整批次**，失败时按该批次的虚拟路径逐条 `DEL_RULE`
+    （容忍 `ENOENT`：规则本就不存在时内核回写 `-ENOENT`，不是回滚失败）。`apply_rules`
+    非原子，中途失败时已生效的前缀同样必须删除，未生效的规则由 ENOENT 容忍；
   - **不使用 `CLEAR_RULES`**：该命令会清空 Provider 的整张规则表；HM 可能复用
     设备上已由其它模块安装规则的 NoMount Provider，回滚不得影响它们；
   - 启动失败时只删除本次下发的规则，不触碰 Provider 的其它状态（如 UID 隔离可独立配置）。

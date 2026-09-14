@@ -99,7 +99,7 @@ VFS 目标不得存在被 Overlay/Magic 挂载的祖先目录（反之亦然）�
 try-umount 列表；其成功目标记录在 `vfs_active_mounts`。
 
 VFS 规则以虚拟路径为键，同一目标只下发一条（`node.sources` 中模块顺序靠后者获胜）。
-回滚是定向删除：按本次 `apply_plan` 实际下发的虚拟路径逐条 `DEL_RULE` 并容忍 `ENOENT`，
+回滚是定向删除：下发前登记本次完整批次，失败时对其逐条 `DEL_RULE` 并容忍 `ENOENT`，
 不使用 `CLEAR_RULES`，因此复用设备上已有 NoMount Provider 时不会改动其它模块预先安装的规则。
 
 本分支 VFS 不支持 `.replace`：planner 对 `replace: true` 的 Vfs 来源在 plan 阶段

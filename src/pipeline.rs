@@ -1609,11 +1609,12 @@ impl LkmLoader for PendingKernelLoader {
     }
 }
 
-/// 定向回滚闭包：只删除本次 apply_plan 实际下发的规则（VfsApplied::rules）。
+/// 定向回滚闭包：删除本次计划下发的完整批次（VfsApplied::rules）。
 ///
-/// 不触碰 Provider 中其它来源的规则（改用 DEL_RULE 而非 CLEAR_RULES）；规则可能
-/// 因为此前不存在而返回 ENOENT，由 remove_rules 容忍。借用失败或内核删除失败
-/// 返回结构化错误，交由事务汇总为清理失败。
+/// 批次在下发前登记，因此中途失败时已生效的前缀也会被删除；尚未生效的规则由
+/// remove_rules 容忍 ENOENT（内核在规则缺失时回写 -ENOENT）。不触碰 Provider 中
+/// 其它来源的规则（改用 DEL_RULE 而非 CLEAR_RULES）。借用失败或内核删除失败返回
+/// 结构化错误，交由事务汇总为清理失败。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn rollback_vfs_rules(
     shared: Rc<RefCell<KeyringKernel>>,
@@ -1679,22 +1680,24 @@ fn apply_vfs_phase(
         Err(err) => return Err(err),
     };
 
-    // 先注册回滚、再借用同一 kernel 执行 apply_plan：apply_plan 非原子，
-    // 中途失败时用共享的 applied 记录删除已下发的那部分规则。回滚始终是定向
-    // 删除，不得清空 Provider 的整张规则表（可能含其它模块预先安装的规则）。
+    // 先构建完整批次并登记回滚，再下发：apply_rules 非原子，中途失败时已生效的
+    // 前缀同样必须删除。未生效的规则由 DEL_RULE 的 ENOENT 容忍——内核按
+    // (vpath, uid) 精确匹配，规则不存在时回写 -ENOENT。回滚始终是定向删除，
+    // 不得清空 Provider 的整张规则表（可能含其它模块预先安装的规则）。
+    let planned = crate::vfs::exec::plan_rules(plan)?;
+    let stats = planned.stats.clone();
     let shared = Rc::new(RefCell::new(kernel));
-    let applied = Rc::new(RefCell::new(VfsApplied::default()));
+    let applied = Rc::new(RefCell::new(planned));
     transaction.register_rollback_only(
         "vfs_rules",
         rollback_vfs_rules(Rc::clone(&shared), Rc::clone(&applied)),
     );
 
-    let outcome = {
+    {
         let mut kernel = shared.borrow_mut();
-        crate::vfs::exec::apply_plan(&mut *kernel, plan, &config.vfs_isolate_uids)?
-    };
-    let stats = outcome.stats.clone();
-    *applied.borrow_mut() = outcome;
+        let batch = applied.borrow();
+        crate::vfs::exec::apply_rules(&mut *kernel, &batch, &config.vfs_isolate_uids)?;
+    }
 
     state.vfs_provider = Some(provider.as_str().to_owned());
     log::info!(

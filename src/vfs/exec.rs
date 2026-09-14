@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! 把规划结果应用到当前绑定的 Provider，并汇总统计。
-//! 回滚由流水线统一负责：对本次下发的规则逐条 DEL_RULE（见 `VfsApplied::rules`）。
+//! 回滚由流水线统一负责：下发前先登记完整批次，失败时对该批次逐条 DEL_RULE。
 
 use crate::errors::Result;
 use crate::module_id::ModuleId;
@@ -25,11 +25,12 @@ pub struct VfsApplied {
     pub rules: Vec<EncodedRule>,
 }
 
-pub fn apply_plan(
-    kernel: &mut dyn VfsKernel,
-    plan: &MountPlan,
-    uids: &[u32],
-) -> Result<VfsApplied> {
+/// 构建本次要下发的完整批次与统计，不触碰内核。
+///
+/// 与下发分离，是为了让调用方在任何内核调用之前就持有完整批次：`apply_rules`
+/// 非原子，中途失败时已生效的前缀同样必须回滚，未生效的规则由 DEL_RULE 的
+/// ENOENT 容忍。
+pub fn plan_rules(plan: &MountPlan) -> Result<VfsApplied> {
     let rules = build_vfs_rules(&plan.tree);
     let mut encoded = Vec::with_capacity(rules.len());
     let mut active_targets = Vec::with_capacity(rules.len());
@@ -49,11 +50,6 @@ pub fn apply_plan(
         encoded.push(encode_rule(rule)?);
     }
 
-    kernel.apply_rules(&encoded)?;
-    if !uids.is_empty() {
-        kernel.add_uids(uids)?;
-    }
-
     Ok(VfsApplied {
         stats: VfsExecStats {
             mounted_module_ids: plan
@@ -67,6 +63,19 @@ pub fn apply_plan(
         },
         rules: encoded,
     })
+}
+
+/// 下发已构建的批次；成功时返回统计。非原子：中途失败时已生效的前缀由调用方回滚。
+pub fn apply_rules(
+    kernel: &mut dyn VfsKernel,
+    applied: &VfsApplied,
+    uids: &[u32],
+) -> Result<VfsExecStats> {
+    kernel.apply_rules(&applied.rules)?;
+    if !uids.is_empty() {
+        kernel.add_uids(uids)?;
+    }
+    Ok(applied.stats.clone())
 }
 
 #[cfg(test)]
