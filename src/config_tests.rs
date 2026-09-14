@@ -109,7 +109,7 @@ fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
     let dir = test_dir("legacy-daemon-mode");
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("config.toml");
-    // Issue #409: this obsolete key caused strict boot loading to abort.
+    // This obsolete key previously caused strict boot loading to abort.
     let original = r#"moduledir = "/data/adb/modules"
 overlay_mode = "tmpfs"
 disable_umount = true

@@ -389,9 +389,9 @@ mod tests {
 
     #[test]
     fn large_images_use_four_kib_blocks_to_bound_group_count() {
-        let issue_image_size = planned_image_size(455_715_840, 158);
-        assert_eq!(issue_image_size, 587_202_560);
-        assert_eq!(select_ext4_block_size(issue_image_size), 4096);
+        let large_image_size = planned_image_size(455_715_840, 158);
+        assert_eq!(large_image_size, 587_202_560);
+        assert_eq!(select_ext4_block_size(large_image_size), 4096);
         assert_eq!(select_ext4_block_size(256 * 1024 * 1024), 1024);
         assert_eq!(
             ext4_block_group_count(256 * 1024 * 1024, EXT4_BLOCK_SIZE_BYTES),
