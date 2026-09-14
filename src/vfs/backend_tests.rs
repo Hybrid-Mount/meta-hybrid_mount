@@ -130,3 +130,54 @@ fn unsupported_existing_version_is_rejected_without_loading() {
     assert!(matches!(err, Error::VfsUnsupportedVersion { .. }));
     assert_eq!(loader.calls.get(), 0);
 }
+
+#[test]
+fn existing_hm_provider_is_adopted_without_loading() {
+    let loaded = Cell::new(true);
+    let mut kernel = MockKernel {
+        before: Some("20"),
+        after: Some("20"),
+        loaded: &loaded,
+        applied: 0,
+    };
+    let loader = MockLoader {
+        loaded: &loaded,
+        calls: Cell::new(0),
+    };
+
+    let selected = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, true).unwrap();
+
+    assert_eq!(selected, Some(VfsProvider::Hm));
+    assert_eq!(loader.calls.get(), 0);
+}
+
+#[test]
+fn loaded_hm_with_unsupported_version_is_rejected() {
+    let loaded = Cell::new(false);
+    let mut kernel = MockKernel {
+        before: None,
+        after: Some("19"),
+        loaded: &loaded,
+        applied: 0,
+    };
+    let loader = MockLoader {
+        loaded: &loaded,
+        calls: Cell::new(0),
+    };
+
+    let err = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, false).unwrap_err();
+
+    assert!(matches!(err, Error::VfsUnsupportedVersion { .. }));
+    assert_eq!(loader.calls.get(), 1);
+}
+
+#[test]
+fn exchange_rejects_request_that_is_not_one_page() {
+    let mut kernel = KeyringKernel::new().unwrap();
+
+    let short = kernel.exchange(&[0_u8; 8]).unwrap_err();
+    assert!(matches!(short, Error::VfsProtocol { .. }));
+
+    let full = kernel.exchange(&[0_u8; crate::vfs::protocol::PAYLOAD_LEN]);
+    assert!(matches!(full, Err(Error::Io(_))));
+}

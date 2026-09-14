@@ -46,7 +46,17 @@ impl KeyringKernel {
     }
 
     fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>> {
-        self.page.as_mut_slice().copy_from_slice(request);
+        let page = self.page.as_mut_slice();
+        if page.len() != request.len() {
+            return Err(Error::VfsProtocol {
+                detail: format!(
+                    "request length {} does not match page length {}",
+                    request.len(),
+                    page.len()
+                ),
+            });
+        }
+        page.copy_from_slice(request);
         sys::add_key(&mut self.page).map_err(Error::Io)?;
         Ok(self.page.as_mut_slice().to_vec())
     }
