@@ -4,5 +4,8 @@ moduledir = "/data/adb/modules"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
+# default_mode 也接受 "vfs"（NoMount 兼容的 VFS 注入后端）。
+# vfs_strict = false        # true 时 VFS 不可用即启动失败
+# vfs_isolate_uids = []     # 这些 UID 将看到原生文件系统
 
 [rules]

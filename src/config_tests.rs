@@ -29,6 +29,7 @@ fn default_config_toml_snapshot_is_stable() {
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
+vfs_strict = false
 
 [rules]
 "#;
@@ -263,6 +264,7 @@ fn json_uses_contract_shape() {
             "overlay_mode": "ext4",
             "disable_umount": false,
             "default_mode": "overlay",
+            "vfs_strict": false,
             "rules": {}
         })
     );
@@ -854,4 +856,21 @@ fn vfs_serializes_lowercase() {
         .to_toml()
         .unwrap();
     assert!(toml.contains("default_mode = \"vfs\""));
+}
+
+#[test]
+fn vfs_strict_and_isolated_uids_parse_and_roundtrip() {
+    let config =
+        crate::config::Config::from_toml("vfs_strict = true\nvfs_isolate_uids = [1000, 1001]\n")
+            .unwrap();
+    assert!(config.vfs_strict);
+    assert_eq!(config.vfs_isolate_uids, vec![1000, 1001]);
+    assert!(config.to_toml().unwrap().contains("vfs_isolate_uids = ["));
+}
+
+#[test]
+fn vfs_fields_default_off() {
+    let config = crate::config::Config::from_toml("").unwrap();
+    assert!(!config.vfs_strict);
+    assert!(config.vfs_isolate_uids.is_empty());
 }
