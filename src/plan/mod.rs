@@ -66,6 +66,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     }
 
     ensure_replace_backend_consistency(&builder.tree.root, "")?;
+    ensure_vfs_not_shadowed(&builder.tree.root, "", None)?;
     Ok(builder.finish())
 }
 
@@ -478,6 +479,55 @@ fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<
 
     for child in node.children.values() {
         ensure_replace_backend_consistency(child, &current_target)?;
+    }
+    Ok(())
+}
+
+/// VFS 规则作用在真实目录上；任何被 Overlay / Magic 以目录形式占用的祖先
+/// 目录都会遮蔽其后代注入，因此必须在 plan 阶段显式报错。
+///
+/// 采用保守判定：只要祖先节点存在 Overlay/Magic 的目录来源（含 `.replace`），
+/// 其下任何 Vfs 来源都视为被遮蔽。
+fn ensure_vfs_not_shadowed(
+    node: &MountNode,
+    target: &str,
+    ancestor_mount: Option<(Mode, &str)>,
+) -> Result<()> {
+    let current_target = if node.name.is_empty() {
+        target.to_owned()
+    } else if target.is_empty() {
+        format!("/{}", node.name)
+    } else {
+        format!("{target}/{}", node.name)
+    };
+
+    if let (Some((mode, source)), Some(vfs_source)) = (
+        ancestor_mount,
+        node.sources
+            .iter()
+            .find(|source| source.backend == Mode::Vfs),
+    ) {
+        return Err(Error::PlanConflict {
+            target: current_target,
+            first_backend: mode.as_str().to_owned(),
+            first_source: source.to_owned(),
+            second_backend: Mode::Vfs.as_str().to_owned(),
+            second_source: format!("{}:{}", vfs_source.module_id, vfs_source.relative),
+        });
+    }
+
+    let self_mount = node
+        .sources
+        .iter()
+        .find(|source| {
+            matches!(source.backend, Mode::Overlay | Mode::Magic)
+                && (source.file_type == NodeFileType::Directory || source.replace)
+        })
+        .map(|source| (source.backend, source.relative.as_str()));
+
+    let child_mount = self_mount.or(ancestor_mount);
+    for child in node.children.values() {
+        ensure_vfs_not_shadowed(child, &current_target, child_mount)?;
     }
     Ok(())
 }
@@ -1414,5 +1464,54 @@ mod tests {
         );
         assert!(result.overlay_module_ids.is_empty());
         assert!(result.magic_module_ids.is_empty());
+    }
+
+    #[test]
+    fn vfs_file_under_overlay_directory_is_rejected() {
+        let mut rules = no_rules();
+        rules.insert(
+            "alpha".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Overlay),
+                paths: BTreeMap::new(),
+            },
+        );
+        rules.insert(
+            "beta".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Vfs),
+                paths: BTreeMap::new(),
+            },
+        );
+        let alpha = record("alpha", &[("system/etc", true)]);
+        let beta = record("beta", &[("system/etc/hosts", false)]);
+        let err = plan_err(&[alpha, beta], &config(Mode::Magic, rules));
+        assert!(
+            matches!(err, Error::PlanConflict { .. }),
+            "unexpected: {err}"
+        );
+    }
+
+    #[test]
+    fn vfs_file_without_mounted_ancestor_is_allowed() {
+        let mut rules = no_rules();
+        rules.insert(
+            "alpha".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Overlay),
+                paths: BTreeMap::new(),
+            },
+        );
+        rules.insert(
+            "beta".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Vfs),
+                paths: BTreeMap::new(),
+            },
+        );
+        let alpha = record("alpha", &[("system/etc/other", true)]);
+        let beta = record("beta", &[("system/etc/hosts", false)]);
+        let result = plan(&[alpha, beta], &config(Mode::Magic, rules), &[]);
+        assert_eq!(result.vfs_module_ids.len(), 1);
     }
 }
