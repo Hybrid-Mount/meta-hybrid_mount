@@ -3,14 +3,10 @@
 //! keyring 发送通道。内核 `nm_key_preparse` 要求 payload 位于一页的偏移 0，
 //! 因此这里用 `mmap` 分配页对齐缓冲，绝不复用普通 `Vec` 堆内存。
 
-// add_key 由后续任务（任务 8 的发送侧）消费；接入前该重导出暂无使用点，
-// 这里显式放行，避免 clippy -D warnings 因未使用导入而失败。
 #[cfg(any(target_os = "linux", target_os = "android"))]
-#[allow(unused_imports)]
 pub use platform::{PageBuffer, add_key};
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-#[allow(unused_imports)]
 pub use stub::{PageBuffer, add_key};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
