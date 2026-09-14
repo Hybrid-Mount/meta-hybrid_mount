@@ -130,3 +130,21 @@ fn subprocess_runner_reports_declared_exit_policy_violation_as_error() {
 
     assert!(matches!(err.kind, ProcessErrorKind::Spawn { .. }));
 }
+
+#[test]
+fn vfs_errors_have_explicit_classes_and_messages() {
+    let unsupported = crate::errors::Error::VfsUnsupportedVersion {
+        found: "19".to_owned(),
+        supported: "20".to_owned(),
+    };
+    assert_eq!(
+        unsupported.classify(),
+        crate::errors::ErrorClass::ManualRecovery
+    );
+    assert!(unsupported.to_string().contains("19"));
+
+    let protocol = crate::errors::Error::VfsProtocol {
+        detail: "buffer overflow".to_owned(),
+    };
+    assert_eq!(protocol.classify(), crate::errors::ErrorClass::Permanent);
+}

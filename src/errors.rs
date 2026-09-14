@@ -255,6 +255,21 @@ pub enum Error {
     State(Box<ContextError>),
 
     #[error("{0}")]
+    Vfs(Box<ContextError>),
+
+    #[error("VFS protocol error: {detail}")]
+    VfsProtocol { detail: String },
+
+    #[error("VFS kernel provider is unavailable: {reason}")]
+    VfsUnavailable { reason: String },
+
+    #[error("VFS provider conflict: {detail}")]
+    VfsProviderConflict { detail: String },
+
+    #[error("unsupported VFS protocol version {found:?} (supported: {supported})")]
+    VfsUnsupportedVersion { found: String, supported: String },
+
+    #[error("{0}")]
     Subprocess(#[from] ProcessError),
 
     #[error("{0}")]
@@ -289,9 +304,15 @@ impl Error {
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             Self::Sys(errno) => classify_errno(errno),
-            Self::Mount(err) | Self::Storage(err) | Self::Lkm(err) | Self::State(err) => {
-                err.source.classify()
-            }
+            Self::Mount(err)
+            | Self::Storage(err)
+            | Self::Lkm(err)
+            | Self::State(err)
+            | Self::Vfs(err) => err.source.classify(),
+            Self::VfsProtocol { .. } => ErrorClass::Permanent,
+            Self::VfsUnavailable { .. }
+            | Self::VfsProviderConflict { .. }
+            | Self::VfsUnsupportedVersion { .. } => ErrorClass::ManualRecovery,
             Self::Subprocess(err) => classify_process(err),
             Self::Msg(_) => ErrorClass::Permanent,
         }
