@@ -15,6 +15,8 @@ const state = (timestamp: number): RunState => ({
   active_mounts: [],
   overlay_active_mounts: [],
   magic_active_mounts: [],
+  vfs_modules: [],
+  vfs_active_mounts: [],
   mount_error_modules: [],
   mount_error_reasons: {},
   mount_stats: {
@@ -26,7 +28,7 @@ const state = (timestamp: number): RunState => ({
     overlayfs_mounts: 0,
     ignored_entries: 0,
   },
-  mode_stats: { overlayfs: 0, magicmount: 0 },
+  mode_stats: { overlayfs: 0, magicmount: 0, vfs: 0 },
 });
 
 describe("active mount presentation", () => {

@@ -27,8 +27,12 @@ const styleOptions: MiuixSelectOption[] = [
   { value: "miuix", label: "MiuiX" },
   { value: "md3", label: "Material Design 3" },
 ];
-const modeOptions: DefaultMountMode[] = ["overlay", "magic"];
-const modeLabels = computed(() => [t("config.modeOverlay"), t("config.modeMagic")]);
+const modeOptions: DefaultMountMode[] = ["overlay", "magic", "vfs"];
+const modeLabels = computed(() => [
+  t("config.modeOverlay"),
+  t("config.modeMagic"),
+  t("config.modeVfs"),
+]);
 const modeSelectOptions = computed<MiuixSelectOption[]>(() =>
   modeOptions.map((mode, index) => ({
     value: mode,

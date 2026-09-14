@@ -29,6 +29,8 @@ const showoverlaymodule = ref(false);
 const magicFileMountCount = computed(() => state.value?.mount_stats.files_mounted ?? 0);
 const magicSymlinkCount = computed(() => state.value?.mount_stats.symlinks_created ?? 0);
 const showmagicmodule = ref(false);
+const showvfsmodule = ref(false);
+const vfsCount = computed(() => state.value?.mode_stats.vfs ?? 0);
 const expandMountPath = ref(false);
 const activeMounts = computed(() => uniqueActiveMounts(state.value?.active_mounts ?? []));
 const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
@@ -160,6 +162,17 @@ onMounted(async () => {
         "
         clickable
         @click="showmagicmodule = !showmagicmodule"
+      />
+      <MiuixBasicComponent
+        class="backend-row"
+        :title="t('status.vfsModules')"
+        :summary="
+          showvfsmodule
+            ? state?.vfs_modules.join(', ') || '0'
+            : t('status.moduleCount', { count: vfsCount })
+        "
+        clickable
+        @click="showvfsmodule = !showvfsmodule"
       />
       <MiuixBasicComponent
         :title="t('status.activeMounts')"
