@@ -11,7 +11,7 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 - OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
 - ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
 - Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- VFS 通过 keyring 把注入规则下发给唯一活动的内核 Provider，需要兼容内核或随附的独立 LKM；VFS 不是真实挂载。
+- VFS 通过 keyring 把注入规则下发给唯一活动的内核 Provider。它需要兼容 NoMount 的内核，或由独立内核子系统计划提供的独立 LKM；当前实现只支持设备上已有的 NoMount Provider（K1），HM 自有内核实现（K2）尚未随本分支交付。VFS 不是真实挂载。
 - WebUI 提供 MD3（默认）与 Miuix 两套界面。
 - 支持 arm64、armv7 与 x86_64，安装脚本会自动选择对应二进制。
 
@@ -36,7 +36,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端接受 `overlay`、`magic` 或 `vfs`。`vfs_strict = true` 时 VFS 不可用即启动失败，`vfs_isolate_uids` 列出应看到原生文件系统的 UID。同一文件路径不能同时进入两个挂载后端；普通目录可以作为两个后端共享的结构节点，文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
+规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端接受 `overlay`、`magic` 或 `vfs`。`vfs_strict = true` 时 VFS 不可用即启动失败，`vfs_isolate_uids` 列出应看到原生文件系统的 UID。同一文件路径不能同时进入多个后端；Overlay 与 Magic 两个真实挂载后端可以共享普通目录作为结构节点，VFS 是第三条注入路径、不是真实挂载。文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
 
 这套分流不改变项目现有的 `CONFIG_TMPFS_XATTR` 能力判断。KernelSU 安装时会删除模块中的整个 `lkm/` 目录，运行时只使用官方 `NukeExt4Sysfs` ioctl；APatch 等非 KSU 安装保留 LKM，并在 ext4 staging 挂载后默认尝试。随附 `.ko` 仅支持 aarch64；自动选择要求内核线和 Android/GKI 标签精确匹配，未知组合直接拒绝，但预编译 LKM 仍必须在对应真机验证 ABI。若设备在 `insmod` 期间崩溃，持久熔断标记会阻止下次启动再次加载 LKM，同时保留 Hybrid Mount 的其余功能。支持矩阵、校验值、来源与许可见 [`module/lkm/README.md`](../module/lkm/README.md)。
 
