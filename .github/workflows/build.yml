@@ -4,7 +4,11 @@ name: Build Hybrid Mount
 
 on:
   push:
-    branches: ["dev"]
+    branches:
+      - "dev"
+      # VFS 实验分支:尚未合并进 dev,但需要与 dev 相同的打包与 TG 通知,
+      # 以便在真机验证前确认产物可构建。合并/删除该分支后应移除本条目。
+      - "feat/nomount-vfs"
     paths:
       - "src/**"
       - "Cargo.*"
