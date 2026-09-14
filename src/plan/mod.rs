@@ -37,6 +37,7 @@ pub struct MountPlan {
     pub overlay_files: BTreeMap<String, Vec<PathBuf>>,
     pub overlay_module_ids: Vec<ModuleId>,
     pub magic_module_ids: Vec<ModuleId>,
+    pub vfs_module_ids: Vec<ModuleId>,
 }
 
 pub struct PlanInput<'a> {
@@ -134,6 +135,7 @@ struct PlanBuilder {
     overlay_files_by_target: BTreeMap<String, BTreeSet<(ModuleId, PathBuf)>>,
     overlay_module_ids: BTreeSet<ModuleId>,
     magic_module_ids: BTreeSet<ModuleId>,
+    vfs_module_ids: BTreeSet<ModuleId>,
     /// 跨模块分配表:target -> 已分配的节点,用于冲突检测。
     assignments: BTreeMap<String, Vec<TargetAssignment>>,
 }
@@ -235,6 +237,7 @@ impl PlanBuilder {
             overlay_files,
             overlay_module_ids: self.overlay_module_ids.into_iter().collect(),
             magic_module_ids: self.magic_module_ids.into_iter().collect(),
+            vfs_module_ids: self.vfs_module_ids.into_iter().collect(),
         }
     }
 }
@@ -296,6 +299,7 @@ fn process_module(
         .count();
     if overlay_count == 0 {
         collect_magic(module, &decisions, builder);
+        collect_vfs(module, &decisions, builder);
         return Ok(());
     }
 
@@ -358,6 +362,7 @@ fn process_module(
     }
 
     collect_magic(module, &decisions, builder);
+    collect_vfs(module, &decisions, builder);
     Ok(())
 }
 
@@ -432,6 +437,14 @@ fn collect_magic(
     }
 
     builder.magic_module_ids.insert(module.id.clone());
+}
+
+fn collect_vfs(module: &ModuleRecord, decisions: &[EntryDecision<'_>], builder: &mut PlanBuilder) {
+    if !decisions.iter().any(|decision| decision.mode == Mode::Vfs) {
+        return;
+    }
+
+    builder.vfs_module_ids.insert(module.id.clone());
 }
 
 /// Magic `.replace` 在 Overlay 阶段之后替换整个目标目录，因此不能包含已先行
@@ -1389,5 +1402,17 @@ mod tests {
         assert_eq!(scanned, crate::scanner::list_modules(&root, &[]).unwrap());
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn vfs_module_is_recorded_in_plan() {
+        let module = record("vfs_mod", &[("system/etc/hosts", false)]);
+        let result = plan(&[module], &config(Mode::Vfs, no_rules()), &[]);
+        assert_eq!(
+            result.vfs_module_ids,
+            vec![ModuleId::try_from("vfs_mod").unwrap()]
+        );
+        assert!(result.overlay_module_ids.is_empty());
+        assert!(result.magic_module_ids.is_empty());
     }
 }
