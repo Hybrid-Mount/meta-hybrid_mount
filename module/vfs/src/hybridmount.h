@@ -15,21 +15,19 @@
 #include <linux/compat.h>
 
 #define HYBRIDMOUNT_VERSION "hm1"
-#define HYBRIDMOUNT_MAGIC_SIG 0x4E4F4D4F554E54ULL /* upstream NoMount magic value, retained until Phase 0 */
+#define HYBRIDMOUNT_MAGIC_SIG 0x4E4F4D4F554E54ULL /* upstream magic; replacement pending decision */
 #define HM_FLAG_IS_DIR      (1 << 0)
 #define HM_FLAG_VIRTUAL_DIR (1 << 1)
 #define HM_FLAG_WHITEOUT    (1 << 2)
 
-/* flags for cleanup */
 #define HM_CLEAR_UIDS  (1 << 0)
 #define HM_CLEAR_RULES (1 << 1)
 #define HM_CLEAR_EXIT  (1 << 2)
 
-/* logs */
-#define hm_debug(fmt, ...) printk(KERN_DEBUG "NoMount: [DEBUG] " fmt, ##__VA_ARGS__)
-#define hm_info(fmt, ...) printk(KERN_INFO "NoMount: " fmt, ##__VA_ARGS__)
-#define hm_warn(fmt, ...) printk(KERN_WARNING "NoMount: [WARN] " fmt, ##__VA_ARGS__)
-#define hm_err(fmt, ...)  printk(KERN_ERR "NoMount: [ERROR] " fmt, ##__VA_ARGS__)
+#define hm_debug(fmt, ...) printk(KERN_DEBUG "hybridmount: [DEBUG] " fmt, ##__VA_ARGS__)
+#define hm_info(fmt, ...) printk(KERN_INFO "hybridmount: " fmt, ##__VA_ARGS__)
+#define hm_warn(fmt, ...) printk(KERN_WARNING "hybridmount: [WARN] " fmt, ##__VA_ARGS__)
+#define hm_err(fmt, ...)  printk(KERN_ERR "hybridmount: [ERROR] " fmt, ##__VA_ARGS__)
 
 static void *hybridmount_art_root = NULL;
 static struct hm_uid_array __rcu *hybridmount_uids = NULL;
@@ -140,7 +138,7 @@ struct hm_uid_array {
     uid_t uids[];
 };
 
-/*** Operaction Vectors ***/
+/*** Operation Vectors ***/
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
 static const struct file_operations hm_file_fops_mmap_prepare;
 #endif
@@ -157,12 +155,12 @@ static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dent
 static void hm_free_rule(struct hybridmount_rule *rule);
 
 /* =====================================================================
- * NoMount VFS Offset Protocol
+ * Hybrid Mount VFS Offset Protocol
  * =====================================================================
  * 64-bit layout: [ 16-bit 'nm' ][ 16-bit 0 ][ 32-bit ID ] 
  * 32-bit layout: [ 16-bit 'nm' ][ 16-bit ID ]
  */
-#define HM_SIG_16 0x6E6DULL /* "nm" in hex */
+#define HM_SIG_16 0x686DULL /* "hm" in hex */
 static inline bool hm_is_virtual_pos(loff_t pos) {
 #ifdef CONFIG_COMPAT
     if (in_compat_syscall()) return (pos & 0xFFFF0000ULL) == (HM_SIG_16 << 16);

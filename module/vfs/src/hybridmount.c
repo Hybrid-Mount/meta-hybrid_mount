@@ -1160,7 +1160,6 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
     int i, p, err = 0;
     LIST_HEAD(pending_list);
 
-    /* yeah, this have a lot of mixed declarations, idgaf */
     while (p_len > 1) {
         for (i = p_len - 1; i >= 0; i--)
             if (v_path[i] == '/') break; 
