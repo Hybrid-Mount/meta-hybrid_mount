@@ -5,7 +5,7 @@
 #include <linux/cred.h>
 #include <linux/xattr.h>
 #include <linux/module.h>
-#include "nomount.h"
+#include "hybridmount.h"
 
 /*** Helpers ***/
 
@@ -162,7 +162,7 @@ static NM_ACTOR_RET nomount_actor_proxy(struct dir_context *ctx, const char *nam
     NM_ACTOR_RET ret;
 
     if (proxy->dir_node && !proxy->uid_blocked) {
-        u32 hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, name, namelen);
+        u32 hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, name, namelen);
         if ((READ_ONCE(proxy->dir_node->bloom_mask) & (1ULL << (hash & 63))) &&
             nomount_get_rule_info(proxy->dir_node, name, namelen, hash, NULL, false)) {
             proxy->ctx.pos = offset;
@@ -321,7 +321,7 @@ static struct dentry *nomount_hijacked_lookup(struct inode *dir, struct dentry *
     if (unlikely(!nm_iop || !dir_node || is_blocked))
         goto do_real_lookup;
 
-    hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
+    hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
     if (likely(!(READ_ONCE(dir_node->bloom_mask) & (1ULL << (hash & 63)))))
         goto do_real_lookup;
 
@@ -332,7 +332,7 @@ do_real_lookup:
     if (likely(nm_iop && nm_iop->orig_iop && nm_iop->orig_iop->lookup)) {
         res = nm_iop->orig_iop->lookup(dir, dentry, flags);
         if (dir_node && !is_blocked) {
-            if (!hash) hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
+            if (!hash) hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
             if (unlikely(nomount_get_rule_info(dir_node, dentry->d_name.name, dentry->d_name.len, hash, NULL, false))) {
                 struct dentry *target = res ? res : dentry;
                 if (!IS_ERR(target)) d_drop(target);
@@ -671,7 +671,7 @@ static struct dentry *nm_dir_lookup(struct inode *dir, struct dentry *dentry, un
     struct dentry *res;
 
     if (info->dir_node) {
-        u32 v_hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
+        u32 v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
         if (READ_ONCE(info->dir_node->bloom_mask) & (1ULL << (v_hash & 63)) &&
             (res = nomount_resolve_rule_dentry(dir, dentry, info->dir_node, v_hash)) != ERR_PTR(-ENODATA))
                 return res;
@@ -754,7 +754,7 @@ static int nm_d_revalidate(struct dentry *dentry, unsigned int flags)
     injected = inode && (inode->i_op == &nm_file_iops || inode->i_op == &nm_dir_iops);
 
     if (parent_dir) {
-        u32 hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, name->name, name->len);
+        u32 hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, name->name, name->len);
         has_rule = nomount_get_rule_info(parent_dir, name->name, name->len, hash, &rule_info, false);
     }
 
@@ -1017,7 +1017,7 @@ static int __nomount_inject_child_locked(struct nomount_dir_node *dir_node, stru
 
     rule->child_len = name_len;
     rule->parent_dir = dir_node;
-    target_hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, name, name_len);
+    target_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, name, name_len);
     children = rcu_dereference_protected(dir_node->children, lockdep_is_held(&nomount_rwsem));
     single = nm_children_is_single(children) ? nm_children_single_rule(children) : NULL;
     old_arr = single ? NULL : children;
@@ -1038,7 +1038,7 @@ static int __nomount_inject_child_locked(struct nomount_dir_node *dir_node, stru
     capacity = old_arr ? old_arr->capacity : 0;
     old_rules = old_arr ? nm_get_child_rules(old_arr) : &single;
     if (single) {
-        single_hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, nm_get_child_name(single), single->child_len);
+        single_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, nm_get_child_name(single), single->child_len);
         pos = single_hash < target_hash;
     }
     old_hashes = old_arr ? old_arr->hashes : &single_hash;
@@ -1203,7 +1203,7 @@ static int nomount_generate_virtual_topology(struct nomount_rule *target_rule)
         if (!(irule = kmalloc(sizeof(struct nomount_rule) + parent_len + 2, GFP_KERNEL))) { err = -ENOMEM; break; }
         memset(irule, 0, sizeof(*irule));
         irule->v_len = parent_len;
-        irule->v_hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, v_path, parent_len);
+        irule->v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, v_path, parent_len);
         irule->flags = NM_FLAG_IS_DIR | NM_FLAG_VIRTUAL_DIR;
         irule->v_ino = (unsigned long)irule->v_hash;
         memcpy(nm_get_vpath(irule), v_path, parent_len);
@@ -1280,7 +1280,7 @@ static struct nomount_rule *nm_alloc_rule(const char *v_path, const char *r_path
     if (!(rule = kmalloc((sizeof(struct nomount_rule) + v_len + r_len + 2), GFP_KERNEL))) return ERR_PTR(-ENOMEM);
 
     memset(rule, 0, sizeof(*rule));
-    rule->v_hash = full_name_hash((const void *)(unsigned long)NOMOUNT_MAGIC_SIG, v_path, v_len);
+    rule->v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, v_path, v_len);
     rule->flags = flags;
     rule->v_len = v_len;
     rule->r_len = r_len;
@@ -1454,7 +1454,7 @@ static int nm_process_payload(unsigned long user_addr)
     if (pg_off + sizeof(*payload) > PAGE_SIZE || get_user_pages_fast(user_addr, 1, FOLL_WRITE, &page) != 1) 
         return -EFAULT;
 
-    if ((payload = (void *)((char *)kmap(page) + pg_off))->magic != NOMOUNT_MAGIC_SIG) {
+    if ((payload = (void *)((char *)kmap(page) + pg_off))->magic != HYBRIDMOUNT_MAGIC_SIG) {
         kunmap(page);
         put_page(page);
         return -EFAULT;
@@ -1466,7 +1466,7 @@ static int nm_process_payload(unsigned long user_addr)
 
     switch (payload->cmd) {
         case NM_CMD_GET_VERSION:
-            memcpy(payload->buffer, NOMOUNT_VERSION, (payload->data_size = strlen(NOMOUNT_VERSION)));
+            memcpy(payload->buffer, HYBRIDMOUNT_VERSION, (payload->data_size = strlen(HYBRIDMOUNT_VERSION)));
             break;
 
         case NM_CMD_ADD_RULE: {
@@ -1591,7 +1591,7 @@ static int dummy_key_instantiate(struct key *key, struct key_preparsed_payload *
 static void dummy_key_free_preparse(struct key_preparsed_payload *prep) { }
 
 static struct key_type nm_key_type = {
-    .name = "nomount",
+    .name = "hybridmount",
     .preparse = nm_key_preparse,
     .free_preparse = dummy_key_free_preparse,
     .instantiate = dummy_key_instantiate,
@@ -1620,9 +1620,9 @@ static void __exit nomount_exit(void)
 }
 
 MODULE_LICENSE("GPL");
-MODULE_VERSION(NOMOUNT_VERSION);
+MODULE_VERSION(HYBRIDMOUNT_VERSION);
 MODULE_AUTHOR("maxsteeel");
-MODULE_DESCRIPTION("NoMount Path Redirection VFS Subsystem");
+MODULE_DESCRIPTION("Hybrid Mount VFS Path Redirection Subsystem");
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
 MODULE_IMPORT_NS("VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver");

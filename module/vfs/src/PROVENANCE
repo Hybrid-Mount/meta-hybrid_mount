@@ -1,18 +1,17 @@
 # Fork provenance
 
-This directory is a verbatim import of NoMount's kernel sources. Nothing here has
-been modified other than this file and the retained upstream README, which record
-where the code came from.
+This directory is a fork of NoMount's kernel sources.
 
 upstream  = https://github.com/maxsteeel/nomount
 commit    = 016375cd4a9e7da07b0519dd7bc492101de2a834
 date      = 2026-09-13
 protocol  = "20"
-license   = see LICENSE in this directory. Upstream ships a GPL-3.0 text while the
-            kernel module declares MODULE_LICENSE("GPL") (GPL-2.0-or-later in kernel
-            convention); the two are inconsistent. See ../../THIRD_PARTY.md.
+imported  = Hybrid Mount commit 4485e41c (verbatim import, original filenames nomount.c / nomount.h)
+license   = see LICENSE in this directory. Upstream ships a GPL-3.0 text while the kernel
+            module declares MODULE_LICENSE("GPL") (GPL-2.0-or-later in kernel convention);
+            the two are inconsistent. See ../../THIRD_PARTY.md.
 
-## Imported files (sha256)
+## Imported baseline (sha256, exactly as imported)
 
 f2bc043af419e857e920fb193e42f3b98b32b432ff58ecc4fd722526f97c5c77  nomount.c
 21e34e1c16a2870d464a0f1cf669f976695d2435cbd661c7b3e40f4f8303b6cd  nomount.h
@@ -21,13 +20,20 @@ c85c0ebe247c77882c5ac9f776941bf3a50f859b7d6bfb5bca1e1ccf9bed5b47  Makefile
 3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986  LICENSE
 c42cad879c216d643444b448e8bd461a757cc2754e716520c9d36da6e799324f  UPSTREAM_README.md
 
+These digests describe the files exactly as imported, under their original names. The
+working tree has since diverged. To compare against the pristine baseline, use the
+import commit, for example:
+
+    git show 4485e41c:module/vfs/src/nomount.c
+
+## Hybrid Mount divergence applied so far
+
+- Identity rename: source files, include guard, key type name, protocol version,
+  Kconfig symbol and Makefile object. See the repository history for the exact commits.
+
 ## Syncing with upstream
 
 1. Fetch the upstream revision you want to compare against.
 2. Diff it against the commit recorded above and review every upstream change.
 3. Re-apply the Hybrid Mount divergences on top; never overwrite them blindly.
 4. Update this file (commit, date, digests) in the same commit as the sync.
-
-The paths, symbols and CONFIG_NOMOUNT entry still use the upstream nomount naming.
-The rename to the Hybrid Mount identity happens together with the ABI changes in
-Phase 3, so this baseline stays auditable as an exact upstream snapshot.

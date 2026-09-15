@@ -1,5 +1,5 @@
-#ifndef _LINUX_NOMOUNT_H
-#define _LINUX_NOMOUNT_H
+#ifndef _LINUX_HYBRIDMOUNT_H
+#define _LINUX_HYBRIDMOUNT_H
 
 #include <linux/types.h>
 #include <linux/idr.h>
@@ -14,8 +14,8 @@
 #include <linux/version.h>
 #include <linux/compat.h>
 
-#define NOMOUNT_VERSION "20"
-#define NOMOUNT_MAGIC_SIG 0x4E4F4D4F554E54ULL /* "NOMOUNT" in hex */
+#define HYBRIDMOUNT_VERSION "hm1"
+#define HYBRIDMOUNT_MAGIC_SIG 0x4E4F4D4F554E54ULL /* upstream NoMount magic value, retained until Phase 0 */
 #define NM_FLAG_IS_DIR      (1 << 0)
 #define NM_FLAG_VIRTUAL_DIR (1 << 1)
 #define NM_FLAG_WHITEOUT    (1 << 2)
@@ -577,7 +577,7 @@ static inline int nm_uid_del(uid_t target)
 }
 
 /* ============================ */
-/* NOMOUNT PAYLOAD PROTOCOL     */
+/* HYBRIDMOUNT PAYLOAD PROTOCOL     */
 /* ============================ */
 
 enum {
@@ -719,4 +719,4 @@ static inline const struct dentry_operations *nm_get_orig_dops(struct nm_iop *io
     return (dops == NM_DOP_INITIALIZING) ? NULL : dops;
 }
 
-#endif /* _LINUX_NOMOUNT_H */
+#endif /* _LINUX_HYBRIDMOUNT_H */
