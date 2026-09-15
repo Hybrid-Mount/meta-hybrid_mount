@@ -29,6 +29,7 @@ fn default_config_toml_snapshot_is_stable() {
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
+vfs_strict = false
 
 [rules]
 "#;
@@ -109,7 +110,7 @@ fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
     let dir = test_dir("legacy-daemon-mode");
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("config.toml");
-    // Issue #409: this obsolete key caused strict boot loading to abort.
+    // This obsolete key previously caused strict boot loading to abort.
     let original = r#"moduledir = "/data/adb/modules"
 overlay_mode = "tmpfs"
 disable_umount = true
@@ -263,6 +264,7 @@ fn json_uses_contract_shape() {
             "overlay_mode": "ext4",
             "disable_umount": false,
             "default_mode": "overlay",
+            "vfs_strict": false,
             "rules": {}
         })
     );
@@ -832,4 +834,43 @@ fn test_dir(tag: &str) -> PathBuf {
 
 fn cleanup(dir: &Path) {
     fs::remove_dir_all(dir).ok();
+}
+
+#[test]
+fn vfs_is_accepted_as_global_and_path_mode() {
+    let config = crate::config::Config::from_toml(
+        "default_mode = \"vfs\"\n\n[rules.\"mod_a\".paths]\n\"system/etc/hosts\" = \"vfs\"\n",
+    )
+    .unwrap();
+    assert_eq!(config.default_mode, crate::config::Mode::Vfs);
+    assert_eq!(
+        config.rules[&crate::module_id::ModuleId::try_from("mod_a").unwrap()].paths["system/etc/hosts"],
+        crate::config::Mode::Vfs
+    );
+}
+
+#[test]
+fn vfs_serializes_lowercase() {
+    let toml = crate::config::Config::from_toml("default_mode = \"vfs\"\n")
+        .unwrap()
+        .to_toml()
+        .unwrap();
+    assert!(toml.contains("default_mode = \"vfs\""));
+}
+
+#[test]
+fn vfs_strict_and_isolated_uids_parse_and_roundtrip() {
+    let config =
+        crate::config::Config::from_toml("vfs_strict = true\nvfs_isolate_uids = [1000, 1001]\n")
+            .unwrap();
+    assert!(config.vfs_strict);
+    assert_eq!(config.vfs_isolate_uids, vec![1000, 1001]);
+    assert!(config.to_toml().unwrap().contains("vfs_isolate_uids = ["));
+}
+
+#[test]
+fn vfs_fields_default_off() {
+    let config = crate::config::Config::from_toml("").unwrap();
+    assert!(!config.vfs_strict);
+    assert!(config.vfs_isolate_uids.is_empty());
 }

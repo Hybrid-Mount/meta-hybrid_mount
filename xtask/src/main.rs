@@ -282,6 +282,10 @@ fn build(release: bool) -> Result<()> {
     )
     .context("failed to stage module files")?;
 
+    // The VFS kernel sources are development input for module/vfs/setup.sh; the
+    // runtime only needs module/vfs/binaries.
+    remove_dir_if_exists(&stage.join("vfs").join("src"))?;
+
     for (suffix, binary) in binaries {
         let staged_binary = stage
             .join("binaries")

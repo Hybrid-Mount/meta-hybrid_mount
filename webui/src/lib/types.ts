@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-export type MountMode = "overlay" | "magic" | "ignore";
+export type MountMode = "overlay" | "magic" | "vfs" | "ignore";
 export type DefaultMountMode = Exclude<MountMode, "ignore">;
 export type OverlayMode = "tmpfs" | "ext4";
 export type UiStyle = "miuix" | "md3";
@@ -48,6 +48,7 @@ export interface MountStatistics {
 export interface ModeStats {
   overlayfs: number;
   magicmount: number;
+  vfs: number;
 }
 
 export interface RunState {
@@ -61,6 +62,9 @@ export interface RunState {
   active_mounts: string[];
   overlay_active_mounts: string[];
   magic_active_mounts: string[];
+  vfs_modules: string[];
+  vfs_active_mounts: string[];
+  vfs_provider?: string | null;
   mount_error_modules: string[];
   mount_error_reasons: Record<string, string>;
   mount_stats: MountStatistics;

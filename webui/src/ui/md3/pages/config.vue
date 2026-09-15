@@ -11,10 +11,11 @@ import { ICONS } from "../icons";
 
 const { t } = useI18n();
 const resetOpen = ref(false);
-const modeOptions: DefaultMountMode[] = ["overlay", "magic"];
+const modeOptions: DefaultMountMode[] = ["overlay", "magic", "vfs"];
 const modeLabels = computed<Record<DefaultMountMode, string>>(() => ({
   overlay: t("config.modeOverlay"),
   magic: t("config.modeMagic"),
+  vfs: t("config.modeVfs"),
 }));
 const languageOptions = computed<SelectOption[]>(() =>
   uiStore.availableLanguages.map((language) => ({

@@ -65,6 +65,7 @@ pub struct MountStatistics {
 pub struct ModeStats {
     pub overlayfs: usize,
     pub magicmount: usize,
+    pub vfs: usize,
 }
 
 /// `run/state.json` 的来源状态。损坏状态必须能在 `status` JSON 中查询到，
@@ -129,6 +130,15 @@ pub struct RunState {
     pub overlay_active_mounts: Vec<String>,
     /// Successful Magic Mount bind and directory targets from the same boot snapshot.
     pub magic_active_mounts: Vec<String>,
+    /// VFS 注入模块与成功目标；VFS 不是真实挂载，不进入 `active_mounts`。
+    pub vfs_modules: Vec<String>,
+    pub vfs_active_mounts: Vec<String>,
+    /// 本次启动实际绑定的 Provider（v2 只有 `hm`）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vfs_provider: Option<String>,
+    /// 单向守卫结果：设备上是否已存在外来 NoMount 实现。
+    #[serde(default)]
+    pub vfs_foreign_nomount: bool,
     /// Final mountinfo-confirmed targets; executor attempts stay in `mount_stats`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub confirmed_active_mounts: Vec<String>,
@@ -250,6 +260,10 @@ impl RunState {
             active_mounts,
             overlay_active_mounts,
             magic_active_mounts,
+            vfs_modules: Vec::new(),
+            vfs_active_mounts: Vec::new(),
+            vfs_provider: None,
+            vfs_foreign_nomount: false,
             confirmed_active_mounts: Vec::new(),
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
@@ -300,8 +314,14 @@ impl RunState {
             ModeStats {
                 overlayfs: plan.overlay_module_ids.len(),
                 magicmount: plan.magic_module_ids.len(),
+                vfs: plan.vfs_module_ids.len(),
             },
         );
+        state.vfs_modules = plan
+            .vfs_module_ids
+            .iter()
+            .map(ModuleId::to_string)
+            .collect();
         state.mount_error_modules = mount_error_modules;
         state.mount_error_reasons = mount_error_reasons;
         state
@@ -383,6 +403,8 @@ pub fn app_modules(
                 Mode::Overlay
             } else if plan.magic_module_ids.contains(&module.id) {
                 Mode::Magic
+            } else if plan.vfs_module_ids.contains(&module.id) {
+                Mode::Vfs
             } else {
                 Mode::Ignore
             };
@@ -761,6 +783,21 @@ mod tests {
     }
 
     #[test]
+    fn mode_stats_exposes_vfs_counter() {
+        let json = serde_json::to_string(&ModeStats::default()).unwrap();
+        assert!(json.contains("\"vfs\":0"), "json was {json}");
+    }
+
+    #[test]
+    fn run_state_defaults_vfs_provider_to_none() {
+        let state = RunState::default();
+        assert!(state.vfs_provider.is_none());
+        assert!(!state.vfs_foreign_nomount);
+        assert!(state.vfs_modules.is_empty());
+        assert!(state.vfs_active_mounts.is_empty());
+    }
+
+    #[test]
     fn app_modules_reflect_plan_backend_and_rules() {
         let modules = [
             record("overlay_mod"),
@@ -1077,6 +1114,7 @@ mod tests {
             ModeStats {
                 overlayfs: 1,
                 magicmount: 1,
+                vfs: 0,
             },
         );
 
@@ -1285,6 +1323,10 @@ mod tests {
             active_mounts: vec!["/system".to_owned()],
             overlay_active_mounts: vec!["/system".to_owned()],
             magic_active_mounts: Vec::new(),
+            vfs_modules: Vec::new(),
+            vfs_active_mounts: Vec::new(),
+            vfs_provider: None,
+            vfs_foreign_nomount: false,
             confirmed_active_mounts: vec!["/system".to_owned()],
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
@@ -1297,6 +1339,7 @@ mod tests {
             mode_stats: ModeStats {
                 overlayfs: 1,
                 magicmount: 1,
+                vfs: 0,
             },
             state_load: StateLoadInfo::loaded(),
             failed_stage: Some("mount_execution".to_owned()),

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
+import { normalizeConfigPayload } from "./api";
 import { cloneAppConfig } from "./config";
 import type { AppConfig } from "./types";
 
@@ -28,5 +29,11 @@ describe("cloneAppConfig", () => {
     expect(cloned.rules.demo).not.toBe(source.rules.demo);
     expect(cloned.rules.demo.paths).not.toBe(source.rules.demo.paths);
     expect(source.rules.demo.paths["system/etc/hosts"]).toBe("overlay");
+  });
+});
+
+describe("normalizeConfigPayload", () => {
+  it("accepts vfs as a default mode", () => {
+    expect(normalizeConfigPayload({ default_mode: "vfs" }).default_mode).toBe("vfs");
   });
 });

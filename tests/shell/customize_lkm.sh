@@ -13,6 +13,7 @@ run_case() {
   expect_lkm="$4"
   case_dir=$(mktemp -d)
   mkdir "$case_dir/lkm"
+  mkdir -p "$case_dir/vfs/src" "$case_dir/vfs/binaries"
 
   (
     MODPATH="$case_dir"
@@ -35,6 +36,10 @@ run_case() {
   else
     test ! -e "$case_dir/lkm"
   fi
+  # Development-only kernel sources are pruned; prebuilt modules are retained.
+  test ! -e "$case_dir/vfs/src"
+  test -d "$case_dir/vfs/binaries"
+  rmdir "$case_dir/vfs/binaries" "$case_dir/vfs"
   rmdir "$case_dir"
   printf '%s installer branch: ok\n' "$case_name"
 }

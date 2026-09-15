@@ -49,10 +49,10 @@ function stringToHex(str: string): string {
 }
 
 const isMountMode = (value: unknown): value is MountMode =>
-  value === "overlay" || value === "magic" || value === "ignore";
+  value === "overlay" || value === "magic" || value === "vfs" || value === "ignore";
 
 const isDefaultMountMode = (value: unknown): value is DefaultMountMode =>
-  value === "overlay" || value === "magic";
+  value === "overlay" || value === "magic" || value === "vfs";
 
 const isOverlayMode = (value: unknown): value is OverlayMode =>
   value === "tmpfs" || value === "ext4";
@@ -187,6 +187,9 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
     active_mounts: [...new Set(activeMounts)].sort(),
     overlay_active_mounts: [...new Set(overlayActiveMounts)].sort(),
     magic_active_mounts: [...new Set(magicActiveMounts)].sort(),
+    vfs_modules: normalizeStringArray(payload.vfs_modules),
+    vfs_active_mounts: normalizeStringArray(payload.vfs_active_mounts),
+    vfs_provider: typeof payload.vfs_provider === "string" ? payload.vfs_provider : null,
     mount_error_modules: Array.isArray(payload.mount_error_modules)
       ? payload.mount_error_modules.map(String)
       : [],
@@ -222,6 +225,7 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
       magicmount: Number(
         (payload.mode_stats as Record<string, unknown>)?.magicmount ?? 0,
       ),
+      vfs: Number((payload.mode_stats as Record<string, unknown>)?.vfs ?? 0),
     },
   };
 }

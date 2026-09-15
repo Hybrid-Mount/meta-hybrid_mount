@@ -41,3 +41,4 @@ ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.2.0" }
 loopdev = { git = "https://github.com/Hybrid-Mount/loopdev.git", version = "0.5.0" }
 procfs = "0.18"
 rustix = { version = "1.1.4", features = ["fs", "mount", "thread"] }
+libc = "0.2"

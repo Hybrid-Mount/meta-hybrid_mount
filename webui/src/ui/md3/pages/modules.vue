@@ -12,10 +12,11 @@ import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.
 import { ICONS } from "../icons";
 
 const { t } = useI18n();
-const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
+const modeOptions: MountMode[] = ["overlay", "magic", "vfs", "ignore"];
 const modeLabels = computed<Record<MountMode, string>>(() => ({
   overlay: t("config.modeOverlay"),
   magic: t("config.modeMagic"),
+  vfs: t("config.modeVfs"),
   ignore: t("config.modeIgnore"),
 }));
 const modeSelectOptions = computed<SelectOption[]>(() =>

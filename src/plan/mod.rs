@@ -37,6 +37,7 @@ pub struct MountPlan {
     pub overlay_files: BTreeMap<String, Vec<PathBuf>>,
     pub overlay_module_ids: Vec<ModuleId>,
     pub magic_module_ids: Vec<ModuleId>,
+    pub vfs_module_ids: Vec<ModuleId>,
 }
 
 pub struct PlanInput<'a> {
@@ -65,6 +66,8 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     }
 
     ensure_replace_backend_consistency(&builder.tree.root, "")?;
+    ensure_vfs_not_shadowed(&builder.tree.root, "", None)?;
+    ensure_vfs_opaque_exclusive(&builder.tree.root, "", None)?;
     Ok(builder.finish())
 }
 
@@ -134,6 +137,7 @@ struct PlanBuilder {
     overlay_files_by_target: BTreeMap<String, BTreeSet<(ModuleId, PathBuf)>>,
     overlay_module_ids: BTreeSet<ModuleId>,
     magic_module_ids: BTreeSet<ModuleId>,
+    vfs_module_ids: BTreeSet<ModuleId>,
     /// 跨模块分配表:target -> 已分配的节点,用于冲突检测。
     assignments: BTreeMap<String, Vec<TargetAssignment>>,
 }
@@ -235,6 +239,7 @@ impl PlanBuilder {
             overlay_files,
             overlay_module_ids: self.overlay_module_ids.into_iter().collect(),
             magic_module_ids: self.magic_module_ids.into_iter().collect(),
+            vfs_module_ids: self.vfs_module_ids.into_iter().collect(),
         }
     }
 }
@@ -296,6 +301,7 @@ fn process_module(
         .count();
     if overlay_count == 0 {
         collect_magic(module, &decisions, builder);
+        collect_vfs(module, &decisions, builder);
         return Ok(());
     }
 
@@ -358,6 +364,7 @@ fn process_module(
     }
 
     collect_magic(module, &decisions, builder);
+    collect_vfs(module, &decisions, builder);
     Ok(())
 }
 
@@ -434,6 +441,14 @@ fn collect_magic(
     builder.magic_module_ids.insert(module.id.clone());
 }
 
+fn collect_vfs(module: &ModuleRecord, decisions: &[EntryDecision<'_>], builder: &mut PlanBuilder) {
+    if !decisions.iter().any(|decision| decision.mode == Mode::Vfs) {
+        return;
+    }
+
+    builder.vfs_module_ids.insert(module.id.clone());
+}
+
 /// Magic `.replace` 在 Overlay 阶段之后替换整个目标目录，因此不能包含已先行
 /// 挂载的 Overlay 后代。Overlay `.replace` 则可由后续 Magic 补入选中子节点。
 fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<()> {
@@ -465,6 +480,98 @@ fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<
 
     for child in node.children.values() {
         ensure_replace_backend_consistency(child, &current_target)?;
+    }
+    Ok(())
+}
+
+/// VFS 规则作用在真实目录上；任何被 Overlay / Magic 以目录形式占用的祖先
+/// 目录都会遮蔽其后代注入，因此必须在 plan 阶段显式报错。
+///
+/// 采用保守判定：只要祖先节点存在 Overlay/Magic 的目录来源（含 `.replace`），
+/// 其下任何 Vfs 来源都视为被遮蔽。
+fn ensure_vfs_not_shadowed(
+    node: &MountNode,
+    target: &str,
+    ancestor_mount: Option<(Mode, &MountSource)>,
+) -> Result<()> {
+    let current_target = if node.name.is_empty() {
+        target.to_owned()
+    } else if target.is_empty() {
+        format!("/{}", node.name)
+    } else {
+        format!("{target}/{}", node.name)
+    };
+
+    if let (Some((mode, source)), Some(vfs_source)) = (
+        ancestor_mount,
+        node.sources
+            .iter()
+            .find(|source| source.backend == Mode::Vfs),
+    ) {
+        return Err(Error::PlanConflict {
+            target: current_target,
+            first_backend: mode.as_str().to_owned(),
+            first_source: format!("{}:{}", source.module_id, source.relative),
+            second_backend: Mode::Vfs.as_str().to_owned(),
+            second_source: format!("{}:{}", vfs_source.module_id, vfs_source.relative),
+        });
+    }
+
+    let self_mount = node
+        .sources
+        .iter()
+        .find(|source| {
+            matches!(source.backend, Mode::Overlay | Mode::Magic)
+                && (source.file_type == NodeFileType::Directory || source.replace)
+        })
+        .map(|source| (source.backend, source));
+
+    let child_mount = self_mount.or(ancestor_mount);
+    for child in node.children.values() {
+        ensure_vfs_not_shadowed(child, &current_target, child_mount)?;
+    }
+    Ok(())
+}
+
+/// VFS 的 `.replace` 目录按 Magisk 语义替换整个子树：目录保持可见，真实条目全部隐藏，
+/// 只显示注入子项。因此该子树内不得存在 overlay / magic 来源，否则它们的挂载内容会被
+/// opaque 规则一并隐藏。
+fn ensure_vfs_opaque_exclusive(
+    node: &MountNode,
+    target: &str,
+    opaque_owner: Option<&MountSource>,
+) -> Result<()> {
+    let current_target = if node.name.is_empty() {
+        target.to_owned()
+    } else if target.is_empty() {
+        format!("/{}", node.name)
+    } else {
+        format!("{target}/{}", node.name)
+    };
+
+    let owner = node
+        .sources
+        .iter()
+        .find(|source| source.backend == Mode::Vfs && source.replace)
+        .or(opaque_owner);
+
+    if let Some(owner) = owner
+        && let Some(other) = node
+            .sources
+            .iter()
+            .find(|source| source.backend != Mode::Vfs)
+    {
+        return Err(Error::PlanConflict {
+            target: current_target,
+            first_backend: Mode::Vfs.as_str().to_owned(),
+            first_source: format!("{}:{} (.replace)", owner.module_id, owner.relative),
+            second_backend: other.backend.as_str().to_owned(),
+            second_source: format!("{}:{}", other.module_id, other.relative),
+        });
+    }
+
+    for child in node.children.values() {
+        ensure_vfs_opaque_exclusive(child, &current_target, owner)?;
     }
     Ok(())
 }
@@ -1389,5 +1496,111 @@ mod tests {
         assert_eq!(scanned, crate::scanner::list_modules(&root, &[]).unwrap());
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn vfs_module_is_recorded_in_plan() {
+        let module = record("vfs_mod", &[("system/etc/hosts", false)]);
+        let result = plan(&[module], &config(Mode::Vfs, no_rules()), &[]);
+        assert_eq!(
+            result.vfs_module_ids,
+            vec![ModuleId::try_from("vfs_mod").unwrap()]
+        );
+        assert!(result.overlay_module_ids.is_empty());
+        assert!(result.magic_module_ids.is_empty());
+    }
+
+    #[test]
+    fn vfs_file_under_overlay_directory_is_rejected() {
+        let mut rules = no_rules();
+        rules.insert(
+            "alpha".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Overlay),
+                paths: BTreeMap::new(),
+            },
+        );
+        rules.insert(
+            "beta".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Vfs),
+                paths: BTreeMap::new(),
+            },
+        );
+        let alpha = record("alpha", &[("system/etc", true)]);
+        let beta = record("beta", &[("system/etc/hosts", false)]);
+        let err = plan_err(&[alpha, beta], &config(Mode::Magic, rules));
+        let Error::PlanConflict {
+            target,
+            first_source,
+            second_source,
+            ..
+        } = err
+        else {
+            panic!("unexpected: {err}");
+        };
+        assert!(
+            first_source.contains("alpha:"),
+            "first_source should name the shadowing module, got: {first_source}"
+        );
+        assert!(
+            second_source.contains("beta:"),
+            "second_source should name the shadowed module, got: {second_source}"
+        );
+        assert_eq!(target, "/system/etc/hosts");
+    }
+
+    #[test]
+    fn vfs_file_without_mounted_ancestor_is_allowed() {
+        let mut rules = no_rules();
+        rules.insert(
+            "alpha".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Overlay),
+                paths: BTreeMap::new(),
+            },
+        );
+        rules.insert(
+            "beta".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Vfs),
+                paths: BTreeMap::new(),
+            },
+        );
+        let alpha = record("alpha", &[("system/etc/other", true)]);
+        let beta = record("beta", &[("system/etc/hosts", false)]);
+        let result = plan(&[alpha, beta], &config(Mode::Magic, rules), &[]);
+        assert_eq!(result.vfs_module_ids.len(), 1);
+    }
+
+    #[test]
+    fn vfs_replace_directory_is_allowed() {
+        let mut module = record("vfs_replace", &[("system/etc", true)]);
+        module.entries[0].replace = true;
+
+        let planned = plan(&[module], &config(Mode::Vfs, no_rules()), &[]);
+        assert_eq!(planned.vfs_module_ids.len(), 1);
+    }
+
+    #[test]
+    fn vfs_replace_subtree_rejects_other_backends() {
+        let rules = BTreeMap::from([(
+            "vfs_replace".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Vfs),
+                paths: BTreeMap::from([("system/etc/hosts".to_owned(), Mode::Overlay)]),
+            },
+        )]);
+        let mut module = record(
+            "vfs_replace",
+            &[("system/etc", true), ("system/etc/hosts", false)],
+        );
+        module.entries[0].replace = true;
+
+        let err = plan_err(&[module], &config(Mode::Vfs, rules));
+        assert!(
+            matches!(err, Error::PlanConflict { .. }),
+            "unexpected: {err}"
+        );
     }
 }

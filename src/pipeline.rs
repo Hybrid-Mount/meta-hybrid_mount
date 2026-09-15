@@ -37,6 +37,18 @@ use crate::state::{RunState, app_modules, mounted_module_ids_for_snapshot, write
 use crate::timing::PhaseTimer;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel, select_provider};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::exec::{VfsApplied, VfsExecStats};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::lkm::VfsLkmLoader;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::sys::KeyringChannel;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::cell::RefCell;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::rc::Rc;
 
 /// 无参数启动挂载流水线的统一入口。
 pub fn run_mount_pipeline() -> Result<()> {
@@ -300,7 +312,13 @@ fn prepare_overlay_storage(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-type MountExecutionResult = (usize, usize, Vec<String>, exec::MagicMountStats);
+type MountExecutionResult = (
+    usize,
+    usize,
+    Vec<String>,
+    exec::MagicMountStats,
+    crate::vfs::exec::VfsExecStats,
+);
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn execute_mount_phases(
@@ -429,6 +447,10 @@ fn execute_mount_phases(
     )?;
     magic_phase.finish();
 
+    let vfs_phase = PhaseTimer::start("vfs");
+    let vfs_stats = apply_vfs_phase(config, plan, state, transaction)?;
+    vfs_phase.finish();
+
     crate::utils::ksu::commit_unmount_list()?;
 
     Ok((
@@ -436,6 +458,7 @@ fn execute_mount_phases(
         shallow_overlay_mounts,
         active_mounts,
         magic_stats,
+        vfs_stats,
     ))
 }
 
@@ -761,7 +784,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         crate::utils::ksu::clear_unmount_list()
     });
     let mut mounted = MountedTargets::default();
-    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats) =
+    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats, vfs_stats) =
         match execute_mount_phases(
             &config,
             &modules,
@@ -822,6 +845,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // Symlink/whiteout-only magic modules have successful execution results
     // but no mount target; include them from the executor stats.
     mounted_module_ids.extend(magic_stats.mounted_module_ids.iter().cloned());
+    mounted_module_ids.extend(vfs_stats.mounted_module_ids.iter().cloned());
     let app_modules = app_modules(
         &modules,
         &config,
@@ -846,6 +870,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     state.active_mounts = confirmed_active_mounts.clone();
     state.overlay_active_mounts = confirmed_overlay_targets;
     state.magic_active_mounts = confirmed_magic_targets;
+    state.vfs_active_mounts = vfs_stats.active_targets.clone();
     state.confirmed_active_mounts = confirmed_active_mounts;
     state.mount_stats = pipeline_stats(
         overlay_dir_mounts,
@@ -1533,6 +1558,165 @@ fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
     crate::sys::fs::copy_prepared_entry(source, dest)
+}
+
+/// VFS boot guard 的 RAII 守卫：arm 成功后，函数以任何已处理方式返回
+/// （Ok 或 Err）都会在 Drop 中清除 guard；只有硬崩溃（Drop 不执行）才保留
+/// guard 触发下次启动熔断。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+struct VfsBootGuard {
+    path: PathBuf,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl VfsBootGuard {
+    fn arm() -> Result<Self> {
+        let path = PathBuf::from(defs::VFS_BOOT_GUARD_PATH);
+        crate::sys::fs::atomic_write(&path, b"1").map_err(|err| {
+            let cause = match err {
+                Error::Io(source) => crate::errors::CausalError::Io(source),
+                other => crate::errors::CausalError::Message(other.to_string()),
+            };
+            Error::Vfs(Box::new(crate::errors::ContextError::new(
+                "write vfs boot guard",
+                Some(path.clone()),
+                cause,
+            )))
+        })?;
+        Ok(Self { path })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for VfsBootGuard {
+    fn drop(&mut self) {
+        if let Err(err) = fs::remove_file(&self.path) {
+            log::warn!("clear vfs boot guard failed: {err}");
+        }
+    }
+}
+
+/// 单向守卫：探测设备上是否已存在外来 NoMount 实现。
+///
+/// 只探测一次，不读取对方规则、不做互斥仲裁。探测失败（key type 未注册、平台不支持
+/// 或内存分配失败）一律视为“不存在”，因此它是纵深防御而非唯一保证：K2 与 NoMount 使用
+/// 不同 key type，且 setup.sh 在集成层拒绝二者共存。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn detect_foreign_nomount() -> bool {
+    match KeyringKernel::new(KeyringChannel::Nomount) {
+        Ok(mut probe) => match probe.version() {
+            Ok(version) => {
+                log::warn!("foreign NoMount VFS implementation detected (version {version})");
+                true
+            }
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
+/// 定向回滚闭包：删除本次计划下发的完整批次（VfsApplied::rules）。
+///
+/// 批次在下发前登记，因此中途失败时已生效的前缀也会被删除；尚未生效的规则由
+/// remove_rules 容忍 ENOENT（内核在规则缺失时回写 -ENOENT）。不触碰 Provider 中
+/// 其它来源的规则（改用 DEL_RULE 而非 CLEAR_RULES）。借用失败或内核删除失败返回
+/// 结构化错误，交由事务汇总为清理失败。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn rollback_vfs_rules(
+    shared: Rc<RefCell<KeyringKernel>>,
+    applied: Rc<RefCell<VfsApplied>>,
+) -> impl FnOnce() -> Result<()> {
+    move || {
+        let rules = std::mem::take(&mut applied.borrow_mut().rules);
+        let mut kernel = shared.try_borrow_mut().map_err(|err| {
+            log::error!("rollback vfs rules failed to borrow kernel: {err}");
+            Error::Vfs(Box::new(crate::errors::ContextError::new(
+                "rollback vfs rules",
+                None,
+                crate::errors::CausalError::Message(format!("vfs kernel borrow failed: {err}")),
+            )))
+        })?;
+        if rules.is_empty() {
+            return Ok(());
+        }
+        kernel.remove_rules(&rules)
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn apply_vfs_phase(
+    config: &Config,
+    plan: &MountPlan,
+    state: &mut RunState,
+    transaction: &mut crate::sys::transaction::MountTransaction<'_>,
+) -> Result<VfsExecStats> {
+    if plan.vfs_module_ids.is_empty() {
+        return Ok(VfsExecStats::default());
+    }
+    let guard = Path::new(defs::VFS_BOOT_GUARD_PATH);
+    if guard.exists() {
+        log::warn!("vfs boot guard present; skipping vfs backend this boot");
+        return Ok(VfsExecStats::default());
+    }
+    // 写 guard 后，任何已处理返回（Ok 或 Err）都由 VfsBootGuard::drop 清除；
+    // 只有硬崩溃（Drop 不执行）才保留 guard 触发下次启动熔断。
+    let _guard = VfsBootGuard::arm()?;
+
+    let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
+    let loader = VfsLkmLoader;
+    let foreign_nomount = detect_foreign_nomount();
+    state.vfs_foreign_nomount = foreign_nomount;
+    let provider = match select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, foreign_nomount)
+    {
+        Ok(Some(provider)) => provider,
+        Ok(None) => {
+            log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
+            if config.vfs_strict {
+                return Err(Error::VfsUnavailable {
+                    reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+                });
+            }
+            return Ok(VfsExecStats::default());
+        }
+        // 版本不受支持、或存在外来 NoMount 实现：默认降级，只有 vfs_strict 才让启动失败。
+        Err(err @ (Error::VfsUnsupportedVersion { .. } | Error::VfsForeignNomount { .. })) => {
+            log::warn!("vfs backend is not attached, treating it as unavailable: {err}");
+            if config.vfs_strict {
+                return Err(err);
+            }
+            return Ok(VfsExecStats::default());
+        }
+        Err(err) => return Err(err),
+    };
+
+    // 先构建完整批次并登记回滚，再下发：apply_rules 非原子，中途失败时已生效的
+    // 前缀同样必须删除。未生效的规则由 DEL_RULE 的 ENOENT 容忍——内核按
+    // (vpath, uid) 精确匹配，规则不存在时回写 -ENOENT。回滚始终是定向删除，
+    // 不得清空 Provider 的整张规则表（可能含其它模块预先安装的规则）。
+    let planned = crate::vfs::exec::plan_rules(plan)?;
+    let stats = planned.stats.clone();
+    let shared = Rc::new(RefCell::new(kernel));
+    let applied = Rc::new(RefCell::new(planned));
+    transaction.register_rollback_only(
+        "vfs_rules",
+        rollback_vfs_rules(Rc::clone(&shared), Rc::clone(&applied)),
+    );
+
+    {
+        let mut kernel = shared.borrow_mut();
+        let batch = applied.borrow();
+        crate::vfs::exec::apply_rules(&mut *kernel, &batch, &config.vfs_isolate_uids)?;
+    }
+
+    state.vfs_provider = Some(provider.as_str().to_owned());
+    log::info!(
+        "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
+        provider.as_str(),
+        stats.injected,
+        stats.whiteouts,
+        stats.opaque
+    );
+    Ok(stats)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

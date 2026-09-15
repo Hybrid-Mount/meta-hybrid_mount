@@ -26,10 +26,11 @@ const { t } = useI18n();
 
 const searchQuery = ref("");
 const filter = ref<ModuleFilter>("active");
-const modeOptions: MountMode[] = ["overlay", "magic", "ignore"];
+const modeOptions: MountMode[] = ["overlay", "magic", "vfs", "ignore"];
 const modeLabels = computed(() => [
   t("config.modeOverlay"),
   t("config.modeMagic"),
+  t("config.modeVfs"),
   t("config.modeIgnore"),
 ]);
 const filterOptions = computed<MiuixSelectOption[]>(() => [
@@ -77,6 +78,7 @@ function ruleFor(module: Module): ModuleRule {
       default_mode:
         rule.default_mode === "overlay" ||
         rule.default_mode === "magic" ||
+        rule.default_mode === "vfs" ||
         rule.default_mode === "ignore"
           ? rule.default_mode
           : null,

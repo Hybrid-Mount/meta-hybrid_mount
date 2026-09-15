@@ -156,6 +156,10 @@
   background-color: var(--md-sys-color-tertiary-container);
 }
 
+.bar-vfs {
+  background-color: var(--md-sys-color-primary-container);
+}
+
 .stats-legend {
   display: flex;
   flex-wrap: wrap;
@@ -185,6 +189,10 @@
 
 .dot-magic {
   background-color: var(--md-sys-color-tertiary-container);
+}
+
+.dot-vfs {
+  background-color: var(--md-sys-color-primary-container);
 }
 
 .info-card {

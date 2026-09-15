@@ -1,0 +1,10 @@
+# Kconfig for the Hybrid Mount VFS kernel subsystem (K2)
+
+config HYBRIDMOUNT
+	tristate "Hybrid Mount VFS Path Redirection Subsystem"
+	default y
+	help
+	  Hybrid Mount's VFS path redirection subsystem. It injects, hides and
+	  redirects paths without mounting filesystems, and is driven by the Hybrid
+	  Mount metamodule over the keyring. It is not compatible with NoMount's
+	  metamodule or its tooling.

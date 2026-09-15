@@ -34,6 +34,12 @@ else
   ui_print "- Non-KernelSU environment: retained compatibility LKM"
 fi
 
+# The VFS kernel source is input for the built-in integration path
+# (module/vfs/setup.sh) and is available from the repository; runtime only needs
+# the prebuilt modules. Unlike the ext4 compatibility LKM this subtree must stay
+# on every platform, because there is no ioctl alternative for the VFS backend.
+rm -rf "$MODPATH/vfs/src"
+
 BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
 BIN_TARGET="$MODPATH/hybrid-mount"
 if [ ! -f "$BIN_SOURCE" ]; then

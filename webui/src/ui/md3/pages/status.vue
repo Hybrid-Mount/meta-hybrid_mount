@@ -21,6 +21,7 @@ const mountedCount = computed(
 );
 const overlayCount = computed(() => sysStore.state?.mode_stats.overlayfs ?? 0);
 const magicCount = computed(() => sysStore.state?.mode_stats.magicmount ?? 0);
+const vfsCount = computed(() => sysStore.state?.mode_stats.vfs ?? 0);
 const overlayMountCount = computed(
   () => sysStore.state?.mount_stats.overlayfs_mounts ?? 0,
 );
@@ -30,12 +31,15 @@ const magicFileMountCount = computed(
 const magicSymlinkCount = computed(
   () => sysStore.state?.mount_stats.symlinks_created ?? 0,
 );
-const modeTotal = computed(() => overlayCount.value + magicCount.value);
+const modeTotal = computed(() => overlayCount.value + magicCount.value + vfsCount.value);
 const overlayWidth = computed(() =>
   modeTotal.value ? `${(overlayCount.value / modeTotal.value) * 100}%` : "0%",
 );
 const magicWidth = computed(() =>
   modeTotal.value ? `${(magicCount.value / modeTotal.value) * 100}%` : "0%",
+);
+const vfsWidth = computed(() =>
+  modeTotal.value ? `${(vfsCount.value / modeTotal.value) * 100}%` : "0%",
 );
 const activeMounts = computed(() =>
   uniqueActiveMounts(sysStore.state?.active_mounts ?? []),
@@ -102,6 +106,7 @@ onMounted(refresh);
         <div class="stats-bar-container" :aria-label="t('status.modeStats')">
           <div class="bar-segment bar-overlay" :style="{ width: overlayWidth }" />
           <div class="bar-segment bar-magic" :style="{ width: magicWidth }" />
+          <div class="bar-segment bar-vfs" :style="{ width: vfsWidth }" />
         </div>
         <div class="stats-legend">
           <div class="legend-item">
@@ -123,6 +128,13 @@ onMounted(refresh);
                   symlinks: magicSymlinkCount,
                 })
               }}
+            </span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot-vfs" />
+            <span>
+              {{ t("config.modeVfs") }}:
+              {{ t("status.moduleCount", { count: vfsCount }) }}
             </span>
           </div>
         </div>

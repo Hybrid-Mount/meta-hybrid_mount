@@ -10,7 +10,7 @@
 
 - `webui` Align contracts and clean up Miuix components
 
-- `config` Accept retired daemon setting during upgrades Preserve active configuration and module rules when daemon_startup_mode remains from an older release. Continue rejecting unknown fields and malformed values. Refs #409.
+- `config` Accept retired daemon setting during upgrades Preserve active configuration and module rules when daemon_startup_mode remains from an older release. Continue rejecting unknown fields and malformed values.
 
 - `notify` Upgrade to tgbot 0.48 and migrate document uploads Upgrade tgbot to 0.48 and migrate single-document and media-group uploads to the new caption and conversion APIs. Preserve HTML formatting and topic routing, with offline request-construction regression coverage. All PR checks passed.
 
@@ -20,7 +20,7 @@
 
 ### <!-- 3 --> Documentation
 
-- Record PR fixes and issue 409 resolution
+- Record completed fixes and pending device validation
 
 - Remove completed development log and retain pending validation
 

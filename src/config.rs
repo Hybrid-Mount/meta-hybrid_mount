@@ -6,7 +6,7 @@
 //! moduledir = "/data/adb/modules"
 //! overlay_mode = "ext4"      # tmpfs | ext4
 //! disable_umount = false
-//! default_mode = "overlay"   # overlay | magic
+//! default_mode = "overlay"   # overlay | magic | vfs
 //!
 //! [rules."<module_id>"]
 //! default_mode = "magic"
@@ -37,6 +37,7 @@ pub enum Mode {
     #[default]
     Overlay,
     Magic,
+    Vfs,
     Ignore,
 }
 
@@ -45,6 +46,7 @@ impl Mode {
         match self {
             Self::Overlay => "overlay",
             Self::Magic => "magic",
+            Self::Vfs => "vfs",
             Self::Ignore => "ignore",
         }
     }
@@ -95,6 +97,14 @@ pub struct Config {
     #[serde(default)]
     pub default_mode: Mode,
 
+    /// VFS 后端不可用时是否直接失败（`true`）或降级（`false`）。
+    #[serde(default)]
+    pub vfs_strict: bool,
+
+    /// 需要隔离（看到原生文件系统）的 UID 列表，下发给 VFS Provider。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vfs_isolate_uids: Vec<u32>,
+
     #[serde(default)]
     pub rules: BTreeMap<ModuleId, ModuleRule>,
 
@@ -132,6 +142,8 @@ impl Default for Config {
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
             default_mode: Mode::default(),
+            vfs_strict: false,
+            vfs_isolate_uids: Vec::new(),
             rules: BTreeMap::new(),
             module_blacklist: BTreeSet::new(),
             config_missing: false,
