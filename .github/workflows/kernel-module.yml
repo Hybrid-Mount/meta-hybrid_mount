@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Build the Hybrid Mount VFS kernel module (K2) for every DDK target.
+#
+# DDK (https://github.com/Ylarod/ddk) publishes one image per Android/GKI target
+# with the matching kernel headers and Clang toolchain baked in, and exports
+# KDIR/ARCH/LLVM for the module build.
+
+name: Build VFS kernel module
+
+on:
+  push:
+    branches:
+      - "dev"
+      # VFS 实验分支:尚未合并进 dev。合并/删除该分支后应移除本条目。
+      - "feat/nomount-vfs"
+    paths:
+      - "module/vfs/**"
+      - ".github/workflows/kernel-module.yml"
+  pull_request:
+    branches: ["dev"]
+    paths:
+      - "module/vfs/**"
+      - ".github/workflows/kernel-module.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-module:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+    env:
+      DDK_IMAGE: ghcr.io/ylarod/ddk
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the module with DDK
+        run: |
+          docker run --rm --platform linux/amd64 \
+            -v "$PWD":/build -w /build \
+            "${DDK_IMAGE}:${TARGET}" \
+            make -C module/vfs/src
+
+      - name: Stage the artifact
+        run: |
+          mkdir -p dist
+          mv module/vfs/src/hybridmount.ko "dist/hybridmount-${TARGET}.ko"
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hybridmount-${{ matrix.target }}
+          path: dist/*.ko
+          if-no-files-found: error

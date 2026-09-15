@@ -14,6 +14,15 @@ module/bin/
 *.zip
 *.sha256
 
+# Kernel module build output (module/vfs/src)
+module/vfs/src/*.ko
+module/vfs/src/*.o
+module/vfs/src/*.mod
+module/vfs/src/*.mod.c
+module/vfs/src/modules.order
+module/vfs/src/Module.symvers
+module/vfs/src/.*.cmd
+
 # Editors / OS
 .vscode/
 .idea/

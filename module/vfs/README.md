@@ -51,6 +51,36 @@ interoperate with NoMount's metamodule or its nm CLI.
 2. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
 3. A decision on the wire magic value (currently the upstream constant).
 
+## Building and integrating
+
+Two supported routes, both driven by the same sources in src/:
+
+1. **Loadable module (recommended for testing).** DDK provides one image per
+   Android/GKI target with the matching kernel headers and Clang toolchain:
+
+   ~~~
+   ddk build --target android14-6.1 -- -C module/vfs/src
+   ~~~
+
+   `.github/workflows/kernel-module.yml` builds the same way for every target and
+   uploads `hybridmount-<target>.ko`. Without DDK, pass a prepared kernel tree:
+   `make -C module/vfs/src KDIR=/path/to/kernel`.
+
+2. **Built-in.** From the root of a kernel tree:
+
+   ~~~
+   sh /path/to/metamodule/module/vfs/setup.sh
+   ~~~
+
+   It copies the sources into `fs/hybridmount/`, adds the `fs/hybridmount` entry to
+   `fs/Makefile`, sources `fs/hybridmount/Kconfig`, then leaves you to enable
+   `CONFIG_HYBRIDMOUNT=y`. `--cleanup` reverts all of it. The script refuses to
+   touch a kernel tree that already integrates NoMount, because both implementations
+   hijack inode operations and the kernel will not stop them from coexisting.
+
+Once a kernel provides K2, the metamodule binds to it automatically; `vfs_strict`
+decides whether an unavailable backend fails the boot or degrades.
+
 ## Packaging and installation (to be wired up in Phase 3/4)
 
 - The release build stages all of module/ recursively, so this src/ tree would be

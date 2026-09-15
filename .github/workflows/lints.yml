@@ -83,7 +83,11 @@ jobs:
             apt-get install -y --no-install-recommends shellcheck
             rm -rf /var/lib/apt/lists/*
           fi
-          shellcheck module/*.sh tests/shell/*.sh
+          # module/vfs/setup.sh is not matched by module/*.sh, so name it explicitly.
+          shellcheck module/*.sh module/vfs/setup.sh tests/shell/*.sh
+
+      - name: Test VFS built-in integration script
+        run: sh tests/shell/vfs_setup.sh
 
       - name: Test installer platform split
         run: sh tests/shell/customize_lkm.sh
