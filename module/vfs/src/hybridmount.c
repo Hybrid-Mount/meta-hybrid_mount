@@ -1470,15 +1470,23 @@ static int hm_process_payload(unsigned long user_addr)
 
         case HM_CMD_ADD_RULE: {
             LIST_HEAD(r_victims);
+            int first_err = 0;
+            u32 err_offset = 0;
             if (payload->data_size > sizeof(payload->buffer)) { payload->status = -EINVAL; break; }
             while ((size_t)(buf_end - buf_ptr) >= sizeof(struct hm_rule_hdr)) {
                 struct hm_rule_hdr *h = (void *)buf_ptr;
+                u32 record_offset = (u32)(buf_ptr - payload->buffer);
+                int err;
                 buf_ptr += sizeof(*h);
                 if ((h->v_len + h->r_len) > (size_t)(buf_end - buf_ptr) || unlikely(h->v_len >= PATH_MAX || h->r_len >= PATH_MAX)) break;
-                payload->status = __hybridmount_add_rule(buf_ptr, buf_ptr + h->v_len, h->v_len, h->r_len, h->flags, h->uid, &r_victims);
+                err = __hybridmount_add_rule(buf_ptr, buf_ptr + h->v_len, h->v_len, h->r_len, h->flags, h->uid, &r_victims);
+                if (err && !first_err) { first_err = err; err_offset = record_offset; }
                 buf_ptr += (size_t)(h->v_len + h->r_len);
             }
-            payload->arg1 = buf_ptr - payload->buffer;
+            /* Report the first failure and where it happened; a later success must not
+             * mask it. On success arg1 stays the consumed cursor. */
+            if (first_err) { payload->status = first_err; payload->arg1 = err_offset; }
+            else payload->arg1 = buf_ptr - payload->buffer;
 
             if (!list_empty(&r_victims)) {
                 struct hybridmount_rule *rule, *tmp;

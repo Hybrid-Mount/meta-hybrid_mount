@@ -36,7 +36,10 @@ interoperate with NoMount's metamodule or its nm CLI.
 
 - Identity: hybridmount.c / hybridmount.h, key type "hybridmount", protocol version
   "hm1", Kconfig symbol HYBRIDMOUNT, module object hybridmount.o.
-- Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*.
+- Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*, and the
+  kernel log prefix is "hybridmount:".
+- Batch ADD_RULE reports the first failure together with the offset of the failing
+  record, instead of letting the last record overwrite the status.
 - Not changed yet: the wire payload layout and the magic value.
 
 ## Divergence still to apply (Phase 3)
@@ -45,11 +48,9 @@ interoperate with NoMount's metamodule or its nm CLI.
    visible while its real children are hidden and only injected children are shown.
    Upstream represents .replace as a directory whiteout, which cannot take injected
    children.
-2. Batch rule application that preserves the first error and reports the failing
-   record, instead of letting the last record overwrite the status.
-3. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
-4. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
-5. A decision on the wire magic value (currently the upstream constant).
+2. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
+3. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
+4. A decision on the wire magic value (currently the upstream constant).
 
 ## Packaging and installation (to be wired up in Phase 3/4)
 

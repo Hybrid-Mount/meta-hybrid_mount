@@ -190,3 +190,15 @@ fn ensure_consumed_rejects_partial_batch_cursor() {
     let err = ensure_consumed(&page).unwrap_err();
     assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
 }
+
+#[test]
+fn ensure_consumed_reports_first_failure_and_its_offset() {
+    let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
+    page[16..20].copy_from_slice(&(-22_i32).to_le_bytes());
+    page[20..24].copy_from_slice(&12_u32.to_le_bytes());
+    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
+    let err = ensure_consumed(&page).unwrap_err();
+    let text = format!("{err}");
+    assert!(text.contains("-22"), "error was {text}");
+    assert!(text.contains("offset 12"), "error was {text}");
+}

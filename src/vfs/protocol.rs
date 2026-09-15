@@ -177,10 +177,20 @@ pub fn ensure_status_allow_enoent(payload: &[u8]) -> Result<()> {
 
 /// 校验 ADD_RULE 响应既成功又完整消费了批内字节。
 ///
-/// 内核在 `arg1` 回写已消费的 buffer 字节数，必须等于 `data_size`，否则视为
-/// 部分应用，不能报告成功。
+/// K2 语义：成功时 `arg1` 是已消费的 buffer 字节数，必须等于 `data_size`，否则视为
+/// 部分应用；失败时 `status` 是批内**首个**错误的 errno，而 `arg1` 是那条失败记录的
+/// 起始偏移。上游实现逐条覆盖 status，批量中间的失败会被后续成功静默掩盖，K2 修掉了
+/// 这一点，因此这里的错误信息会带上失败位置。
 pub fn ensure_consumed(payload: &[u8]) -> Result<()> {
-    ensure_status(payload)?;
+    if payload.len() != PAYLOAD_LEN {
+        return Err(Error::VfsProtocol {
+            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
+        });
+    }
+    let status =
+        i32::from_le_bytes(payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
+            detail: "status field is not four bytes".to_owned(),
+        })?);
     let arg1 = u32::from_le_bytes(payload[20..24].try_into().map_err(|_| Error::VfsProtocol {
         detail: "arg1 field is not four bytes".to_owned(),
     })?);
@@ -188,6 +198,11 @@ pub fn ensure_consumed(payload: &[u8]) -> Result<()> {
         u32::from_le_bytes(payload[24..28].try_into().map_err(|_| Error::VfsProtocol {
             detail: "data_size field is not four bytes".to_owned(),
         })?);
+    if status < 0 {
+        return Err(Error::VfsProtocol {
+            detail: format!("kernel returned status {status} for the record at offset {arg1}"),
+        });
+    }
     if arg1 != data_size {
         return Err(Error::VfsProtocol {
             detail: format!("kernel consumed {arg1} of {data_size} bytes"),
