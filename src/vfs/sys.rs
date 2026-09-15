@@ -9,6 +9,27 @@ pub use platform::{PageBuffer, add_key};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub use stub::{PageBuffer, add_key};
 
+/// keyring 通道。K2（Hybrid Mount 自有 VFS 内核子系统）是唯一被驱动的实现；
+/// 上游 NoMount 的 key type 只用于探测设备上是否已存在外来实现（单向守卫），
+/// 绝不用它下发规则。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyringChannel {
+    /// Hybrid Mount 自有实现（K2）。
+    Hybridmount,
+    /// 上游 NoMount，仅用于探测。
+    Nomount,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl KeyringChannel {
+    const fn as_cstr(self) -> &'static std::ffi::CStr {
+        match self {
+            Self::Hybridmount => c"hybridmount",
+            Self::Nomount => c"nomount",
+        }
+    }
+}
+
 /// Linux/Android 的 ECANCELED。NoMount 的 key type preparse 在处理完 payload 后
 /// 故意返回 -ECANCELED（使 key 不被创建），因此该 errno 表示成功。
 pub const LINUX_ECANCELED: i32 = 125;
@@ -30,6 +51,8 @@ fn interpret_add_key(ret: i64, errno: i32) -> std::io::Result<()> {
 mod platform {
     use std::io;
     use std::ptr::NonNull;
+
+    use super::KeyringChannel;
 
     pub struct PageBuffer {
         ptr: NonNull<u8>,
@@ -81,13 +104,13 @@ mod platform {
     const SYS_ADD_KEY: libc::c_long = 248;
 
     /// 发送一页 payload。内核通过同一页回写 `status`，调用方随后自行解析。
-    pub fn add_key(page: &mut PageBuffer) -> io::Result<()> {
+    pub fn add_key(page: &mut PageBuffer, channel: KeyringChannel) -> io::Result<()> {
         let ptr = page.ptr.as_ptr() as libc::c_ulong;
         // SAFETY: 变参 syscall，参数布局与内核 add_key(type, desc, &ptr, 8, -1) 一致。
         let ret = unsafe {
             libc::syscall(
                 SYS_ADD_KEY,
-                c"nomount".as_ptr(),
+                channel.as_cstr().as_ptr(),
                 c"trigger".as_ptr(),
                 std::ptr::addr_of!(ptr),
                 std::mem::size_of::<libc::c_ulong>(),
@@ -107,6 +130,8 @@ mod platform {
 mod stub {
     use std::io;
 
+    use super::KeyringChannel;
+
     pub struct PageBuffer {
         bytes: Vec<u8>,
     }
@@ -123,10 +148,10 @@ mod stub {
         }
     }
 
-    pub fn add_key(_page: &mut PageBuffer) -> io::Result<()> {
+    pub fn add_key(_page: &mut PageBuffer, _channel: KeyringChannel) -> io::Result<()> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "nomount keyring is linux/android only",
+            "vfs keyring is linux/android only",
         ))
     }
 }

@@ -133,9 +133,12 @@ pub struct RunState {
     /// VFS 注入模块与成功目标；VFS 不是真实挂载，不进入 `active_mounts`。
     pub vfs_modules: Vec<String>,
     pub vfs_active_mounts: Vec<String>,
-    /// 本次启动实际绑定的 Provider（`nomount` / `hm`）。
+    /// 本次启动实际绑定的 Provider（v2 只有 `hm`）。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vfs_provider: Option<String>,
+    /// 单向守卫结果：设备上是否已存在外来 NoMount 实现。
+    #[serde(default)]
+    pub vfs_foreign_nomount: bool,
     /// Final mountinfo-confirmed targets; executor attempts stay in `mount_stats`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub confirmed_active_mounts: Vec<String>,
@@ -260,6 +263,7 @@ impl RunState {
             vfs_modules: Vec::new(),
             vfs_active_mounts: Vec::new(),
             vfs_provider: None,
+            vfs_foreign_nomount: false,
             confirmed_active_mounts: Vec::new(),
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
@@ -788,6 +792,7 @@ mod tests {
     fn run_state_defaults_vfs_provider_to_none() {
         let state = RunState::default();
         assert!(state.vfs_provider.is_none());
+        assert!(!state.vfs_foreign_nomount);
         assert!(state.vfs_modules.is_empty());
         assert!(state.vfs_active_mounts.is_empty());
     }
@@ -1321,6 +1326,7 @@ mod tests {
             vfs_modules: Vec::new(),
             vfs_active_mounts: Vec::new(),
             vfs_provider: None,
+            vfs_foreign_nomount: false,
             confirmed_active_mounts: vec!["/system".to_owned()],
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),

@@ -263,8 +263,8 @@ pub enum Error {
     #[error("VFS kernel provider is unavailable: {reason}")]
     VfsUnavailable { reason: String },
 
-    #[error("VFS provider conflict: {detail}")]
-    VfsProviderConflict { detail: String },
+    #[error("a foreign NoMount VFS kernel implementation is present: {detail}")]
+    VfsForeignNomount { detail: String },
 
     #[error("unsupported VFS protocol version {found:?} (supported: {supported})")]
     VfsUnsupportedVersion { found: String, supported: String },
@@ -318,7 +318,7 @@ impl Error {
             | Self::Vfs(err) => err.source.classify(),
             Self::VfsProtocol { .. } => ErrorClass::Permanent,
             Self::VfsUnavailable { .. }
-            | Self::VfsProviderConflict { .. }
+            | Self::VfsForeignNomount { .. }
             | Self::VfsUnsupportedVersion { .. }
             | Self::VfsReplaceUnsupported { .. } => ErrorClass::ManualRecovery,
             Self::Subprocess(err) => classify_process(err),

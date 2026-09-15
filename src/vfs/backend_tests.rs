@@ -53,11 +53,11 @@ impl LkmLoader for MockLoader<'_> {
 }
 
 #[test]
-fn existing_supported_provider_is_adopted_without_loading() {
+fn existing_k2_is_adopted_without_loading() {
     let loaded = Cell::new(true);
     let mut kernel = MockKernel {
-        before: Some("20"),
-        after: Some("20"),
+        before: Some("hm1"),
+        after: Some("hm1"),
         loaded: &loaded,
         applied: 0,
     };
@@ -68,7 +68,7 @@ fn existing_supported_provider_is_adopted_without_loading() {
 
     let selected = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, false).unwrap();
 
-    assert_eq!(selected, Some(VfsProvider::Nomount));
+    assert_eq!(selected, Some(VfsProvider::Hm));
     assert_eq!(loader.calls.get(), 0);
 }
 
@@ -77,7 +77,7 @@ fn missing_provider_loads_hm_lkm_then_reports_hm() {
     let loaded = Cell::new(false);
     let mut kernel = MockKernel {
         before: None,
-        after: Some("20"),
+        after: Some("hm1"),
         loaded: &loaded,
         applied: 0,
     };
@@ -113,11 +113,11 @@ fn missing_provider_stays_unavailable_when_lkm_does_not_help() {
 }
 
 #[test]
-fn unsupported_existing_version_is_rejected_without_loading() {
+fn upstream_nomount_version_is_rejected_without_loading() {
     let loaded = Cell::new(false);
     let mut kernel = MockKernel {
-        before: Some("19"),
-        after: Some("20"),
+        before: Some("20"),
+        after: Some("hm1"),
         loaded: &loaded,
         applied: 0,
     };
@@ -133,31 +133,11 @@ fn unsupported_existing_version_is_rejected_without_loading() {
 }
 
 #[test]
-fn existing_hm_provider_is_adopted_without_loading() {
-    let loaded = Cell::new(true);
-    let mut kernel = MockKernel {
-        before: Some("20"),
-        after: Some("20"),
-        loaded: &loaded,
-        applied: 0,
-    };
-    let loader = MockLoader {
-        loaded: &loaded,
-        calls: Cell::new(0),
-    };
-
-    let selected = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, true).unwrap();
-
-    assert_eq!(selected, Some(VfsProvider::Hm));
-    assert_eq!(loader.calls.get(), 0);
-}
-
-#[test]
-fn loaded_hm_with_unsupported_version_is_rejected() {
+fn loaded_k2_with_unsupported_version_is_rejected() {
     let loaded = Cell::new(false);
     let mut kernel = MockKernel {
         before: None,
-        after: Some("19"),
+        after: Some("20"),
         loaded: &loaded,
         applied: 0,
     };
@@ -173,8 +153,28 @@ fn loaded_hm_with_unsupported_version_is_rejected() {
 }
 
 #[test]
+fn foreign_nomount_is_refused_without_loading_modules() {
+    let loaded = Cell::new(true);
+    let mut kernel = MockKernel {
+        before: Some("hm1"),
+        after: Some("hm1"),
+        loaded: &loaded,
+        applied: 0,
+    };
+    let loader = MockLoader {
+        loaded: &loaded,
+        calls: Cell::new(0),
+    };
+
+    let err = select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, true).unwrap_err();
+
+    assert!(matches!(err, Error::VfsForeignNomount { .. }));
+    assert_eq!(loader.calls.get(), 0);
+}
+
+#[test]
 fn exchange_rejects_request_that_is_not_one_page() {
-    let mut kernel = KeyringKernel::new().unwrap();
+    let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount).unwrap();
 
     let short = kernel.exchange(&[0_u8; 8]).unwrap_err();
     assert!(matches!(short, Error::VfsProtocol { .. }));

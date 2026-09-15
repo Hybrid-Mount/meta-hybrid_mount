@@ -1,24 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 唯一活动的 VFS 内核 Provider：K1（NoMount）或 K2（HM 自有），二选一。
-//! 选择结果在本次启动内固定，禁止热切换。
+//! VFS 内核 Provider 绑定。v2 只支持 Hybrid Mount 自有的 K2；设备上若已存在
+//! 外来 NoMount 实现，则拒绝附着。绑定结果在本次启动内固定，禁止热切换。
 
 use crate::errors::{Error, Result};
 use crate::vfs::protocol::{self, EncodedRule, NmCommand};
-use crate::vfs::sys::{self, PageBuffer};
+use crate::vfs::sys::{self, KeyringChannel, PageBuffer};
 
-pub const SUPPORTED_VERSIONS: &[&str] = &["20"];
+/// K2 支持的协议版本。上游 NoMount 的 "20" 不在其中。
+pub const SUPPORTED_VERSIONS: &[&str] = &["hm1"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VfsProvider {
-    Nomount,
     Hm,
 }
 
 impl VfsProvider {
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Nomount => "nomount",
             Self::Hm => "hm",
         }
     }
@@ -38,12 +37,13 @@ pub trait LkmLoader {
 
 pub struct KeyringKernel {
     page: PageBuffer,
+    channel: KeyringChannel,
 }
 
 impl KeyringKernel {
-    pub fn new() -> Result<Self> {
+    pub fn new(channel: KeyringChannel) -> Result<Self> {
         let page = PageBuffer::new().map_err(Error::Io)?;
-        Ok(Self { page })
+        Ok(Self { page, channel })
     }
 
     fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>> {
@@ -58,7 +58,7 @@ impl KeyringKernel {
             });
         }
         page.copy_from_slice(request);
-        sys::add_key(&mut self.page).map_err(Error::Io)?;
+        sys::add_key(&mut self.page, self.channel).map_err(Error::Io)?;
         Ok(self.page.as_mut_slice().to_vec())
     }
 }
@@ -103,29 +103,30 @@ impl VfsKernel for KeyringKernel {
     }
 }
 
-/// 选择唯一活动的 Provider。
+/// 选择并绑定唯一活动的 VFS 内核 Provider（v2：只有 K2）。
 ///
-/// 1. 已有可响应且版本受支持的 Provider：直接采用，不加载任何模块；
-/// 2. 否则尝试加载 HM 自有 VFS LKM，再重新探测；
-/// 3. 仍不可用返回 `Ok(None)`，由调用方决定降级或失败。
+/// 1. 单向守卫：`foreign_nomount` 为真表示设备上已存在外来 NoMount 实现，此时拒绝
+///    附着（不加载模块、不下发规则）；
+/// 2. 已有可响应的 K2：直接采用，不加载任何模块；
+/// 3. 否则尝试加载 HM 自有 VFS LKM，再重新探测；
+/// 4. 仍不可用返回 `Ok(None)`，由调用方决定降级或失败。
 ///
-/// 注意：当前 `LkmLoader` 为 no-op，K2（HM 自有内核实现）尚未接入，因此“两个实现
-/// 同时可见”的分支不可达。K2 接入时**必须**在此实现同名 key type 的“双可见/二次注册”
-/// 检测并触发 `Error::VfsProviderConflict`；在此之前不得假设该冲突已被覆盖。
+/// 当前 `LkmLoader` 仍为 no-op（K2 内核子系统尚未接入构建），因此第 3 步尚不能真正
+/// 加载模块；加载实现就绪后本函数无需改动。
 pub fn select_provider(
     kernel: &mut dyn VfsKernel,
     loader: &dyn LkmLoader,
     supported: &[&str],
-    hm_loaded: bool,
+    foreign_nomount: bool,
 ) -> Result<Option<VfsProvider>> {
+    if foreign_nomount {
+        return Err(Error::VfsForeignNomount {
+            detail: "a foreign NoMount kernel implementation is present".to_owned(),
+        });
+    }
+
     match kernel.version() {
-        Ok(found) if supported.contains(&found.as_str()) => {
-            return Ok(Some(if hm_loaded {
-                VfsProvider::Hm
-            } else {
-                VfsProvider::Nomount
-            }));
-        }
+        Ok(found) if supported.contains(&found.as_str()) => return Ok(Some(VfsProvider::Hm)),
         Ok(found) => {
             return Err(Error::VfsUnsupportedVersion {
                 found,

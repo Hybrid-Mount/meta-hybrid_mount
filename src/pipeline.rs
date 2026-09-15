@@ -44,6 +44,8 @@ use crate::vfs::backend::{
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::vfs::exec::{VfsApplied, VfsExecStats};
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::sys::KeyringChannel;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::cell::RefCell;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::rc::Rc;
@@ -1594,18 +1596,34 @@ impl Drop for VfsBootGuard {
     }
 }
 
-/// K2（HM 自有 VFS 内核实现）的加载由内核子系统计划接入；
-/// 用户态此阶段只支持设备已有的 K1 Provider。
+/// K2（HM 自有 VFS 内核实现）的加载由内核子系统计划接入；在此之前不加载任何模块。
 #[cfg(any(target_os = "linux", target_os = "android"))]
 struct PendingKernelLoader;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 impl LkmLoader for PendingKernelLoader {
     fn load_hm_vfs(&self) -> Result<()> {
-        log::warn!(
-            "hm vfs kernel implementation is not installed; only an existing nomount provider can be used"
-        );
+        log::warn!("hm vfs kernel module is not installed yet; vfs backend stays unavailable");
         Ok(())
+    }
+}
+
+/// 单向守卫：探测设备上是否已存在外来 NoMount 实现。
+///
+/// 只探测一次，不读取对方规则、不做互斥仲裁。探测失败（key type 未注册、平台不支持
+/// 或内存分配失败）一律视为“不存在”，因此它是纵深防御而非唯一保证：K2 与 NoMount 使用
+/// 不同 key type，且 setup.sh 在集成层拒绝二者共存。
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn detect_foreign_nomount() -> bool {
+    match KeyringKernel::new(KeyringChannel::Nomount) {
+        Ok(mut probe) => match probe.version() {
+            Ok(version) => {
+                log::warn!("foreign NoMount VFS implementation detected (version {version})");
+                true
+            }
+            Err(_) => false,
+        },
+        Err(_) => false,
     }
 }
 
@@ -1656,9 +1674,12 @@ fn apply_vfs_phase(
     // 只有硬崩溃（Drop 不执行）才保留 guard 触发下次启动熔断。
     let _guard = VfsBootGuard::arm()?;
 
-    let mut kernel = KeyringKernel::new()?;
+    let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
     let loader = PendingKernelLoader;
-    let provider = match select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, false) {
+    let foreign_nomount = detect_foreign_nomount();
+    state.vfs_foreign_nomount = foreign_nomount;
+    let provider = match select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, foreign_nomount)
+    {
         Ok(Some(provider)) => provider,
         Ok(None) => {
             log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
@@ -1669,9 +1690,9 @@ fn apply_vfs_phase(
             }
             return Ok(VfsExecStats::default());
         }
-        // 版本不受支持视同 Provider 不可用：默认降级，只有 vfs_strict 才让启动失败。
-        Err(err @ Error::VfsUnsupportedVersion { .. }) => {
-            log::warn!("vfs provider version unsupported, treating provider as unavailable: {err}");
+        // 版本不受支持、或存在外来 NoMount 实现：默认降级，只有 vfs_strict 才让启动失败。
+        Err(err @ (Error::VfsUnsupportedVersion { .. } | Error::VfsForeignNomount { .. })) => {
+            log::warn!("vfs backend is not attached, treating it as unavailable: {err}");
             if config.vfs_strict {
                 return Err(err);
             }
