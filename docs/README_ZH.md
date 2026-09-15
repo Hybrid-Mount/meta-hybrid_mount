@@ -2,16 +2,16 @@
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在启动阶段扫描其他模块，按全局、模块和路径规则，为每一项选择 OverlayFS、Magic Mount、VFS（NoMount 兼容）或忽略，并且始终把模块源目录当作只读输入。
+Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在启动阶段扫描其他模块，按全局、模块和路径规则，为每一项选择 OverlayFS、Magic Mount、VFS 或忽略，并且始终把模块源目录当作只读输入。
 
 ## 功能
 
-- OverlayFS、Magic Mount 与 VFS（NoMount 兼容）可按模块、按路径混用。
+- OverlayFS、Magic Mount 与 VFS 可按模块、按路径混用。
 - 路径规则优先于模块默认值，模块默认值优先于全局默认值。
 - OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
 - ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
 - Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- VFS 通过 keyring 把注入规则下发给唯一活动的内核 Provider。它需要兼容 NoMount 的内核，或由独立内核子系统计划提供的独立 LKM；当前实现只支持设备上已有的 NoMount Provider（K1），HM 自有内核实现（K2）尚未随本分支交付。VFS 不是真实挂载。
+- VFS 通过 keyring 把注入规则下发给 HM 自有的 VFS 内核子系统（K2）。K2 是独立实现，不与 NoMount 内核或其 nm CLI 互操作。K2 内核产物由独立的「内核子系统」计划交付；在兼容的 K2 内核就绪前，VFS 不可用，HM 会按 vfs_strict 降级。VFS 不是真实挂载。
 - WebUI 提供 MD3（默认）与 Miuix 两套界面。
 - 支持 arm64、armv7 与 x86_64，安装脚本会自动选择对应二进制。
 
@@ -64,3 +64,4 @@ default_mode = "magic"
 - 核心（Rust、module 脚本）：GPL-3.0-only（见 [LICENSE](../LICENSE)）。
 - WebUI：Apache-2.0（见 [webui/LICENSE](../webui/LICENSE)）。
 - 可选 ext4 sysfs LKM（源码与预编译 `.ko`）：GPL-2.0-only，源自 [Mountify](https://github.com/backslashxx/mountify)；见 [module/lkm/README.md](../module/lkm/README.md) 与 [module/lkm/src/LICENSE](../module/lkm/src/LICENSE)。
+- VFS 内核子系统（K2，交付后）：fork 自 [NoMount](https://github.com/maxsteeel/nomount)；归属与许可证细节见 [THIRD_PARTY.md](../THIRD_PARTY.md)。

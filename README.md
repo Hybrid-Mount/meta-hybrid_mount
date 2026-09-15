@@ -2,16 +2,16 @@
 
 <img src="icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, VFS (NoMount-compatible), or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
+Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, VFS, or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
 
 ## Features
 
-- OverlayFS, Magic Mount, and VFS (NoMount-compatible) can be mixed per module and per path.
+- OverlayFS, Magic Mount, and VFS can be mixed per module and per path.
 - Path rules take precedence over module defaults, and module defaults take precedence over the global default.
 - OverlayFS supports both tmpfs and ext4 storage modes.
 - For ext4 staging, KernelSU uses the official ioctl to hide sysfs nodes; APatch and other non-KSU environments use the bundled LKM compatibility fallback by default.
 - Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
-- VFS sends injection rules to a single active kernel provider through the keyring. It requires a NoMount-compatible kernel or an independent LKM to be delivered under a separate kernel-subsystem plan; the current implementation only supports an existing NoMount provider (K1) already present on the device, and Hybrid Mount's own kernel implementation (K2) is not delivered by this branch. VFS is not a real mount.
+- VFS sends injection rules to Hybrid Mount's own VFS kernel subsystem (K2) through the keyring. K2 is an independent implementation and does not interoperate with NoMount's kernel or its nm CLI. K2 kernel artifacts are delivered under a separate kernel-subsystem plan; until a compatible K2 kernel is available, VFS is unavailable and Hybrid Mount falls back according to vfs_strict. VFS is not a real mount.
 - The WebUI provides MD3 (default) and Miuix interfaces.
 - arm64, armv7, and x86_64 are supported; the installer automatically selects the matching binary.
 
@@ -64,3 +64,4 @@ Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.
 - Core (Rust and module scripts): GPL-3.0-only (see [`LICENSE`](LICENSE)).
 - WebUI: Apache-2.0 (see [`webui/LICENSE`](webui/LICENSE)).
 - Optional ext4 sysfs LKM (source and prebuilt `.ko` files): GPL-2.0-only, derived from [Mountify](https://github.com/backslashxx/mountify); see [`module/lkm/README.md`](module/lkm/README.md) and [`module/lkm/src/LICENSE`](module/lkm/src/LICENSE).
+- VFS kernel subsystem (K2, when delivered): a fork of [NoMount](https://github.com/maxsteeel/nomount); see [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and license details.
