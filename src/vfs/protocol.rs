@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! NoMount wire 协议：`add_key("nomount", "trigger", &payload_ptr)` 指向的
-//! 单页 `nm_payload`。这里只做纯字节编解码，便于主机单测。
+//! K2 wire 协议（布局沿用 NoMount v20 基线）：`add_key("hybridmount", "trigger", &payload_ptr)`
+//! 指向的单页 `hm_payload`。这里只做纯字节编解码，便于主机单测。
 
 use crate::errors::{Error, Result};
 use crate::vfs::rule::{VfsAction, VfsRule};
@@ -11,12 +11,14 @@ pub const MAGIC: u64 = 0x004E_4F4D_4F55_4E54;
 pub const PAYLOAD_LEN: usize = 4096;
 pub const BUFFER_LEN: usize = 4068;
 pub const RULE_HEADER_LEN: usize = 12;
-// NoMount wire 契约：DEL 命令的 6 字节头长度（u32 uid + u16 v_len，随后是 vpath 字节）。
+// K2 wire 契约：DEL 命令的 6 字节头长度（u32 uid + u16 v_len，随后是 vpath 字节）。
 pub const DEL_HEADER_LEN: usize = 6;
 
 pub const FLAG_WHITEOUT: u32 = 1 << 2;
+/// 与目录规则组合使用：目录保持可见，真实条目隐藏，只显示注入子项（`.replace`）。
+pub const FLAG_OPAQUE: u32 = 1 << 3;
 
-// NoMount wire 契约的完整命令集，当前后端只发出 AddRule/DelRule/AddUid/GetVersion 子集，
+// K2 wire 契约的完整命令集，当前后端只发出 AddRule/DelRule/AddUid/GetVersion 子集，
 // 其余（DelUid/ClearAll/ClearRules/ClearUids/GetList/GetUids）留给后续版本，命令号取值不可改动。
 // 用 allow 而非 expect：非 linux/android 目标由 src/main.rs 的 crate 级 allow(dead_code) 覆盖，lint 不触发时
 // expect 会产生 unfulfilled_lint_expectations，从而让宿主 -D warnings 失败。
@@ -70,6 +72,11 @@ pub fn encode_rule(rule: &VfsRule) -> Result<EncodedRule> {
         }),
         VfsAction::Whiteout { virtual_path } => Ok(EncodedRule {
             flags: FLAG_WHITEOUT,
+            virtual_path: virtual_path.as_bytes().to_vec(),
+            real_path: Vec::new(),
+        }),
+        VfsAction::OpaqueDir { virtual_path } => Ok(EncodedRule {
+            flags: FLAG_OPAQUE,
             virtual_path: virtual_path.as_bytes().to_vec(),
             real_path: Vec::new(),
         }),

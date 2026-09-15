@@ -118,6 +118,78 @@ fn duplicate_targets_emit_one_rule_from_the_last_source() {
 }
 
 #[test]
+fn replace_directory_and_its_subtree_become_opaque_rules() {
+    let mut tree = MountTree::default();
+    let mut dir = source("m", "system/etc", NodeFileType::Directory, Mode::Vfs);
+    dir.replace = true;
+    tree.insert("/system/etc", dir);
+    tree.insert(
+        "/system/etc/sub/bar.conf",
+        source(
+            "m",
+            "system/etc/sub/bar.conf",
+            NodeFileType::RegularFile,
+            Mode::Vfs,
+        ),
+    );
+
+    let module = ModuleId::try_from("m").unwrap();
+    assert_eq!(
+        build_vfs_rules(&tree),
+        vec![
+            VfsRule {
+                action: VfsAction::OpaqueDir {
+                    virtual_path: "/system/etc".to_owned(),
+                },
+                module_id: module.clone(),
+            },
+            VfsRule {
+                action: VfsAction::OpaqueDir {
+                    virtual_path: "/system/etc/sub".to_owned(),
+                },
+                module_id: module.clone(),
+            },
+            VfsRule {
+                action: VfsAction::Inject {
+                    virtual_path: "/system/etc/sub/bar.conf".to_owned(),
+                    real_path: PathBuf::from("/data/adb/modules/m/system/etc/sub/bar.conf"),
+                },
+                module_id: module,
+            },
+        ]
+    );
+}
+
+#[test]
+fn directory_without_replace_stays_structural() {
+    let mut tree = MountTree::default();
+    tree.insert(
+        "/system/etc",
+        source("m", "system/etc", NodeFileType::Directory, Mode::Vfs),
+    );
+    tree.insert(
+        "/system/etc/sub/bar.conf",
+        source(
+            "m",
+            "system/etc/sub/bar.conf",
+            NodeFileType::RegularFile,
+            Mode::Vfs,
+        ),
+    );
+
+    assert_eq!(
+        build_vfs_rules(&tree),
+        vec![VfsRule {
+            action: VfsAction::Inject {
+                virtual_path: "/system/etc/sub/bar.conf".to_owned(),
+                real_path: PathBuf::from("/data/adb/modules/m/system/etc/sub/bar.conf"),
+            },
+            module_id: ModuleId::try_from("m").unwrap(),
+        }]
+    );
+}
+
+#[test]
 fn directory_and_other_backends_produce_no_rules() {
     let mut tree = MountTree::default();
     tree.insert(

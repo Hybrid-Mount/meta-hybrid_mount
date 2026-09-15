@@ -1269,27 +1269,33 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
 {
     struct hybridmount_rule *rule;
     bool is_whiteout = (flags & HM_FLAG_WHITEOUT);
+    bool is_opaque = (flags & HM_FLAG_OPAQUE);
     struct path v_path_struct;
 
-    if (!v_path || (!r_path && !is_whiteout)) return ERR_PTR(-EINVAL);
+    if (!v_path || (!r_path && !is_whiteout && !is_opaque)) return ERR_PTR(-EINVAL);
     while (v_len > 1 && v_path[v_len - 1] == '/') { v_len--; }
-    if (!is_whiteout) { while (r_len > 1 && r_path[r_len - 1] == '/') { r_len--; } }
+    if (!is_whiteout && !is_opaque) { while (r_len > 1 && r_path[r_len - 1] == '/') { r_len--; } }
 
-    if (is_whiteout) r_len = 0;
+    /* Whiteout and opaque rules carry no real path. */
+    if (is_whiteout || is_opaque) r_len = 0;
     if (!(rule = kmalloc((sizeof(struct hybridmount_rule) + v_len + r_len + 2), GFP_KERNEL))) return ERR_PTR(-ENOMEM);
 
     memset(rule, 0, sizeof(*rule));
     rule->v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, v_path, v_len);
     rule->flags = flags;
+    /* An opaque directory replaces its whole subtree: it stays visible, hides every real
+     * child and shows only the injected ones. That is virtual-dir behaviour without a
+     * real path. */
+    if (is_opaque) rule->flags |= HM_FLAG_IS_DIR | HM_FLAG_VIRTUAL_DIR;
     rule->v_len = v_len;
     rule->r_len = r_len;
     rule->target_uid = target_uid;
     memcpy(hm_get_vpath(rule), v_path, v_len);
     hm_get_vpath(rule)[v_len] = '\0';
-    if (!is_whiteout) memcpy(hm_get_rpath(rule), r_path, r_len);
+    if (!is_whiteout && r_len) memcpy(hm_get_rpath(rule), r_path, r_len);
     hm_get_rpath(rule)[r_len] = '\0';
 
-    if (!is_whiteout && kern_path(hm_get_rpath(rule), LOOKUP_FOLLOW, &rule->r_path) == 0) {
+    if (!is_whiteout && !is_opaque && kern_path(hm_get_rpath(rule), LOOKUP_FOLLOW, &rule->r_path) == 0) {
         struct inode *real_inode = d_backing_inode(rule->r_path.dentry);
         if (likely(real_inode)) {
             real_inode->i_flags |= S_PRIVATE;

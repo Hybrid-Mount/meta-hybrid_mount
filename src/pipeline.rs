@@ -1722,10 +1722,11 @@ fn apply_vfs_phase(
 
     state.vfs_provider = Some(provider.as_str().to_owned());
     log::info!(
-        "vfs phase complete: provider={}, injected={}, whiteouts={}",
+        "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
         provider.as_str(),
         stats.injected,
-        stats.whiteouts
+        stats.whiteouts,
+        stats.opaque
     );
     Ok(stats)
 }

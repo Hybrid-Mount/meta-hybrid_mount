@@ -19,6 +19,7 @@
 #define HM_FLAG_IS_DIR      (1 << 0)
 #define HM_FLAG_VIRTUAL_DIR (1 << 1)
 #define HM_FLAG_WHITEOUT    (1 << 2)
+#define HM_FLAG_OPAQUE      (1 << 3)
 
 #define HM_CLEAR_UIDS  (1 << 0)
 #define HM_CLEAR_RULES (1 << 1)

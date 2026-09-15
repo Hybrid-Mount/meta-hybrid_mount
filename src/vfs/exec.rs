@@ -16,6 +16,7 @@ pub struct VfsExecStats {
     pub active_targets: Vec<String>,
     pub injected: usize,
     pub whiteouts: usize,
+    pub opaque: usize,
 }
 
 /// 本次下发的结果：统计与逐条回滚所需的规则。
@@ -36,6 +37,7 @@ pub fn plan_rules(plan: &MountPlan) -> Result<VfsApplied> {
     let mut active_targets = Vec::with_capacity(rules.len());
     let mut injected = 0;
     let mut whiteouts = 0;
+    let mut opaque = 0;
     for rule in &rules {
         match &rule.action {
             VfsAction::Inject { virtual_path, .. } => {
@@ -44,6 +46,10 @@ pub fn plan_rules(plan: &MountPlan) -> Result<VfsApplied> {
             }
             VfsAction::Whiteout { virtual_path } => {
                 whiteouts += 1;
+                active_targets.push(virtual_path.clone());
+            }
+            VfsAction::OpaqueDir { virtual_path } => {
+                opaque += 1;
                 active_targets.push(virtual_path.clone());
             }
         }
@@ -60,6 +66,7 @@ pub fn plan_rules(plan: &MountPlan) -> Result<VfsApplied> {
             active_targets,
             injected,
             whiteouts,
+            opaque,
         },
         rules: encoded,
     })

@@ -40,17 +40,16 @@ interoperate with NoMount's metamodule or its nm CLI.
   kernel log prefix is "hybridmount:".
 - Batch ADD_RULE reports the first failure together with the offset of the failing
   record, instead of letting the last record overwrite the status.
+- HM_FLAG_OPAQUE marks a directory that replaces its whole subtree: it stays visible,
+  hides every real child and shows only the injected ones. The userspace emits it for a
+  .replace directory and for every directory below it, matching Magisk semantics.
 - Not changed yet: the wire payload layout and the magic value.
 
 ## Divergence still to apply (Phase 3)
 
-1. An explicit opaque-directory flag implementing .replace: the directory stays
-   visible while its real children are hidden and only injected children are shown.
-   Upstream represents .replace as a directory whiteout, which cannot take injected
-   children.
-2. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
-3. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
-4. A decision on the wire magic value (currently the upstream constant).
+1. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
+2. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
+3. A decision on the wire magic value (currently the upstream constant).
 
 ## Packaging and installation (to be wired up in Phase 3/4)
 

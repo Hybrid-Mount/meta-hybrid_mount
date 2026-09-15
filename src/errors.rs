@@ -269,13 +269,6 @@ pub enum Error {
     #[error("unsupported VFS protocol version {found:?} (supported: {supported})")]
     VfsUnsupportedVersion { found: String, supported: String },
 
-    // 字段不能命名为 `source`：thiserror 2.x 会把名为 `source` 的字段自动当作
-    // error source，而这里存的是 "module_id:relative" 标识串，故用 `source_id`。
-    #[error(
-        "vfs does not support .replace at {target} ({source_id}); use overlay or magic for this path"
-    )]
-    VfsReplaceUnsupported { target: String, source_id: String },
-
     #[error("{0}")]
     Subprocess(#[from] ProcessError),
 
@@ -319,8 +312,7 @@ impl Error {
             Self::VfsProtocol { .. } => ErrorClass::Permanent,
             Self::VfsUnavailable { .. }
             | Self::VfsForeignNomount { .. }
-            | Self::VfsUnsupportedVersion { .. }
-            | Self::VfsReplaceUnsupported { .. } => ErrorClass::ManualRecovery,
+            | Self::VfsUnsupportedVersion { .. } => ErrorClass::ManualRecovery,
             Self::Subprocess(err) => classify_process(err),
             Self::Msg(_) => ErrorClass::Permanent,
         }
