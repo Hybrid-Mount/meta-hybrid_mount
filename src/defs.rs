@@ -11,6 +11,11 @@ pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
 pub const MODULE_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/lkm/binaries";
 pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
 
+/// Hybrid Mount 自有 VFS 内核模块（K2）：按 Android/GKI 目标预编译，
+/// 命名为 hybridmount-<android>-<kernel>.ko。
+pub const VFS_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/vfs/binaries";
+pub const VFS_LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_lkm_boot_guard";
+
 /// VFS 后端启动熔断标记：本次启动下发规则前写入，成功后清除。
 /// 硬崩溃遗留该标记时，下次启动跳过 vfs 后端。
 pub const VFS_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_boot_guard";

@@ -38,11 +38,11 @@ use crate::timing::PhaseTimer;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::vfs::backend::{
-    KeyringKernel, LkmLoader, SUPPORTED_VERSIONS, VfsKernel, select_provider,
-};
+use crate::vfs::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel, select_provider};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::vfs::exec::{VfsApplied, VfsExecStats};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::lkm::VfsLkmLoader;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::vfs::sys::KeyringChannel;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1596,18 +1596,6 @@ impl Drop for VfsBootGuard {
     }
 }
 
-/// K2（HM 自有 VFS 内核实现）的加载由内核子系统计划接入；在此之前不加载任何模块。
-#[cfg(any(target_os = "linux", target_os = "android"))]
-struct PendingKernelLoader;
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl LkmLoader for PendingKernelLoader {
-    fn load_hm_vfs(&self) -> Result<()> {
-        log::warn!("hm vfs kernel module is not installed yet; vfs backend stays unavailable");
-        Ok(())
-    }
-}
-
 /// 单向守卫：探测设备上是否已存在外来 NoMount 实现。
 ///
 /// 只探测一次，不读取对方规则、不做互斥仲裁。探测失败（key type 未注册、平台不支持
@@ -1675,7 +1663,7 @@ fn apply_vfs_phase(
     let _guard = VfsBootGuard::arm()?;
 
     let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
-    let loader = PendingKernelLoader;
+    let loader = VfsLkmLoader;
     let foreign_nomount = detect_foreign_nomount();
     state.vfs_foreign_nomount = foreign_nomount;
     let provider = match select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, foreign_nomount)
