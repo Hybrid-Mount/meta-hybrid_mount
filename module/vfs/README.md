@@ -1,8 +1,9 @@
 # VFS kernel subsystem (K2)
 
-Status: **in progress**. The upstream baseline is imported and the Hybrid Mount
-identity rename is applied; the behaviour changes and the built-in integration script
-are still pending, and nothing here is built into a release yet.
+Status: **in progress**. The upstream baseline is imported and both the identity
+rename and the internal symbol rename are applied; the behaviour changes and the
+built-in integration script are still pending, and nothing here is built into a
+release yet.
 
 This subtree holds the K2 VFS path-redirection kernel module: its source, the
 prebuilt Android/GKI variants and the built-in integration script. K2 is meant to be
@@ -33,10 +34,10 @@ interoperate with NoMount's metamodule or its nm CLI.
 
 ## Divergence applied
 
-- Identity: the source files are hybridmount.c / hybridmount.h, the key type is
-  "hybridmount", the reported protocol version is "hm1", the Kconfig symbol is
-  HYBRIDMOUNT and the module object is hybridmount.o.
-- The wire payload layout and the internal symbol prefixes are not changed yet.
+- Identity: hybridmount.c / hybridmount.h, key type "hybridmount", protocol version
+  "hm1", Kconfig symbol HYBRIDMOUNT, module object hybridmount.o.
+- Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*.
+- Not changed yet: the wire payload layout and the magic value.
 
 ## Divergence still to apply (Phase 3)
 
