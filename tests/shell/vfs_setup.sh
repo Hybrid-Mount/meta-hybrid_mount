@@ -38,6 +38,8 @@ grep -qF 'source "fs/hybridmount/Kconfig"' "$tree/fs/Kconfig" ||
 # shellcheck disable=SC2016
 grep -qF 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount.o' "$tree/fs/hybridmount/Makefile" ||
     fail "in-tree Makefile is not in Kbuild form"
+grep -qF -- '-std=gnu11' "$tree/fs/hybridmount/Makefile" ||
+    fail "in-tree Makefile must force gnu11 for pre-5.18 kernels"
 
 # 2. A second run must refuse rather than clobber the tree.
 if (cd "$tree" && sh "$SETUP" > /dev/null 2>&1); then

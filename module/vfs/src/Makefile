@@ -17,7 +17,9 @@
 MODULE_NAME := hybridmount
 obj-m += $(MODULE_NAME).o
 
-ccflags-y += -Wno-declaration-after-statement
+# Kernels before 5.18 default to gnu89, which rejects the C99 declarations used
+# throughout the sources; the upstream build always set -std=gnu11.
+ccflags-y += -std=gnu11 -Wno-declaration-after-statement
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))

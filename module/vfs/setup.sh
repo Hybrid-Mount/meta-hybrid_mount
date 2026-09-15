@@ -100,7 +100,9 @@ do_setup() {
     # The out-of-tree Makefile targets a DDK build; in-tree Kbuild needs the
     # CONFIG_HYBRIDMOUNT form instead.
     # shellcheck disable=SC2016
-    printf 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount.o\nccflags-y += -Wno-declaration-after-statement\n' \
+    # -std=gnu11 matters: kernels before 5.18 default to gnu89 and the sources use
+    # C99 declarations.
+    printf 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount.o\nccflags-y += -std=gnu11 -Wno-declaration-after-statement\n' \
         > "$FS_DIR/$DIR_NAME/Makefile"
     echo "[+] copied sources into fs/$DIR_NAME"
 
