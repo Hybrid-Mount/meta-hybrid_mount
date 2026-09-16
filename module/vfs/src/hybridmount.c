@@ -1295,8 +1295,17 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
     if (!is_whiteout && r_len) memcpy(hm_get_rpath(rule), r_path, r_len);
     hm_get_rpath(rule)[r_len] = '\0';
 
-    if (!is_whiteout && !is_opaque && kern_path(hm_get_rpath(rule), LOOKUP_FOLLOW, &rule->r_path) == 0) {
-        struct inode *real_inode = d_backing_inode(rule->r_path.dentry);
+    if (!is_whiteout && !is_opaque) {
+        struct inode *real_inode;
+
+        /* 真实路径解析失败必须上报：此前这里静默跳过，规则照样插入并回写成功，
+         * 但 resolve 路径两条分支都不成立，lookup 永远回落到真实文件——用户态会
+         * 把一条完全不生效的规则记成注入成功。 */
+        if (kern_path(hm_get_rpath(rule), LOOKUP_FOLLOW, &rule->r_path) != 0) {
+            kfree(rule);
+            return ERR_PTR(-ENOENT);
+        }
+        real_inode = d_backing_inode(rule->r_path.dentry);
         if (likely(real_inode)) {
             real_inode->i_flags |= S_PRIVATE;
             if (S_ISDIR(real_inode->i_mode)) rule->flags |= HM_FLAG_IS_DIR;
@@ -1305,7 +1314,8 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
 
     if (kern_path(hm_get_vpath(rule), LOOKUP_FOLLOW, &v_path_struct) == 0) {
         struct dentry *target_dentry = v_path_struct.dentry;
-        rule->v_ino = d_backing_inode(target_dentry)->i_ino;
+        struct inode *target_inode = d_backing_inode(target_dentry);
+        rule->v_ino = target_inode ? target_inode->i_ino : (unsigned long)rule->v_hash;
         d_drop(target_dentry);
         path_put(&v_path_struct);
     } else {
@@ -1313,8 +1323,17 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
     }
 
     if (rule->flags & HM_FLAG_IS_DIR) {
+        /* 分配失败不能静默：opaque 规则带 VIRTUAL_DIR，缺 this_dir 时注入子项全部
+         * 不可达，而 ADD_RULE 仍会回写成功。 */
         rule->this_dir = __hybridmount_alloc_dir_node();
-        if (rule->this_dir) hm_dir_set_owner(rule->this_dir, rule);
+        if (unlikely(!rule->this_dir)) {
+            /* 与 hm_free_rule 一致：VIRTUAL_DIR（opaque）规则没有真实路径，不得
+             * path_put。规则尚未入树，直接释放即可。 */
+            if (!(rule->flags & HM_FLAG_VIRTUAL_DIR) && rule->r_path.dentry) path_put(&rule->r_path);
+            kfree(rule);
+            return ERR_PTR(-ENOMEM);
+        }
+        hm_dir_set_owner(rule->this_dir, rule);
     }
 
     return rule;
@@ -1466,7 +1485,11 @@ static int hm_process_payload(unsigned long user_addr)
     }
 
     payload->status = 0;
-    buf_ptr = payload->buffer + payload->arg1;
+    /* buf_ptr 的顺序游标由 ADD_RULE / DEL_RULE 各自按 payload->arg1 推进；arg1 是
+     * userspace 提供的续传游标，必须在各命令内校验后再使用——越界时
+     * (size_t)(buf_end - buf_ptr) 会按无符号回绕成巨大值，循环随即解引用越界内存。
+     * GET_LIST / GET_UIDS 的 arg1 是规则下标而非字节偏移，不在这里统一收敛。 */
+    buf_ptr = payload->buffer;
     buf_end = payload->buffer + (payload->data_size > sizeof(payload->buffer) ? sizeof(payload->buffer) : payload->data_size);
 
     switch (payload->cmd) {
@@ -1478,13 +1501,22 @@ static int hm_process_payload(unsigned long user_addr)
             LIST_HEAD(r_victims);
             int first_err = 0;
             u32 err_offset = 0;
-            if (payload->data_size > sizeof(payload->buffer)) { payload->status = -EINVAL; break; }
+            if (payload->data_size > sizeof(payload->buffer) || payload->arg1 > payload->data_size) {
+                payload->status = -EINVAL;
+                break;
+            }
+            buf_ptr += payload->arg1;
             while ((size_t)(buf_end - buf_ptr) >= sizeof(struct hm_rule_hdr)) {
                 struct hm_rule_hdr *h = (void *)buf_ptr;
                 u32 record_offset = (u32)(buf_ptr - payload->buffer);
                 int err;
                 buf_ptr += sizeof(*h);
-                if ((h->v_len + h->r_len) > (size_t)(buf_end - buf_ptr) || unlikely(h->v_len >= PATH_MAX || h->r_len >= PATH_MAX)) break;
+                /* 长度越界必须留下痕迹：静默 break 会让 status 保持 0 而游标停在半路，
+                 * 与「首错 + 偏移」的协议承诺不符。 */
+                if ((h->v_len + h->r_len) > (size_t)(buf_end - buf_ptr) || unlikely(h->v_len >= PATH_MAX || h->r_len >= PATH_MAX)) {
+                    if (!first_err) { first_err = -EINVAL; err_offset = record_offset; }
+                    break;
+                }
                 err = __hybridmount_add_rule(buf_ptr, buf_ptr + h->v_len, h->v_len, h->r_len, h->flags, h->uid, &r_victims);
                 if (err && !first_err) { first_err = err; err_offset = record_offset; }
                 buf_ptr += (size_t)(h->v_len + h->r_len);
@@ -1504,23 +1536,37 @@ static int hm_process_payload(unsigned long user_addr)
 
         case HM_CMD_DEL_RULE: {
             LIST_HEAD(r_victims);
-            if (payload->data_size > sizeof(payload->buffer)) { payload->status = -EINVAL; break; }
+            int first_err = 0;
+            u32 err_offset = 0;
+            if (payload->data_size > sizeof(payload->buffer) || payload->arg1 > payload->data_size) {
+                payload->status = -EINVAL;
+                break;
+            }
+            buf_ptr += payload->arg1;
             down_write(&hybridmount_rwsem);
             while ((size_t)(buf_end - buf_ptr) >= sizeof(struct hm_del_hdr)) {
                 struct hm_del_hdr *h = (void *)buf_ptr;
+                u32 record_offset = (u32)(buf_ptr - payload->buffer);
                 buf_ptr += sizeof(*h);
-                if (h->v_len > (size_t)(buf_end - buf_ptr)) break;
+                /* 截断的记录必须留下痕迹：此前这里直接 break，status 保持 0 而游标
+                 * 停在半路，回滚方只看 status 就会把「还有规则没删掉」当成成功。 */
+                if (h->v_len > (size_t)(buf_end - buf_ptr)) {
+                    if (!first_err) { first_err = -EINVAL; err_offset = record_offset; }
+                    break;
+                }
                 __hybridmount_del_rule(buf_ptr, h->v_len, h->uid, &r_victims);
                 buf_ptr += h->v_len;
             }
             up_write(&hybridmount_rwsem);
-            payload->arg1 = buf_ptr - payload->buffer;
+            /* 与 ADD_RULE 一致：失败时回写首错与失败记录偏移，成功时 arg1 是消费游标。 */
+            if (first_err) { payload->status = first_err; payload->arg1 = err_offset; }
+            else payload->arg1 = buf_ptr - payload->buffer;
 
             if (!list_empty(&r_victims)) {
                 struct hybridmount_rule *rule, *tmp;
                 synchronize_rcu(); synchronize_srcu(&hybridmount_srcu);
                 list_for_each_entry_safe(rule, tmp, &r_victims, list_node) hm_free_rule(rule);
-            } else payload->status = -ENOENT;
+            } else if (!first_err) payload->status = -ENOENT;
             break;
         }
 

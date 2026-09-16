@@ -173,6 +173,36 @@ fn ensure_status_allow_enoent_rejects_other_negative_status() {
 }
 
 #[test]
+fn ensure_status_allow_enoent_rejects_truncated_batch() {
+    // DEL_RULE 批内长度越界时内核 break，status 仍为 0 而 arg1 停在截断处；
+    // 只看 status 会把「还有规则没删掉」误判成回滚成功。
+    let mut page = build_payload(NmCommand::DelRule, 0, &[0_u8; 16]).unwrap();
+    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    page[20..24].copy_from_slice(&6_u32.to_le_bytes());
+    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
+    let err = ensure_status_allow_enoent(&page).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn ensure_status_allow_enoent_accepts_full_batch_cursor() {
+    let mut page = build_payload(NmCommand::DelRule, 0, &[0_u8; 16]).unwrap();
+    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    page[20..24].copy_from_slice(&16_u32.to_le_bytes());
+    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
+    assert!(ensure_status_allow_enoent(&page).is_ok());
+}
+
+#[test]
+fn ensure_status_accepts_already_isolated_uid() {
+    // ADD_UID 是幂等操作：同一次启动内第二次运行流水线时 UID 已在表内，
+    // 内核回 -EEXIST，这不是错误。
+    let mut page = build_payload(NmCommand::AddUid, 1000, &[]).unwrap();
+    page[16..20].copy_from_slice(&(-17_i32).to_le_bytes());
+    assert!(ensure_status_allow_eexist(&page).is_ok());
+}
+
+#[test]
 fn ensure_consumed_accepts_full_batch_cursor() {
     let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
     page[16..20].copy_from_slice(&0_i32.to_le_bytes());

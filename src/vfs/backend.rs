@@ -83,7 +83,9 @@ impl VfsKernel for KeyringKernel {
         for uid in uids {
             let request = protocol::build_payload(NmCommand::AddUid, *uid, &[])?;
             let response = self.exchange(&request)?;
-            protocol::ensure_status(&response)?;
+            // UID 表在重启前不清空：同一次启动内第二次运行流水线时内核回 -EEXIST，
+            // 但目标状态（该 UID 被隔离）已经达成，按成功处理。
+            protocol::ensure_status_allow_eexist(&response)?;
         }
         Ok(())
     }

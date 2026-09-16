@@ -1689,10 +1689,10 @@ fn apply_vfs_phase(
         Err(err) => return Err(err),
     };
 
-    // 先构建完整批次并登记回滚，再下发：apply_rules 非原子，中途失败时已生效的
-    // 前缀同样必须删除。未生效的规则由 DEL_RULE 的 ENOENT 容忍——内核按
-    // (vpath, uid) 精确匹配，规则不存在时回写 -ENOENT。回滚始终是定向删除，
-    // 不得清空 Provider 的整张规则表（可能含其它模块预先安装的规则）。
+    // 先构建完整批次并登记回滚，再下发：内核侧下发非原子，中途失败时已生效的前缀
+    // 同样必须删除。未生效的规则由 DEL_RULE 的 ENOENT 容忍——内核按 (vpath, uid)
+    // 精确匹配，规则不存在时回写 -ENOENT。回滚始终是定向删除，不得清空 Provider 的
+    // 整张规则表（可能含其它模块预先安装的规则）。
     let planned = crate::vfs::exec::plan_rules(plan)?;
     let stats = planned.stats.clone();
     let shared = Rc::new(RefCell::new(kernel));
@@ -1705,18 +1705,31 @@ fn apply_vfs_phase(
     {
         let mut kernel = shared.borrow_mut();
         let batch = applied.borrow();
-        crate::vfs::exec::apply_rules(&mut *kernel, &batch, &config.vfs_isolate_uids)?;
+        // VFS 失败按 vfs_strict 决定是否致命：非 strict 下降级为「本次不使用 VFS」，
+        // 不拖垮已经成功的 Overlay / Magic 挂载；两条路径都会先删除已生效的前缀。
+        let outcome = crate::vfs::exec::apply_rules_with_policy(
+            &mut *kernel,
+            &batch,
+            &config.vfs_isolate_uids,
+            config.vfs_strict,
+        )?;
+        drop(batch);
+        let Some(stats) = outcome else {
+            // 已经在内联清理里删掉了这批规则，清空登记避免后续回滚重复下发 DEL_RULE。
+            applied.borrow_mut().rules.clear();
+            log::warn!("vfs backend degraded: rules were rolled back and vfs is skipped this boot");
+            return Ok(VfsExecStats::default());
+        };
+        state.vfs_provider = Some(provider.as_str().to_owned());
+        log::info!(
+            "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
+            provider.as_str(),
+            stats.injected,
+            stats.whiteouts,
+            stats.opaque
+        );
+        Ok(stats)
     }
-
-    state.vfs_provider = Some(provider.as_str().to_owned());
-    log::info!(
-        "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
-        provider.as_str(),
-        stats.injected,
-        stats.whiteouts,
-        stats.opaque
-    );
-    Ok(stats)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

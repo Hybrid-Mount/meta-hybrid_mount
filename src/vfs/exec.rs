@@ -3,6 +3,8 @@
 //! 把规划结果应用到当前绑定的 Provider，并汇总统计。
 //! 回滚由流水线统一负责：下发前先登记完整批次，失败时对该批次逐条 DEL_RULE。
 
+use std::collections::BTreeSet;
+
 use crate::errors::Result;
 use crate::module_id::ModuleId;
 use crate::plan::MountPlan;
@@ -79,10 +81,52 @@ pub fn apply_rules(
     uids: &[u32],
 ) -> Result<VfsExecStats> {
     kernel.apply_rules(&applied.rules)?;
+    let uids = dedupe_uids(uids);
     if !uids.is_empty() {
-        kernel.add_uids(uids)?;
+        kernel.add_uids(&uids)?;
     }
     Ok(applied.stats.clone())
+}
+
+/// 带降级策略的下发：VFS 自身的失败按 `vfs_strict` 决定是否致命。
+///
+/// 返回 `Ok(Some(stats))` 表示批次已生效；`Ok(None)` 表示非 strict 下降级为「本次不
+/// 使用 VFS」。非 strict 时 VFS 是可选后端，单条坏规则（例如源路径在开机早期尚不可
+/// 解析）不该拖垮已经成功的 Overlay / Magic 挂载。两条错误路径都会先按批次定向删除
+/// 已生效的前缀，再决定是降级还是把错误交回调用方。
+pub fn apply_rules_with_policy(
+    kernel: &mut dyn VfsKernel,
+    applied: &VfsApplied,
+    uids: &[u32],
+    strict: bool,
+) -> Result<Option<VfsExecStats>> {
+    match apply_rules(kernel, applied, uids) {
+        Ok(stats) => Ok(Some(stats)),
+        Err(err) => {
+            // 批次非原子：失败时可能已有前缀生效，必须定向删除。未生效的规则由
+            // DEL_RULE 的 ENOENT 容忍。
+            if let Err(cleanup) = kernel.remove_rules(&applied.rules) {
+                log::error!("vfs rollback after a failed apply also failed: {cleanup}");
+            }
+            if strict {
+                Err(err)
+            } else {
+                log::warn!("vfs apply failed, continuing without the vfs backend: {err}");
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// 保序去重。内核的 ADD_UID 对已存在的 UID 回 -EEXIST，而 `ensure_status` 把任何负值
+/// 当硬错误，会把整条挂载流水线拖进回滚；配置里写重、或同一次启动内第二次运行流水线
+/// （UID 表在重启前不清空）都会命中这条路径，因此在用户态先收敛。
+fn dedupe_uids(uids: &[u32]) -> Vec<u32> {
+    let mut seen = BTreeSet::new();
+    uids.iter()
+        .copied()
+        .filter(|uid| seen.insert(*uid))
+        .collect()
 }
 
 #[cfg(test)]

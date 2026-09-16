@@ -145,17 +145,28 @@ pub fn build_del_rule_payloads(paths: &[Vec<u8>], uid: u32) -> Result<Vec<Vec<u8
     Ok(payloads)
 }
 
-pub fn ensure_status(payload: &[u8]) -> Result<()> {
+/// 内核回写的负 errno：规则不存在，回滚删除时容忍。
+const KERNEL_ENOENT: i32 = -2;
+/// 内核回写的负 errno：UID 已在隔离表内，ADD_UID 的幂等结果。
+const KERNEL_EEXIST: i32 = -17;
+
+/// 读取 payload 的 `status` 字段，并校验响应长度。
+fn read_status(payload: &[u8]) -> Result<i32> {
     if payload.len() != PAYLOAD_LEN {
         return Err(Error::VfsProtocol {
             detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
         });
     }
-    let status =
-        i32::from_le_bytes(payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
-            detail: "status field is not four bytes".to_owned(),
-        })?);
-    if status < 0 {
+    let raw = payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
+        detail: "status field is not four bytes".to_owned(),
+    })?;
+    Ok(i32::from_le_bytes(raw))
+}
+
+/// 统一的 status 校验：`allowed` 中的负 errno 视为成功，其余负值报错。
+fn ensure_status_allowing(payload: &[u8], allowed: &[i32]) -> Result<()> {
+    let status = read_status(payload)?;
+    if status < 0 && !allowed.contains(&status) {
         return Err(Error::VfsProtocol {
             detail: format!("kernel returned status {status}"),
         });
@@ -163,23 +174,24 @@ pub fn ensure_status(payload: &[u8]) -> Result<()> {
     Ok(())
 }
 
+pub fn ensure_status(payload: &[u8]) -> Result<()> {
+    ensure_status_allowing(payload, &[])
+}
+
 /// 回滚删除时容忍 ENOENT（规则本就不存在）；其它负 status 视为错误。
+///
+/// 与 ADD_RULE 一样校验续传游标：DEL_RULE 遇到批内长度越界会 `break`，此时 status
+/// 仍为 0 而 `arg1` 停在截断处。只看 status 会把「还有规则没删掉」当成回滚成功，
+/// 残留规则会在本次启动继续生效。整批一条都没删到时内核回 -ENOENT，游标同样停在
+/// 消费量上，故 ENOENT 走与成功相同的游标校验。
 pub fn ensure_status_allow_enoent(payload: &[u8]) -> Result<()> {
-    if payload.len() != PAYLOAD_LEN {
-        return Err(Error::VfsProtocol {
-            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
-        });
-    }
-    let status =
-        i32::from_le_bytes(payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
-            detail: "status field is not four bytes".to_owned(),
-        })?);
-    if status < 0 && status != -2 {
-        return Err(Error::VfsProtocol {
-            detail: format!("kernel returned status {status}"),
-        });
-    }
-    Ok(())
+    ensure_status_allowing(payload, &[KERNEL_ENOENT])?;
+    ensure_full_cursor(payload)
+}
+
+/// ADD_UID 幂等：UID 已在隔离表内时内核回 -EEXIST，这不是失败。
+pub fn ensure_status_allow_eexist(payload: &[u8]) -> Result<()> {
+    ensure_status_allowing(payload, &[KERNEL_EEXIST])
 }
 
 /// 校验 ADD_RULE 响应既成功又完整消费了批内字节。
@@ -189,33 +201,42 @@ pub fn ensure_status_allow_enoent(payload: &[u8]) -> Result<()> {
 /// 起始偏移。上游实现逐条覆盖 status，批量中间的失败会被后续成功静默掩盖，K2 修掉了
 /// 这一点，因此这里的错误信息会带上失败位置。
 pub fn ensure_consumed(payload: &[u8]) -> Result<()> {
-    if payload.len() != PAYLOAD_LEN {
-        return Err(Error::VfsProtocol {
-            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
-        });
-    }
-    let status =
-        i32::from_le_bytes(payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
-            detail: "status field is not four bytes".to_owned(),
-        })?);
-    let arg1 = u32::from_le_bytes(payload[20..24].try_into().map_err(|_| Error::VfsProtocol {
-        detail: "arg1 field is not four bytes".to_owned(),
-    })?);
-    let data_size =
-        u32::from_le_bytes(payload[24..28].try_into().map_err(|_| Error::VfsProtocol {
-            detail: "data_size field is not four bytes".to_owned(),
-        })?);
+    let status = read_status(payload)?;
+    let arg1 = read_arg1(payload)?;
     if status < 0 {
         return Err(Error::VfsProtocol {
             detail: format!("kernel returned status {status} for the record at offset {arg1}"),
         });
     }
+    ensure_full_cursor(payload)
+}
+
+/// 校验批内字节被完整消费。截断的批次（`arg1 != data_size`）意味着还有记录没处理，
+/// 无论 status 是 0 还是 ENOENT 都不能当成整批成功。
+fn ensure_full_cursor(payload: &[u8]) -> Result<()> {
+    let arg1 = read_arg1(payload)?;
+    let data_size =
+        u32::from_le_bytes(payload[24..28].try_into().map_err(|_| Error::VfsProtocol {
+            detail: "data_size field is not four bytes".to_owned(),
+        })?);
     if arg1 != data_size {
         return Err(Error::VfsProtocol {
             detail: format!("kernel consumed {arg1} of {data_size} bytes"),
         });
     }
     Ok(())
+}
+
+fn read_arg1(payload: &[u8]) -> Result<u32> {
+    if payload.len() != PAYLOAD_LEN {
+        return Err(Error::VfsProtocol {
+            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
+        });
+    }
+    let raw = payload[20..24].try_into().map_err(|_| Error::VfsProtocol {
+        detail: "arg1 field is not four bytes".to_owned(),
+    })?;
+    Ok(u32::from_le_bytes(raw))
 }
 
 pub fn parse_version(payload: &[u8]) -> Result<String> {
