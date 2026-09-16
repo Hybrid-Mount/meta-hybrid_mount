@@ -1,14 +1,11 @@
 # VFS kernel subsystem (K2)
 
-Status: **in progress**. The upstream baseline is imported and both the identity
-rename and the internal symbol rename are applied; the behaviour changes and the
-built-in integration script are still pending, and nothing here is built into a
-release yet.
-
-This subtree holds the K2 VFS path-redirection kernel module: its source, the
-prebuilt Android/GKI variants and the built-in integration script. K2 is meant to be
-driven exclusively by the Hybrid Mount metamodule over the keyring and does not
+Hybrid Mount's own VFS path-redirection kernel module. It is forked from NoMount
+and driven exclusively by the Hybrid Mount metamodule over the keyring; it does not
 interoperate with NoMount's metamodule or its nm CLI.
+
+The sources compile against every DDK target (see .github/workflows/kernel-module.yml)
+and the metamodule binds to whichever implementation the kernel provides.
 
 ## Layout
 
@@ -16,7 +13,9 @@ interoperate with NoMount's metamodule or its nm CLI.
 - src/PROVENANCE — fork commit, baseline digests and sync instructions
 - src/UPSTREAM_README.md — upstream kernel integration README, retained verbatim
 - src/LICENSE — upstream license text
-- binaries/ — prebuilt hybridmount-<gki>-<kernel>.ko (Phase 3; not present yet)
+- binaries/ — prebuilt hybridmount-<android>-<kernel>.ko plus list.txt (SHA-256),
+  produced by the DDK workflow and consumed by the runtime loader
+- setup.sh — built-in integration into a kernel tree
 
 ## License and provenance
 
@@ -43,50 +42,53 @@ interoperate with NoMount's metamodule or its nm CLI.
 - HM_FLAG_OPAQUE marks a directory that replaces its whole subtree: it stays visible,
   hides every real child and shows only the injected ones. The userspace emits it for a
   .replace directory and for every directory below it, matching Magisk semantics.
+- Builds for pre-5.18 kernels need -std=gnu11, which the Makefile sets.
 - Not changed yet: the wire payload layout and the magic value.
 
-## Divergence still to apply (Phase 3)
+## Divergence still to apply
 
 1. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
 2. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
 3. A decision on the wire magic value (currently the upstream constant).
 
-## Building and integrating
+## Building
 
-Two supported routes, both driven by the same sources in src/:
+**Prebuilt (default).** .github/workflows/kernel-module.yml builds one module per DDK
+target and the packaging job assembles them into binaries/ with a list.txt digest file.
+Run the workflow manually with commit_binaries=true to refresh the copies kept in the
+repository. The runtime loader matches the device's kernel release and Android version
+against that matrix, loads the exact match and treats the keyring response as
+authoritative.
 
-1. **Loadable module (recommended for testing).** DDK provides one image per
-   Android/GKI target with the matching kernel headers and Clang toolchain:
+**Locally, with DDK:**
 
-   ~~~
-   ddk build --target android14-6.1 -- -C module/vfs/src
-   ~~~
+~~~
+ddk build --target android14-6.1 -- -C module/vfs/src
+~~~
 
-   `.github/workflows/kernel-module.yml` builds the same way for every target and
-   uploads `hybridmount-<target>.ko`. Without DDK, pass a prepared kernel tree:
-   `make -C module/vfs/src KDIR=/path/to/kernel`.
+**Locally, against a prepared kernel tree:**
 
-2. **Built-in.** From the root of a kernel tree:
+~~~
+make -C module/vfs/src KDIR=/path/to/kernel
+~~~
 
-   ~~~
-   sh /path/to/metamodule/module/vfs/setup.sh
-   ~~~
+## Built-in integration
 
-   It copies the sources into `fs/hybridmount/`, adds the `fs/hybridmount` entry to
-   `fs/Makefile`, sources `fs/hybridmount/Kconfig`, then leaves you to enable
-   `CONFIG_HYBRIDMOUNT=y`. `--cleanup` reverts all of it. The script refuses to
-   touch a kernel tree that already integrates NoMount, because both implementations
-   hijack inode operations and the kernel will not stop them from coexisting.
+From the root of a kernel tree:
 
-Once a kernel provides K2, the metamodule binds to it automatically; `vfs_strict`
-decides whether an unavailable backend fails the boot or degrades.
+~~~
+sh /path/to/metamodule/module/vfs/setup.sh
+~~~
 
-## Packaging and installation (to be wired up in Phase 3/4)
+It copies the sources into fs/hybridmount/, adds the fs/hybridmount entry to
+fs/Makefile, sources fs/hybridmount/Kconfig, then leaves you to enable
+CONFIG_HYBRIDMOUNT=y. --cleanup reverts all of it. The script refuses to touch a kernel
+tree that already integrates NoMount, because both implementations hijack inode
+operations and the kernel will not stop them from coexisting.
 
-- The release build stages all of module/ recursively, so this src/ tree would be
-  shipped inside the release ZIP as-is. The installer should prune it and retain only
-  binaries/, mirroring what customize.sh already does for the ext4 LKM subtree.
-- shellcheck currently lints only module/*.sh, so a new module/vfs/setup.sh needs an
-  explicit CI entry.
-- The built-in integration script must refuse to patch a kernel tree that already
-  integrates NoMount, and the module must not register the upstream key type.
+## Packaging
+
+- xtask keeps module/vfs/src out of the release ZIP; only binaries/ ships.
+- customize.sh prunes the dev-only sources from the installed module on every platform
+  and keeps the prebuilt modules.
+- lints.yml verifies binaries/list.txt whenever it is committed.
