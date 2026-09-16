@@ -17,6 +17,60 @@ fn payload_has_exact_wire_layout() {
     assert_eq!(u32::from_le_bytes(page[24..28].try_into().unwrap()), 0);
 }
 
+/// wire magic 是 HM 专属值，必须与内核头文件的 `HYBRIDMOUNT_MAGIC_SIG` 逐字节一致。
+///
+/// `payload_has_exact_wire_layout` 里的 `page[0..8] == MAGIC.to_le_bytes()` 是自引用断言：
+/// 常量改了它照样通过，因此发现不了「只改一边」或「两边一起改错」。这里把字面量钉死——
+/// 改动 wire 契约必须先改这条测试，也就必须同时想到内核那一边。
+#[test]
+fn wire_magic_is_pinned_to_the_hm_value() {
+    assert_eq!(
+        MAGIC, 0x4859_4252_4944_4D4F,
+        "wire magic 必须与 module/vfs/src/hybridmount.h 的 HYBRIDMOUNT_MAGIC_SIG 相同"
+    );
+    // 常量按上游约定是 ASCII 串的大端读数（"HYBRIDMO"），小端机上落盘即反向字节。
+    let page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
+    assert_eq!(&page[0..8], b"OMDIRBYH", "小端序写入后 wire 上的 8 字节");
+}
+
+/// 直接读内核头文件核对常量，防止用户态与内核单侧漂移。
+///
+/// 上面那条测试只能发现「用户态被改错」，发现不了「内核被改动而用户态没跟上」——
+/// 而两者不一致时内核会在 preparse 阶段回 -EFAULT，表现为 VFS 静默降级（规则一条都
+/// 不生效），是最难定位的一类故障。这里沿用 defs.rs 里 metainstall.sh 交叉校验的做法。
+#[test]
+fn kernel_header_magic_and_version_match_userspace() {
+    let header = include_str!("../../module/vfs/src/hybridmount.h");
+
+    let magic_line = header
+        .lines()
+        .find(|line| line.starts_with("#define HYBRIDMOUNT_MAGIC_SIG"))
+        .expect("hybridmount.h is missing HYBRIDMOUNT_MAGIC_SIG");
+    let raw = magic_line
+        .split_whitespace()
+        .nth(2)
+        .and_then(|value| value.strip_suffix("ULL"))
+        .expect("HYBRIDMOUNT_MAGIC_SIG is not a ULL literal");
+    assert_eq!(
+        u64::from_str_radix(raw.trim_start_matches("0x"), 16).unwrap(),
+        MAGIC,
+        "内核 HYBRIDMOUNT_MAGIC_SIG 与用户态 MAGIC 不一致，内核会以 -EFAULT 拒绝所有 payload"
+    );
+
+    let version_line = header
+        .lines()
+        .find(|line| line.starts_with("#define HYBRIDMOUNT_VERSION"))
+        .expect("hybridmount.h is missing HYBRIDMOUNT_VERSION");
+    let version = version_line
+        .split('"')
+        .nth(1)
+        .expect("HYBRIDMOUNT_VERSION is not a string literal");
+    assert!(
+        crate::vfs::backend::SUPPORTED_VERSIONS.contains(&version),
+        "内核版本串 {version} 不在用户态 SUPPORTED_VERSIONS 内，Provider 会被判为不支持"
+    );
+}
+
 #[test]
 fn add_rule_record_encodes_header_and_paths() {
     let rule = VfsRule {

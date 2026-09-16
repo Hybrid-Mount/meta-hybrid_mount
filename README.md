@@ -64,4 +64,4 @@ Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.
 - Core (Rust and module scripts): GPL-3.0-only (see [`LICENSE`](LICENSE)).
 - WebUI: Apache-2.0 (see [`webui/LICENSE`](webui/LICENSE)).
 - Optional ext4 sysfs LKM (source and prebuilt `.ko` files): GPL-2.0-only, derived from [Mountify](https://github.com/backslashxx/mountify); see [`module/lkm/README.md`](module/lkm/README.md) and [`module/lkm/src/LICENSE`](module/lkm/src/LICENSE).
-- VFS kernel subsystem (K2, when delivered): a fork of [NoMount](https://github.com/maxsteeel/nomount); see [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and license details.
+- VFS kernel subsystem (K2): a fork of [NoMount](https://github.com/maxsteeel/nomount). Upstream's license is inconsistent (a GPL-3.0 text alongside `MODULE_LICENSE("GPL")`) and must be clarified with the upstream author before any compiled artifact is distributed; see [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and license details.

@@ -21,9 +21,9 @@
 - `/data/adb/modules/<id>/**` 始终是只读输入，不得写入。
 - 面向 WebUI 的 JSON 只走 stdout，诊断日志走 `log` crate。
 - 新配置字段必须同步 `module/config.toml` 与 `docs/ARCHITECTURE.md`。
-- wire 常量必须与规格完全一致：`MAGIC=0x4E4F4D4F554E54`、`PAYLOAD_LEN=4096`、`BUFFER_LEN=4068`、`RULE_HEADER_LEN=12`、`DEL_HEADER_LEN=6`、flags `IS_DIR=1 / VIRTUAL_DIR=2 / WHITEOUT=4`、命令号 `GET_VERSION=1 … GET_UIDS=10`。
-- Provider 二选一为硬不变量：同一时刻只驱动 K1 或 K2 之一，不并存、不热切换。
-- 支持的协议版本集合初始为 `{"20"}`。
+- wire 常量必须与规格完全一致：`MAGIC=0x4859425249444D4F`（ASCII "HYBRIDMO"；本计划初稿曾沿用上游 `0x4E4F4D4F554E54`，后按规格 §17.2 决议换为 HM 专属值）、`PAYLOAD_LEN=4096`、`BUFFER_LEN=4068`、`RULE_HEADER_LEN=12`、`DEL_HEADER_LEN=6`、flags `IS_DIR=1 / VIRTUAL_DIR=2 / WHITEOUT=4 / OPAQUE=8`、命令号 `GET_VERSION=1 … GET_UIDS=10`。
+- Provider 二选一为硬不变量：同一时刻只驱动 K1 或 K2 之一，不并存、不热切换。（**v2 已废弃 K1**：只驱动 K2，另保留单向「外来 NoMount」守卫。）
+- 支持的协议版本集合初始为 `{"20"}`。（**v2 起为 `{"hm1"}`**。）
 
 ---
 

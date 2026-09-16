@@ -15,7 +15,11 @@
 #include <linux/compat.h>
 
 #define HYBRIDMOUNT_VERSION "hm1"
-#define HYBRIDMOUNT_MAGIC_SIG 0x4E4F4D4F554E54ULL /* upstream magic; replacement pending decision */
+/* HM-exclusive wire magic: ASCII "HYBRIDMO" read big-endian. Upstream uses "NOMOUNT"
+ * for the same purpose; replacing it means a stock nm CLI is rejected at preparse with
+ * -EFAULT instead of relying on the key type name alone to stay separate. The value is
+ * also the full_name_hash seed, so it must match src/vfs/protocol.rs::MAGIC exactly. */
+#define HYBRIDMOUNT_MAGIC_SIG 0x4859425249444D4FULL
 #define HM_FLAG_IS_DIR      (1 << 0)
 #define HM_FLAG_VIRTUAL_DIR (1 << 1)
 #define HM_FLAG_WHITEOUT    (1 << 2)

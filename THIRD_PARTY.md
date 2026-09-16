@@ -17,6 +17,7 @@ This file records third-party components that Hybrid Mount is derived from or di
   - record the fork commit and make the derivation explicit in design documents and release notes.
 - Interoperability and non-affiliation:
   - K2 is an independent implementation. It does not interoperate with NoMount's kernel or its nm CLI, and Hybrid Mount does not use the NoMount name or branding to imply endorsement.
+  - That separation is enforced at the wire level, not only by naming: K2 registers a different keyring key type ("hybridmount" vs "nomount"), reports the protocol version "hm1" (vs upstream "20"), and uses an HM-exclusive payload magic (0x4859425249444D4F, ASCII "HYBRIDMO") in place of upstream's 0x4E4F4D4F554E54 ("NOMOUNT"). A stock nm CLI is therefore rejected during payload validation.
   - Hybrid Mount is not affiliated with, sponsored by, or endorsed by the NoMount project.
 - Source availability: K2 kernel sources are part of this repository. Any prebuilt .ko distributed with a release is accompanied by its corresponding source and build instructions, as required by the GPL.
 

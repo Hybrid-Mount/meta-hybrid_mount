@@ -31,10 +31,19 @@ import commit, for example:
 - Identity: files, include guard, key type name, protocol version, Kconfig symbol,
   Makefile object, module description.
 - Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*.
-- Batch ADD_RULE reports the first failure and the offset of the failing record.
+- Wire magic: HYBRIDMOUNT_MAGIC_SIG is now the HM-exclusive 0x4859425249444D4F
+  (ASCII "HYBRIDMO"), replacing upstream's 0x4E4F4D4F554E54 ("NOMOUNT"). It is also the
+  full_name_hash seed and must match src/vfs/protocol.rs::MAGIC byte for byte.
+- Virtual offset signature: HM_SIG_16 is 'hm' (0x686D), replacing 'nm' (0x6E6D).
+- HM_FLAG_OPAQUE (bit 3) is a new flag: an opaque directory replaces its whole subtree.
+- Batch ADD_RULE reports the first failure and the offset of the failing record;
+  DEL_RULE does the same and no longer leaves status 0 on a truncated batch. A rule
+  whose real path cannot be resolved is rejected with -ENOENT, an out-of-range cursor
+  with -EINVAL, and a failed directory-node allocation with -ENOMEM.
 
-Behaviour is no longer byte-identical to upstream; the wire payload layout and the
-magic value are still the upstream ones.
+Behaviour is no longer byte-identical to upstream, and the wire magic no longer matches
+it: a stock nm CLI is rejected at preparse with -EFAULT. The payload field order, sizes
+and command numbering are still the upstream ones.
 
 ## Syncing with upstream
 

@@ -37,19 +37,31 @@ and the metamodule binds to whichever implementation the kernel provides.
   "hm1", Kconfig symbol HYBRIDMOUNT, module object hybridmount.o.
 - Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*, and the
   kernel log prefix is "hybridmount:".
+- Wire magic: HYBRIDMOUNT_MAGIC_SIG is the HM-exclusive value 0x4859425249444D4F
+  (ASCII "HYBRIDMO" read big-endian), replacing upstream's 0x4E4F4D4F554E54
+  ("NOMOUNT"). A stock nm CLI is now rejected at preparse with -EFAULT rather than
+  being kept out by the key type name alone. The constant is also the full_name_hash
+  seed and must stay byte-identical to src/vfs/protocol.rs::MAGIC.
+- Virtual offset signature: HM_SIG_16 is 'hm' (0x686D), replacing upstream's 'nm'
+  (0x6E6D). This is the high half of the packed virtual loff_t, so it is an in-kernel
+  ABI in its own right.
 - Batch ADD_RULE reports the first failure together with the offset of the failing
-  record, instead of letting the last record overwrite the status.
+  record, instead of letting the last record overwrite the status. DEL_RULE reports the
+  first error the same way and no longer leaves status 0 on a truncated batch.
+- A rule whose real path fails to resolve is rejected with -ENOENT instead of being
+  inserted as a rule that can never match; ADD_RULE and DEL_RULE reject a cursor past
+  data_size; directory rules fail with -ENOMEM when the directory node cannot be
+  allocated.
 - HM_FLAG_OPAQUE marks a directory that replaces its whole subtree: it stays visible,
   hides every real child and shows only the injected ones. The userspace emits it for a
   .replace directory and for every directory below it, matching Magisk semantics.
 - Builds for pre-5.18 kernels need -std=gnu11, which the Makefile sets.
-- Not changed yet: the wire payload layout and the magic value.
+- Not changed: the wire payload layout (field order, sizes and command numbering).
 
 ## Divergence still to apply
 
 1. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
 2. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
-3. A decision on the wire magic value (currently the upstream constant).
 
 ## Building
 

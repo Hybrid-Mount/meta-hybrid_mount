@@ -6,8 +6,13 @@
 use crate::errors::{Error, Result};
 use crate::vfs::rule::{VfsAction, VfsRule};
 
-// 规格字面量 0x4E4F4D4F554E54（7 字节），此处补齐为 8 字节同样取值以通过 clippy。
-pub const MAGIC: u64 = 0x004E_4F4D_4F55_4E54;
+/// K2 wire 规格字面量，必须与内核头文件的 `HYBRIDMOUNT_MAGIC_SIG` 逐字节一致。
+///
+/// 取值是 ASCII "HYBRIDMO" 的大端读数，即小端机落盘的 8 字节为 `OMDIRBYH`。沿用上游
+/// 的记法（上游用 "NOMOUNT" 的大端读数），但换成 HM 专属值：上游魔数是公开常量，换掉
+/// 后旧版 nm CLI 即使不检查版本串也会在 preparse 阶段被 `-EFAULT` 拒绝，二进制层面
+/// 与上游彻底断开，而不再只靠 key type 名隔离。
+pub const MAGIC: u64 = 0x4859_4252_4944_4D4F;
 pub const PAYLOAD_LEN: usize = 4096;
 pub const BUFFER_LEN: usize = 4068;
 pub const RULE_HEADER_LEN: usize = 12;

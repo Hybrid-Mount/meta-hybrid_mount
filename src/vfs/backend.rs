@@ -113,8 +113,10 @@ impl VfsKernel for KeyringKernel {
 /// 3. 否则尝试加载 HM 自有 VFS LKM，再重新探测；
 /// 4. 仍不可用返回 `Ok(None)`，由调用方决定降级或失败。
 ///
-/// 当前 `LkmLoader` 仍为 no-op（K2 内核子系统尚未接入构建），因此第 3 步尚不能真正
-/// 加载模块；加载实现就绪后本函数无需改动。
+/// 第 3 步的 `VfsLkmLoader` 会按内核版本选中随模块分发的 `.ko`、置熔断标记并依次尝试
+/// insmod 候选；加载失败不致命，第 4 步的重新探测会把结果收敛成「本机没有 K2」。
+/// 注意 wire magic 与内核头文件的 `HYBRIDMOUNT_MAGIC_SIG` 必须一致：不一致时内核在
+/// preparse 阶段回 -EFAULT，探测失败，同样走降级而不是启动失败。
 pub fn select_provider(
     kernel: &mut dyn VfsKernel,
     loader: &dyn LkmLoader,

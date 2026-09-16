@@ -119,7 +119,7 @@ Payload：
 
 ~~~c
 struct nm_payload {              /* 共 4096 B, packed */
-    u64 magic;                   /* 0x4E4F4D4F554E54 "NOMOUNT"（v2 可能改为 HM 值） */
+    u64 magic;                   /* 0x4859425249444D4F "HYBRIDMO"（已换为 HM 专属值，见 17.2） */
     u32 cmd;                     /* K2_CMD_* */
     u32 target_uid;              /* ADD/DEL_UID */
     int status;                  /* 内核回写；v2 语义见第 6.3 节 */
@@ -209,7 +209,7 @@ struct nm_del_hdr  { u32 uid; u16 v_len; }                       /* 6 B */
 
 - 基线沿用 NoMount v20 布局（magic / cmd / target_uid / status / arg1 / data_size / buffer[4068]），以降低 fork 的 rebase 成本并复用现有 src/vfs/protocol.rs。
 - 因为不再需要对 K1 兼容，HM 可**增量**扩展：新增 flag 位、命令，或重定义保留语义（如 OPAQUE、失败下标复用 arg1）。扩展必须记录在协议版本号中（第 6.3 节）。
-- magic 是否改为 HM 专属值：Phase 0 决定（第 17 节）。改动成本低，但会影响与上游代码的可读性对照。
+- magic 已改为 HM 专属值 0x4859425249444D4F（ASCII "HYBRIDMO"）：上游 nm CLI 不论是否检查版本串，都会在 preparse 校验 magic 时被 -EFAULT 拒绝。布局其余部分（字段顺序、偏移、命令号）仍是上游 v20 的。
 
 ### 6.3 版本握手与状态语义
 
@@ -486,7 +486,7 @@ VFS 新增：
 ## 17. 未决问题
 
 1. **HM key type 名与版本串**：工作名 hybridmount / "hm1" 待 Phase 0 冻结；需确认不触发意外 request_module、不与常见 key type 冲突。
-2. **magic 是否改为 HM 专属值**：沿用 0x4E4F4D4F554E54 便于对照上游；改为 HM 值可避免误识别。Phase 0 决定。
+2. ~~**magic 是否改为 HM 专属值**~~ **已决（v2）**：改为 0x4859425249444D4F（ASCII "HYBRIDMO" 的大端读数）。上游常量为公开值，沿用只能靠 key type 名隔离；换掉后旧 nm CLI 在 preparse 阶段即被 -EFAULT 拒绝，二进制层面彻底断开。该常量同时是 `full_name_hash` 种子，用户态 `src/vfs/protocol.rs::MAGIC` 与内核 `HYBRIDMOUNT_MAGIC_SIG` 必须逐字节一致，由 `wire_magic_is_pinned_to_the_hm_value` 测试钉死。注意换 magic 后**旧版预编译 .ko 与新用户态不兼容**，需重跑 DDK 工作流刷新 `module/vfs/binaries/`；不匹配时表现为探测失败并降级，不会导致启动失败。
 3. **符号链接源语义**：K2 注入符号链接是否保留链接语义（上游以 LOOKUP_FOLLOW 解析真实路径），需实机确认并写入协议文档。
 4. **K2 覆盖矩阵**：先覆盖 GKI 5.10+ 主流版本，还是对齐上游全量。
 5. **vfs_strict 默认值**：默认 false（降级）还是 true（失败）需产品决策。

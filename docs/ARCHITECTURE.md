@@ -86,7 +86,7 @@ WebUI 不持有第二套业务协议：配置与状态请求都映射到以上�
 
 `status` 中的 `active_mounts` 是 OverlayFS 与 Magic Mount 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts` 与 `magic_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。
 
-`status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（`nomount` 或 `hm`）。这些字段与配置一并由启动流水线与状态层写入启动快照。
+`status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（v2 只有 `hm`，即 HM 自有的 K2 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
 
 ## 共享节点树契约
 

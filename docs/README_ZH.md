@@ -64,4 +64,4 @@ default_mode = "magic"
 - 核心（Rust、module 脚本）：GPL-3.0-only（见 [LICENSE](../LICENSE)）。
 - WebUI：Apache-2.0（见 [webui/LICENSE](../webui/LICENSE)）。
 - 可选 ext4 sysfs LKM（源码与预编译 `.ko`）：GPL-2.0-only，源自 [Mountify](https://github.com/backslashxx/mountify)；见 [module/lkm/README.md](../module/lkm/README.md) 与 [module/lkm/src/LICENSE](../module/lkm/src/LICENSE)。
-- VFS 内核子系统（K2，交付后）：fork 自 [NoMount](https://github.com/maxsteeel/nomount)；归属与许可证细节见 [THIRD_PARTY.md](../THIRD_PARTY.md)。
+- VFS 内核子系统（K2）：fork 自 [NoMount](https://github.com/maxsteeel/nomount)。上游许可证自相矛盾（GPL-3.0 正文与 `MODULE_LICENSE("GPL")` 并存），分发任何编译产物前须与上游作者澄清；归属与许可证细节见 [THIRD_PARTY.md](../THIRD_PARTY.md)。
