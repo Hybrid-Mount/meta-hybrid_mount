@@ -374,6 +374,7 @@ fn escape_html(input: &str) -> String {
 mod tests {
     use std::{
         fs::{self, File},
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -436,10 +437,42 @@ mod tests {
     }
 
     fn make_temp_output_dir() -> Result<PathBuf> {
+        // The clock alone is not enough: it can return the same value for two
+        // calls in a row, which let the parallel tests in this module share one
+        // directory and delete each other's fixtures.
+        static NEXT: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-        let output_dir = env::temp_dir().join(format!("notify-test-{nanos}"));
+        let seq = NEXT.fetch_add(1, Ordering::Relaxed);
+        let output_dir = env::temp_dir().join(format!("notify-test-{nanos}-{seq}"));
         fs::create_dir_all(&output_dir)?;
         Ok(output_dir)
+    }
+
+    #[test]
+    fn temp_output_dirs_are_unique_across_concurrent_calls() {
+        // The collision this guards happened between parallel tests, so the
+        // calls must race: a sequential loop advances the clock far enough
+        // between iterations to hide a missing discriminator.
+        let threads = 8;
+        let per_thread = 200;
+        let handles: Vec<_> = (0..threads)
+            .map(|_| {
+                std::thread::spawn(move || {
+                    (0..per_thread)
+                        .map(|_| make_temp_output_dir().expect("temp dir"))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+
+        let mut seen = std::collections::HashSet::new();
+        for handle in handles {
+            for dir in handle.join().expect("join") {
+                assert!(seen.insert(dir.clone()), "duplicate temp dir: {dir:?}");
+                fs::remove_dir_all(dir).ok();
+            }
+        }
+        assert_eq!(seen.len(), threads * per_thread);
     }
 }
 

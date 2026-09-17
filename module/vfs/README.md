@@ -100,7 +100,9 @@ operations and the kernel will not stop them from coexisting.
 
 ## Packaging
 
-- xtask keeps module/vfs/src out of the release ZIP; only binaries/ ships.
-- customize.sh prunes the dev-only sources from the installed module on every platform
-  and keeps the prebuilt modules.
+- xtask ships module/vfs/src in the release ZIP next to binaries/, and strips any
+  Kbuild output a local build left in the working tree, so setup.sh works from an
+  installed module and the distributed .ko files stay accompanied by their sources.
+- customize.sh keeps src/ on every platform, like module/lkm, and prunes only the
+  prebuilt modules on non-arm64 installs, where they cannot load.
 - lints.yml verifies binaries/list.txt whenever it is committed.

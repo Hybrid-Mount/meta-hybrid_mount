@@ -16,6 +16,7 @@ run_case() {
   case_dir=$(mktemp -d)
   mkdir "$case_dir/lkm"
   mkdir -p "$case_dir/vfs/src" "$case_dir/vfs/binaries"
+  : > "$case_dir/vfs/src/hybridmount.c"
 
   (
     MODPATH="$case_dir"
@@ -44,8 +45,11 @@ run_case() {
   else
     test ! -e "$case_dir/vfs/binaries"
   fi
-  # Development-only kernel sources are pruned on every platform.
-  test ! -e "$case_dir/vfs/src"
+  # The kernel sources ship next to the prebuilt modules on every platform, the
+  # same way lkm/src does, so the installed tree stays GPL-complete.
+  test -f "$case_dir/vfs/src/hybridmount.c" ||
+    { echo "FAIL: $case_name dropped vfs/src" >&2; exit 1; }
+  rm -rf "$case_dir/vfs/src"
   rmdir "$case_dir/vfs"
   rmdir "$case_dir"
   printf '%s installer branch: ok\n' "$case_name"

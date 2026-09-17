@@ -45,11 +45,6 @@ else
   ui_print "- $ARCH: omitted aarch64-only VFS modules"
 fi
 
-# The VFS kernel source is input for the built-in integration path
-# (module/vfs/setup.sh) and is available from the repository; runtime only needs
-# the prebuilt modules above.
-rm -rf "$MODPATH/vfs/src"
-
 BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
 BIN_TARGET="$MODPATH/hybrid-mount"
 if [ ! -f "$BIN_SOURCE" ]; then

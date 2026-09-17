@@ -158,6 +158,39 @@ fn remove_dir_if_exists(path: &Path) -> Result<()> {
     }
 }
 
+/// Suffixes Kbuild leaves behind in a kernel source directory: object and module
+/// files, `.cmd` command records, `modules.order` and `Module.symvers`.
+fn is_kernel_build_output(name: &str) -> bool {
+    [".ko", ".o", ".mod", ".mod.c", ".cmd", ".order", ".symvers"]
+        .iter()
+        .any(|suffix| name.ends_with(suffix))
+}
+
+/// Strips Kbuild output from a staged kernel source directory.
+///
+/// `cargo xtask build` copies the working tree, so a developer who built the
+/// module in place would otherwise ship its `.ko` and object files. Missing
+/// directories are fine: a source directory is optional in the stage.
+fn prune_kernel_build_output(dir: &Path) -> Result<()> {
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => return Err(err).with_context(|| format!("failed to read {}", dir.display())),
+    };
+    for entry in entries {
+        let entry = entry.with_context(|| format!("failed to read {}", dir.display()))?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if path.is_dir() {
+            prune_kernel_build_output(&path)?;
+        } else if is_kernel_build_output(&name) {
+            remove_file_if_exists(&path)?;
+        }
+    }
+    Ok(())
+}
+
 fn remove_file_if_exists(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -282,9 +315,11 @@ fn build(release: bool) -> Result<()> {
     )
     .context("failed to stage module files")?;
 
-    // The VFS kernel sources are development input for module/vfs/setup.sh; the
-    // runtime only needs module/vfs/binaries.
-    remove_dir_if_exists(&stage.join("vfs").join("src"))?;
+    // The kernel sources ship with the package so installs stay GPL-complete,
+    // but a working tree that was built in place must not carry its Kbuild
+    // output into the release.
+    prune_kernel_build_output(&stage.join("vfs").join("src"))?;
+    prune_kernel_build_output(&stage.join("lkm").join("src"))?;
 
     for (suffix, binary) in binaries {
         let staged_binary = stage
@@ -374,5 +409,60 @@ mod tests {
                 "--release",
             ]
         );
+    }
+
+    #[test]
+    fn kernel_source_pruning_keeps_sources_and_drops_build_output() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        for name in [
+            "hybridmount.c",
+            "hybridmount.h",
+            "Kconfig",
+            "LICENSE",
+            "Makefile",
+            "PROVENANCE",
+            "hybridmount.ko",
+            "hybridmount.o",
+            "hybridmount.mod",
+            "hybridmount.mod.c",
+            "modules.order",
+            "Module.symvers",
+            ".hybridmount.o.cmd",
+        ] {
+            fs::write(dir.path().join(name), b"x").expect("write fixture");
+        }
+        fs::create_dir(dir.path().join("nested")).expect("mkdir fixture");
+        fs::write(dir.path().join("nested/hybridmount.o"), b"x").expect("write nested fixture");
+
+        prune_kernel_build_output(dir.path()).expect("prune");
+
+        for kept in [
+            "hybridmount.c",
+            "hybridmount.h",
+            "Kconfig",
+            "LICENSE",
+            "Makefile",
+            "PROVENANCE",
+        ] {
+            assert!(
+                dir.path().join(kept).exists(),
+                "{kept} must survive so the shipped sources stay complete"
+            );
+        }
+        for dropped in [
+            "hybridmount.ko",
+            "hybridmount.o",
+            "hybridmount.mod",
+            "hybridmount.mod.c",
+            "modules.order",
+            "Module.symvers",
+            ".hybridmount.o.cmd",
+            "nested/hybridmount.o",
+        ] {
+            assert!(
+                !dir.path().join(dropped).exists(),
+                "{dropped} is kernel build output and must not reach the package"
+            );
+        }
     }
 }

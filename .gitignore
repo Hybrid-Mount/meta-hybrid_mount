@@ -14,7 +14,7 @@ module/bin/
 *.zip
 *.sha256
 
-# Kernel module build output (module/vfs/src)
+# Kernel module build output (module/vfs/src, module/lkm/src)
 module/vfs/src/*.ko
 module/vfs/src/*.o
 module/vfs/src/*.mod
@@ -22,6 +22,13 @@ module/vfs/src/*.mod.c
 module/vfs/src/modules.order
 module/vfs/src/Module.symvers
 module/vfs/src/.*.cmd
+module/lkm/src/*.ko
+module/lkm/src/*.o
+module/lkm/src/*.mod
+module/lkm/src/*.mod.c
+module/lkm/src/modules.order
+module/lkm/src/Module.symvers
+module/lkm/src/.*.cmd
 
 # Editors / OS
 .vscode/
