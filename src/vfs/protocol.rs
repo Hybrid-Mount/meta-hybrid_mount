@@ -254,6 +254,126 @@ pub fn parse_version(payload: &[u8]) -> Result<String> {
     Ok(text.trim().to_owned())
 }
 
+/// One rule as `GET_LIST` reports it. Paths are decoded lossily: a diagnostic listing
+/// must not fail on a path the kernel accepted as opaque bytes.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct ListedRule {
+    pub flags: u32,
+    pub uid: u32,
+    pub virtual_path: String,
+    pub real_path: String,
+}
+
+/// A listing request carries no records; `arg1` is the index to resume from.
+pub fn build_list_payload(cmd: NmCommand, cursor: u32) -> Result<Vec<u8>> {
+    let mut page = build_payload(cmd, 0, &[])?;
+    page[20..24].copy_from_slice(&cursor.to_le_bytes());
+    Ok(page)
+}
+
+/// The response's `data_size` bytes, bounded by the fixed buffer.
+fn response_body(payload: &[u8]) -> Result<&[u8]> {
+    let len = read_data_size(payload)? as usize;
+    if len > BUFFER_LEN {
+        return Err(Error::VfsProtocol {
+            detail: format!("response claims {len} bytes, exceeding {BUFFER_LEN}"),
+        });
+    }
+    payload.get(28..28 + len).ok_or_else(|| Error::VfsProtocol {
+        detail: format!("response is too short for its {len} byte body"),
+    })
+}
+
+/// `GET_LIST` records plus the index of the next rule. Unlike the batch commands, `arg1`
+/// is a rule index rather than a byte offset, so `ensure_full_cursor` does not apply.
+pub fn parse_list(payload: &[u8]) -> Result<(Vec<ListedRule>, u32)> {
+    ensure_status(payload)?;
+    let body = response_body(payload)?;
+    let mut rules = Vec::new();
+    let mut pos = 0;
+
+    while pos < body.len() {
+        let header = body
+            .get(pos..pos + RULE_HEADER_LEN)
+            .ok_or_else(|| Error::VfsProtocol {
+                detail: format!("truncated rule header at offset {pos}"),
+            })?;
+        let flags = u32::from_le_bytes(field(header, 0, "rule flags")?);
+        let uid = u32::from_le_bytes(field(header, 4, "rule uid")?);
+        let v_len = u16::from_le_bytes(field(header, 8, "rule v_len")?) as usize;
+        let r_len = u16::from_le_bytes(field(header, 10, "rule r_len")?) as usize;
+        pos += RULE_HEADER_LEN;
+
+        let paths = body
+            .get(pos..pos + v_len + r_len)
+            .ok_or_else(|| Error::VfsProtocol {
+                detail: format!(
+                    "rule at offset {pos} claims {} path bytes but the batch ends early",
+                    v_len + r_len
+                ),
+            })?;
+        let (virtual_path, real_path) = paths.split_at(v_len);
+        rules.push(ListedRule {
+            flags,
+            uid,
+            virtual_path: String::from_utf8_lossy(virtual_path).into_owned(),
+            real_path: String::from_utf8_lossy(real_path).into_owned(),
+        });
+        pos += v_len + r_len;
+    }
+
+    Ok((rules, read_arg1(payload)?))
+}
+
+/// Isolated uids plus the index of the next uid to read.
+pub fn parse_uids(payload: &[u8]) -> Result<(Vec<u32>, u32)> {
+    ensure_status(payload)?;
+    let body = response_body(payload)?;
+    if body.len() % std::mem::size_of::<u32>() != 0 {
+        return Err(Error::VfsProtocol {
+            detail: format!(
+                "uid batch of {} bytes is not a whole number of u32",
+                body.len()
+            ),
+        });
+    }
+    let uids = body
+        .chunks_exact(4)
+        .map(|word| u32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+        .collect();
+
+    Ok((uids, read_arg1(payload)?))
+}
+
+/// Reads every page of a listing command. Both listing commands return a next-index in
+/// `arg1` and an empty batch at the end.
+pub fn paginate<T, F, P>(mut fetch: F, parse: P) -> Result<Vec<T>>
+where
+    F: FnMut(u32) -> Result<Vec<u8>>,
+    P: Fn(&[u8]) -> Result<(Vec<T>, u32)>,
+{
+    let mut cursor = 0_u32;
+    let mut all = Vec::new();
+    loop {
+        let payload = fetch(cursor)?;
+        let (mut batch, next) = parse(&payload)?;
+        if batch.is_empty() {
+            return Ok(all);
+        }
+        // A non-empty batch that does not move the cursor would loop forever.
+        if next <= cursor {
+            return Err(Error::VfsProtocol {
+                detail: format!(
+                    "kernel returned cursor {next} for {} records requested from {cursor}",
+                    batch.len()
+                ),
+            });
+        }
+        all.append(&mut batch);
+        cursor = next;
+    }
+}
+
 #[cfg(test)]
 #[path = "protocol_tests.rs"]
 mod tests;

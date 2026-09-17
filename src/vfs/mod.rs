@@ -3,6 +3,7 @@
 //! Userspace backend for Hybrid Mount's own VFS kernel subsystem (K2).
 
 pub mod backend;
+pub mod doctor;
 pub mod exec;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod lkm;

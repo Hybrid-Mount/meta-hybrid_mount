@@ -255,3 +255,176 @@ fn ensure_consumed_reports_first_failure_and_its_offset() {
     assert!(text.contains("-22"), "error was {text}");
     assert!(text.contains("offset 12"), "error was {text}");
 }
+
+/// A response page carrying real buffer content, as GET_LIST / GET_UIDS return it.
+fn page_with_data(status: i32, cursor: u32, data: &[u8]) -> Vec<u8> {
+    let mut page = response(status, cursor, data.len() as u32);
+    page[28..28 + data.len()].copy_from_slice(data);
+    page
+}
+
+fn listed_record(flags: u32, uid: u32, virtual_path: &str, real_path: &str) -> Vec<u8> {
+    let mut record = Vec::new();
+    record.extend_from_slice(&flags.to_le_bytes());
+    record.extend_from_slice(&uid.to_le_bytes());
+    record.extend_from_slice(&(virtual_path.len() as u16).to_le_bytes());
+    record.extend_from_slice(&(real_path.len() as u16).to_le_bytes());
+    record.extend_from_slice(virtual_path.as_bytes());
+    record.extend_from_slice(real_path.as_bytes());
+    record
+}
+
+#[test]
+fn parse_list_reads_records_and_the_next_cursor() {
+    let mut data = listed_record(0, 0, "/system/etc/hosts", "/data/adb/modules/m/hosts");
+    data.extend(listed_record(FLAG_WHITEOUT, 10123, "/system/app/Foo", ""));
+    let page = page_with_data(0, 2, &data);
+
+    let (rules, cursor) = parse_list(&page).unwrap();
+
+    assert_eq!(cursor, 2, "arg1 is the index of the next rule to read");
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[0].flags, 0);
+    assert_eq!(rules[0].uid, 0);
+    assert_eq!(rules[0].virtual_path, "/system/etc/hosts");
+    assert_eq!(rules[0].real_path, "/data/adb/modules/m/hosts");
+    assert_eq!(rules[1].flags, FLAG_WHITEOUT);
+    assert_eq!(rules[1].uid, 10123);
+    assert_eq!(rules[1].virtual_path, "/system/app/Foo");
+    assert!(rules[1].real_path.is_empty());
+}
+
+#[test]
+fn parse_list_rejects_negative_status() {
+    let err = parse_list(&page_with_data(-22, 0, &[])).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn parse_list_rejects_a_truncated_record_header() {
+    let page = page_with_data(0, 1, &[0_u8; RULE_HEADER_LEN - 1]);
+    let err = parse_list(&page).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn parse_list_rejects_paths_that_exceed_the_reported_length() {
+    // Claims 64 bytes of paths but the record body is empty.
+    let mut data = vec![0_u8; RULE_HEADER_LEN];
+    data[8..10].copy_from_slice(&32_u16.to_le_bytes());
+    data[10..12].copy_from_slice(&32_u16.to_le_bytes());
+    let err = parse_list(&page_with_data(0, 1, &data)).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn parse_list_rejects_data_size_beyond_the_buffer() {
+    let mut page = response(0, 1, BUFFER_LEN as u32 + 1);
+    page[28..32].copy_from_slice(b"junk");
+    let err = parse_list(&page).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn parse_uids_reads_words_and_the_next_cursor() {
+    let mut data = Vec::new();
+    for uid in [1000_u32, 10123] {
+        data.extend_from_slice(&uid.to_le_bytes());
+    }
+
+    let (uids, cursor) = parse_uids(&page_with_data(0, 2, &data)).unwrap();
+
+    assert_eq!(uids, vec![1000, 10123]);
+    assert_eq!(cursor, 2);
+}
+
+#[test]
+fn parse_uids_rejects_a_length_that_is_not_whole_words() {
+    let err = parse_uids(&page_with_data(0, 0, &[0_u8; 6])).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn parse_uids_rejects_negative_status() {
+    let err = parse_uids(&page_with_data(-13, 0, &[])).unwrap_err();
+    assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
+}
+
+#[test]
+fn build_list_payload_writes_the_cursor_into_arg1() {
+    let page = build_list_payload(NmCommand::GetList, 7).unwrap();
+
+    assert_eq!(
+        u32::from_le_bytes(page[8..12].try_into().unwrap()),
+        NmCommand::GetList as u32
+    );
+    assert_eq!(u32::from_le_bytes(page[20..24].try_into().unwrap()), 7);
+    // A listing request carries no input records.
+    assert_eq!(u32::from_le_bytes(page[24..28].try_into().unwrap()), 0);
+}
+
+#[test]
+fn paginate_walks_the_cursor_until_the_kernel_returns_an_empty_batch() {
+    let pages = [
+        page_with_data(0, 2, &listed_record(0, 0, "/a", "/x")),
+        page_with_data(0, 3, &listed_record(0, 0, "/b", "/y")),
+        page_with_data(0, 3, &[]),
+    ];
+    let mut index = 0;
+
+    let rules = paginate(
+        |_cursor| {
+            let page = pages[index].clone();
+            index += 1;
+            Ok(page)
+        },
+        parse_list,
+    )
+    .unwrap();
+
+    assert_eq!(index, 3, "stops at the first empty batch");
+    assert_eq!(rules.len(), 2);
+    assert_eq!(rules[1].virtual_path, "/b");
+}
+
+#[test]
+fn paginate_asks_for_the_next_cursor_the_kernel_reported() {
+    let mut seen = Vec::new();
+    let pages = [
+        page_with_data(0, 4, &listed_record(0, 0, "/a", "/x")),
+        page_with_data(0, 4, &[]),
+    ];
+    let mut index = 0;
+
+    paginate(
+        |cursor| {
+            seen.push(cursor);
+            let page = pages[index].clone();
+            index += 1;
+            Ok(page)
+        },
+        parse_list,
+    )
+    .unwrap();
+
+    assert_eq!(seen, vec![0, 4]);
+}
+
+#[test]
+fn paginate_rejects_a_cursor_that_does_not_advance() {
+    // A kernel that keeps reporting the same cursor would loop forever. The first page
+    // still moves 0 -> 3, so the stall only shows up once the cursor is re-requested.
+    let mut calls = 0;
+    let err = paginate(
+        |_cursor| {
+            calls += 1;
+            Ok(page_with_data(0, 3, &listed_record(0, 0, "/a", "/x")))
+        },
+        parse_list,
+    )
+    .unwrap_err();
+
+    let text = format!("{err}");
+    assert!(text.contains("cursor"), "error was {text}");
+    assert_eq!(calls, 2, "gives up as soon as the cursor stops moving");
+}

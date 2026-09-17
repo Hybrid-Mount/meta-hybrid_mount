@@ -46,7 +46,40 @@ impl KeyringKernel {
         Ok(Self { page, channel })
     }
 
-    fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>> {
+    /// Probes the key type, returning its version when it answers.
+    ///
+    /// `None` covers both "no such key type" and "the page was rejected"; the caller
+    /// distinguishes those from the device's module tables rather than from the errno.
+    pub fn probe_version(&mut self) -> Option<String> {
+        let request = protocol::build_payload(NmCommand::GetVersion, 0, &[]).ok()?;
+        let response = self.exchange(&request).ok()?;
+        protocol::parse_version(&response).ok()
+    }
+
+    /// Every rule currently installed in the provider.
+    pub fn list_rules(&mut self) -> Result<Vec<protocol::ListedRule>> {
+        protocol::paginate(
+            |cursor| {
+                let page = protocol::build_list_payload(NmCommand::GetList, cursor)?;
+                self.exchange(&page)
+            },
+            protocol::parse_list,
+        )
+    }
+
+    /// Every isolated uid currently installed in the provider.
+    pub fn list_uids(&mut self) -> Result<Vec<u32>> {
+        protocol::paginate(
+            |cursor| {
+                let page = protocol::build_list_payload(NmCommand::GetUids, cursor)?;
+                self.exchange(&page)
+            },
+            protocol::parse_uids,
+        )
+    }
+
+    /// Sends one payload page and returns the page the kernel wrote back.
+    pub(crate) fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>> {
         let page = self.page.as_mut_slice();
         if page.len() != request.len() {
             return Err(Error::VfsProtocol {
