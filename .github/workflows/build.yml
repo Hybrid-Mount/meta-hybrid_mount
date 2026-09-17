@@ -6,8 +6,8 @@ on:
   push:
     branches:
       - "dev"
-      # VFS 实验分支:尚未合并进 dev,但需要与 dev 相同的打包与 TG 通知,
-      # 以便在真机验证前确认产物可构建。合并/删除该分支后应移除本条目。
+      # VFS experiment branch: not merged into dev yet, but it needs the same packaging and TG notification
+      # so the artifacts can be confirmed buildable before on-device testing. Remove this entry once the branch is merged or deleted.
       - "feat/nomount-vfs"
     paths:
       - "src/**"

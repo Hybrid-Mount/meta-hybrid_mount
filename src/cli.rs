@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 手工 CLI 参数解析与命令分派(无 clap 运行时依赖)。
+//! Hand-rolled CLI argument parsing and command dispatch, with no clap runtime dependency.
 //!
-//! 无参数执行完整挂载流水线；其余命令为 WebUI 与诊断工具提供结构化数据。
+//! No arguments runs the full mount pipeline; the other commands return structured data for the WebUI and diagnostics.
 
 use crate::config::{handle_gen_config, handle_save_config, handle_show_config};
 use crate::errors::{Error, Result};

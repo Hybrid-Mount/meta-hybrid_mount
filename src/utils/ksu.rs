@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! KernelSU 尝试卸载列表集成。
-//! 去重与忽略分区延续本仓库 v4.2.0 `umount_mgr` 语义。
+//! KernelSU try-umount list integration.
+//! Deduplication and ignored partitions follow this repo's v4.2.0 `umount_mgr` semantics.
 //!
-//! 注意语义边界:这里只把挂载点**注册**进内核列表,不做立即卸载;
-//! 立即卸载必须走 rustix 的 `unmount` 系统调用。
+//! Note the boundary: this only **registers** mountpoints with the kernel list and never
+//! unmounts immediately, which requires the rustix `unmount` syscall.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -22,7 +22,7 @@ static UMOUNT_BROKEN: AtomicBool = AtomicBool::new(false);
 static TRY_UMOUNT_LIST: OnceLock<Mutex<TryUmount>> = OnceLock::new();
 static REGISTERED_PATHS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
-/// 启动时检测 KernelSU 是否可用;大版本 4 时禁用卸载列表。
+/// Detects whether KernelSU is available at boot; major version 4 disables the umount list.
 pub fn init() {
     let active = ksu::version().is_some_and(|version| {
         log::info!("KernelSU Version: {version}");
@@ -42,7 +42,7 @@ pub fn is_active() -> bool {
     KSU_ACTIVE.load(Ordering::Relaxed)
 }
 
-/// 把挂载点加入 KernelSU 尝试卸载列表(不可用/禁用/命中忽略分区/重复时为空操作)。
+/// Adds a mountpoint to the KernelSU try-umount list, a no-op when unavailable, disabled, ignored or already present.
 pub fn send_unmountable(target: impl AsRef<Path>) {
     if !is_active() || UMOUNT_BROKEN.load(Ordering::Relaxed) {
         return;
@@ -75,7 +75,7 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
         .add(path);
 }
 
-/// 提交尝试卸载列表(`MNT_DETACH`),流水线结束后调用。
+/// Commits the try-umount list (`MNT_DETACH`); called once the pipeline finishes.
 pub fn commit_unmount_list() -> Result<()> {
     if crate::sys::faults::should_fail_ksu_commit() {
         return Err(Error::Mount(Box::new(ContextError::new(
@@ -105,7 +105,7 @@ pub fn commit_unmount_list() -> Result<()> {
     Ok(())
 }
 
-/// 清空内核 try-umount 列表与本进程注册历史,仅用于失败回滚。
+/// Clears the kernel try-umount list and this process's registration history, for failure rollback only.
 pub fn clear_unmount_list() -> Result<()> {
     if !is_active() {
         return Ok(());

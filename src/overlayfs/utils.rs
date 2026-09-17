@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! OverlayFS 与 ext4 的底层挂载原语(仅 Linux/Android)。
+//! Low-level mount primitives for OverlayFS and ext4 (Linux/Android only).
 
 use std::io;
 use std::os::unix::fs::MetadataExt;
@@ -19,7 +19,7 @@ use rustix::mount::{
 use crate::errors::{Error, Result};
 use crate::sys::fs::check_kernel_config;
 
-/// EBUSY 重试上限与指数退避(loop attach/mount/detach)。
+/// EBUSY retry cap and exponential backoff for loop attach/mount/detach.
 const EBUSY_MAX_RETRIES: usize = 3;
 const EBUSY_BASE_BACKOFF: Duration = Duration::from_millis(50);
 
@@ -78,12 +78,12 @@ fn retry_ebusy_errno<T>(
     Err(last_error.unwrap_or(rustix::io::Errno::BUSY))
 }
 
-/// 检查内核是否编译了 overlayfs(`CONFIG_OVERLAY_FS=y`)。
+/// Checks whether the kernel has overlayfs built in (`CONFIG_OVERLAY_FS=y`).
 pub fn is_overlay_supported() -> Result<bool> {
     check_kernel_config("CONFIG_OVERLAY_FS")
 }
 
-/// fsopen("overlay") 主路径:fsconfig → fsmount → move_mount。
+/// Primary fsopen("overlay") path: fsconfig, then fsmount, then move_mount.
 pub fn fsopen_mount(
     upperdir: Option<String>,
     workdir: Option<String>,
@@ -121,8 +121,8 @@ pub fn fsopen_mount(
     .map_err(|err| Error::msg(format!("move overlay mount to {}: {err}", dest.display())))
 }
 
-/// 已 attach 的 loop 设备句柄。成功挂载后由 `StorageHandle` 持有，
-/// teardown 时先 unmount 再显式 detach；mount 失败路径在此函数内清理。
+/// Handle for an attached loop device. `StorageHandle` keeps it after a successful mount
+/// and unmounts before detaching explicitly at teardown; the mount failure path cleans up inside this function.
 #[derive(Debug)]
 pub struct Ext4LoopMount {
     device: loopdev::LoopDevice,
@@ -134,7 +134,7 @@ impl Ext4LoopMount {
     }
 }
 
-/// 挂载 ext4 镜像(loop 设备 + autoclear,v4.2.0 行为)。
+/// Mounts an ext4 image via a loop device with autoclear (v4.2.0 behaviour).
 pub fn mount_ext4(source: &Path, target: &Path) -> Result<Ext4LoopMount> {
     if !source.exists() {
         log::warn!("ext4 source does not exist: {}", source.display());

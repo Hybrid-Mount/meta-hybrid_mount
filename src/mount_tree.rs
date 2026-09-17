@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! OverlayFS 与 Magic Mount 共享的挂载树。
 //!
-//! scanner 只读识别节点类型与 `.replace` / whiteout 语义，planner 再把每个
-//! 模块贡献标注为 overlay、magic 或 ignore。执行阶段只消费这棵树，不再重新
-//! 扫描模块目录或维护第二套路径过滤协议。
+//! The scanner identifies node types and `.replace` / whiteout semantics read-only, then the
+//! planner labels each module contribution overlay, magic or ignore. Execution only consumes
+//! this tree; it never rescans module directories or keeps a second path-filtering protocol.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -14,7 +13,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Mode;
 use crate::module_id::ModuleId;
 
-/// 内建分区提升规则:`(分区名, 是否要求 /system/<分区> 是符号链接)`。
+/// Built-in partition promotion rules: `(partition, requires /system/<partition> to be a symlink)`.
 pub const BUILTIN_PARTITIONS: [(&str, bool); 4] = [
     ("vendor", true),
     ("system_ext", true),
@@ -22,7 +21,7 @@ pub const BUILTIN_PARTITIONS: [(&str, bool); 4] = [
     ("odm", false),
 ];
 
-/// 两个挂载后端共同关心的节点类型。
+/// Node types both mount backends care about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NodeFileType {
     RegularFile,
@@ -58,7 +57,7 @@ impl fmt::Display for NodeFileType {
     }
 }
 
-/// 一个模块对目标节点的贡献。`source_path` 始终指向只读模块源目录。
+/// One module's contribution to a target node. `source_path` always points into the read-only module source.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MountSource {
     pub module_id: ModuleId,
@@ -75,7 +74,7 @@ pub struct StructuralSource {
     pub source_path: PathBuf,
 }
 
-/// 以真实挂载目标为层级的一棵树。一个目标可以有多个同后端模块层。
+/// A tree keyed by real mount targets. One target can carry several module layers for the same backend.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MountNode {
     pub name: String,
@@ -94,12 +93,12 @@ impl MountNode {
         }
     }
 
-    /// 当前目标上该后端的优先贡献。排序与 Overlay lowerdir 顺序一致。
+    /// The winning contribution for this backend on this target, ordered like the Overlay lowerdirs.
     pub fn source_for(&self, backend: Mode) -> Option<&MountSource> {
         self.sources.iter().find(|source| source.backend == backend)
     }
 
-    /// 仅用于承载后端子节点的目录来源，不会把该来源本身切换到目标后端。
+    /// A directory source that only carries backend descendants; it does not switch this source to the target backend.
     pub fn structural_path(&self) -> Option<&Path> {
         self.sources
             .iter()
@@ -120,7 +119,7 @@ impl MountNode {
                 .any(|child| child.has_backend(backend))
     }
 
-    /// 执行器看到的节点类型。没有自身贡献、但有该后端子孙时是结构目录。
+    /// The node type the executor sees. With no contribution of its own but descendants for this backend, it is a structural directory.
     pub fn file_type_for(&self, backend: Mode) -> Option<NodeFileType> {
         self.source_for(backend)
             .map(|source| source.file_type)
@@ -132,7 +131,7 @@ impl MountNode {
             })
     }
 
-    /// 后端自己的来源优先；结构目录可借用任意模块目录的元数据来建 staging。
+    /// The backend's own source wins; a structural directory may borrow any module directory's metadata for staging.
     pub fn module_path_for(&self, backend: Mode) -> Option<&Path> {
         self.source_for(backend)
             .map(|source| source.source_path.as_path())
@@ -227,7 +226,7 @@ impl MountTree {
         Some(node)
     }
 
-    /// 成功挂载目标对应的模块贡献(只统计该目标节点自身来源)。
+    /// Module contributions for a successfully mounted target, counting only that node's own sources.
     pub fn module_ids_for_target(&self, backend: Mode, target: &str) -> BTreeSet<&ModuleId> {
         self.find(target)
             .map(|node| {
@@ -240,7 +239,7 @@ impl MountTree {
             .unwrap_or_default()
     }
 
-    /// 目录级挂载目标下所有后端贡献模块(用于 shallow overlay 等父目标)。
+    /// Every contributing module under a directory-level target, used by parent targets such as shallow overlay.
     pub fn module_ids_for_subtree(&self, backend: Mode, target: &str) -> BTreeSet<&ModuleId> {
         let mut ids = BTreeSet::new();
         if let Some(node) = self.find(target) {
@@ -264,7 +263,7 @@ impl MountTree {
         self.root.has_backend(backend)
     }
 
-    /// 共享树节点总数(含根),用于启动性能计数。
+    /// Total nodes in the shared tree, including the root, for boot performance counts.
     pub fn node_count(&self) -> usize {
         fn count(node: &MountNode) -> usize {
             1 + node.children.values().map(count).sum::<usize>()

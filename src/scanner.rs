@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 模块清单的只读扫描(供 planner 与 CLI 使用)。
+//! Read-only scan of the module list, used by the planner and the CLI.
 //!
-//! 只读取并记录,绝不写回模块目录。
-//! 识别 `module.prop`、disable/remove/skip_mount 标记与 system/额外分区内容。
+//! It only reads and records, and never writes back to a module directory.
+//! It recognises `module.prop`, the disable/remove/skip_mount markers and system/extra partition contents.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -17,8 +17,8 @@ use crate::errors::{Error, Result};
 use crate::module_id::ModuleId;
 use crate::mount_tree::NodeFileType;
 
-/// 模块内一个可挂载条目:`relative` 相对模块根(如 `system/etc/hosts`),
-/// 统一使用 `/` 分隔,便于跨平台比较。
+/// A mountable entry inside a module: `relative` is relative to the module root
+/// (such as `system/etc/hosts`) and always uses `/`, so it compares across platforms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleEntry {
     pub relative: String,
@@ -26,7 +26,7 @@ pub struct ModuleEntry {
     pub replace: bool,
 }
 
-/// 只读扫描出的模块记录。
+/// A module record produced by the read-only scan.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleRecord {
     pub id: ModuleId,
@@ -42,20 +42,20 @@ pub struct ModuleRecord {
 }
 
 impl ModuleRecord {
-    /// 是否参与挂载(供 planner 与 WebUI 模块列表使用)。
+    /// Whether it takes part in mounting, for the planner and the WebUI module list.
     pub fn mountable(&self) -> bool {
         self.has_mount_files && !self.disabled && !self.skip_mount
     }
 }
 
-/// 扫描模块目录,按 id 排序返回。
+/// Scans the module directory and returns records sorted by id.
 ///
-/// 失败语义:
-/// - 模块根目录不可读:致命错误(`Error::ScanReadDir`),不再静默返回空列表。
-/// - 目录内单个条目无法读取/检查:警告并跳过该条目。
-/// - 辅助目录、缺失/非普通/不可读 `module.prop`、必填字段缺失、
-///   无效 ID 或目录名与声明 ID 不一致:警告并跳过,保持“非模块不参与”语义。
-/// - 两个目录声明同一模块 ID:致命错误,避免它们互相覆盖 staging 路径。
+/// Failure semantics:
+/// - An unreadable module root is fatal (`Error::ScanReadDir`) rather than a silent empty list.
+/// - A single entry that cannot be read or checked is warned about and skipped.
+/// - Auxiliary directories, a missing/non-regular/unreadable `module.prop`, missing required
+///   fields, an invalid id, or a directory name that disagrees with the declared id are warned about and skipped, keeping non-modules out.
+/// - Two directories declaring the same module id is fatal, so they cannot overwrite each other's staging paths.
 pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Vec<ModuleRecord>> {
     let mut modules = Vec::new();
     let mut declared_ids: BTreeMap<ModuleId, PathBuf> = BTreeMap::new();
@@ -221,7 +221,7 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
     Ok(modules)
 }
 
-/// 轻量 `key=value` 解析:空行与 `#` 注释跳过,键值去首尾空白。
+/// Lightweight `key=value` parsing: blank lines and `#` comments are skipped and both sides are trimmed.
 fn parse_prop(text: &str) -> BTreeMap<String, String> {
     text.lines()
         .filter_map(|line| {

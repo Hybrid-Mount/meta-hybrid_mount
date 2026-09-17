@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 无参数启动流水线:读配置 → 只读扫描 → planner → overlayfs 执行 →
-//! magic mount 执行 → 提交 KSU 尝试卸载列表 → 写 scan.ret / run/state.json。
+//! The argument-free boot pipeline: read config, scan read-only, plan, run OverlayFS,
+//! run Magic Mount, commit the KSU try-umount list, then write scan.ret and run/state.json.
 //!
-//! 挂载与 shallow staging 只写运行目录,模块源目录只读。
+//! Mounts and shallow staging write only inside the runtime directory; module sources stay read-only.
 
 #[cfg(unix)]
 use std::collections::BTreeMap;
@@ -50,7 +50,7 @@ use std::cell::RefCell;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::rc::Rc;
 
-/// 无参数启动挂载流水线的统一入口。
+/// The single entry point for the argument-free boot pipeline.
 pub fn run_mount_pipeline() -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
@@ -65,7 +65,7 @@ pub fn run_mount_pipeline() -> Result<()> {
     }
 }
 
-/// 由执行数字汇总出状态快照统计(纯函数,可跨平台测试)。
+/// Summarises the execution counters into state statistics (pure, so it tests across platforms).
 pub fn pipeline_stats(
     overlay_dir_mounts: usize,
     shallow_overlay_mounts: usize,
@@ -97,7 +97,7 @@ pub fn merge_active_mounts(overlay: &[String], magic: &[String]) -> Vec<String> 
         .collect()
 }
 
-/// 文件级 overlay 规则的 shallow 目录规划:每个源文件一个独立层目录。
+/// Shallow directory planning for file-level overlay rules: one layer directory per source file.
 pub fn staged_overlay_path(
     source: &Path,
     modules: &[ModuleRecord],
@@ -585,8 +585,8 @@ fn persist_mount_failure_state(
     }
 }
 
-/// 回滚后必须把 `scan.ret` 恢复到“全部未挂载”，避免 WebUI 显示
-/// 回滚前曾经成功的挂载结果。
+/// After a rollback `scan.ret` must report everything as unmounted, or the WebUI would
+/// keep showing mounts that succeeded before the rollback.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn persist_unmounted_module_snapshot(modules: &[ModuleRecord], config: &Config, plan: &MountPlan) {
     let mount_errors = crate::state::collect_mount_error_modules(&config.moduledir);
@@ -632,7 +632,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
 
-    // 配置和 scan.ret 共用持久化目录；state.json 位于 run 子目录。
+    // Config and scan.ret share the persisted directory; state.json lives in the run subdirectory.
     for path in [defs::CONFIG_PATH, defs::STATE_PATH] {
         if let Some(directory) = Path::new(path).parent()
             && let Err(err) = crate::sys::fs::cleanup_stale_atomic_temp_files(directory)
@@ -1595,11 +1595,11 @@ impl Drop for VfsBootGuard {
     }
 }
 
-/// 单向守卫：探测设备上是否已存在外来 NoMount 实现。
+/// One-way guard: detects whether a foreign NoMount implementation already exists on the device.
 ///
-/// 只探测一次，不读取对方规则、不做互斥仲裁。探测失败（key type 未注册、平台不支持
-/// 或内存分配失败）一律视为“不存在”，因此它是纵深防御而非唯一保证：K2 与 NoMount 使用
-/// 不同 key type，且 setup.sh 在集成层拒绝二者共存。
+/// Probed once, without reading the other side's rules or arbitrating. A failed probe (key
+/// type unregistered, unsupported platform, allocation failure) counts as "absent", so this
+/// is defence in depth rather than the only guarantee: K2 and NoMount use different key types, and setup.sh refuses to let both coexist.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn detect_foreign_nomount() -> bool {
     match KeyringKernel::new(KeyringChannel::Nomount) {

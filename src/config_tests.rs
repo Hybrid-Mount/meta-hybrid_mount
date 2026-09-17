@@ -584,7 +584,7 @@ fn load_for_boot_rejects_dangling_config_symlink() {
 fn load_wraps_read_errors_with_path_context() {
     let dir = test_dir("load-read-error");
     fs::create_dir_all(&dir).unwrap();
-    // 目录不是可读的 TOML 文件，`read_to_string` 在任何平台都会失败。
+    // A directory is not a readable TOML file, so `read_to_string` fails on every platform.
     let path = dir.join("unreadable.toml");
     fs::create_dir_all(&path).unwrap();
 
@@ -673,7 +673,7 @@ fn missing_main_config_loads_blacklist_but_corrupt_blacklist_fails_closed() {
         "{err}"
     );
 
-    // 配置存在时黑名单损坏同样 fail-closed。
+    // A corrupt blacklist is fail-closed even when the config exists.
     fs::write(&path, "default_mode = \"magic\"\n").unwrap();
     assert!(Config::load_or_default(&path).is_err());
     cleanup(&dir);
@@ -719,7 +719,7 @@ fn patch_rejects_ignore_as_global_default_without_partial_update() {
     let err = config.apply_patch(patch).unwrap_err();
 
     assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
-    // 校验失败不能留下半个 patch。
+    // A failed validation must not leave half a patch behind.
     assert_eq!(config.default_mode, Mode::Magic);
     assert!(!config.disable_umount);
 }

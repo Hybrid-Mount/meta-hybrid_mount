@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 通用工具:模块 ID 校验、目录创建、SELinux 上下文读写。
+//! Shared utilities: module id validation, directory creation and SELinux context I/O.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::io;
@@ -14,7 +14,6 @@ use rustix::fs::{XattrFlags, lgetxattr, lsetxattr};
 use crate::defs;
 use crate::errors::{Error, Result};
 
-/// 创建目录并确认结果是目录。
 pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
     std::fs::create_dir_all(dir)?;
     if dir.is_dir() {
@@ -26,8 +25,8 @@ pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
     }
 }
 
-/// 读取路径的扩展属性：先查询长度，再按长度分配并一次读取，
-/// 兼容长 SELinux context，不依赖固定栈缓冲。
+/// Reads a path's extended attribute: query the length, then allocate and read it in
+/// one pass, which handles long SELinux contexts without a fixed stack buffer.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
     let mut empty = [0_u8; 0];
@@ -42,13 +41,13 @@ pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
     Ok(value)
 }
 
-/// 设置路径的扩展属性，不跟随最终路径组件的符号链接。
+/// Sets a path's extended attribute without following a symlink in the final component.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn write_xattr(path: &Path, name: &str, value: &[u8]) -> io::Result<()> {
     Ok(lsetxattr(path, name, value, XattrFlags::empty())?)
 }
 
-/// 设置路径的 SELinux 上下文。
+/// Sets a path's SELinux context.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
     log::debug!("file: {}, con: {context}", path.display());
@@ -60,7 +59,7 @@ pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
     })
 }
 
-/// 读取路径的 SELinux 上下文。
+/// Reads a path's SELinux context.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lgetfilecon(path: &Path) -> Result<String> {
     let context = read_xattr(path, defs::SELINUX_XATTR).map_err(|err| {
@@ -72,7 +71,7 @@ pub fn lgetfilecon(path: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&context).to_string())
 }
 
-/// 是否命中“不注册尝试卸载”的分区(v4.2.0 pairip 规避行为)。
+/// Whether the path falls in a partition excluded from try-umount registration (v4.2.0 pairip workaround).
 pub fn is_ignored_unmount_partition(path: &str) -> bool {
     defs::IGNORE_UNMOUNT_PARTITIONS.iter().any(|ignored| {
         let ignored = ignored.trim_end_matches('/');
@@ -83,7 +82,7 @@ pub fn is_ignored_unmount_partition(path: &str) -> bool {
     })
 }
 
-/// KernelSU 尝试卸载列表集成(仅 Linux/Android)。
+/// KernelSU try-umount list integration (Linux/Android only).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod ksu;
 

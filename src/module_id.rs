@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 经过验证的模块 ID。
+//! A validated module ID.
 //!
-//! 模块 ID 只在 `ModuleId::try_from(String)` 这一个入口完成合法性验证，
-//! scanner、config rules、mount tree、plan 与 state 内部只消费该类型。
-//! 序列化仍然是普通字符串，因此 TOML/JSON 线格式与旧版本兼容。
+//! Validation happens only at the `ModuleId::try_from(String)` entry point; the scanner,
+//! config rules, mount tree, planner and state only ever consume this type.
+//! It still serialises as a plain string, so the TOML/JSON wire format stays compatible.
 
 use std::borrow::Borrow;
 use std::fmt;
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::errors::{Error, Result};
 
-/// `^[a-zA-Z][a-zA-Z0-9._-]*$`（与既有 `validate_module_id` 行为一致）。
+/// `^[a-zA-Z][a-zA-Z0-9._-]*$`, matching the existing `validate_module_id` behaviour.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ModuleId(String);
 
@@ -74,8 +74,8 @@ impl From<ModuleId> for String {
     }
 }
 
-/// 测试与状态查询经常把 newtype 与字面量比较；字符串永远只是投影，
-/// 不会反过来构造未验证的 `ModuleId`。
+/// Tests and status queries compare the newtype against literals; the string is only ever
+/// a projection and never constructs an unvalidated `ModuleId`.
 impl PartialEq<str> for ModuleId {
     fn eq(&self, other: &str) -> bool {
         self.0 == other

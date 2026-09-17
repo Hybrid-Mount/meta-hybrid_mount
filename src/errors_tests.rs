@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 结构化错误分类与上下文展示测试。
-
 use std::error::Error as StdError;
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;

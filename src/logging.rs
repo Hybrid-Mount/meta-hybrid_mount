@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 日志初始化与 panic hook。
 //!
-//! Android 上输出到 logcat,主机侧(开发/单测)输出到 stderr。
-//! 统一通过 `log` facade,日志级别可用 `RUST_LOG` 覆盖,默认 `info`。
+//! logcat on Android, stderr on the host (development and unit tests).
+//! Everything goes through the `log` facade; `RUST_LOG` overrides the level, which defaults to `info`.
 
 use std::env;
 use std::panic;
@@ -13,7 +12,7 @@ use log::LevelFilter;
 #[cfg(not(target_os = "android"))]
 use log::{Log, Metadata, Record};
 
-/// 初始化日志后端并设置全局级别。重复调用是安全的。
+/// Initialises the log backend and sets the global level. Safe to call repeatedly.
 pub fn init() {
     let level = detect_level_filter();
     log::set_max_level(level);
@@ -27,7 +26,7 @@ pub fn init() {
     }
 }
 
-/// 安装 panic hook:记录线程名、位置与 payload 后保留默认输出。
+/// Installs a panic hook that records the thread name, location and payload, then keeps the default output.
 pub fn install_panic_hook() {
     let default_hook = panic::take_hook();
 

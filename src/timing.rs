@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 低开销启动阶段计时。
+//! Low-overhead boot phase timing.
 //!
-//! 设计约束：
-//! - 只使用 `Instant`，不分配聚合结构，每阶段一条 info 日志；
-//! - 显式 `finish()` 记录 `status=ok`，因 `?` 提前离开作用域时
-//!   `Drop` 记录 `status=aborted`；
-//! - 日志只包含阶段名与耗时，不携带路径、环境变量或令牌等敏感内容。
+//! Design constraints:
+//! - Uses only `Instant`, allocates no aggregation structure, and logs one info line per phase.
+//! - An explicit `finish()` records `status=ok`; leaving scope early via `?` records
+//!   `status=aborted` from `Drop`.
+//! - Logs carry only the phase name and duration, never paths, environment variables or tokens.
 
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -51,8 +51,8 @@ impl fmt::Display for PhaseRecord {
     }
 }
 
-/// RAII 阶段计时器。显式 `finish()`/`abort()` 会消费自身；
-/// 未消费即离开作用域时由 `Drop` 记录 aborted。
+/// RAII phase timer. An explicit `finish()`/`abort()` consumes it;
+/// leaving scope unconsumed records abort from `Drop`.
 #[derive(Debug)]
 pub struct PhaseTimer {
     label: &'static str,

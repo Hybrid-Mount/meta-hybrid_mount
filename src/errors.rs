@@ -10,19 +10,19 @@ use crate::sys::process::{ProcessError, ProcessErrorKind};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// 错误的处置分类。调用方不得根据 Display 文本猜测可重试性。
+/// How an error should be handled. Callers must not infer retryability from Display text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorClass {
-    /// 明确值得重试的瞬态失败(中断、超时、EBUSY 等)。
+    /// Transient failures worth retrying: interruption, timeout, EBUSY and similar.
     Transient,
-    /// 重试也不会自行恢复的失败。
+    /// Failures that retrying alone will not recover.
     Permanent,
-    /// 必须由用户修改模块/配置/设备状态后才能恢复。
+    /// Failures the user must resolve by changing a module, the config or the device state.
     ManualRecovery,
 }
 
-/// 带 context/path/source 的 I/O 错误类型。所有字段保持结构化，
-/// Display 文本在此生成，调用点不预格式化字符串。
+/// I/O error carrying context, path and source. Fields stay structured and the
+/// Display text is generated here, so call sites never pre-format strings.
 #[derive(Debug)]
 pub struct IoError {
     pub context: &'static str,
@@ -56,10 +56,10 @@ impl std::error::Error for IoError {
     }
 }
 
-/// 带 operation/path/source 的层边界上下文错误。
+/// Layering-boundary context error carrying operation, path and source.
 ///
-/// 各子系统变体共用该结构：错误文本在 Display 时生成，
-/// 调用点只提供结构化字段，不再把错误提前拼成字符串。
+/// Shared by every subsystem variant: the text is generated at Display time and
+/// call sites supply structured fields instead of pre-joining an error into a string.
 #[derive(Debug)]
 pub struct ContextError {
     pub operation: &'static str,
@@ -97,8 +97,8 @@ impl std::error::Error for ContextError {
     }
 }
 
-/// 层边界统一翻译后的原因类型。子进程、rustix、procfs 与 serde 错误
-/// 都在这里收敛，而不是让调用点各自格式化。
+/// Cause type after the layering boundary translation. Subprocess, rustix, procfs
+/// and serde errors all converge here rather than being formatted per call site.
 #[derive(Debug, Error)]
 pub enum CausalError {
     #[error(transparent)]
@@ -149,10 +149,10 @@ impl From<String> for CausalError {
     }
 }
 
-/// 全工程统一错误类型。
+/// The project-wide error type.
 ///
-/// 已按子系统建立可匹配变体；`Msg` 仅保留给尚未迁移的低风险路径，
-/// 新代码禁止再通过 `Error::msg` 预格式化可结构化的错误。
+/// Variants are matchable per subsystem; `Msg` remains only for low-risk paths not yet
+/// migrated, and new code must not use `Error::msg` to pre-format a structurable error.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("I/O error: {0}")]
@@ -281,7 +281,7 @@ impl Error {
         Self::Msg(message.into())
     }
 
-    /// 穷尽匹配每个变体；新增变体必须在这里显式选择分类。
+    /// Exhaustively matched over every variant; a new variant must pick a class here.
     pub fn classify(&self) -> ErrorClass {
         match self {
             Self::Io(source) => classify_io(source),

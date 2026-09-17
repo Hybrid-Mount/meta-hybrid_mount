@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 混合挂载 planner。
+//! The hybrid mount planner.
 //!
-//! 规则优先级:路径规则 > 模块 `default_mode` > 全局 `default_mode`。
-//! 同一文件路径只进入一个后端;普通结构目录可由两个后端共享，真实冲突在启动时显式报错。
-//! 输出:
-//! - overlay 操作按目标分区聚合(目录规则直接作为 lowerdir,
-//!   文件规则交给执行层做 shallow 层,v4.2.0 prepare 语义);
-//! - 同一棵带后端标注的节点树直接交给 OverlayFS 与 Magic Mount 执行层。
+//! Rule precedence: path rules, then the module `default_mode`, then the global `default_mode`.
+//! A file path goes to exactly one backend; plain structural directories can be shared, and a real conflict is an explicit boot error.
+//! Output:
+//! - overlay operations grouped by target partition, with directory rules used directly as lowerdirs
+//!   and file rules left to the executor as shallow layers (v4.2.0 prepare semantics);
+//! - one backend-labelled node tree handed straight to the OverlayFS and Magic Mount executors.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use crate::module_id::ModuleId;
 use crate::mount_tree::{MountNode, MountSource, MountTree, NodeFileType};
 use crate::scanner::{ModuleEntry, ModuleRecord};
 
-/// 一个 overlay 挂载操作(结构与 v4.2.0 `OverlayOperation` 对齐)。
+/// One overlay mount operation, structured like v4.2.0's `OverlayOperation`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OverlayOperation {
     pub partition: String,
@@ -26,14 +26,13 @@ pub struct OverlayOperation {
     pub lowerdirs: Vec<PathBuf>,
 }
 
-/// 混合挂载计划。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MountPlan {
-    /// scanner 与 planner 共同生成、由两个执行后端共同消费的唯一节点树。
+    /// The single node tree produced by the scanner and planner and consumed by both executors.
     pub tree: MountTree,
-    /// 目录级 overlay:目标挂载点 -> 有序 lowerdirs(按模块 id 排序)。
+    /// Directory-level overlay: target mountpoint to ordered lowerdirs, sorted by module id.
     pub overlay_ops: Vec<OverlayOperation>,
-    /// 文件级 overlay 规则:父目录目标 -> 文件源(执行层做 shallow 层)。
+    /// File-level overlay rules: parent directory target to file sources, which the executor turns into shallow layers.
     pub overlay_files: BTreeMap<String, Vec<PathBuf>>,
     pub overlay_module_ids: Vec<ModuleId>,
     pub magic_module_ids: Vec<ModuleId>,
@@ -43,11 +42,11 @@ pub struct MountPlan {
 pub struct PlanInput<'a> {
     pub modules: &'a [ModuleRecord],
     pub config: &'a Config,
-    /// 执行层按内建分区提升规则探测出的提升分区。
+    /// Promoted partitions discovered by the executor from the built-in promotion rules.
     pub promoted_partitions: &'a BTreeSet<String>,
 }
 
-/// 构建挂载计划;跨后端文件、类型与 `.replace` 冲突都会返回错误。
+/// Builds the mount plan; cross-backend file, type and `.replace` conflicts are errors.
 pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     let mut modules: Vec<&ModuleRecord> = input.modules.iter().collect();
     modules.sort_by(|left, right| left.id.cmp(&right.id));
@@ -73,7 +72,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
 
 struct ModuleRulesView {
     default_mode: Mode,
-    /// `(normalized_key, mode)`,按 key 长度降序保证最长前缀优先。
+    /// `(normalized_key, mode)`, sorted by key length descending so the longest prefix wins.
     path_rules: Vec<(String, Mode)>,
 }
 
@@ -119,7 +118,7 @@ impl ModuleRulesView {
             .unwrap_or(self.default_mode)
     }
 
-    /// 是否存在把整个 `system` 判为 overlay 的路径规则。
+    /// Whether a path rule classifies the whole `system` as overlay.
     fn has_whole_system_overlay_rule(&self) -> bool {
         self.path_rules
             .iter()
@@ -132,13 +131,13 @@ struct PlanBuilder {
     tree: MountTree,
     /// target -> (partition, module id -> lowerdir)
     overlay_by_target: BTreeMap<String, (String, BTreeMap<ModuleId, PathBuf>)>,
-    /// 文件规则:父目录 target -> 有序且去重的 (module id, file source)。
-    /// 同一模块可以在一个父目录内贡献多个文件。
+    /// File rules: parent directory target to ordered, deduplicated (module id, file source).
+    /// One module may contribute several files to the same parent directory.
     overlay_files_by_target: BTreeMap<String, BTreeSet<(ModuleId, PathBuf)>>,
     overlay_module_ids: BTreeSet<ModuleId>,
     magic_module_ids: BTreeSet<ModuleId>,
     vfs_module_ids: BTreeSet<ModuleId>,
-    /// 跨模块分配表:target -> 已分配的节点,用于冲突检测。
+    /// Cross-module allocation table from target to already-assigned node, used for conflict detection.
     assignments: BTreeMap<String, Vec<TargetAssignment>>,
 }
 
@@ -269,7 +268,7 @@ fn process_module(
         })
         .collect();
 
-    // 1. 跨模块冲突:普通目录可以共享，文件、类型与 `.replace` 必须唯一。
+    // 1. Cross-module conflicts: plain directories may be shared, while files, types and `.replace` must be unique.
     for decision in &decisions {
         let (_, target) = map_target(&decision.entry.relative, promoted);
         builder.tree.insert(
@@ -305,8 +304,8 @@ fn process_module(
         return Ok(());
     }
 
-    // 2. 模块整体 overlay:所有条目都是 overlay,且模块默认 overlay
-    //    或存在 `system = "overlay"` 规则。
+    // 2. Whole-module overlay: every entry is overlay and the module default is overlay,
+    //    or a `system = "overlay"` rule exists.
     let all_overlay = overlay_count == decisions.len();
     let whole_overlay = all_overlay
         && (rules.default_mode == Mode::Overlay || rules.has_whole_system_overlay_rule());
@@ -316,8 +315,8 @@ fn process_module(
         return Ok(());
     }
 
-    // 3. 部分 overlay:目录根直接作 lowerdir。staging 从共享树按节点物化，
-    //    因此 magic / ignore 后代不会泄漏进该 lowerdir。
+    // 3. Partial overlay: the directory root becomes a lowerdir. Staging materialises from the shared tree per node,
+    //    so magic and ignore descendants cannot leak into it.
     let overlay_rels: BTreeSet<&str> = decisions
         .iter()
         .filter(|decision| decision.mode == Mode::Overlay)
@@ -343,7 +342,7 @@ fn process_module(
         );
     }
 
-    // 4. 文件/符号链接级 overlay:父目录目标 -> 文件源(执行层 shallow)。
+    // 4. File and symlink level overlay: parent directory target to file source, shallow in the executor.
     for decision in &decisions {
         if decision.mode != Mode::Overlay
             || decision.entry.file_type == NodeFileType::Directory
@@ -449,8 +448,8 @@ fn collect_vfs(module: &ModuleRecord, decisions: &[EntryDecision<'_>], builder: 
     builder.vfs_module_ids.insert(module.id.clone());
 }
 
-/// Magic `.replace` 在 Overlay 阶段之后替换整个目标目录，因此不能包含已先行
-/// 挂载的 Overlay 后代。Overlay `.replace` 则可由后续 Magic 补入选中子节点。
+/// A Magic `.replace` replaces the whole target directory after the Overlay phase, so it
+/// cannot contain Overlay descendants that already mounted. An Overlay `.replace` may still receive Magic children.
 fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<()> {
     let current_target = if node.name.is_empty() {
         target.to_owned()
@@ -484,11 +483,11 @@ fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<
     Ok(())
 }
 
-/// VFS 规则作用在真实目录上；任何被 Overlay / Magic 以目录形式占用的祖先
-/// 目录都会遮蔽其后代注入，因此必须在 plan 阶段显式报错。
+/// VFS rules act on real directories, and any ancestor occupied as a directory by Overlay
+/// or Magic shadows injection into its descendants, so it must be an explicit plan-time error.
 ///
-/// 采用保守判定：只要祖先节点存在 Overlay/Magic 的目录来源（含 `.replace`），
-/// 其下任何 Vfs 来源都视为被遮蔽。
+/// The check is conservative: if an ancestor node has an Overlay/Magic directory source,
+/// including `.replace`, any Vfs source beneath it counts as shadowed.
 fn ensure_vfs_not_shadowed(
     node: &MountNode,
     target: &str,
@@ -533,9 +532,9 @@ fn ensure_vfs_not_shadowed(
     Ok(())
 }
 
-/// VFS 的 `.replace` 目录按 Magisk 语义替换整个子树：目录保持可见，真实条目全部隐藏，
-/// 只显示注入子项。因此该子树内不得存在 overlay / magic 来源，否则它们的挂载内容会被
-/// opaque 规则一并隐藏。
+/// A VFS `.replace` directory replaces its whole subtree as Magisk does: the directory stays
+/// visible, real entries are hidden and only injected children show. The subtree must therefore
+/// hold no overlay or magic sources, whose mounts the opaque rule would hide.
 fn ensure_vfs_opaque_exclusive(
     node: &MountNode,
     target: &str,
@@ -631,7 +630,7 @@ fn is_redundant_partition_self_alias(entry: &ModuleEntry, promoted: &BTreeSet<St
         && components.next().is_none()
 }
 
-/// 相对路径 -> (分区, 目标挂载点)。
+/// Relative path to (partition, target mountpoint).
 fn map_target(relative: &str, promoted: &BTreeSet<String>) -> (String, String) {
     let parts: Vec<&str> = relative.split('/').collect();
     if parts.len() >= 2 && parts[0] == "system" && promoted.contains(parts[1]) {
@@ -1014,7 +1013,7 @@ mod tests {
             vec![PathBuf::from("/data/adb/modules/m/system/etc")]
         );
         assert!(result.overlay_files.is_empty());
-        // 其余仍是 magic，后端选择直接保存在共享树上。
+        // The rest stay magic; the backend choice is stored on the shared tree itself.
         assert!(
             result
                 .tree

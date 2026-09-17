@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 持久化快照:`scan.ret`(模块清单)与 `run/state.json`(启动状态快照),
-//! 以及 install-state / clear-mount-errors 等 CLI 命令实现。
+//! Persisted snapshots: `scan.ret` (module list) and `run/state.json` (boot state),
+//! plus the install-state and clear-mount-errors CLI commands.
 //!
-//! 状态为启动快照而非常驻服务提供的实时状态；host 构建保留纯逻辑与单测。
+//! State is a boot snapshot, not a live service; host builds keep the pure logic and its tests.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -19,8 +19,8 @@ use crate::module_id::ModuleId;
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::{ModuleRecord, list_modules};
 
-/// `modules` 命令输出的模块条目及其 JSON 交互契约。
-/// `id` 在反序列化时仍然验证;线格式保持普通 JSON 字符串。
+/// A module entry in the `modules` command output, and its JSON contract.
+/// `id` is still validated on deserialisation; the wire format stays a plain JSON string.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppModule {
     pub id: ModuleId,
@@ -43,7 +43,7 @@ pub struct AppModule {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppModuleRules {
-    /// `None` 表示继承全局默认模式，不能折叠成当前的有效模式。
+    /// `None` inherits the global default mode and must not be collapsed into the effective mode.
     pub default_mode: Option<String>,
     pub paths: BTreeMap<String, String>,
 }
@@ -68,8 +68,8 @@ pub struct ModeStats {
     pub vfs: usize,
 }
 
-/// `run/state.json` 的来源状态。损坏状态必须能在 `status` JSON 中查询到，
-/// 不能只打日志后静默回退默认值。
+/// Provenance of `run/state.json`. A corrupt state must be visible in the `status` JSON,
+/// not merely logged before silently falling back to the default.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum StateLoadKind {
@@ -110,10 +110,10 @@ impl StateLoadInfo {
     }
 }
 
-/// 启动时生成的挂载状态快照(替代常驻实时状态)。
+/// The mount state snapshot written at boot, replacing a resident live state.
 ///
-/// 新增字段全部带 serde default，旧 `run/state.json` 与旧 WebUI 客户端
-/// 可以继续读取；失败诊断字段只在失败时序列化。
+/// Every new field carries a serde default so old `run/state.json` files and old WebUI
+/// clients keep working; failure diagnostics serialise only on failure.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct RunState {
@@ -130,13 +130,13 @@ pub struct RunState {
     pub overlay_active_mounts: Vec<String>,
     /// Successful Magic Mount bind and directory targets from the same boot snapshot.
     pub magic_active_mounts: Vec<String>,
-    /// VFS 注入模块与成功目标；VFS 不是真实挂载，不进入 `active_mounts`。
+    /// VFS-injected modules and successful targets. VFS is not a real mount, so it stays out of `active_mounts`.
     pub vfs_modules: Vec<String>,
     pub vfs_active_mounts: Vec<String>,
-    /// 本次启动实际绑定的 Provider（v2 只有 `hm`）。
+    /// The provider actually bound this boot (v2 has only `hm`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vfs_provider: Option<String>,
-    /// 单向守卫结果：设备上是否已存在外来 NoMount 实现。
+    /// One-way guard result: whether a foreign NoMount implementation exists on the device.
     #[serde(default)]
     pub vfs_foreign_nomount: bool,
     /// Final mountinfo-confirmed targets; executor attempts stay in `mount_stats`.
@@ -146,18 +146,18 @@ pub struct RunState {
     pub mount_error_reasons: BTreeMap<String, String>,
     pub mount_stats: MountStatistics,
     pub mode_stats: ModeStats,
-    /// 本次 `status` 输出的状态文件来源;缺省 `missing` 兼容旧客户端。
+    /// State file provenance for this `status` output; defaulting to `missing` for old clients.
     pub state_load: StateLoadInfo,
-    /// 失败阶段,如 `mount_execution`、`state_save`、`mount_transaction_commit`。
+    /// The failing phase, such as `mount_execution`, `state_save` or `mount_transaction_commit`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failed_stage: Option<String>,
-    /// 启动失败的可展示原因；旧快照缺省为 `None`。
+    /// Displayable boot failure reason; old snapshots default to `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
     /// `pending_commit` / `committed` / `clean` / `incomplete` / `unverified`。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollback_status: Option<String>,
-    /// 回滚确认后仍然残留的挂载目标。
+    /// Mount targets still present after rollback.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub leftover_mount_targets: Vec<String>,
 }
@@ -349,7 +349,7 @@ impl RunState {
     }
 }
 
-/// 安装兼容性状态(`install-state`)。
+/// Install compatibility state (`install-state`).
 #[derive(Debug, Clone, Serialize)]
 pub struct InstallState {
     pub installed: bool,
@@ -382,10 +382,10 @@ pub fn build_install_state(
     }
 }
 
-/// 由模块清单 + 配置 + 计划 + 最终成功挂载目标生成 `scan.ret` 条目。
+/// Builds `scan.ret` entries from the module list, config, plan and final mounted targets.
 ///
-/// `mounted_module_ids` 必须来自执行结果，而不是计划选择；
-/// 空集合表示“尚未挂载”或“全部回滚”。
+/// `mounted_module_ids` must come from the execution result, never from the plan's selection;
+/// an empty set means nothing is mounted yet, or everything was rolled back.
 pub fn app_modules(
     modules: &[ModuleRecord],
     config: &Config,
@@ -433,13 +433,13 @@ pub fn app_modules(
         .collect()
 }
 
-/// 用最终成功挂载目标反推真正挂载成功的模块。
+/// Derives which modules actually mounted from the final successful targets.
 ///
-/// 计划里的 `overlay_module_ids`/`magic_module_ids` 只是“被选择”，
-/// 不能冒充 `is_mounted`。这里以执行阶段产出的目标列表为输入：
-/// - 目录级 overlay 目标读取该节点自身贡献；
-/// - shallow overlay 目标读取其整棵子树贡献；
-/// - magic 目标读取该节点自身的 magic 来源。
+/// The plan's `overlay_module_ids`/`magic_module_ids` only say what was chosen and
+/// must not stand in for `is_mounted`, so the executed target list is the input here:
+/// - a directory-level overlay target reads that node's own contribution;
+/// - a shallow overlay target reads its whole subtree's contributions;
+/// - a magic target reads that node's own magic sources.
 pub fn mounted_module_ids_for_snapshot(
     modules: &[ModuleRecord],
     plan: &MountPlan,
@@ -475,7 +475,7 @@ pub fn mounted_module_ids_for_snapshot(
         );
     }
 
-    // 只报告本机实际扫描到的模块，过滤树中残留的无效/未扫描 id。
+    // Report only modules actually scanned here, filtering stale ids left in the tree.
     let scanned = modules
         .iter()
         .map(|module| module.id.as_str())
@@ -524,7 +524,7 @@ pub fn write_scan_ret(modules: &[AppModule]) -> Result<()> {
     crate::sys::fs::atomic_write(path, json.as_bytes())
 }
 
-/// `modules`:输出启动时缓存的 `scan.ret`。
+/// `modules`: outputs the `scan.ret` cached at boot.
 pub fn handle_modules() -> Result<()> {
     match fs::read_to_string(defs::SCAN_RET_PATH) {
         Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
@@ -589,14 +589,14 @@ fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppMod
     app_modules(modules, config, &plan, &mount_errors, &BTreeSet::new())
 }
 
-/// `status`:输出 `run/state.json`(缺失时输出默认快照)。
+/// `status`: outputs `run/state.json`, or the default snapshot when absent.
 pub fn handle_status() -> Result<()> {
     let state = RunState::load_or_default();
     println!("{}", serde_json::to_string_pretty(&state)?);
     Ok(())
 }
 
-/// `install-state`:安装兼容性状态。
+/// `install-state`: install compatibility state.
 pub fn handle_install_state() -> Result<()> {
     let self_module = Path::new(defs::SELF_MODULE_DIR).is_dir();
     let binary = std::env::current_exe().is_ok_and(|path| path.exists());
@@ -626,7 +626,7 @@ pub fn handle_install_state() -> Result<()> {
     Ok(())
 }
 
-/// 收集带 `mount_error` 标记的模块(大小写不敏感,只读)。
+/// Collects modules carrying a `mount_error` marker (case-insensitive, read-only).
 pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
     let mut modules = Vec::new();
     let Ok(entries) = fs::read_dir(moduledir) else {
@@ -658,7 +658,7 @@ pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
     modules
 }
 
-/// 清除模块 `mount_error` 标记，返回删除数量。只删除标记文件，不递归删除目录。
+/// Clears module `mount_error` markers and returns how many were deleted. Only marker files are removed, never directories.
 pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
     let mut removed = 0;
     let Ok(entries) = fs::read_dir(moduledir) else {
@@ -711,7 +711,7 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
     removed
 }
 
-/// `clear-mount-errors`:清除标记并刷新状态快照。
+/// `clear-mount-errors`: clears the markers and refreshes the state snapshot.
 pub fn handle_clear_mount_errors() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let removed = clear_mount_error_markers(&config.moduledir);
@@ -726,7 +726,7 @@ pub fn handle_clear_mount_errors() -> Result<()> {
         .collect();
     state.save()?;
 
-    // `modules` 读取的是启动时缓存。同步清理缓存，避免 WebUI 刷新后重新出现旧错误。
+    // `modules` reads the boot-time cache, so clear it too or the WebUI will show the old errors again.
     if let Ok(text) = fs::read_to_string(defs::SCAN_RET_PATH) {
         match serde_json::from_str::<Vec<AppModule>>(&text) {
             Ok(mut modules) => {

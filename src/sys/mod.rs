@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 系统辅助层:文件系统、挂载与 nuke。
+//! System helpers: filesystem, mounting and nuke.
 
 pub mod faults;
 pub mod fs;

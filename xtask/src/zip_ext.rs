@@ -8,7 +8,7 @@ use std::{
 
 use zip::{ZipWriter, result::ZipResult, write::FileOptions};
 
-/// 把目录递归打包为 zip;每个条目通过回调决定 FileOptions。
+/// Recursively packages a directory into a zip, letting a callback pick FileOptions per entry.
 pub fn zip_create_from_directory_with_options<F>(
     archive_file: &Path,
     directory: &Path,

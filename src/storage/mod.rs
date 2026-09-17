@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Overlay 的 staging 后端:tmpfs 或 ext4 loop 镜像(行为对齐 v4.2.0)。
+//! Overlay staging backends: tmpfs or an ext4 loop image (behaviour aligned with v4.2.0).
 //!
-//! - 非 ext4 强制时先试 tmpfs,要求内核 `CONFIG_TMPFS_XATTR=y`;
-//! - 否则创建/格式化/校验 ext4 镜像并 loop 挂载;
-//! - 挂载完成后设置 private propagation,并按需注册进 KSU 尝试卸载列表。
+//! - unless ext4 is forced, tmpfs is tried first and needs `CONFIG_TMPFS_XATTR=y`;
+//! - otherwise an ext4 image is created, formatted, checked and mounted via loop;
+//! - once mounted it sets private propagation and registers with the KSU try-umount list when needed.
 
 mod ext4;
 
@@ -23,7 +23,7 @@ use crate::sys;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils::ksu::send_unmountable;
 
-/// staging 后端模式(与 `config.toml` 的 `overlay_mode` 对应)。
+/// Staging backend mode, matching `overlay_mode` in `config.toml`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageMode {
     Tmpfs,
@@ -39,7 +39,7 @@ impl StorageMode {
     }
 }
 
-/// 已建立的 staging 挂载句柄。
+/// Handle for an established staging mount.
 #[derive(Debug)]
 pub struct StorageHandle {
     mount_point: PathBuf,
@@ -164,7 +164,7 @@ fn reset_image_files(img_path: &Path) -> Result<()> {
     };
     for entry in entries {
         let entry = entry?;
-        // 只删除项目自有的精确文件名；modules.img.bak 等用户备份必须保留。
+        // Remove only the exact filenames the project owns; user backups such as modules.img.bak must survive.
         if entry.file_name() != file_name {
             continue;
         }
@@ -297,8 +297,8 @@ fn try_setup_tmpfs(target: &Path, mount_source: &str) -> Result<bool> {
     }
 
     if let Err(err) = unmount(target, UnmountFlags::DETACH) {
-        // tmpfs 回退前必须确认 tmpfs 已卸载；卸载失败 fail-closed，
-        // 不能继续尝试把 ext4 挂到同一个仍被占用的目标上。
+        // Confirm tmpfs is unmounted before falling back; a failed unmount is fail-closed, because
+        // ext4 must not be mounted onto a target that is still occupied.
         return Err(crate::errors::Error::Storage(Box::new(
             crate::errors::ContextError::new(
                 "unmount tmpfs before ext4 fallback",
@@ -339,7 +339,7 @@ fn remove_image_file(path: &Path) -> Result<()> {
     }
 }
 
-/// ext4 模式下移除镜像文件;tmpfs 模式没有镜像。
+/// Removes the image file in ext4 mode; tmpfs mode has no image.
 pub fn cleanup_artifacts(storage_mode: StorageMode) -> Result<()> {
     if should_cleanup_image(storage_mode) {
         remove_image_file(Path::new(defs::MODULES_IMG_FILE))?;

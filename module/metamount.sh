@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
 
-# metamount.sh — 启动期入口:调用唯一二进制执行完整挂载流水线。
+# metamount.sh - boot entry point: calls the single binary to run the whole mount pipeline.
 
 MODDIR="${0%/*}"
 BASE_DIR="/data/adb/hybrid-mount"

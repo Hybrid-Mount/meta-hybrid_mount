@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! TOML 配置 schema、默认值与持久化核心。
+//! TOML config schema, defaults and persistence.
 //!
 //! ```toml
 //! moduledir = "/data/adb/modules"
@@ -15,7 +15,7 @@
 //! "system/etc/hosts" = "overlay"
 //! ```
 //!
-//! 未知字段会被拒绝,保证配置契约不会被悄悄漂移。
+//! Unknown fields are rejected so the config contract cannot drift silently.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -28,7 +28,7 @@ use crate::defs;
 use crate::errors::{Error, Result};
 use crate::module_id::ModuleId;
 
-/// 单个路径/模块可选的挂载后端。
+/// Mount backend selectable per path or per module.
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
 )]
@@ -52,7 +52,7 @@ impl Mode {
     }
 }
 
-/// overlayfs staging 后端(v4.2.0 语义)。
+/// OverlayFS staging backend (v4.2.0 semantics).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OverlayMode {
@@ -70,7 +70,7 @@ impl OverlayMode {
     }
 }
 
-/// 单个模块的规则:模块级默认后端 + 路径级覆盖。
+/// Rules for one module: a module-level default backend plus per-path overrides.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModuleRule {
@@ -81,7 +81,6 @@ pub struct ModuleRule {
     pub paths: BTreeMap<String, Mode>,
 }
 
-/// 持久配置根对象。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -97,23 +96,23 @@ pub struct Config {
     #[serde(default)]
     pub default_mode: Mode,
 
-    /// VFS 后端不可用时是否直接失败（`true`）或降级（`false`）。
+    /// Fail the boot (`true`) or degrade (`false`) when the VFS backend is unavailable.
     #[serde(default)]
     pub vfs_strict: bool,
 
-    /// 需要隔离（看到原生文件系统）的 UID 列表，下发给 VFS Provider。
+    /// UIDs to isolate, meaning they see the native filesystem. Sent to the VFS provider.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub vfs_isolate_uids: Vec<u32>,
 
     #[serde(default)]
     pub rules: BTreeMap<ModuleId, ModuleRule>,
 
-    /// 模块黑名单来自独立 TOML 文件，不属于 WebUI 可写配置。
+    /// The module blacklist lives in its own TOML file, not in the WebUI-writable config.
     #[serde(skip)]
     pub(crate) module_blacklist: BTreeSet<ModuleId>,
 
-    /// 主配置文件不存在时使用默认值；仅用于 `show-config` 的诊断展示，
-    /// 不写入 TOML。配置文件损坏/不可读时同样回退默认值，但不标记为缺失。
+    /// Used when the main config file is absent. For the `show-config` diagnostic display
+    /// only, never written back to TOML. A corrupt or unreadable file also falls back to the default, but is not marked missing.
     #[serde(skip)]
     pub config_missing: bool,
 
@@ -155,10 +154,10 @@ impl Default for Config {
 }
 
 impl Config {
-    /// 解析 TOML 文本(空文本等价于全默认)。
+    /// Parses TOML text; empty text is equivalent to all defaults.
     ///
-    /// `default_mode = "ignore"` 是"可解析但已废弃"的值：直接报错，
-    /// 不再静默规范化为 Overlay。按模块/路径禁用请使用 `[rules.*]`。
+    /// `default_mode = "ignore"` parses but is deprecated, so it is rejected outright
+    /// rather than silently normalised to Overlay. Disable a module or path with `[rules.*]`.
     pub fn from_toml(text: &str) -> Result<Self> {
         let config: Self = toml::from_str(text)?;
         if config.default_mode == Mode::Ignore {
@@ -167,13 +166,13 @@ impl Config {
         Ok(config)
     }
 
-    /// 序列化为 TOML 文本。
+    /// Serialises to TOML text.
     pub fn to_toml(&self) -> Result<String> {
         Ok(toml::to_string_pretty(self)?)
     }
 
-    /// WebUI 配置响应。运行时能力只用于控制选项可见性，不持久化到 TOML。
-    /// `config_missing` 让 WebUI 识别主配置文件是否缺失。
+    /// WebUI config response. Runtime capabilities only control option visibility and are not persisted to TOML.
+    /// `config_missing` tells the WebUI whether the main config file is absent.
     pub fn to_webui_json(&self, tmpfs_xattr_supported: bool) -> Result<String> {
         #[derive(Serialize)]
         struct WebUiConfig<'a> {
@@ -190,7 +189,7 @@ impl Config {
         })?)
     }
 
-    /// 从磁盘读取配置。读取、解析和黑名单加载错误都携带配置路径上下文。
+    /// Reads config from disk. Read, parse and blacklist errors all carry the config path as context.
     pub fn load(path: &Path) -> Result<Self> {
         let text = fs::read_to_string(path).map_err(|source| Error::ConfigRead {
             path: path.to_path_buf(),
@@ -277,9 +276,9 @@ impl Config {
         }
     }
 
-    /// 读取配置：文件不存在时使用默认值并标记 `config_missing`；
-    /// 主配置损坏、不可读或不受支持时记录警告并使用默认值，不覆盖原文件。
-    /// 独立模块黑名单损坏或不可读时仍然返回错误，保持 fail-closed。
+    /// Reads config: a missing file uses defaults and sets `config_missing`.
+    /// A corrupt, unreadable or unsupported main config logs a warning and uses defaults without overwriting the file.
+    /// A corrupt or unreadable standalone module blacklist is still an error, staying fail-closed.
     pub fn load_or_default(path: &Path) -> Result<Self> {
         match Self::load_or_missing_tolerant(path) {
             Ok(config) => Ok(config),
@@ -300,11 +299,11 @@ impl Config {
         }
     }
 
-    /// 持久化配置；父目录不存在时自动创建。
-    /// 通过 `sys::fs::atomic_write` 写临时文件 + fsync + rename，失败不会暴露截断内容。
-    /// 与 `from_toml`/`apply_patch` 一样拒绝把已废弃的全局 ignore 落到磁盘。
-    /// 原子 rename 会替换符号链接本身，与旧的 `fs::write` 跟随链接语义不同，
-    /// 因此对符号链接目标显式报错，避免静默改变用户的数据布局。
+    /// Persists config, creating parent directories as needed.
+    /// Goes through `sys::fs::atomic_write` (temp file + fsync + rename), so a failure never exposes truncated content.
+    /// Like `from_toml`/`apply_patch` it refuses to write the deprecated global ignore to disk.
+    /// The atomic rename replaces a symlink itself rather than following it as the old `fs::write` did,
+    /// so a symlinked target is an explicit error instead of silently changing the user's data layout.
     pub fn save(&self, path: &Path) -> Result<()> {
         if self.default_mode == Mode::Ignore {
             return Err(Error::UnsupportedGlobalDefaultMode);
@@ -337,15 +336,15 @@ impl Config {
             .map_err(|err| Error::msg(format!("atomically save config {}: {err}", path.display())))
     }
 
-    /// `gen-config`:重置为默认配置并写入磁盘,返回写入后的配置。
+    /// `gen-config`: resets to the default config, writes it to disk and returns it.
     pub fn write_default(path: &Path) -> Result<Self> {
         let config = Self::default();
         config.save(path)?;
         Ok(config)
     }
 
-    /// 合并配置 patch:未出现的字段保留,`rules` 按模块合并。
-    /// 校验在修改前完成：非法 patch 不会留下部分更新。
+    /// Merges a config patch: absent fields are kept and `rules` merge per module.
+    /// Validation runs before any mutation, so an invalid patch leaves no partial update.
     pub fn apply_patch(&mut self, patch: ConfigPatch) -> Result<()> {
         if patch.default_mode == Some(Mode::Ignore) {
             return Err(Error::UnsupportedGlobalDefaultMode);
@@ -387,11 +386,11 @@ impl Config {
         self.module_blacklist.contains(module_id)
     }
 
-    /// 加载随包发布与用户持久化的模块黑名单。
+    /// Loads the bundled and user-persisted module blacklists.
     ///
-    /// 文件**缺失** = 无对应来源的黑名单，属于正常状态；
-    /// 文件存在但**损坏或不可读** = 错误，调用方必须 fail-closed，
-    /// 防止用户明确屏蔽的模块因解析失败而重新参与挂载。
+    /// A **missing** file means no blacklist from that source, which is normal.
+    /// A file that exists but is **corrupt or unreadable** is an error the caller must treat as fail-closed,
+    /// so a module the user explicitly blocked cannot rejoin the mount set because parsing failed.
     fn load_module_blacklists(&mut self, config_path: &Path) -> Result<()> {
         let persistent_path = if config_path == Path::new(defs::CONFIG_PATH) {
             PathBuf::from(defs::MODULE_BLACKLIST_PATH)
@@ -464,7 +463,7 @@ fn read_module_blacklist(path: &Path) -> Result<BTreeSet<ModuleId>> {
     Ok(blacklist)
 }
 
-/// `save-config --payload <hex>` 的部分配置 patch:缺省字段保留。
+/// Partial config patch from `save-config --payload <hex>`; absent fields are kept.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigPatch {
@@ -483,13 +482,13 @@ pub struct ConfigPatch {
     #[serde(default)]
     pub rules: Option<BTreeMap<ModuleId, ModuleRulePatch>>,
 
-    /// 全量配置保存时先清空旧规则；缺省时保持历史 patch 合并语义。
+    /// A full config save clears the old rules first; when absent, the historical patch-merge semantics apply.
     #[serde(default)]
     pub replace_rules: Option<bool>,
 }
 
-/// 模块规则 patch:`default_mode: null` 表示清除模块级模式,
-/// `paths` 出现时全量替换该模块路径规则。
+/// Module rule patch: `default_mode: null` clears the module-level mode, and a present
+/// `paths` replaces that module's path rules wholesale.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModuleRulePatch {
@@ -500,8 +499,8 @@ pub struct ModuleRulePatch {
     pub paths: Option<BTreeMap<String, Mode>>,
 }
 
-/// 区分字段缺失(`None`)与显式 null(`Some(None)`),后者清除模块级模式。
-/// 字段缺失时 serde 不会调用本函数;字段出现且为 null 时走 `visit_none`。
+/// Distinguishes a missing field (`None`) from an explicit null (`Some(None)`), the latter clearing the module-level mode.
+/// serde skips this for a missing field and reaches `visit_none` only for a present null.
 fn deserialize_optional_mode_clear<'de, D>(
     deserializer: D,
 ) -> std::result::Result<Option<Option<Mode>>, D::Error>
@@ -535,21 +534,21 @@ where
     deserializer.deserialize_option(OptionalModeClearVisitor)
 }
 
-/// 从 `["--payload", "<hex>", ...]` 中取出 payload。
+/// Extracts the payload from `["--payload", "<hex>", ...]`.
 pub fn parse_payload_arg(args: &[String]) -> Result<&str> {
     args.windows(2)
         .find_map(|window| (window[0] == "--payload").then_some(window[1].as_str()))
         .ok_or_else(|| Error::msg("missing required --payload argument"))
 }
 
-/// hex payload -> UTF-8 JSON 文本。
+/// hex payload -> UTF-8 JSON text.
 pub fn decode_payload_arg(payload_hex: &str) -> Result<String> {
     let bytes =
         hex::decode(payload_hex).map_err(|err| Error::msg(format!("decode payload hex: {err}")))?;
     String::from_utf8(bytes).map_err(|err| Error::msg(format!("payload is not valid UTF-8: {err}")))
 }
 
-/// 解析 payload 并合并/持久化到指定路径。
+/// Parses the payload and merges or persists it to the given path.
 pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
     let payload_json = decode_payload_arg(payload_hex)?;
     let patch: ConfigPatch = serde_json::from_str(&payload_json).map_err(|err| {
@@ -564,8 +563,8 @@ pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
     config.save(path)
 }
 
-/// `show-config`:输出 JSON 配置。
-/// 配置缺失时输出默认配置并带 `config_missing: true`；损坏/不可读时输出默认配置。
+/// `show-config`: outputs the JSON config.
+/// When it is missing, outputs the default with `config_missing: true`; when corrupt or unreadable, outputs the default.
 pub fn handle_show_config() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let tmpfs_xattr_supported = match crate::sys::fs::is_overlay_xattr_supported() {
@@ -579,7 +578,7 @@ pub fn handle_show_config() -> Result<()> {
     Ok(())
 }
 
-/// `save-config --payload <hex>`:合并/持久化配置,返回 `{ok:true}`。
+/// `save-config --payload <hex>`: merges and persists the config, returning `{ok:true}`.
 pub fn handle_save_config(args: &[String]) -> Result<()> {
     let payload = parse_payload_arg(args)?;
     save_config_payload(Path::new(defs::CONFIG_PATH), payload)?;
@@ -587,7 +586,7 @@ pub fn handle_save_config(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// `gen-config`:重置默认配置,返回 `{ok:true}`。
+/// `gen-config`: resets to the default config, returning `{ok:true}`.
 pub fn handle_gen_config() -> Result<()> {
     Config::write_default(Path::new(defs::CONFIG_PATH))?;
     println!("{}", serde_json::json!({ "ok": true }));

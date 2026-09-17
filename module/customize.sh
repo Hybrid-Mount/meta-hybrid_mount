@@ -2,7 +2,7 @@
 # shellcheck disable=SC3043
 # SPDX-License-Identifier: GPL-3.0-only
 
-# customize.sh — 安装阶段:平台检查、二进制落位、默认配置与初始化向导。
+# customize.sh - install stage: platform check, binary placement, default config and setup wizard.
 
 if [ -z "$APATCH" ] && [ -z "$KSU" ]; then
   abort "! unsupported root platform"

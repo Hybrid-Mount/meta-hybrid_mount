@@ -28,7 +28,7 @@ const KALLSYMS_PATH: &str = "/proc/kallsyms";
 const KPTR_RESTRICT_PATH: &str = "/proc/sys/kernel/kptr_restrict";
 const KERNEL_RELEASE_PATH: &str = "/proc/sys/kernel/osrelease";
 const LKM_OVERRIDE_ENV: &str = "HYBRID_MOUNT_LKM_PATH";
-/// LKM insmod 一次加载有已知的有限耗时上限。
+/// A single LKM insmod has a known, bounded worst case.
 const INSMOD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Conceal the ext4 staging superblock from `/proc/fs/ext4`.

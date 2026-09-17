@@ -15,7 +15,7 @@ on:
   push:
     branches:
       - "dev"
-      # VFS 实验分支:尚未合并进 dev。合并/删除该分支后应移除本条目。
+      # VFS experiment branch: not merged into dev yet. Remove this entry once the branch is merged or deleted.
       - "feat/nomount-vfs"
     paths:
       - "module/vfs/**"

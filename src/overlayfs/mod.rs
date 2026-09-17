@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! OverlayFS 后端，兼容 v4.2.0 `e20f9c19` 的行为。
+//! OverlayFS backend, behaviour-compatible with v4.2.0 `e20f9c19`.
 //!
-//! 纯算法(转义、层拆分、子挂载相对路径)跨平台可测;
-//! fsopen / mount / bind / mountinfo 执行部分仅 Linux/Android。
+//! The pure algorithms (escaping, layer splitting, sub-mount relative paths) test across platforms;
+//! the fsopen / mount / bind / mountinfo execution is Linux/Android only.
 
 #[allow(clippy::module_inception)]
 pub mod overlayfs;

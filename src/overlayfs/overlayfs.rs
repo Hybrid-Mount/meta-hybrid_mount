@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! OverlayFS 挂载编排(行为对齐 v4.2.0 `e20f9c19`):
-//! - fsopen("overlay") 主路径,传统 `mount(2)` 转义 fallback;
-//! - lowerdir 超过 64 层时,尾部层先叠成 staging 再作为新层;
-//! - 根挂载后按 `/proc/self/mountinfo` 的子挂载逐个重建 overlay,
-//!   失败时交由流水线事务回滚已登记目标。
+//! OverlayFS mount orchestration (behaviour aligned with v4.2.0 `e20f9c19`):
+//! - fsopen("overlay") is the primary path, with an escaped traditional `mount(2)` fallback;
+//! - past 64 lowerdirs, the trailing layers are stacked into staging first and used as a new layer;
+//! - after the root mount, sub-mounts are rebuilt as overlays one by one from `/proc/self/mountinfo`,
+//!   leaving a failure to the pipeline transaction to roll back the registered targets.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;
@@ -35,7 +35,7 @@ pub enum MountEffect {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
-    // 正常清理路径不得把 mountinfo 查询失败当成“未挂载”。
+    // The normal cleanup path must not treat a failed mountinfo lookup as "not mounted".
     if crate::sys::mount::is_mounted(&path)?
         && let Err(err) = unmount(&path, UnmountFlags::DETACH)
         && !matches!(err, rustix::io::Errno::NOENT | rustix::io::Errno::INVAL)
@@ -104,10 +104,10 @@ impl Drop for CurrentDirGuard {
     }
 }
 
-/// overlayfs 单次挂载最多接受的层数(v4.2.0 行为)。
+/// Maximum layers accepted in a single overlayfs mount (v4.2.0 behaviour).
 pub const MAX_LAYERS: usize = 64;
 
-/// 转义 lowerdir 单个路径中的 `\`、`,`、`:`(传统 mount fallback 专用)。
+/// Escapes `\`, `,` and `:` inside a single lowerdir path, for the traditional mount fallback only.
 pub fn escape_mount_option_value(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for ch in value.chars() {
@@ -136,7 +136,7 @@ fn collapse_staging_layers<E>(
     Ok(())
 }
 
-/// 计算根挂载点下子挂载的相对路径;非子孙路径返回 `None`。
+/// Computes a sub-mount's path relative to the root mountpoint; `None` when it is not a descendant.
 pub fn child_relative_path(root: &str, mount_point: &str) -> Option<String> {
     if mount_point == root {
         return None;
@@ -234,7 +234,7 @@ fn mount_overlay_core(
     Ok(())
 }
 
-/// 把 lowerdirs + lowest 叠到 dest;超过 64 层时先做 staging。
+/// Stacks lowerdirs plus lowest onto dest, staging first when there are more than 64 layers.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
 pub fn mount_overlayfs(
@@ -272,7 +272,7 @@ pub fn mount_overlayfs(
     )
 }
 
-/// 递归 bind mount:优先 open_tree + move_mount,失败回退传统 bind(v4.2.0 行为)。
+/// Recursive bind mount: open_tree + move_mount first, falling back to a traditional bind (v4.2.0 behaviour).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
     log::debug!("bind mount: src={}, dst={}", from.display(), to.display());
@@ -384,7 +384,7 @@ fn mount_overlay_child(
     Ok(())
 }
 
-/// 挂载根 overlay 并重建其子挂载点;失败时由流水线事务回滚已登记目标。
+/// Mounts the root overlay and rebuilds its sub-mounts; on failure the pipeline transaction rolls back the registered targets.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
 pub fn mount_overlay(

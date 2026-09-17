@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Hybrid Mount 的 Telegram 构建产物通知。
-//! 无 secrets 时由 `maybe_send_output_dir_notification` 静默跳过并打印提示。
+//! Telegram build-artifact notifications for Hybrid Mount.
+//! Without secrets, `maybe_send_output_dir_notification` skips silently after printing a notice.
 
 use std::{
     env,
@@ -45,7 +45,7 @@ impl NotifyRequest {
     }
 }
 
-/// secrets 缺失时跳过并返回 `Ok(false)`;本地构建行为与现状一致。
+/// Skips and returns `Ok(false)` when secrets are absent, so local builds behave as before.
 pub fn maybe_send_output_dir_notification(request: &NotifyRequest) -> Result<bool> {
     let has_token = env::var("TELEGRAM_BOT_TOKEN").is_ok_and(|value| !value.trim().is_empty());
     let has_chat = env::var("TELEGRAM_CHAT_ID").is_ok_and(|value| !value.trim().is_empty());

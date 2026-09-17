@@ -13,7 +13,7 @@ use crate::errors::{Error, IoError, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys::process::{CaptureMode, CommandSpec, ProcessErrorKind, run_command};
 
-/// ksud/apd 描述更新是尽力而为的副作用：只允许短总超时，不得拖慢启动。
+/// Updating the ksud/apd description is a best-effort side effect: only a short total timeout, never slowing the boot.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const DESCRIPTION_OVERRIDE_TIMEOUT: Duration = Duration::from_secs(15);
 

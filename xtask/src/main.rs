@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 构建与发布自动化:WebUI 构建 + MODULE_ID 注入、Rust 交叉编译、
-//! module.prop 生成、zip 打包、update.json 与 TG 通知。
+//! Build and release automation: WebUI build with MODULE_ID injection, Rust cross-compilation,
+//! module.prop generation, zip packaging, update.json and Telegram notifications.
 
 mod zip_ext;
 
@@ -36,16 +36,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// 构建 WebUI + 二进制并打包 module zip
+    /// Builds the WebUI and binaries, then packages the module zip
     Build {
-        /// 使用 release profile
+        /// Use the release profile
         #[arg(long)]
         release: bool,
-        /// CI 模式(等价 release)
+        /// CI mode, equivalent to release
         #[arg(long)]
         ci: bool,
     },
-    /// 发送 output 目录 zip 到 Telegram(topic 6=release,37=dev)
+    /// Sends the output directory zip to Telegram (topic 6 = release, 37 = dev)
     Notify {
         #[arg(long, default_value = "output")]
         output: PathBuf,
@@ -54,7 +54,7 @@ enum Commands {
         #[arg(long)]
         topic_id: Option<i64>,
     },
-    /// 写 update.json
+    /// Writes update.json
     UpdateJson {
         version: String,
         version_code: u64,
@@ -189,7 +189,7 @@ struct AndroidArch {
     suffix: &'static str,
 }
 
-/// 支持的三架构:cargo-ndk ABI、Rust target、zip 内文件名后缀。
+/// The three supported architectures: cargo-ndk ABI, Rust target and in-zip filename suffix.
 const ANDROID_ARCHS: &[AndroidArch] = &[
     AndroidArch {
         ndk_abi: "arm64-v8a",

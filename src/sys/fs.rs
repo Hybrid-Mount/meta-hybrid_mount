@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 文件系统辅助:路径清理、内核配置读取、tmpfs xattr 能力探测。
+//! Filesystem helpers: path cleanup, kernel config reads and tmpfs xattr probing.
 
 use std::path::Path;
 
@@ -86,8 +86,8 @@ fn atomic_write_with_sequence(path: &Path, content: &[u8], sequence: &AtomicU64)
         file.sync_all()?;
 
         fs::rename(&temporary, path)?;
-        // 父目录 fsync 失败按保存失败处理。rename 已经可见，但调用方
-        // 必须知道目录项未持久化，不能把它当成一次成功的原子保存。
+        // A failed parent-directory fsync counts as a failed save. The rename is already visible,
+        // but the caller must know the directory entry is not durable and cannot call it an atomic save.
         sync_parent_directory(path)?;
         Ok(())
     })();
@@ -98,8 +98,8 @@ fn atomic_write_with_sequence(path: &Path, content: &[u8], sequence: &AtomicU64)
     result
 }
 
-/// 清理超过 24 小时、符合原子写命名规则的普通临时文件。
-/// 当前进程的文件可能仍在写入，必须保留。
+/// Removes regular temp files older than 24 hours that match the atomic-write naming scheme.
+/// Files belonging to the current process may still be in flight and are kept.
 #[cfg(unix)]
 pub fn cleanup_stale_atomic_temp_files(dir: &Path) -> Result<()> {
     let entries = match fs::read_dir(dir) {
@@ -188,8 +188,8 @@ pub fn cleanup_stale_atomic_temp_files(dir: &Path) -> Result<()> {
 
 #[cfg(not(unix))]
 pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
-    // Host 测试/开发用途的非原子回退：Windows 上不提供崩溃安全的
-    // 临时文件 + rename 语义，发布目标(Android/Linux)始终走上面的实现。
+    // Non-atomic fallback for host tests and development: Windows offers no crash-safe
+    // temp-file + rename, and release targets (Android/Linux) always take the path above.
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -199,11 +199,11 @@ pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
 
 #[cfg(not(unix))]
 pub fn cleanup_stale_atomic_temp_files(_dir: &Path) -> Result<()> {
-    // 非 Unix 平台不需要清理
+    // Nothing to clean up on non-Unix platforms.
     Ok(())
 }
 
-/// 删除路径:目录递归删除,非目录直接删除,不存在视为成功。
+/// Deletes a path: directories recursively, anything else directly, and a missing path counts as success.
 pub fn remove_path(path: &Path) -> Result<()> {
     match std::fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_dir() => Ok(std::fs::remove_dir_all(path)?),
@@ -224,8 +224,8 @@ pub struct CopyTreeStats {
     pub bytes: u64,
 }
 
-/// 从 planner 的共享节点树物化 OverlayFS 层。只复制标注为 overlay 的贡献，
-/// magic / ignore 子树不会泄漏进 lowerdir；模块源目录始终只读。
+/// Materialises OverlayFS layers from the planner's shared node tree. Only overlay-labelled
+/// contributions are copied, so magic and ignore subtrees cannot leak into a lowerdir, and module sources stay read-only.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn stage_overlay_tree(tree: &MountTree, destination: &Path) -> Result<CopyTreeStats> {
     for module_id in tree.module_ids_for(MountMode::Overlay) {
@@ -236,7 +236,7 @@ pub fn stage_overlay_tree(tree: &MountTree, destination: &Path) -> Result<CopyTr
     let mut directory_metadata = Vec::new();
     stage_overlay_node(&tree.root, destination, &mut stats, &mut directory_metadata)?;
 
-    // 子节点创建完成后再恢复目录元数据，避免 staging 写入改变最终属性。
+    // Restore directory metadata only after the children exist, so staging writes cannot change the final attributes.
     for (source, staged, metadata) in directory_metadata.into_iter().rev() {
         clone_entry_metadata(&source, &staged, &metadata, false);
     }
@@ -308,8 +308,8 @@ fn stage_overlay_node(
     Ok(())
 }
 
-/// 复制已经物化的单个 Overlay 节点到 shallow layer，保留符号链接、
-/// whiteout 设备节点、权限、所有权和 SELinux 上下文。
+/// Copies one materialised Overlay node into a shallow layer, preserving symlinks,
+/// whiteout device nodes, permissions, ownership and the SELinux context.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn copy_prepared_entry(source: &Path, destination: &Path) -> Result<()> {
     let mut stats = CopyTreeStats::default();
@@ -517,7 +517,7 @@ pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()>
     Ok(())
 }
 
-/// 读取 `/proc/config.gz`,检查 `CONFIG_*` 是否编译为 `y`(v4.2.0 行为)。
+/// Reads `/proc/config.gz` and checks whether a `CONFIG_*` is built in as `y` (v4.2.0 behaviour).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn check_kernel_config(key: &str) -> Result<bool> {
     use std::io::Read;
@@ -549,7 +549,7 @@ pub fn check_kernel_config(_key: &str) -> Result<bool> {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 static TMPFS_XATTR_SUPPORT: AtomicU8 = AtomicU8::new(0);
 
-/// overlay 层落到 tmpfs 时要求 tmpfs 支持 xattr;结果缓存一次(v4.2.0 行为)。
+/// An overlay layer on tmpfs needs tmpfs xattr support; the result is cached once (v4.2.0 behaviour).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn is_overlay_xattr_supported() -> Result<bool> {
     match TMPFS_XATTR_SUPPORT.load(Ordering::Relaxed) {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 挂载系统辅助(仅 Linux/Android):挂载点探测、tmpfs 挂载、镜像修复。
+//! Mount helpers (Linux/Android only): mountpoint probing, tmpfs mounts and image repair.
 //!
-//! `unmount` 语义:本文件所有“卸载”都是 rustix `unmount` 系统调用,
-//! 即立即执行;与 KernelSU try-umount 列表注册不是一回事。
+//! `unmount` semantics: every "unmount" in this file is the rustix `unmount` syscall, meaning
+//! it happens immediately. It is not the same as registering with the KernelSU try-umount list.
 
 use std::path::Path;
 use std::time::Duration;
@@ -16,18 +16,18 @@ use crate::sys::mountinfo::MountSnapshot;
 use crate::sys::process::{CaptureMode, CommandSpec, run_command};
 use crate::utils::ensure_dir_exists;
 
-/// e2fsck 修复大镜像可能耗时，但启动路径上的等待必须有界。
+/// Repairing a large image with e2fsck can take a while, but a boot-path wait must stay bounded.
 const E2FSCK_TIMEOUT: Duration = Duration::from_secs(300);
-/// v4.2.0 兼容语义:退出码 0..=3 视为成功,4 及以上失败,被 signal 终止失败。
+/// v4.2.0 semantics: exit codes 0..=3 succeed, 4 and above fail, and a signal termination fails.
 pub const E2FSCK_COMPATIBLE_EXIT_CODES: &[i32] = &[0, 1, 2, 3];
 
-/// 从 `/proc/self/mountinfo` 判断路径是否为挂载点。
+/// Decides from `/proc/self/mountinfo` whether a path is a mountpoint.
 pub fn is_mounted(path: &Path) -> Result<bool> {
     Ok(MountSnapshot::read()?.contains(path))
 }
 
-/// Drop 清理路径的 best-effort 探测:查询失败记录原因并按未挂载处理,
-/// 正常路径必须使用返回错误的 [`is_mounted`]。
+/// Best-effort probe for the Drop cleanup path: a failed lookup records the reason and
+/// treats the path as unmounted. Normal paths must use [`is_mounted`], which returns the error.
 pub fn is_mounted_best_effort(path: &Path) -> bool {
     match is_mounted(path) {
         Ok(mounted) => mounted,
@@ -84,7 +84,7 @@ pub fn rollback_mount_target(path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 挂载 tmpfs(`mode=0755`),用于 overlay staging(v4.2.0 行为)。
+/// Mounts tmpfs (`mode=0755`) for overlay staging (v4.2.0 behaviour).
 pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
     ensure_dir_exists(target)?;
     mount(
@@ -103,7 +103,7 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
     })
 }
 
-/// 用 `e2fsck -y -f` 修复镜像;退出码 0..=3 视为成功(v4.2.0 行为)。
+/// Repairs an image with `e2fsck -y -f`; exit codes 0..=3 succeed (v4.2.0 behaviour).
 pub fn repair_image(image_path: &Path) -> Result<()> {
     let spec = CommandSpec::new("e2fsck")
         .operation("repair ext4 image")
@@ -131,8 +131,8 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `emulated-soft-reboot`:立即卸载 mountinfo 中 source 为指定值的所有挂载点，
-/// 用于模拟软重启前的挂载清理。
+/// `emulated-soft-reboot`: immediately unmounts every mountpoint whose source matches,
+/// simulating the mount cleanup before a soft reboot.
 pub fn emulated_soft_reboot(source: &str) -> Result<()> {
     let process = Process::myself().map_err(|source| {
         Error::Mount(Box::new(ContextError::new(

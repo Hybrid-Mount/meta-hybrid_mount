@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Magic Mount 挂载执行(仅 Linux/Android)。
+//! Magic Mount execution (Linux/Android only).
 //!
-//! 核心语义：
-//! - 文件直接 bind + 只读 remount;符号链接克隆到 staging;
-//! - 目录在需要挂子项或 `replace` 时建立 tmpfs skeleton,
-//!   mirror 原目录的其余条目,最后只读 remount 并 mount-move 到目标;
-//! - whiteout 只记录不挂载;所有写入都发生在私有随机 tmpfs staging,
-//!   模块源目录只读。
+//! Core semantics:
+//! - files are bound directly and remounted read-only, while symlinks are cloned into staging;
+//! - a directory gets a tmpfs skeleton when it needs children or `replace`,
+//!   mirrors the remaining entries of the real directory, then remounts read-only and mount-moves onto the target;
+//! - whiteouts are recorded but not mounted, and all writes happen in a private random tmpfs staging,
+//!   leaving module sources read-only.
 
 use std::collections::BTreeSet;
 use std::fs::{self, DirEntry};
@@ -175,8 +175,8 @@ impl MagicMount<'_, '_, '_> {
             crate::utils::ksu::send_unmountable(target);
         }
 
-        // MS_REMOUNT | MS_BIND 把单文件改成只读。无法降为只读时，撤销刚刚
-        // 创建的 bind mount 并将目标视为失败，不能报告部分成功。
+        // MS_REMOUNT | MS_BIND makes a single file read-only. When that fails, undo the bind
+        // just created and fail the target rather than reporting partial success.
         if let Err(error) = magic_mount_remount(target, MountFlags::RDONLY | MountFlags::BIND, "")
             .map_err(|err| Error::msg(format!("make file {} read-only: {err}", target.display())))
         {
@@ -224,7 +224,7 @@ impl MagicMount<'_, '_, '_> {
                                 },
                             )
                         } else {
-                            // 实际路径不存在:必须用 tmpfs 承载新文件。
+                            // The real path does not exist, so tmpfs must carry the new file.
                             true
                         }
                     }
@@ -248,7 +248,7 @@ impl MagicMount<'_, '_, '_> {
         }
 
         if tmpfs {
-            // 先自身 bind 一次,保证后续 mount-move 作用于这个挂载点。
+            // Bind onto itself first so the later mount-move acts on this mountpoint.
             magic_mount_bind(&self.work_dir_path, &self.work_dir_path).map_err(|err| {
                 Error::msg(format!(
                     "creating tmpfs for {} at {}: {err}",
@@ -329,7 +329,7 @@ impl MagicMount<'_, '_, '_> {
             let result = MagicMountResult::new(operation, &self.path);
             record_mount_target(self.stats, &mut *self.on_mount, &result, &self.path);
 
-            // 降为 private,减少 peer group 数量。
+            // Drop to private to reduce the number of peer groups.
             if !crate::sys::faults::use_fake_magic_mount_ops()
                 && let Err(err) = mount_change(
                     &self.path,
@@ -349,8 +349,8 @@ impl MagicMount<'_, '_, '_> {
         Ok(MagicMountResult::new(MagicOperation::Noop, &self.path))
     }
 
-    /// 处理实际目录中已有的条目:命中收集树的走 magic mount,
-    /// 其余条目在 tmpfs 场景下 mirror 进 staging。
+    /// Handles entries already present in the real directory: those in the collected tree go
+    /// through magic mount, and the rest are mirrored into staging in the tmpfs case.
     fn mount_path(&mut self, has_tmpfs: bool) -> Result<BTreeSet<String>> {
         let mut processed = BTreeSet::new();
         for entry in self.path.read_dir()? {
@@ -409,7 +409,7 @@ fn record_mount_target(
     on_mount(&rollback_target.to_string_lossy());
 }
 
-/// magic mount 一次执行的统计(供 `run/state.json` 快照)。
+/// Statistics for one magic mount execution, used by the `run/state.json` snapshot.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MagicMountStats {
     pub mounted_files: u32,
@@ -430,7 +430,7 @@ fn record_module_success(stats: &mut MagicMountStats, node: &MountNode) {
     }
 }
 
-/// 完整 magic mount 入口:消费共享树 → 建 staging tmpfs → 执行 → 汇总。
+/// The full magic mount entry point: consume the shared tree, build staging tmpfs, execute, summarise.
 pub fn magic_mount(
     tree: &MountTree,
     mount_source: &str,
@@ -486,7 +486,7 @@ pub fn magic_mount(
     Ok(stats)
 }
 
-/// 按真实路径(存在时)或模块源路径复制 mode/uid/gid/SELinux 到 staging。
+/// Copies mode, uid, gid and SELinux context into staging from the real path when it exists, else the module source.
 fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result<()> {
     log::debug!(
         "creating tmpfs skeleton for {} at {}",
@@ -521,7 +521,7 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
     Ok(())
 }
 
-/// 把真实目录中未被收集树覆盖的条目递归 mirror 到 tmpfs staging。
+/// Recursively mirrors entries of the real directory that the collected tree does not cover into the tmpfs staging.
 fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<()> {
     let path = path.join(entry.file_name());
     let work_dir_path = work_dir_path.join(entry.file_name());

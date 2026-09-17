@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 生产路径的统一子进程 runner。
+//! The shared subprocess runner used on production paths.
 //!
-//! 设计约束：
-//! - 不接受 shell 拼装字符串；程序与参数分别传入。
-//! - stdout/stderr 只保留固定容量的 head + tail，超过上限后继续 drain，
-//!   防止大输出 OOM 或子进程因管道写满而阻塞。
-//! - 总超时与 I/O drain 超时独立：直接子进程被 kill 后，其孙进程可能继承
-//!   stdout/stderr 管道并保持打开，drain 线程必须有自己的截止时间。
-//! - 每个调用点必须显式声明可接受退出码；`ExitPolicy::Any` 只用于
-//!   insmod 这类“退出码不承载结果、副作用才权威”的已知场景。
-//! - 错误与日志不携带环境变量内容（KernelSU/APatch 模块名等仅写入子进程 env）。
+//! Design constraints:
+//! - No shell string assembly: the program and its arguments are passed separately.
+//! - stdout/stderr keep only a bounded head + tail, and draining continues past the cap,
+//!   so large output cannot OOM us or block the child on a full pipe.
+//! - The total timeout is independent of the I/O drain timeout: after the direct child is
+//!   killed, grandchildren can inherit and hold the stdout/stderr pipes open, so the drain thread needs its own deadline.
+//! - Every call site must declare its acceptable exit codes; `ExitPolicy::Any` is only for
+//!   known cases like insmod, where the exit code carries no result and only the side effect is authoritative.
+//! - Errors and logs never carry environment contents; KernelSU/APatch module names go only into the child's env.
 
 use std::fmt;
 use std::io::{self, Read};
@@ -23,13 +23,13 @@ use std::time::{Duration, Instant};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 
-/// 每个流默认保留的总字节数(head 与 tail 各占一半)。
+/// Default total bytes kept per stream, split evenly between head and tail.
 pub const DEFAULT_OUTPUT_CAPACITY_BYTES: usize = 32 * 1024;
-/// 直接子进程退出后，等待输出 drain 线程的默认截止时间。
+/// Default deadline for waiting on the output drain threads once the direct child exits.
 pub const DEFAULT_DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
-/// 子进程 wait 轮询间隔。
+/// Polling interval for waiting on the child.
 const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
-/// 单次管道读取块大小。远小于容量上限，因此缓冲永远有界。
+/// Pipe read chunk size. Far below the cap, so the buffer stays bounded.
 const READ_CHUNK_BYTES: usize = 8 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,8 +47,8 @@ impl fmt::Display for OutputStream {
     }
 }
 
-/// 跨平台子进程退出状态。`Signaled` 在非 Unix 目标上永远不会被构造，
-/// 但保留变体可以让错误分类与日志代码不依赖平台 cfg。
+/// Cross-platform child exit status. `Signaled` is never constructed on non-Unix targets,
+/// but keeping the variant spares the error-classification and logging code a platform cfg.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitStatus {
     Exited(i32),
@@ -76,7 +76,7 @@ impl fmt::Display for ExitStatus {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CaptureMode {
-    /// 不分配输出缓冲；stdout/stderr 直接连到 `/dev/null` 等价物。
+    /// Allocates no output buffer; stdout/stderr go straight to a `/dev/null` equivalent.
     #[default]
     None,
     Stdout,
@@ -94,14 +94,14 @@ impl CaptureMode {
     }
 }
 
-/// 显式可接受退出码策略。
+/// Explicitly declares the acceptable exit codes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitPolicy {
-    /// 只接受退出码 0。
+    /// Accepts exit code 0 only.
     Success,
-    /// 只接受列出的退出码；如 `e2fsck` 的 0..=3。
+    /// Accepts only the listed codes, such as 0..=3 for `e2fsck`.
     Accepted(&'static [i32]),
-    /// 退出码不承载结果，副作用检查才权威（LKM `insmod` 故意返回 -EAGAIN）。
+    /// The exit code carries no result and only the side-effect check is authoritative (LKM `insmod` deliberately returns -EAGAIN).
     Any,
 }
 
@@ -117,11 +117,11 @@ impl ExitPolicy {
     }
 }
 
-/// 有界 head + tail 输出缓冲。
+/// Bounded head + tail output buffer.
 ///
-/// 保留最前面的 `head_budget` 字节与最后面的 `tail_budget` 字节，
-/// 中间丢弃量记录在 `omitted`。容量填满后调用方仍必须继续 push 新字节，
-/// 否则子进程会因管道背压而阻塞。
+/// Keeps the first `head_budget` bytes and the last `tail_budget` bytes, recording how
+/// much was dropped in `omitted`. Callers must keep pushing new bytes once the buffer is
+/// full, or the child blocks on pipe backpressure.
 #[derive(Debug)]
 pub struct OutputCapture {
     head: Vec<u8>,
@@ -167,7 +167,7 @@ impl OutputCapture {
         }
 
         if rest.len() >= self.tail_budget {
-            // 整段只保留最后 tail_budget 字节，旧 tail 与丢弃前缀一并计入。
+            // Keep only the last tail_budget bytes, counting both the old tail and the dropped prefix.
             self.omitted = self.omitted.saturating_add(self.tail.len() as u64);
             self.tail.clear();
             let keep = self.tail_budget.min(rest.len());
@@ -205,7 +205,7 @@ impl OutputCapture {
         self.head.is_empty() && self.tail.is_empty()
     }
 
-    /// 用于错误与日志的受限文本视图：head + 省略标记 + tail。
+    /// Restricted text view for errors and logs: head, an omission marker, then tail.
     pub fn render(&self) -> String {
         let mut text = String::from_utf8_lossy(&self.head).into_owned();
         if self.omitted > 0 {
@@ -218,7 +218,7 @@ impl OutputCapture {
     }
 }
 
-/// 一次子进程调用的完整规格。环境变量只写进子进程，绝不进入 Debug/日志/错误。
+/// Full spec for one subprocess call. Environment variables go only into the child, never into Debug, logs or errors.
 #[derive(Clone)]
 pub struct CommandSpec {
     pub operation: &'static str,
@@ -336,7 +336,7 @@ impl CommandOutcome {
     }
 }
 
-/// 非零退出码时的结构化失败载荷。输出缓冲 boxed，避免把错误枚举撑得过大。
+/// Structured failure payload for a non-zero exit. The output buffer is boxed to keep the error enum small.
 #[derive(Debug)]
 pub struct UnexpectedExit {
     pub status: ExitStatus,
@@ -369,7 +369,7 @@ pub enum ProcessErrorKind {
     Wait {
         source: io::Error,
     },
-    /// 输出读取失败或 drain 线程无法启动。
+    /// Reading output failed, or the drain thread could not start.
     Reader {
         stream: OutputStream,
         source: io::Error,
@@ -462,8 +462,8 @@ fn process_error(spec: &CommandSpec, kind: ProcessErrorKind) -> ProcessError {
     }
 }
 
-/// 执行一次子进程调用。总超时由调用点通过 [`CommandSpec::timeout`] 显式选择；
-/// I/O drain 超时默认 [`DEFAULT_DRAIN_TIMEOUT`]，可显式覆盖。
+/// Runs one subprocess call. The call site picks the total timeout via [`CommandSpec::timeout`];
+/// the I/O drain timeout defaults to [`DEFAULT_DRAIN_TIMEOUT`] and can be overridden.
 pub fn run_command(spec: &CommandSpec) -> ProcessResult<CommandOutcome> {
     let mut command = Command::new(&spec.program);
     command.args(&spec.args);
@@ -552,8 +552,8 @@ pub fn run_command(spec: &CommandSpec) -> ProcessResult<CommandOutcome> {
     let status = match wait_child(&mut child, spec.timeout) {
         Ok(status) => ExitStatus::from_std(status),
         Err(kind) => {
-            // 主错误是超时/等待失败，但仍给 drain 线程自己的截止时间，
-            // 避免孙进程继承的管道把线程永远拖住。
+            // The primary error is a timeout or wait failure, but the drain threads still get their
+            // own deadline so a pipe inherited by a grandchild cannot hold them forever.
             if let Some(rx) = stdout_rx {
                 let _ = collect_drain(rx, OutputStream::Stdout, spec.drain_timeout);
             }
@@ -564,7 +564,7 @@ pub fn run_command(spec: &CommandSpec) -> ProcessResult<CommandOutcome> {
         }
     };
 
-    // 即使一个流先报错，也要尝试等待另一个流退出，避免遗留 drain 线程。
+    // Even when one stream errors first, still wait for the other so no drain thread is left behind.
     let stdout_result = stdout_rx
         .map(|rx| collect_drain(rx, OutputStream::Stdout, spec.drain_timeout))
         .transpose();
@@ -665,8 +665,8 @@ fn wait_child(
                 if let Some(deadline) = deadline
                     && Instant::now() >= deadline
                 {
-                    // kill + wait 只回收直接子进程。孙进程继承的管道由 drain
-                    // 超时另行处理，这正是两个超时必须独立的原因。
+                    // kill + wait only reaps the direct child; pipes inherited by grandchildren are handled
+                    // by the drain timeout, which is exactly why the two timeouts must be independent.
                     let _ = child.kill();
                     let _ = child.wait();
                     return Err(ProcessErrorKind::Timeout {

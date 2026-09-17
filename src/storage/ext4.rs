@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! ext4 loop 镜像 staging:
-//! 按 staging 后的逻辑数据量和 inode 需求动态估算镜像大小，
-//! 使用 Android 系统 `/system/bin/mke2fs`，结合上游 meta-overlayfs 的无日志配置
-//! 与 Hybrid Mount 4.2.0 的 1 KiB block / 4 KiB inode 密度格式化；首次挂载前用
-//! 系统 `e2fsck` 校验，挂载失败时再修复重试。
+//! ext4 loop image staging:
+//! the image size is estimated from the post-staging logical data volume and inode demand,
+//! using Android's `/system/bin/mke2fs` with upstream meta-overlayfs's journal-less config
+//! and Hybrid Mount 4.2.0's 1 KiB block / 4 KiB inode density; the image is checked with the
+//! system `e2fsck` before the first mount and repaired and retried if mounting fails.
 
 #[cfg(unix)]
 use std::{fs, path::PathBuf};
@@ -38,14 +38,14 @@ const EXT4_IMAGE_ALIGNMENT_BYTES: u64 = 4 * 1024 * 1024;
 const EXT4_BYTES_PER_INODE: u64 = 4096;
 const SYSTEM_MKE2FS: &str = "/system/bin/mke2fs";
 const MODULES_IMG_SELINUX_CONTEXT: &str = "u:object_r:ksu_file:s0";
-/// 大镜像格式化/校验是设备启动路径上的慢操作，给足上限但仍必须有限。
+/// Formatting or checking a large image is slow on the boot path, so it gets a generous but still finite bound.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const EXT4_IMAGE_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
-/// staging 逻辑占用统计器。
+/// Accumulator for the logical staging footprint.
 ///
-/// 普通复制会把 F2FS 压缩/稀疏文件展开，也不会保留源端硬链接的块共享，
-/// 所以每个普通文件都按 4.2.0 使用的 1 KiB 块向上取整，并分别统计所有目标 inode。
+/// A plain copy expands F2FS-compressed and sparse files and loses the block sharing of source
+/// hardlinks, so every regular file is rounded up to the 1 KiB block 4.2.0 uses and all target inodes are counted.
 #[derive(Debug, Default)]
 pub struct SizeCounter {
     data_bytes: u64,
@@ -141,11 +141,11 @@ fn mke2fs_args(block_size: u64) -> Vec<String> {
     ]
 }
 
-/// 镜像容量计划：
+/// Image capacity plan:
 ///
-/// - 数据需求为逻辑文件块 × 1.25 + 16 MiB；
-/// - inode 需求按 4.2.0 的 4 KiB/inode 再留 25% 余量；
-/// - 两者取较大值，最低 64 MiB，并按 4 MiB 对齐以保持稀疏镜像尺寸规整。
+/// - data demand is logical file blocks x 1.25 plus 16 MiB;
+/// - inode demand follows 4.2.0's 4 KiB per inode with another 25% of headroom;
+/// - the larger of the two wins, floored at 64 MiB and aligned to 4 MiB so sparse image sizes stay tidy.
 pub fn planned_image_size(data_bytes: u64, entries: u64) -> u64 {
     let data_requirement =
         multiply_ratio_ceil(data_bytes, EXT4_GROWTH_NUMERATOR, EXT4_GROWTH_DENOMINATOR)
