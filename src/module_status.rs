@@ -45,11 +45,18 @@ pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize) 
 fn running_description(mode: &str, overlay_count: usize, magic_count: usize) -> String {
     let (mode_name, mode_icon) = match mode {
         "tmpfs" => ("Tmpfs", "🐾"),
+        "none" => ("", ""),
         _ => ("Ext4", "💿"),
     };
 
+    let mode_tag = if mode_name.is_empty() {
+        String::new()
+    } else {
+        format!(" ({mode_name}) {mode_icon}")
+    };
+
     format!(
-        "😋 运行中喵～ ({mode_name}) {mode_icon} | OverlayFS: {overlay_count} | Magic Mount: {magic_count}"
+        "😋 运行中喵～{mode_tag} | OverlayFS: {overlay_count} | Magic Mount: {magic_count}"
     )
 }
 
@@ -138,6 +145,16 @@ mod tests {
         assert!(description.contains("(Tmpfs)"));
         assert!(description.contains("OverlayFS: 0"));
         assert!(description.contains("Magic Mount: 1"));
+    }
+
+    /// HM-RUST-014：Magic-only 运行时 storage_mode="none"，不能假装在跑 Ext4。
+    #[test]
+    fn running_description_with_none_reports_no_storage_backend() {
+        let description = running_description("none", 0, 1);
+
+        assert!(description.contains("OverlayFS: 0"));
+        assert!(description.contains("Magic Mount: 1"));
+        assert!(!description.contains("Ext4"), "should not show Ext4 for Magic-only run");
     }
 
     #[test]

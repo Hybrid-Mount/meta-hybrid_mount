@@ -72,8 +72,9 @@ pub fn pipeline_stats(
     magic_files: usize,
     magic_symlinks: usize,
     ignored_entries: usize,
+    magic_dirs: usize,
 ) -> MountStatistics {
-    let successful = overlay_dir_mounts + shallow_overlay_mounts + magic_files + magic_symlinks;
+    let successful = overlay_dir_mounts + shallow_overlay_mounts + magic_files + magic_symlinks + magic_dirs;
 
     MountStatistics {
         total_mounts: successful,
@@ -83,6 +84,7 @@ pub fn pipeline_stats(
         symlinks_created: magic_symlinks,
         overlayfs_mounts: overlay_dir_mounts + shallow_overlay_mounts,
         ignored_entries,
+        magic_dirs,
     }
 }
 
@@ -878,6 +880,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         magic_stats.mounted_files as usize,
         magic_stats.mounted_symlinks as usize,
         magic_stats.ignored_files as usize,
+        magic_stats.mounted_dirs as usize,
     );
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;
@@ -1754,9 +1757,10 @@ fn mount_magic_phase(
         &mut on_mount,
     )?;
     log::info!(
-        "magic mount phase complete: files={}, symlinks={}, ignored={}",
+        "magic mount phase complete: files={}, symlinks={}, dirs={}, ignored={}",
         stats.mounted_files,
         stats.mounted_symlinks,
+        stats.mounted_dirs,
         stats.ignored_files
     );
     Ok(stats)
@@ -1768,14 +1772,27 @@ mod tests {
 
     #[test]
     fn pipeline_stats_aggregates_all_sources() {
-        let stats = pipeline_stats(2, 3, 10, 4, 5);
+        let stats = pipeline_stats(2, 3, 10, 4, 5, 6);
 
         assert_eq!(stats.overlayfs_mounts, 5);
         assert_eq!(stats.files_mounted, 10);
         assert_eq!(stats.symlinks_created, 4);
         assert_eq!(stats.ignored_entries, 5);
-        assert_eq!(stats.total_mounts, 19);
-        assert_eq!(stats.successful_mounts, 19);
+        assert_eq!(stats.total_mounts, 25);
+        assert_eq!(stats.successful_mounts, 25);
+    }
+
+    /// HM-RUST-013: Magic Mount 目录挂载（Move/Replace）必须进入 total_mounts。
+    #[test]
+    fn pipeline_stats_counts_magic_directory_mounts_in_total() {
+        let stats = pipeline_stats(1, 0, 2, 0, 0, 3);
+
+        // 1 overlay-dir + 2 magic files + 3 magic dirs = 6
+        assert_eq!(stats.total_mounts, 6);
+        assert_eq!(stats.successful_mounts, 6);
+        assert_eq!(stats.files_mounted, 2);
+        assert_eq!(stats.symlinks_created, 0);
+        assert_eq!(stats.overlayfs_mounts, 1);
     }
 
     #[test]

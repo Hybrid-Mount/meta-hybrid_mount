@@ -111,6 +111,7 @@ impl<'tree, 'stats, 'mount> MagicMount<'tree, 'stats, 'mount> {
             NodeFileType::Directory => self.mount_directory(),
             NodeFileType::Whiteout => {
                 log::debug!("file {} is removed", self.path.display());
+                self.stats.ignored_files = self.stats.ignored_files.saturating_add(1);
                 record_module_success(self.stats, self.node);
                 Ok(MagicMountResult::new(MagicOperation::Whiteout, &self.path))
             }
@@ -325,6 +326,7 @@ impl MagicMount<'_, '_, '_> {
             } else {
                 MagicOperation::Move
             };
+            self.stats.mounted_dirs = self.stats.mounted_dirs.saturating_add(1);
             record_module_success(self.stats, self.node);
             let result = MagicMountResult::new(operation, &self.path);
             record_mount_target(self.stats, &mut *self.on_mount, &result, &self.path);
@@ -414,6 +416,7 @@ fn record_mount_target(
 pub struct MagicMountStats {
     pub mounted_files: u32,
     pub mounted_symlinks: u32,
+    pub mounted_dirs: u32,
     pub ignored_files: u32,
     /// Successful module-controlled bind and directory mount targets.
     pub active_mounts: Vec<String>,

@@ -58,6 +58,9 @@ pub struct MountStatistics {
     pub symlinks_created: usize,
     pub overlayfs_mounts: usize,
     pub ignored_entries: usize,
+    /// Magic Mount directory targets (Move, Replace). Separate from `files_mounted` so the
+    /// WebUI can distinguish file binds from full-directory mounts.
+    pub magic_dirs: usize,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -280,7 +283,7 @@ impl RunState {
     /// Build the boot snapshot as soon as planning succeeds.  This keeps the
     /// WebUI contract available even when a later mount operation fails.
     pub fn from_plan(
-        config: &Config,
+        _config: &Config,
         modules: &[ModuleRecord],
         plan: &MountPlan,
         mount_error_modules: Vec<String>,
@@ -296,7 +299,7 @@ impl RunState {
             .collect();
 
         let mut state = Self::new(
-            config.overlay_mode.as_str().to_owned(),
+            String::new(),
             PathBuf::new(),
             plan.overlay_module_ids
                 .iter()
