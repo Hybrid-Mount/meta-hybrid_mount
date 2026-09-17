@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! VFS 内核 Provider 绑定。v2 只支持 Hybrid Mount 自有的 K2；设备上若已存在
-//! 外来 NoMount 实现，则拒绝附着。绑定结果在本次启动内固定，禁止热切换。
+//! VFS kernel provider binding. v2 supports only K2; a device already running a
+//! foreign NoMount implementation is refused. The binding is fixed for the boot.
 
 use crate::errors::{Error, Result};
 use crate::vfs::protocol::{self, EncodedRule, NmCommand};
 use crate::vfs::sys::{self, KeyringChannel, PageBuffer};
 
-/// K2 支持的协议版本。上游 NoMount 的 "20" 不在其中。
+/// Protocol versions K2 accepts. Upstream NoMount's "20" is not one of them.
 pub const SUPPORTED_VERSIONS: &[&str] = &["hm1"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ pub trait VfsKernel {
     fn version(&mut self) -> Result<String>;
     fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()>;
     fn add_uids(&mut self, uids: &[u32]) -> Result<()>;
-    /// 定向删除指定的规则；不触碰 Provider 中其它来源的规则。
+    /// Deletes the given rules only, leaving rules from other sources in place.
     fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()>;
 }
 
@@ -73,7 +73,7 @@ impl VfsKernel for KeyringKernel {
     fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
         for page in protocol::build_add_rule_payloads(rules, 0)? {
             let response = self.exchange(&page)?;
-            // ADD_RULE 必须整批消费；GET_VERSION 不设置 arg1，仍用 ensure_status。
+            // ADD_RULE must consume the whole batch; GET_VERSION leaves arg1 unset.
             protocol::ensure_consumed(&response)?;
         }
         Ok(())
@@ -83,40 +83,38 @@ impl VfsKernel for KeyringKernel {
         for uid in uids {
             let request = protocol::build_payload(NmCommand::AddUid, *uid, &[])?;
             let response = self.exchange(&request)?;
-            // UID 表在重启前不清空：同一次启动内第二次运行流水线时内核回 -EEXIST，
-            // 但目标状态（该 UID 被隔离）已经达成，按成功处理。
+            // The uid table survives until reboot, so a second pipeline run in the
+            // same boot sees -EEXIST even though the uid is already isolated.
             protocol::ensure_status_allow_eexist(&response)?;
         }
         Ok(())
     }
 
     fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
-        // DEL_RULE 按虚拟路径索引，只需 vpath；uid 与 ADD 保持一致（当前为 0）。
+        // DEL_RULE indexes by virtual path, so only vpath is needed.
         let paths = rules
             .iter()
             .map(|rule| rule.virtual_path.clone())
             .collect::<Vec<_>>();
         for page in protocol::build_del_rule_payloads(&paths, 0)? {
             let response = self.exchange(&page)?;
-            // 规则可能已被移除或从未生效：ENOENT 不是回滚失败。
+            // The rule may be gone or never have taken effect.
             protocol::ensure_status_allow_enoent(&response)?;
         }
         Ok(())
     }
 }
 
-/// 选择并绑定唯一活动的 VFS 内核 Provider（v2：只有 K2）。
+/// Binds the single active VFS kernel provider (v2: K2 only).
 ///
-/// 1. 单向守卫：`foreign_nomount` 为真表示设备上已存在外来 NoMount 实现，此时拒绝
-///    附着（不加载模块、不下发规则）；
-/// 2. 已有可响应的 K2：直接采用，不加载任何模块；
-/// 3. 否则尝试加载 HM 自有 VFS LKM，再重新探测；
-/// 4. 仍不可用返回 `Ok(None)`，由调用方决定降级或失败。
+/// 1. If a foreign NoMount implementation is present, refuse to attach.
+/// 2. If K2 already responds, use it without loading anything.
+/// 3. Otherwise load the bundled VFS LKM and probe again.
+/// 4. Still unavailable: `Ok(None)`, leaving the caller to degrade or fail.
 ///
-/// 第 3 步的 `VfsLkmLoader` 会按内核版本选中随模块分发的 `.ko`、置熔断标记并依次尝试
-/// insmod 候选；加载失败不致命，第 4 步的重新探测会把结果收敛成「本机没有 K2」。
-/// 注意 wire magic 与内核头文件的 `HYBRIDMOUNT_MAGIC_SIG` 必须一致：不一致时内核在
-/// preparse 阶段回 -EFAULT，探测失败，同样走降级而不是启动失败。
+/// The magic must match the kernel header's `HYBRIDMOUNT_MAGIC_SIG`; on a mismatch the
+/// kernel rejects the page with `-EFAULT` and the probe fails, which degrades rather
+/// than failing the boot.
 pub fn select_provider(
     kernel: &mut dyn VfsKernel,
     loader: &dyn LkmLoader,

@@ -1,32 +1,31 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! K2 wire 协议（布局沿用 NoMount v20 基线）：`add_key("hybridmount", "trigger", &payload_ptr)`
-//! 指向的单页 `hm_payload`。这里只做纯字节编解码，便于主机单测。
+//! K2 wire protocol: a single `hm_payload` page passed to
+//! `add_key("hybridmount", "trigger", &payload_ptr)`. Byte codec only.
 
 use crate::errors::{Error, Result};
 use crate::vfs::rule::{VfsAction, VfsRule};
 
-/// K2 wire 规格字面量，必须与内核头文件的 `HYBRIDMOUNT_MAGIC_SIG` 逐字节一致。
-///
-/// 取值是 ASCII "HYBRIDMO" 的大端读数，即小端机落盘的 8 字节为 `OMDIRBYH`。沿用上游
-/// 的记法（上游用 "NOMOUNT" 的大端读数），但换成 HM 专属值：上游魔数是公开常量，换掉
-/// 后旧版 nm CLI 即使不检查版本串也会在 preparse 阶段被 `-EFAULT` 拒绝，二进制层面
-/// 与上游彻底断开，而不再只靠 key type 名隔离。
+/// Must match `HYBRIDMOUNT_MAGIC_SIG` in `module/vfs/src/hybridmount.h`; the kernel
+/// rejects the page with `-EFAULT` before parsing if it does not.
 pub const MAGIC: u64 = 0x4859_4252_4944_4D4F;
 pub const PAYLOAD_LEN: usize = 4096;
 pub const BUFFER_LEN: usize = 4068;
 pub const RULE_HEADER_LEN: usize = 12;
-// K2 wire 契约：DEL 命令的 6 字节头长度（u32 uid + u16 v_len，随后是 vpath 字节）。
+/// u32 uid followed by a u16 path length and the path bytes.
 pub const DEL_HEADER_LEN: usize = 6;
 
 pub const FLAG_WHITEOUT: u32 = 1 << 2;
-/// 与目录规则组合使用：目录保持可见，真实条目隐藏，只显示注入子项（`.replace`）。
+/// Combined with a directory rule: the directory stays visible, real entries are
+/// hidden and only injected children show through.
 pub const FLAG_OPAQUE: u32 = 1 << 3;
 
-// K2 wire 契约的完整命令集，当前后端只发出 AddRule/DelRule/AddUid/GetVersion 子集，
-// 其余（DelUid/ClearAll/ClearRules/ClearUids/GetList/GetUids）留给后续版本，命令号取值不可改动。
-// 用 allow 而非 expect：非 linux/android 目标由 src/main.rs 的 crate 级 allow(dead_code) 覆盖，lint 不触发时
-// expect 会产生 unfulfilled_lint_expectations，从而让宿主 -D warnings 失败。
+// Command numbering is part of the wire contract and must not change. Only
+// AddRule/DelRule/AddUid/GetVersion are issued today.
+//
+// `allow` rather than `expect`: the crate-level allow(dead_code) in main.rs covers the
+// non-Linux targets, where `expect` would trip unfulfilled_lint_expectations under
+// -D warnings.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u32)]
@@ -98,7 +97,7 @@ pub fn build_payload(cmd: NmCommand, target_uid: u32, buffer: &[u8]) -> Result<V
     page[0..8].copy_from_slice(&MAGIC.to_le_bytes());
     page[8..12].copy_from_slice(&(cmd as u32).to_le_bytes());
     page[12..16].copy_from_slice(&target_uid.to_le_bytes());
-    // status 哨兵：内核未处理该 payload 时保持 -1，处理后会回写真实结果。
+    // The kernel leaves status at -1 unless it handled this payload.
     page[16..20].copy_from_slice(&(-1_i32).to_le_bytes());
     page[24..28].copy_from_slice(&(buffer.len() as u32).to_le_bytes());
     page[28..28 + buffer.len()].copy_from_slice(buffer);
@@ -150,25 +149,37 @@ pub fn build_del_rule_payloads(paths: &[Vec<u8>], uid: u32) -> Result<Vec<Vec<u8
     Ok(payloads)
 }
 
-/// 内核回写的负 errno：规则不存在，回滚删除时容忍。
+/// `-ENOENT`: no such rule.
 const KERNEL_ENOENT: i32 = -2;
-/// 内核回写的负 errno：UID 已在隔离表内，ADD_UID 的幂等结果。
+/// `-EEXIST`: the uid is already isolated.
 const KERNEL_EEXIST: i32 = -17;
 
-/// 读取 payload 的 `status` 字段，并校验响应长度。
-fn read_status(payload: &[u8]) -> Result<i32> {
-    if payload.len() != PAYLOAD_LEN {
-        return Err(Error::VfsProtocol {
-            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
-        });
-    }
-    let raw = payload[16..20].try_into().map_err(|_| Error::VfsProtocol {
-        detail: "status field is not four bytes".to_owned(),
-    })?;
-    Ok(i32::from_le_bytes(raw))
+/// Read a fixed-size field, checking that the response is long enough to hold it.
+fn field<const N: usize>(payload: &[u8], offset: usize, name: &str) -> Result<[u8; N]> {
+    let end = offset + N;
+    payload
+        .get(offset..end)
+        .and_then(|raw| raw.try_into().ok())
+        .ok_or_else(|| Error::VfsProtocol {
+            detail: format!(
+                "response is {} bytes, expected at least {end} for the {name} field",
+                payload.len()
+            ),
+        })
 }
 
-/// 统一的 status 校验：`allowed` 中的负 errno 视为成功，其余负值报错。
+fn read_status(payload: &[u8]) -> Result<i32> {
+    Ok(i32::from_le_bytes(field(payload, 16, "status")?))
+}
+
+fn read_arg1(payload: &[u8]) -> Result<u32> {
+    Ok(u32::from_le_bytes(field(payload, 20, "arg1")?))
+}
+
+fn read_data_size(payload: &[u8]) -> Result<u32> {
+    Ok(u32::from_le_bytes(field(payload, 24, "data_size")?))
+}
+
 fn ensure_status_allowing(payload: &[u8], allowed: &[i32]) -> Result<()> {
     let status = read_status(payload)?;
     if status < 0 && !allowed.contains(&status) {
@@ -183,47 +194,38 @@ pub fn ensure_status(payload: &[u8]) -> Result<()> {
     ensure_status_allowing(payload, &[])
 }
 
-/// 回滚删除时容忍 ENOENT（规则本就不存在）；其它负 status 视为错误。
-///
-/// 与 ADD_RULE 一样校验续传游标：DEL_RULE 遇到批内长度越界会 `break`，此时 status
-/// 仍为 0 而 `arg1` 停在截断处。只看 status 会把「还有规则没删掉」当成回滚成功，
-/// 残留规则会在本次启动继续生效。整批一条都没删到时内核回 -ENOENT，游标同样停在
-/// 消费量上，故 ENOENT 走与成功相同的游标校验。
+/// Tolerates `-ENOENT` so that deleting a rule that was never installed is not an error,
+/// but still requires the batch cursor to be fully consumed.
 pub fn ensure_status_allow_enoent(payload: &[u8]) -> Result<()> {
     ensure_status_allowing(payload, &[KERNEL_ENOENT])?;
     ensure_full_cursor(payload)
 }
 
-/// ADD_UID 幂等：UID 已在隔离表内时内核回 -EEXIST，这不是失败。
+/// Tolerates `-EEXIST`: adding an isolated uid is idempotent.
 pub fn ensure_status_allow_eexist(payload: &[u8]) -> Result<()> {
     ensure_status_allowing(payload, &[KERNEL_EEXIST])
 }
 
-/// 校验 ADD_RULE 响应既成功又完整消费了批内字节。
-///
-/// K2 语义：成功时 `arg1` 是已消费的 buffer 字节数，必须等于 `data_size`，否则视为
-/// 部分应用；失败时 `status` 是批内**首个**错误的 errno，而 `arg1` 是那条失败记录的
-/// 起始偏移。上游实现逐条覆盖 status，批量中间的失败会被后续成功静默掩盖，K2 修掉了
-/// 这一点，因此这里的错误信息会带上失败位置。
+/// On failure the kernel reports the first error's errno, with `arg1` set to the offset
+/// of the record that failed.
 pub fn ensure_consumed(payload: &[u8]) -> Result<()> {
     let status = read_status(payload)?;
-    let arg1 = read_arg1(payload)?;
     if status < 0 {
         return Err(Error::VfsProtocol {
-            detail: format!("kernel returned status {status} for the record at offset {arg1}"),
+            detail: format!(
+                "kernel returned status {status} for the record at offset {}",
+                read_arg1(payload)?
+            ),
         });
     }
     ensure_full_cursor(payload)
 }
 
-/// 校验批内字节被完整消费。截断的批次（`arg1 != data_size`）意味着还有记录没处理，
-/// 无论 status 是 0 还是 ENOENT 都不能当成整批成功。
+/// A short cursor means records were left unprocessed, so the batch must not be treated
+/// as applied even when status is 0 or `-ENOENT`.
 fn ensure_full_cursor(payload: &[u8]) -> Result<()> {
     let arg1 = read_arg1(payload)?;
-    let data_size =
-        u32::from_le_bytes(payload[24..28].try_into().map_err(|_| Error::VfsProtocol {
-            detail: "data_size field is not four bytes".to_owned(),
-        })?);
+    let data_size = read_data_size(payload)?;
     if arg1 != data_size {
         return Err(Error::VfsProtocol {
             detail: format!("kernel consumed {arg1} of {data_size} bytes"),
@@ -232,29 +234,20 @@ fn ensure_full_cursor(payload: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn read_arg1(payload: &[u8]) -> Result<u32> {
-    if payload.len() != PAYLOAD_LEN {
-        return Err(Error::VfsProtocol {
-            detail: format!("response {} bytes, expected {PAYLOAD_LEN}", payload.len()),
-        });
-    }
-    let raw = payload[20..24].try_into().map_err(|_| Error::VfsProtocol {
-        detail: "arg1 field is not four bytes".to_owned(),
-    })?;
-    Ok(u32::from_le_bytes(raw))
-}
-
 pub fn parse_version(payload: &[u8]) -> Result<String> {
     ensure_status(payload)?;
-    let len = u32::from_le_bytes(payload[24..28].try_into().map_err(|_| Error::VfsProtocol {
-        detail: "data_size field is not four bytes".to_owned(),
-    })?) as usize;
+    // Clamp before adding to 28: len is a u32 and would overflow usize on 32-bit targets.
+    let len = read_data_size(payload)? as usize;
     if len > BUFFER_LEN {
         return Err(Error::VfsProtocol {
             detail: format!("version length {len} exceeds {BUFFER_LEN}"),
         });
     }
-    let raw = &payload[28..28 + len];
+    let raw = payload
+        .get(28..28 + len)
+        .ok_or_else(|| Error::VfsProtocol {
+            detail: format!("response is too short for a {len} byte version"),
+        })?;
     let text = std::str::from_utf8(raw).map_err(|_| Error::VfsProtocol {
         detail: "version is not valid utf-8".to_owned(),
     })?;

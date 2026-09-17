@@ -1560,9 +1560,8 @@ fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
     crate::sys::fs::copy_prepared_entry(source, dest)
 }
 
-/// VFS boot guard 的 RAII 守卫：arm 成功后，函数以任何已处理方式返回
-/// （Ok 或 Err）都会在 Drop 中清除 guard；只有硬崩溃（Drop 不执行）才保留
-/// guard 触发下次启动熔断。
+/// RAII guard for the VFS boot guard file: once armed, any handled return (Ok or Err)
+/// clears it on Drop. Only a hard crash leaves it behind and trips the next boot.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 struct VfsBootGuard {
     path: PathBuf,
@@ -1615,12 +1614,11 @@ fn detect_foreign_nomount() -> bool {
     }
 }
 
-/// 定向回滚闭包：删除本次计划下发的完整批次（VfsApplied::rules）。
+/// Rollback closure: deletes the full batch registered for this run.
 ///
-/// 批次在下发前登记，因此中途失败时已生效的前缀也会被删除；尚未生效的规则由
-/// remove_rules 容忍 ENOENT（内核在规则缺失时回写 -ENOENT）。不触碰 Provider 中
-/// 其它来源的规则（改用 DEL_RULE 而非 CLEAR_RULES）。借用失败或内核删除失败返回
-/// 结构化错误，交由事务汇总为清理失败。
+/// Registering before applying means an applied prefix is undone too; rules that never
+/// took effect are tolerated as ENOENT. Uses DEL_RULE rather than CLEAR_RULES so it
+/// cannot remove rules from other sources.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn rollback_vfs_rules(
     shared: Rc<RefCell<KeyringKernel>>,
@@ -1658,8 +1656,7 @@ fn apply_vfs_phase(
         log::warn!("vfs boot guard present; skipping vfs backend this boot");
         return Ok(VfsExecStats::default());
     }
-    // 写 guard 后，任何已处理返回（Ok 或 Err）都由 VfsBootGuard::drop 清除；
-    // 只有硬崩溃（Drop 不执行）才保留 guard 触发下次启动熔断。
+    // Any handled return past this point clears the guard on Drop.
     let _guard = VfsBootGuard::arm()?;
 
     let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
@@ -1678,7 +1675,7 @@ fn apply_vfs_phase(
             }
             return Ok(VfsExecStats::default());
         }
-        // 版本不受支持、或存在外来 NoMount 实现：默认降级，只有 vfs_strict 才让启动失败。
+        // Unsupported version or a foreign NoMount: degrade unless vfs_strict.
         Err(err @ (Error::VfsUnsupportedVersion { .. } | Error::VfsForeignNomount { .. })) => {
             log::warn!("vfs backend is not attached, treating it as unavailable: {err}");
             if config.vfs_strict {
@@ -1689,12 +1686,10 @@ fn apply_vfs_phase(
         Err(err) => return Err(err),
     };
 
-    // 先构建完整批次并登记回滚，再下发：内核侧下发非原子，中途失败时已生效的前缀
-    // 同样必须删除。未生效的规则由 DEL_RULE 的 ENOENT 容忍——内核按 (vpath, uid)
-    // 精确匹配，规则不存在时回写 -ENOENT。回滚始终是定向删除，不得清空 Provider 的
-    // 整张规则表（可能含其它模块预先安装的规则）。
+    // Build the full batch and register it for rollback before applying: the kernel
+    // applies non-atomically, so a mid-batch failure leaves an applied prefix to undo.
+    // Rollback is always targeted, never a CLEAR_RULES of the whole provider table.
     let planned = crate::vfs::exec::plan_rules(plan)?;
-    let stats = planned.stats.clone();
     let shared = Rc::new(RefCell::new(kernel));
     let applied = Rc::new(RefCell::new(planned));
     transaction.register_rollback_only(
@@ -1702,34 +1697,33 @@ fn apply_vfs_phase(
         rollback_vfs_rules(Rc::clone(&shared), Rc::clone(&applied)),
     );
 
-    {
+    let outcome = {
         let mut kernel = shared.borrow_mut();
         let batch = applied.borrow();
-        // VFS 失败按 vfs_strict 决定是否致命：非 strict 下降级为「本次不使用 VFS」，
-        // 不拖垮已经成功的 Overlay / Magic 挂载；两条路径都会先删除已生效的前缀。
-        let outcome = crate::vfs::exec::apply_rules_with_policy(
+        crate::vfs::exec::apply_rules_with_policy(
             &mut *kernel,
             &batch,
             &config.vfs_isolate_uids,
             config.vfs_strict,
-        )?;
-        drop(batch);
-        let Some(stats) = outcome else {
-            // 已经在内联清理里删掉了这批规则，清空登记避免后续回滚重复下发 DEL_RULE。
-            applied.borrow_mut().rules.clear();
-            log::warn!("vfs backend degraded: rules were rolled back and vfs is skipped this boot");
-            return Ok(VfsExecStats::default());
-        };
-        state.vfs_provider = Some(provider.as_str().to_owned());
-        log::info!(
-            "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
-            provider.as_str(),
-            stats.injected,
-            stats.whiteouts,
-            stats.opaque
-        );
-        Ok(stats)
-    }
+        )?
+    };
+
+    let Some(stats) = outcome else {
+        // Already deleted inline; clearing avoids a duplicate DEL_RULE at rollback.
+        applied.borrow_mut().rules.clear();
+        log::warn!("vfs backend degraded: rules were rolled back and vfs is skipped this boot");
+        return Ok(VfsExecStats::default());
+    };
+
+    state.vfs_provider = Some(provider.as_str().to_owned());
+    log::info!(
+        "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
+        provider.as_str(),
+        stats.injected,
+        stats.whiteouts,
+        stats.opaque
+    );
+    Ok(stats)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

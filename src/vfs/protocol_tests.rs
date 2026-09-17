@@ -5,6 +5,16 @@ use crate::module_id::ModuleId;
 use crate::vfs::rule::{VfsAction, VfsRule};
 use std::path::PathBuf;
 
+/// A response page as the kernel would write it back: `build_payload` leaves the -1
+/// sentinel, overwritten here with the real status / arg1 / data_size.
+fn response(status: i32, arg1: u32, data_size: u32) -> Vec<u8> {
+    let mut page = build_payload(NmCommand::DelRule, 0, &[]).unwrap();
+    page[16..20].copy_from_slice(&status.to_le_bytes());
+    page[20..24].copy_from_slice(&arg1.to_le_bytes());
+    page[24..28].copy_from_slice(&data_size.to_le_bytes());
+    page
+}
+
 #[test]
 fn payload_has_exact_wire_layout() {
     let page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
@@ -17,29 +27,13 @@ fn payload_has_exact_wire_layout() {
     assert_eq!(u32::from_le_bytes(page[24..28].try_into().unwrap()), 0);
 }
 
-/// wire magic 是 HM 专属值，必须与内核头文件的 `HYBRIDMOUNT_MAGIC_SIG` 逐字节一致。
+/// Checks the constants against the kernel header so the two cannot drift apart.
 ///
-/// `payload_has_exact_wire_layout` 里的 `page[0..8] == MAGIC.to_le_bytes()` 是自引用断言：
-/// 常量改了它照样通过，因此发现不了「只改一边」或「两边一起改错」。这里把字面量钉死——
-/// 改动 wire 契约必须先改这条测试，也就必须同时想到内核那一边。
+/// A mismatch makes the kernel answer -EFAULT and VFS degrade silently with no rule
+/// applied, which is hard to diagnose. The `page[0..8] == MAGIC.to_le_bytes()` assertion
+/// in `payload_has_exact_wire_layout` is self-referential and would pass for any value.
 #[test]
-fn wire_magic_is_pinned_to_the_hm_value() {
-    assert_eq!(
-        MAGIC, 0x4859_4252_4944_4D4F,
-        "wire magic 必须与 module/vfs/src/hybridmount.h 的 HYBRIDMOUNT_MAGIC_SIG 相同"
-    );
-    // 常量按上游约定是 ASCII 串的大端读数（"HYBRIDMO"），小端机上落盘即反向字节。
-    let page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
-    assert_eq!(&page[0..8], b"OMDIRBYH", "小端序写入后 wire 上的 8 字节");
-}
-
-/// 直接读内核头文件核对常量，防止用户态与内核单侧漂移。
-///
-/// 上面那条测试只能发现「用户态被改错」，发现不了「内核被改动而用户态没跟上」——
-/// 而两者不一致时内核会在 preparse 阶段回 -EFAULT，表现为 VFS 静默降级（规则一条都
-/// 不生效），是最难定位的一类故障。这里沿用 defs.rs 里 metainstall.sh 交叉校验的做法。
-#[test]
-fn kernel_header_magic_and_version_match_userspace() {
+fn wire_magic_and_version_match_the_kernel_header() {
     let header = include_str!("../../module/vfs/src/hybridmount.h");
 
     let magic_line = header
@@ -56,6 +50,9 @@ fn kernel_header_magic_and_version_match_userspace() {
         MAGIC,
         "内核 HYBRIDMOUNT_MAGIC_SIG 与用户态 MAGIC 不一致，内核会以 -EFAULT 拒绝所有 payload"
     );
+
+    let page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
+    assert_eq!(&page[0..8], b"OMDIRBYH", "小端序写入后 wire 上的 8 字节");
 
     let version_line = header
         .lines()
@@ -146,7 +143,7 @@ fn batches_split_when_buffer_is_full() {
 #[test]
 fn parse_version_reads_buffer_and_len() {
     let mut page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
-    // build_payload 的 status 是 -1 哨兵，这里模拟内核已回写成功状态。
+    // Status was written back as success.
     page[16..20].copy_from_slice(&0_i32.to_le_bytes());
     page[28..30].copy_from_slice(b"20");
     page[24..28].copy_from_slice(&2_u32.to_le_bytes());
@@ -155,8 +152,7 @@ fn parse_version_reads_buffer_and_len() {
 
 #[test]
 fn ensure_status_rejects_negative_kernel_status() {
-    let mut page = build_payload(NmCommand::AddRule, 0, &[]).unwrap();
-    page[16..20].copy_from_slice(&(-22_i32).to_le_bytes());
+    let page = response(-22, 0, 0);
     let err = ensure_status(&page).unwrap_err();
     assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
 }
@@ -212,76 +208,49 @@ fn del_rule_rejects_path_that_does_not_fit_one_page() {
 
 #[test]
 fn ensure_status_allow_enoent_accepts_missing_rule() {
-    let mut page = build_payload(NmCommand::DelRule, 0, &[]).unwrap();
-    page[16..20].copy_from_slice(&(-2_i32).to_le_bytes());
-    assert!(ensure_status_allow_enoent(&page).is_ok());
+    assert!(ensure_status_allow_enoent(&response(-2, 0, 0)).is_ok());
 }
 
 #[test]
 fn ensure_status_allow_enoent_rejects_other_negative_status() {
-    let mut page = build_payload(NmCommand::DelRule, 0, &[]).unwrap();
-    page[16..20].copy_from_slice(&(-22_i32).to_le_bytes());
-    let err = ensure_status_allow_enoent(&page).unwrap_err();
+    let err = ensure_status_allow_enoent(&response(-22, 0, 0)).unwrap_err();
     assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
     assert!(!format!("{err}").is_empty());
 }
 
+/// An out-of-range record length leaves status at 0 with the cursor mid-batch; trusting
+/// status alone would read a partial delete as a complete one.
 #[test]
 fn ensure_status_allow_enoent_rejects_truncated_batch() {
-    // DEL_RULE 批内长度越界时内核 break，status 仍为 0 而 arg1 停在截断处；
-    // 只看 status 会把「还有规则没删掉」误判成回滚成功。
-    let mut page = build_payload(NmCommand::DelRule, 0, &[0_u8; 16]).unwrap();
-    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
-    page[20..24].copy_from_slice(&6_u32.to_le_bytes());
-    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
-    let err = ensure_status_allow_enoent(&page).unwrap_err();
+    let err = ensure_status_allow_enoent(&response(0, 6, 16)).unwrap_err();
     assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
 }
 
 #[test]
 fn ensure_status_allow_enoent_accepts_full_batch_cursor() {
-    let mut page = build_payload(NmCommand::DelRule, 0, &[0_u8; 16]).unwrap();
-    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
-    page[20..24].copy_from_slice(&16_u32.to_le_bytes());
-    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
-    assert!(ensure_status_allow_enoent(&page).is_ok());
+    assert!(ensure_status_allow_enoent(&response(0, 16, 16)).is_ok());
 }
 
+/// Adding an already-isolated uid is idempotent, not an error.
 #[test]
 fn ensure_status_accepts_already_isolated_uid() {
-    // ADD_UID 是幂等操作：同一次启动内第二次运行流水线时 UID 已在表内，
-    // 内核回 -EEXIST，这不是错误。
-    let mut page = build_payload(NmCommand::AddUid, 1000, &[]).unwrap();
-    page[16..20].copy_from_slice(&(-17_i32).to_le_bytes());
-    assert!(ensure_status_allow_eexist(&page).is_ok());
+    assert!(ensure_status_allow_eexist(&response(-17, 0, 0)).is_ok());
 }
 
 #[test]
 fn ensure_consumed_accepts_full_batch_cursor() {
-    let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
-    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
-    page[20..24].copy_from_slice(&16_u32.to_le_bytes());
-    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
-    assert!(ensure_consumed(&page).is_ok());
+    assert!(ensure_consumed(&response(0, 16, 16)).is_ok());
 }
 
 #[test]
 fn ensure_consumed_rejects_partial_batch_cursor() {
-    let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
-    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
-    page[20..24].copy_from_slice(&8_u32.to_le_bytes());
-    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
-    let err = ensure_consumed(&page).unwrap_err();
+    let err = ensure_consumed(&response(0, 8, 16)).unwrap_err();
     assert!(matches!(err, crate::errors::Error::VfsProtocol { .. }));
 }
 
 #[test]
 fn ensure_consumed_reports_first_failure_and_its_offset() {
-    let mut page = build_payload(NmCommand::AddRule, 0, &[0_u8; 16]).unwrap();
-    page[16..20].copy_from_slice(&(-22_i32).to_le_bytes());
-    page[20..24].copy_from_slice(&12_u32.to_le_bytes());
-    page[24..28].copy_from_slice(&16_u32.to_le_bytes());
-    let err = ensure_consumed(&page).unwrap_err();
+    let err = ensure_consumed(&response(-22, 12, 16)).unwrap_err();
     let text = format!("{err}");
     assert!(text.contains("-22"), "error was {text}");
     assert!(text.contains("offset 12"), "error was {text}");

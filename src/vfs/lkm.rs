@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 加载 Hybrid Mount 自有的 VFS 内核模块（K2）。
+//! Loads Hybrid Mount's own VFS kernel module (K2).
 //!
-//! DDK 为每个 Android/GKI 目标构建一个 hybridmount-<android>-<kernel>.ko
-//! （见 .github/workflows/kernel-module.yml）。这里按内核 release 与 Android 版本
-//! 精确匹配后加载：先写熔断标记，再尝试 insmod，最后以 key type 是否响应为准裁决。
+//! The DDK builds one hybridmount-<android>-<kernel>.ko per Android/GKI target (see
+//! .github/workflows/kernel-module.yml). Selection matches the kernel release and
+//! Android version exactly; a boot guard is written before insmod, and whether the key
+//! type answers is what decides success.
 //!
-//! 加载失败不是致命错误：调用方会重新探测，失败后按 vfs_strict 降级或报错，与
-//! 设备本来就没有 K2 走同一条路径。
+//! A failed load is not fatal: the caller probes again and degrades or reports
+//! according to vfs_strict, the same path taken when no K2 is present at all.
 
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -19,20 +20,18 @@ use crate::errors::Result;
 use crate::sys::process::{CaptureMode, CommandSpec, run_command};
 use crate::vfs::backend::{KeyringKernel, LkmLoader, VfsKernel};
 use crate::vfs::lkm_target::{
-    android_major_from_kernel_release, parse_android_major, select_lkm_filename,
+    android_major_from_kernel_release, device_android_major, select_lkm_filename,
 };
 use crate::vfs::sys::KeyringChannel;
 
 const KERNEL_RELEASE_PATH: &str = "/proc/sys/kernel/osrelease";
 const MODULE_NAME: &str = "hybridmount";
-/// 覆盖选择结果，供真机调试未打包的目标。
+/// Overrides the selection, for testing a target that is not packaged.
 const LKM_OVERRIDE_ENV: &str = "HYBRID_MOUNT_VFS_LKM_PATH";
-/// getprop 是辅助路径，短超时后降级。
-const GETPROP_TIMEOUT: Duration = Duration::from_secs(10);
 const INSMOD_TIMEOUT: Duration = Duration::from_secs(30);
 const RMMOD_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// 生产用加载器：选择、加载并校验打包的 K2 模块。
+/// Production loader: selects, loads and verifies the bundled K2 module.
 pub struct VfsLkmLoader;
 
 impl LkmLoader for VfsLkmLoader {
@@ -70,8 +69,8 @@ fn load() -> std::result::Result<(), String> {
 
         match run_command(&spec) {
             Ok(outcome) => {
-                // insmod 的退出码不是权威依据：模块可能已由上次启动加载，或 init
-                // 之后才失败。以 key type 是否响应为准。
+                // The insmod exit code is not authoritative: the module may already
+                // be loaded from an earlier boot.
                 if module_responds() {
                     return Ok(());
                 }
@@ -86,7 +85,7 @@ fn load() -> std::result::Result<(), String> {
         }
     }
 
-    // 探测失败时模块可能处于半初始化状态，尽力卸载，避免留下一个坏的实现。
+    // A failed probe can leave a half-initialised module behind.
     unload();
     Err(format!(
         "{MODULE_NAME} did not become available; attempts: {}",
@@ -112,7 +111,7 @@ fn rmmod_candidates() -> [(&'static str, Option<&'static str>); 4] {
     ]
 }
 
-/// K2 是否已经响应：以 key type 为准，而不是 insmod 的退出码。
+/// Whether K2 answers, decided by the key type rather than the insmod exit code.
 fn module_responds() -> bool {
     match KeyringKernel::new(KeyringChannel::Hybridmount) {
         Ok(mut kernel) => kernel.version().is_ok(),
@@ -169,29 +168,8 @@ fn select_lkm_path() -> std::result::Result<PathBuf, String> {
     Ok(Path::new(defs::VFS_LKM_DIR).join(file_name))
 }
 
-fn device_android_major() -> Option<u32> {
-    for program in ["/system/bin/getprop", "getprop"] {
-        let spec = CommandSpec::new(program)
-            .operation("read Android version")
-            .arg("ro.build.version.release")
-            .capture(CaptureMode::Stdout)
-            .timeout(GETPROP_TIMEOUT);
-
-        let Ok(outcome) = run_command(&spec) else {
-            continue;
-        };
-        if let Some(major) = outcome
-            .stdout_text()
-            .as_deref()
-            .and_then(parse_android_major)
-        {
-            return Some(major);
-        }
-    }
-    None
-}
-
-/// 加载前写下的熔断标记：Drop 即清除，硬崩溃则遗留，下次启动据此拒绝自动重试。
+/// Boot guard written before loading: cleared on Drop, left behind by a hard crash so
+/// the next boot refuses to retry automatically.
 #[derive(Debug)]
 struct LkmAttemptGuard {
     marker_path: PathBuf,

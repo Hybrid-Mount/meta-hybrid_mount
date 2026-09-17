@@ -1298,9 +1298,9 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
     if (!is_whiteout && !is_opaque) {
         struct inode *real_inode;
 
-        /* 真实路径解析失败必须上报：此前这里静默跳过，规则照样插入并回写成功，
-         * 但 resolve 路径两条分支都不成立，lookup 永远回落到真实文件——用户态会
-         * 把一条完全不生效的规则记成注入成功。 */
+        /* Fail loudly instead of inserting a rule that can never match: without a real
+         * path neither branch of resolve applies, so lookup always falls back to the
+         * real file while userspace records the injection as successful. */
         if (kern_path(hm_get_rpath(rule), LOOKUP_FOLLOW, &rule->r_path) != 0) {
             kfree(rule);
             return ERR_PTR(-ENOENT);
@@ -1323,12 +1323,11 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
     }
 
     if (rule->flags & HM_FLAG_IS_DIR) {
-        /* 分配失败不能静默：opaque 规则带 VIRTUAL_DIR，缺 this_dir 时注入子项全部
-         * 不可达，而 ADD_RULE 仍会回写成功。 */
+        /* An opaque rule needs this_dir: without it the injected children are
+         * unreachable while ADD_RULE still reports success. */
         rule->this_dir = __hybridmount_alloc_dir_node();
         if (unlikely(!rule->this_dir)) {
-            /* 与 hm_free_rule 一致：VIRTUAL_DIR（opaque）规则没有真实路径，不得
-             * path_put。规则尚未入树，直接释放即可。 */
+            /* VIRTUAL_DIR (opaque) rules carry no real path, as in hm_free_rule. */
             if (!(rule->flags & HM_FLAG_VIRTUAL_DIR) && rule->r_path.dentry) path_put(&rule->r_path);
             kfree(rule);
             return ERR_PTR(-ENOMEM);
@@ -1485,10 +1484,9 @@ static int hm_process_payload(unsigned long user_addr)
     }
 
     payload->status = 0;
-    /* buf_ptr 的顺序游标由 ADD_RULE / DEL_RULE 各自按 payload->arg1 推进；arg1 是
-     * userspace 提供的续传游标，必须在各命令内校验后再使用——越界时
-     * (size_t)(buf_end - buf_ptr) 会按无符号回绕成巨大值，循环随即解引用越界内存。
-     * GET_LIST / GET_UIDS 的 arg1 是规则下标而非字节偏移，不在这里统一收敛。 */
+    /* ADD_RULE and DEL_RULE resume from the userspace cursor in arg1, so each validates it
+     * before use: past data_size, (size_t)(buf_end - buf_ptr) wraps and the loop walks off
+     * the payload. GET_LIST / GET_UIDS treat arg1 as a rule index, not a byte offset. */
     buf_ptr = payload->buffer;
     buf_end = payload->buffer + (payload->data_size > sizeof(payload->buffer) ? sizeof(payload->buffer) : payload->data_size);
 
@@ -1511,8 +1509,8 @@ static int hm_process_payload(unsigned long user_addr)
                 u32 record_offset = (u32)(buf_ptr - payload->buffer);
                 int err;
                 buf_ptr += sizeof(*h);
-                /* 长度越界必须留下痕迹：静默 break 会让 status 保持 0 而游标停在半路，
-                 * 与「首错 + 偏移」的协议承诺不符。 */
+                /* A truncated record must not pass silently: breaking here leaves status 0
+                 * with the cursor mid-batch, contradicting the first-error contract. */
                 if ((h->v_len + h->r_len) > (size_t)(buf_end - buf_ptr) || unlikely(h->v_len >= PATH_MAX || h->r_len >= PATH_MAX)) {
                     if (!first_err) { first_err = -EINVAL; err_offset = record_offset; }
                     break;
@@ -1548,8 +1546,8 @@ static int hm_process_payload(unsigned long user_addr)
                 struct hm_del_hdr *h = (void *)buf_ptr;
                 u32 record_offset = (u32)(buf_ptr - payload->buffer);
                 buf_ptr += sizeof(*h);
-                /* 截断的记录必须留下痕迹：此前这里直接 break，status 保持 0 而游标
-                 * 停在半路，回滚方只看 status 就会把「还有规则没删掉」当成成功。 */
+                /* Same as ADD_RULE: a truncated record must not leave status 0, or the
+                 * rollback side reads a partial delete as complete. */
                 if (h->v_len > (size_t)(buf_end - buf_ptr)) {
                     if (!first_err) { first_err = -EINVAL; err_offset = record_offset; }
                     break;
@@ -1558,7 +1556,7 @@ static int hm_process_payload(unsigned long user_addr)
                 buf_ptr += h->v_len;
             }
             up_write(&hybridmount_rwsem);
-            /* 与 ADD_RULE 一致：失败时回写首错与失败记录偏移，成功时 arg1 是消费游标。 */
+            /* As in ADD_RULE: report the first error and its offset, else the cursor. */
             if (first_err) { payload->status = first_err; payload->arg1 = err_offset; }
             else payload->arg1 = buf_ptr - payload->buffer;
 

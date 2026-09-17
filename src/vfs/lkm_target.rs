@@ -1,10 +1,39 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! 内核 release 与 Android 版本到打包模块文件名的映射。
+//! Kernel release and Android version to packaged LKM filename mapping.
 //!
-//! 刻意不含任何平台相关代码，便于在任意主机上单测；加载逻辑见 lkm.rs。
+//! Deliberately free of platform code so it is unit-testable on any host.
 
-/// 从 getprop 风格的值里取 Android 主版本号。
+use std::time::Duration;
+
+use crate::sys::process::{CaptureMode, CommandSpec, run_command};
+
+const GETPROP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Reads the Android release from getprop. Best-effort diagnostic path.
+pub fn device_android_major() -> Option<u32> {
+    for program in ["/system/bin/getprop", "getprop"] {
+        let spec = CommandSpec::new(program)
+            .operation("read Android version")
+            .arg("ro.build.version.release")
+            .capture(CaptureMode::Stdout)
+            .timeout(GETPROP_TIMEOUT);
+
+        let Ok(outcome) = run_command(&spec) else {
+            continue;
+        };
+        if let Some(major) = outcome
+            .stdout_text()
+            .as_deref()
+            .and_then(parse_android_major)
+        {
+            return Some(major);
+        }
+    }
+    None
+}
+
+/// Android major version from a getprop-style value.
 pub fn parse_android_major(value: &str) -> Option<u32> {
     value
         .trim()
@@ -14,14 +43,14 @@ pub fn parse_android_major(value: &str) -> Option<u32> {
         .ok()
 }
 
-/// 从 GKI release 字符串里取 Android 主版本号，例如 5.10.198-android13-8-gki。
+/// Android major version encoded in a GKI release, e.g. 5.10.198-android13-8-gki.
 pub fn android_major_from_kernel_release(release: &str) -> Option<u32> {
     let lower = release.to_ascii_lowercase();
     let suffix = lower.split_once("android")?.1;
     parse_android_major(suffix)
 }
 
-/// 内核主次版本号，例如 5.10.198-android13-8-gki -> (5, 10)。
+/// Kernel major/minor, e.g. 5.10.198-android13-8-gki -> (5, 10).
 pub fn kernel_major_minor(release: &str) -> Option<(u32, u32)> {
     let mut parts = release
         .split(|ch: char| !ch.is_ascii_digit())
@@ -29,8 +58,8 @@ pub fn kernel_major_minor(release: &str) -> Option<(u32, u32)> {
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
-/// 与 .github/workflows/kernel-module.yml 的 DDK 目标一一对应。
-/// android_major 缺省时回退到 release 字符串里编码的版本。
+/// Mirrors the DDK targets in .github/workflows/kernel-module.yml.
+/// Falls back to the version encoded in the release string when android_major is absent.
 pub fn select_lkm_filename(release: &str, android_major: Option<u32>) -> Option<&'static str> {
     let android = android_major.or_else(|| android_major_from_kernel_release(release));
     match (kernel_major_minor(release)?, android) {

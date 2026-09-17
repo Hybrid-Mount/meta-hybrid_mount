@@ -20,13 +20,14 @@ use crate::defs;
 use crate::errors::{ContextError, Error};
 use crate::sys::process::{CaptureMode, CommandSpec, run_command};
 use crate::utils::ksu;
+use crate::vfs::lkm_target::{
+    android_major_from_kernel_release, device_android_major, kernel_major_minor,
+};
 
 const KALLSYMS_PATH: &str = "/proc/kallsyms";
 const KPTR_RESTRICT_PATH: &str = "/proc/sys/kernel/kptr_restrict";
 const KERNEL_RELEASE_PATH: &str = "/proc/sys/kernel/osrelease";
 const LKM_OVERRIDE_ENV: &str = "HYBRID_MOUNT_LKM_PATH";
-/// 读取 Android 版本的 getprop 是辅助诊断路径，短超时后降级。
-const GETPROP_TIMEOUT: Duration = Duration::from_secs(10);
 /// LKM insmod 一次加载有已知的有限耗时上限。
 const INSMOD_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -330,28 +331,6 @@ fn is_bundled_lkm_arch_supported(arch: &str) -> bool {
     arch == "aarch64"
 }
 
-fn device_android_major() -> Option<u32> {
-    for program in ["/system/bin/getprop", "getprop"] {
-        let spec = CommandSpec::new(program)
-            .operation("read Android version")
-            .arg("ro.build.version.release")
-            .capture(CaptureMode::Stdout)
-            .timeout(GETPROP_TIMEOUT);
-
-        let Ok(outcome) = run_command(&spec) else {
-            continue;
-        };
-        if let Some(major) = outcome
-            .stdout_text()
-            .as_deref()
-            .and_then(parse_android_major)
-        {
-            return Some(major);
-        }
-    }
-    None
-}
-
 fn readable_symbol_address() -> Option<String> {
     if let Some(address) = find_symbol_address() {
         return Some(address);
@@ -394,28 +373,6 @@ impl Drop for KptrRestrictGuard {
             log::warn!("failed to restore kptr_restrict: {err}");
         }
     }
-}
-
-fn parse_android_major(value: &str) -> Option<u32> {
-    value
-        .trim()
-        .split(|ch: char| !ch.is_ascii_digit())
-        .find(|part| !part.is_empty())?
-        .parse()
-        .ok()
-}
-
-fn android_major_from_kernel_release(release: &str) -> Option<u32> {
-    let lower = release.to_ascii_lowercase();
-    let suffix = lower.split_once("android")?.1;
-    parse_android_major(suffix)
-}
-
-fn kernel_major_minor(release: &str) -> Option<(u32, u32)> {
-    let mut parts = release
-        .split(|ch: char| !ch.is_ascii_digit())
-        .filter(|part| !part.is_empty());
-    Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
 fn select_lkm_filename(release: &str, android_major: Option<u32>) -> Option<&'static str> {
@@ -467,8 +424,11 @@ mod tests {
 
     #[test]
     fn parses_android_versions_without_assuming_semver() {
-        assert_eq!(parse_android_major("14"), Some(14));
-        assert_eq!(parse_android_major("15.0.0"), Some(15));
+        assert_eq!(crate::vfs::lkm_target::parse_android_major("14"), Some(14));
+        assert_eq!(
+            crate::vfs::lkm_target::parse_android_major("15.0.0"),
+            Some(15)
+        );
         assert_eq!(
             android_major_from_kernel_release("6.6.1-android15-8"),
             Some(15)

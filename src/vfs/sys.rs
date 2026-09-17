@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! keyring 发送通道。内核 `nm_key_preparse` 要求 payload 位于一页的偏移 0，
-//! 因此这里用 `mmap` 分配页对齐缓冲，绝不复用普通 `Vec` 堆内存。
+//! keyring transport. The kernel reads the payload from offset 0 of a page, so the
+//! buffer is page-aligned `mmap` memory rather than an ordinary `Vec`.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use platform::{PageBuffer, add_key};
@@ -9,14 +9,13 @@ pub use platform::{PageBuffer, add_key};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub use stub::{PageBuffer, add_key};
 
-/// keyring 通道。K2（Hybrid Mount 自有 VFS 内核子系统）是唯一被驱动的实现；
-/// 上游 NoMount 的 key type 只用于探测设备上是否已存在外来实现（单向守卫），
-/// 绝不用它下发规则。
+/// Keyring channel. K2 is the only implementation rules are ever sent to; the upstream
+/// NoMount key type is probed purely to detect a foreign implementation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyringChannel {
-    /// Hybrid Mount 自有实现（K2）。
+    /// Hybrid Mount's own implementation.
     Hybridmount,
-    /// 上游 NoMount，仅用于探测。
+    /// Upstream NoMount, used only for probing.
     Nomount,
 }
 
@@ -30,16 +29,11 @@ impl KeyringChannel {
     }
 }
 
-/// Linux/Android 的 ECANCELED。NoMount 的 key type preparse 在处理完 payload 后
-/// 故意返回 -ECANCELED（使 key 不被创建），因此该 errno 表示成功。
 pub const LINUX_ECANCELED: i32 = 125;
 
-/// 解释 `add_key` 的原始返回值。
-///
-/// NoMount 的 `nm_key_preparse` 在处理器处理完 payload 后总是返回 -ECANCELED，
-/// 这是它“不创建 key”的正常机制；上游 `nm.c` 完全忽略 `add_key` 的返回值，只读回
-/// payload 里的 `status`。因此当 syscall 返回 -1/ECANCELED 时这里是成功，payload 的
-/// 真实结果由调用方的 `ensure_status` / `ensure_consumed` 判定。
+/// The key type's preparse hook returns `-ECANCELED` once it has handled the payload, so
+/// that no key is created; `-ECANCELED` here means the payload was delivered. The real
+/// result is in the payload's status field, checked by the caller.
 fn interpret_add_key(ret: i64, errno: i32) -> std::io::Result<()> {
     if ret < 0 && errno != LINUX_ECANCELED {
         return Err(std::io::Error::from_raw_os_error(errno));
@@ -60,7 +54,7 @@ mod platform {
 
     impl PageBuffer {
         pub fn new() -> io::Result<Self> {
-            // SAFETY: mmap 返回的映射在本结构 Drop 前保持有效，长度固定为 PAYLOAD_LEN。
+            // SAFETY: the mapping stays valid until Drop; the length is fixed.
             let addr = unsafe {
                 libc::mmap(
                     std::ptr::null_mut(),
@@ -80,7 +74,7 @@ mod platform {
         }
 
         pub fn as_mut_slice(&mut self) -> &mut [u8] {
-            // SAFETY: 指针来自 mmap，长度固定，且 &mut self 保证独占访问。
+            // SAFETY: pointer from mmap, fixed length, exclusive via &mut self.
             unsafe {
                 std::slice::from_raw_parts_mut(self.ptr.as_ptr(), crate::vfs::protocol::PAYLOAD_LEN)
             }
@@ -89,7 +83,7 @@ mod platform {
 
     impl Drop for PageBuffer {
         fn drop(&mut self) {
-            // SAFETY: 指针与长度来自同一 mmap。
+            // SAFETY: pointer and length come from the same mmap.
             unsafe {
                 libc::munmap(self.ptr.as_ptr().cast(), crate::vfs::protocol::PAYLOAD_LEN);
             }
@@ -103,10 +97,10 @@ mod platform {
     #[cfg(target_arch = "x86_64")]
     const SYS_ADD_KEY: libc::c_long = 248;
 
-    /// 发送一页 payload。内核通过同一页回写 `status`，调用方随后自行解析。
+    /// Sends one payload page. The kernel writes `status` back into the same page.
     pub fn add_key(page: &mut PageBuffer, channel: KeyringChannel) -> io::Result<()> {
         let ptr = page.ptr.as_ptr() as libc::c_ulong;
-        // SAFETY: 变参 syscall，参数布局与内核 add_key(type, desc, &ptr, 8, -1) 一致。
+        // SAFETY: variadic syscall matching add_key(type, desc, &ptr, 8, -1).
         let ret = unsafe {
             libc::syscall(
                 SYS_ADD_KEY,
@@ -118,7 +112,7 @@ mod platform {
             )
         };
         if ret < 0 {
-            // ECANCELED 表示内核已处理 payload 且刻意不创建 key，属正常完成。
+            // -ECANCELED means the payload was handled; no key is created by design.
             let errno = io::Error::last_os_error().raw_os_error().unwrap_or(0);
             return super::interpret_add_key(ret as i64, errno);
         }
