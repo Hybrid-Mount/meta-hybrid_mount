@@ -24,7 +24,6 @@ publish = false
 workspace = true
 
 [dependencies]
-flate2 = "1"
 getrandom = "0.4"
 hex = "0.4"
 log = "0.4"
@@ -37,6 +36,9 @@ toml = "1"
 android_logger = "0.15"
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+# Only `sys::fs::check_kernel_config` needs this, to read /proc/config.gz; the
+# non-Unix stub takes no key, so a host build has no use for it.
+flate2 = "1"
 ksu = { git = "https://github.com/Tools-cx-app/ksu.git", version = "0.2.0" }
 loopdev = { git = "https://github.com/Hybrid-Mount/loopdev.git", version = "0.5.0" }
 procfs = "0.18"
