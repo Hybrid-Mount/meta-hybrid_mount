@@ -59,6 +59,16 @@ default_mode = "magic"
 - [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
+## Подяки
+
+- Дякуємо [Anatdx](https://github.com/Anatdx)
+- Дякуємо [Tools-cx-app](https://github.com/Tools-cx-app)
+- Дякуємо [KernelSU](https://github.com/tiann/KernelSU)
+- Дякуємо [MKSU від 5ec1cff](https://github.com/5ec1cff/KernelSU)
+- Дякуємо [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
+- Дякуємо [meta-magic_mount-rs](https://github.com/Tools-cx-app/meta-magic_mount-rs)
+- Дякуємо [NoMount](https://github.com/maxsteeel/nomount)
+
 ## Ліцензія
 
 - Ядро (Rust і скрипти модуля): GPL-3.0-only (див. [`LICENSE`](../LICENSE)).

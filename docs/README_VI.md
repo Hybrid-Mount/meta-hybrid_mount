@@ -59,6 +59,16 @@ Trước khi cài đặt hoặc báo cáo sự cố, hãy đọc [Lưu ý sử d
 - [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
+## Lời cảm ơn
+
+- Cảm ơn [Anatdx](https://github.com/Anatdx)
+- Cảm ơn [Tools-cx-app](https://github.com/Tools-cx-app)
+- Cảm ơn [KernelSU](https://github.com/tiann/KernelSU)
+- Cảm ơn [MKSU của 5ec1cff](https://github.com/5ec1cff/KernelSU)
+- Cảm ơn [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
+- Cảm ơn [meta-magic_mount-rs](https://github.com/Tools-cx-app/meta-magic_mount-rs)
+- Cảm ơn [NoMount](https://github.com/maxsteeel/nomount)
+
 ## Giấy phép
 
 - Phần lõi (Rust và các tập lệnh mô-đun): GPL-3.0-only (xem [`LICENSE`](../LICENSE)).

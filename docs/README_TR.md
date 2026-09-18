@@ -59,6 +59,16 @@ Kurulumdan veya hata bildiriminden önce [kullanım bildirimini](../USAGE_NOTICE
 - [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
+## Teşekkürler
+
+- Teşekkürler [Anatdx](https://github.com/Anatdx)
+- Teşekkürler [Tools-cx-app](https://github.com/Tools-cx-app)
+- Teşekkürler [KernelSU](https://github.com/tiann/KernelSU)
+- Teşekkürler [5ec1cff'in MKSU](https://github.com/5ec1cff/KernelSU)
+- Teşekkürler [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
+- Teşekkürler [meta-magic_mount-rs](https://github.com/Tools-cx-app/meta-magic_mount-rs)
+- Teşekkürler [NoMount](https://github.com/maxsteeel/nomount)
+
 ## Lisans
 
 - Çekirdek (Rust ve module betikleri): GPL-3.0-only (bkz. [`LICENSE`](../LICENSE)).

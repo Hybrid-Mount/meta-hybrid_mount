@@ -59,6 +59,16 @@ Antes de instalar o informar de un problema, lee el [Aviso de uso](../USAGE_NOTI
 - [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
+## Agradecimientos
+
+- Gracias a [Anatdx](https://github.com/Anatdx)
+- Gracias a [Tools-cx-app](https://github.com/Tools-cx-app)
+- Gracias a [KernelSU](https://github.com/tiann/KernelSU)
+- Gracias a [MKSU de 5ec1cff](https://github.com/5ec1cff/KernelSU)
+- Gracias a [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
+- Gracias a [meta-magic_mount-rs](https://github.com/Tools-cx-app/meta-magic_mount-rs)
+- Gracias a [NoMount](https://github.com/maxsteeel/nomount)
+
 ## Licencia
 
 - Núcleo (Rust y scripts del módulo): GPL-3.0-only (consulta [`LICENSE`](../LICENSE)).

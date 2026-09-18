@@ -59,6 +59,16 @@ Sebelum menginstal atau melaporkan masalah, baca [Pemberitahuan Penggunaan](../U
 - [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
 - [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
 
+## Ucapan terima kasih
+
+- Terima kasih kepada [Anatdx](https://github.com/Anatdx)
+- Terima kasih kepada [Tools-cx-app](https://github.com/Tools-cx-app)
+- Terima kasih kepada [KernelSU](https://github.com/tiann/KernelSU)
+- Terima kasih kepada [MKSU dari 5ec1cff](https://github.com/5ec1cff/KernelSU)
+- Terima kasih kepada [ReSukiSU](https://github.com/ReSukiSU/ReSukiSU)
+- Terima kasih kepada [meta-magic_mount-rs](https://github.com/Tools-cx-app/meta-magic_mount-rs)
+- Terima kasih kepada [NoMount](https://github.com/maxsteeel/nomount)
+
 ## Lisensi
 
 - Inti (Rust dan skrip modul): GPL-3.0-only (lihat [`LICENSE`](../LICENSE)).
