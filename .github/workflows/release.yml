@@ -145,22 +145,18 @@ jobs:
       - name: Prepare release metadata
         run: |
           set -euo pipefail
-          REPO="${{ github.repository }}"
           TAG="${{ github.ref_name }}"
           CLEAN_VERSION="${TAG#v}"
           VERSION_CODE=$(awk -F. '{print $1 * 100000 + $2 * 1000 + $3}' <<< "$CLEAN_VERSION")
           ZIP_NAME="${{ steps.paths.outputs.name }}"
-          ZIP_DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
-          CHANGELOG_URL="https://raw.githubusercontent.com/$REPO/dev/changelog.md"
 
-          cat <<EOF > /tmp/update.json
-          {
-            "version": "$TAG",
-            "versionCode": $VERSION_CODE,
-            "zipUrl": "$ZIP_DOWNLOAD_URL",
-            "changelog": "$CHANGELOG_URL"
-          }
-          EOF
+          # Reuse the xtask serializer so the release metadata and the local
+          # `cargo xtask update-json` path cannot drift apart.
+          cargo xtask update-json \
+            "$TAG" \
+            "$VERSION_CODE" \
+            "https://github.com/${{ github.repository }}/releases/download/$TAG/$ZIP_NAME"
+          cp update.json /tmp/update.json
 
       - name: Generate changelog
         id: git-cliff

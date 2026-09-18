@@ -16,20 +16,6 @@ jobs:
         with:
           script: |
             const body = context.payload.issue.body || "";
-            const labelsToAdd = [];
-            if (body.match(/### Kernel Version Category \/ 内核版本分类\s+kernel version 5\.10-/)) labelsToAdd.push("5.10-");
-            if (body.match(/### Kernel Version Category \/ 内核版本分类\s+kernel version 5\.10\+/)) labelsToAdd.push("5.10+");
-            if (body.match(/### Hook Type \/ Hook 类型\s+susfs/)) labelsToAdd.push("susfs");
-            if (body.match(/### Hook Type \/ Hook 类型\s+tracepoint/)) labelsToAdd.push("tracepoint");
-            if (body.match(/### Hook Type \/ Hook 类型\s+manual/)) labelsToAdd.push("manual");
-            if (labelsToAdd.length > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                labels: labelsToAdd
-              });
-            }
 
             if (context.payload.issue.state === "open") {
               const hasBugLabel = context.payload.issue.labels.some(l => l.name === "bug");
