@@ -1073,7 +1073,10 @@ static int __hybridmount_inject_child_locked(struct hybridmount_dir_node *dir_no
     }
 
     new_cap = capacity == 0 ? 4 : capacity * 2;
-    if (!(new_arr = kmalloc(sizeof(*new_arr) + (new_cap * sizeof(u32)) + (new_cap * sizeof(*new_rules)), GFP_KERNEL))) return -ENOMEM;
+    if (!(new_arr = kmalloc(sizeof(*new_arr) + (new_cap * sizeof(u32)) + (new_cap * sizeof(*new_rules)), GFP_KERNEL))) {
+        rule->parent_dir = NULL;
+        return -ENOMEM;
+    }
     new_arr->capacity = new_cap;
     new_arr->count = old_count + 1;
     new_rules = hm_get_child_rules(new_arr);
@@ -1162,16 +1165,46 @@ static struct hybridmount_dir_node *__hybridmount_delete_child_locked(struct hyb
     return parent;
 }
 
-static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target_rule)
+static void hm_detach_rule_locked(struct hybridmount_rule *rule, struct list_head *victims, bool prune);
+
+static void hm_rollback_generated_topology_locked(struct hybridmount_rule *target_rule,
+                                                   struct list_head *generated_rules,
+                                                   struct list_head *victims)
+{
+    struct hybridmount_rule *rule;
+
+    if (list_empty(&target_rule->list_node)) {
+        if (target_rule->parent_dir)
+            __hybridmount_delete_child_locked(target_rule);
+        list_add_tail(&target_rule->list_node, victims);
+    } else {
+        hm_detach_rule_locked(target_rule, victims, false);
+    }
+
+    while (!list_empty(generated_rules)) {
+        rule = list_last_entry(generated_rules, struct hybridmount_rule, topology_node);
+        list_del_init(&rule->topology_node);
+        if (list_empty(&rule->list_node)) {
+            if (rule->parent_dir)
+                __hybridmount_delete_child_locked(rule);
+            list_add_tail(&rule->list_node, victims);
+        } else {
+            hm_detach_rule_locked(rule, victims, false);
+        }
+    }
+}
+
+static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target_rule,
+                                                 struct list_head *generated_rules,
+                                                 struct list_head *victims)
 {
     struct hybridmount_rule *current_rule = target_rule, *ex;
     char *v_path = hm_get_vpath(target_rule);
     int p_len = target_rule->v_len;
     struct hybridmount_dir_node *dir_node;
-    struct hybridmount_rule *irule, *tmp;
+    struct hybridmount_rule *irule;
     struct path p_path;
     int i, p, err = 0;
-    LIST_HEAD(pending_list);
 
     while (p_len > 1) {
         for (i = p_len - 1; i >= 0; i--)
@@ -1214,6 +1247,8 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
 
         if (!(irule = kmalloc(sizeof(struct hybridmount_rule) + parent_len + 2, GFP_KERNEL))) { err = -ENOMEM; break; }
         memset(irule, 0, sizeof(*irule));
+        INIT_LIST_HEAD(&irule->list_node);
+        INIT_LIST_HEAD(&irule->topology_node);
         irule->v_len = parent_len;
         irule->v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, v_path, parent_len);
         irule->flags = HM_FLAG_IS_DIR | HM_FLAG_VIRTUAL_DIR;
@@ -1233,15 +1268,21 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
         }
         hm_dir_set_owner(dir_node, irule);
         irule->this_dir = dir_node;
-        list_add(&irule->list_node, &pending_list);
+        list_add(&irule->topology_node, generated_rules);
         current_rule = irule;
         p_len = i;
     }
 
-    list_for_each_entry_safe(irule, tmp, &pending_list, list_node) {
-        list_del(&irule->list_node);
-        (err == 0) ? hm_tree_insert(irule) : hm_free_rule(irule);
+    if (!err) {
+        list_for_each_entry(irule, generated_rules, topology_node) {
+            err = hm_tree_insert(irule);
+            if (err)
+                break;
+        }
     }
+
+    if (err)
+        hm_rollback_generated_topology_locked(target_rule, generated_rules, victims);
 
     return err;
 }
@@ -1294,6 +1335,8 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
     if (!(rule = kmalloc((sizeof(struct hybridmount_rule) + v_len + r_len + 2), GFP_KERNEL))) return ERR_PTR(-ENOMEM);
 
     memset(rule, 0, sizeof(*rule));
+    INIT_LIST_HEAD(&rule->list_node);
+    INIT_LIST_HEAD(&rule->topology_node);
     rule->v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, v_path, v_len);
     rule->flags = flags;
     /* An opaque directory replaces its whole subtree: it stays visible, hides every real
@@ -1381,6 +1424,7 @@ static int __hybridmount_add_rule(const char *v_path, const char *r_path, u16 v_
 {
     struct hybridmount_rule *rule, *existing;
     int err = 0;
+    LIST_HEAD(generated_rules);
 
     if (IS_ERR((rule = hm_alloc_rule(v_path, r_path, v_len, r_len, flags, target_uid))))
         return PTR_ERR(rule);
@@ -1397,13 +1441,21 @@ static int __hybridmount_add_rule(const char *v_path, const char *r_path, u16 v_
         hm_info("Shadowing existing rule for: %s\n", hm_get_vpath(rule));
     }
 
-    if ((err = hybridmount_generate_virtual_topology(rule)) != 0) {
+    if ((err = hybridmount_generate_virtual_topology(rule, &generated_rules, r_victims)) != 0) {
         up_write(&hybridmount_rwsem);
-        hm_free_rule(rule);
         return err;
     }
 
-    hm_tree_insert(rule);
+    if ((err = hm_tree_insert(rule)) != 0) {
+        hm_rollback_generated_topology_locked(rule, &generated_rules, r_victims);
+        up_write(&hybridmount_rwsem);
+        return err;
+    }
+    while (!list_empty(&generated_rules)) {
+        struct hybridmount_rule *generated = list_first_entry(
+            &generated_rules, struct hybridmount_rule, topology_node);
+        list_del_init(&generated->topology_node);
+    }
     up_write(&hybridmount_rwsem);
 
     (flags & HM_FLAG_WHITEOUT) ? hm_info("Successfully added whiteout rule: %s\n", hm_get_vpath(rule))
@@ -1532,6 +1584,10 @@ static int hm_process_payload(unsigned long user_addr)
                 if (err && !first_err) { first_err = err; err_offset = record_offset; }
                 buf_ptr += (size_t)(h->v_len + h->r_len);
             }
+            if (!first_err && buf_ptr != buf_end) {
+                first_err = -EINVAL;
+                err_offset = (u32)(buf_ptr - payload->buffer);
+            }
             /* Report the first failure and where it happened; a later success must not
              * mask it. On success arg1 stays the consumed cursor. */
             if (first_err) { payload->status = first_err; payload->arg1 = err_offset; }
@@ -1567,6 +1623,10 @@ static int hm_process_payload(unsigned long user_addr)
                 }
                 __hybridmount_del_rule(buf_ptr, h->v_len, h->uid, &r_victims);
                 buf_ptr += h->v_len;
+            }
+            if (!first_err && buf_ptr != buf_end) {
+                first_err = -EINVAL;
+                err_offset = (u32)(buf_ptr - payload->buffer);
             }
             up_write(&hybridmount_rwsem);
             /* As in ADD_RULE: report the first error and its offset, else the cursor. */

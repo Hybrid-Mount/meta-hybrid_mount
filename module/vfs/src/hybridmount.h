@@ -132,6 +132,7 @@ struct hybridmount_rule {
 
     struct hybridmount_dir_node *parent_dir;
     struct list_head list_node;
+    struct list_head topology_node;
     struct hybridmount_rule *next_uid;
     char paths[];
 };
@@ -168,8 +169,8 @@ static void hm_free_rule(struct hybridmount_rule *rule);
 /* =====================================================================
  * Hybrid Mount VFS Offset Protocol
  * =====================================================================
- * 64-bit layout: [ 16-bit 'nm' ][ 16-bit 0 ][ 32-bit ID ] 
- * 32-bit layout: [ 16-bit 'nm' ][ 16-bit ID ]
+ * 64-bit layout: [ 16-bit 'hm' ][ 16-bit 0 ][ 32-bit ID ]
+ * 32-bit layout: [ 16-bit 'hm' ][ 16-bit ID ]
  */
 #define HM_SIG_16 0x686DULL /* "hm" in hex */
 static inline bool hm_is_virtual_pos(loff_t pos) {
@@ -297,7 +298,7 @@ static struct hybridmount_rule *hm_tree_search_exact(u16 len, const char *path, 
     return NULL;
 }
 
-static void hm_art_add_child(void **ref, u8 c, void *child)
+static int hm_art_add_child(void **ref, u8 c, void *child)
 {
     void *node = *ref;
     struct art_node *n = node;
@@ -308,10 +309,11 @@ static void hm_art_add_child(void **ref, u8 c, void *child)
             n4->keys[n->num_children] = c;
             n4->children[n->num_children] = child;
             n->num_children++;
-            return;
+            return 0;
         }
 
         struct art_node16 *n16 = kzalloc(sizeof(*n16), GFP_KERNEL);
+        if (!n16) return -ENOMEM;
         n16->n = n4->n;
         n16->n.type = ART_NODE16;
         memcpy(n16->keys, n4->keys, 4);
@@ -328,10 +330,11 @@ static void hm_art_add_child(void **ref, u8 c, void *child)
             n16->keys[n->num_children] = c;
             n16->children[n->num_children] = child;
             n->num_children++;
-            return;
+            return 0;
         }
 
         struct art_node48 *n48 = kzalloc(sizeof(*n48), GFP_KERNEL);
+        if (!n48) return -ENOMEM;
         n48->n = n16->n;
         n48->n.type = ART_NODE48;
         for (int i = 0; i < 16; i++) {
@@ -351,10 +354,11 @@ static void hm_art_add_child(void **ref, u8 c, void *child)
             n48->child_index[c] = pos + 1;
             n48->children[pos] = child;
             n->num_children++;
-            return;
+            return 0;
         }
 
         struct art_node256 *n256 = kzalloc(sizeof(*n256), GFP_KERNEL);
+        if (!n256) return -ENOMEM;
         n256->n = n48->n;
         n256->n.type = ART_NODE256;
         for (int i = 0; i < 256; i++) {
@@ -370,6 +374,7 @@ static void hm_art_add_child(void **ref, u8 c, void *child)
         n256->children[c] = child;
         n256->n.num_children++;
     }
+    return 0;
 }
 
 static void *hm_art_first_child(struct art_node *n)
@@ -388,24 +393,25 @@ static struct hybridmount_rule *hm_art_minimum(void *node)
     return ART_GET_LEAF(node);
 }
 
-static void hm_tree_insert(struct hybridmount_rule *new_rule)
+static int hm_tree_insert(struct hybridmount_rule *new_rule)
 {
     const char *key = hm_get_vpath(new_rule);
     void **child, **node_ref = &hybridmount_art_root;
     void *node;
     int depth = 0;
 
-    list_add_tail(&new_rule->list_node, &hybridmount_rules_list);
     while ((node = *node_ref)) {
         if (ART_IS_LEAF(node)) {
             struct hybridmount_rule *existing = ART_GET_LEAF(node);
             if (existing->v_len == new_rule->v_len && !memcmp(hm_get_vpath(existing), key, new_rule->v_len)) {
                 new_rule->next_uid = existing->next_uid;
                 existing->next_uid = new_rule;
-                return;
+                list_add_tail(&new_rule->list_node, &hybridmount_rules_list);
+                return 0;
             }
 
             struct art_node4 *n4 = kzalloc(sizeof(*n4), GFP_KERNEL);
+            if (!n4) return -ENOMEM;
             n4->n.type = ART_NODE4;
             n4->n.num_children = 2;
 
@@ -421,7 +427,8 @@ static void hm_tree_insert(struct hybridmount_rule *new_rule)
             n4->keys[1] = key[depth];
             n4->children[1] = ART_MAKE_LEAF(new_rule);
             *node_ref = n4;
-            return;
+            list_add_tail(&new_rule->list_node, &hybridmount_rules_list);
+            return 0;
         }
 
         struct art_node *n = node;
@@ -433,6 +440,7 @@ static void hm_tree_insert(struct hybridmount_rule *new_rule)
             while (p < max_cmp && borrowed_key[depth + p] == key[depth + p]) p++;
             if (p < n->prefix_len) {
                 struct art_node4 *n4 = kzalloc(sizeof(*n4), GFP_KERNEL);
+                if (!n4) return -ENOMEM;
                 n4->n.type = ART_NODE4;
                 n4->n.num_children = 2;
                 n4->n.prefix_len = p;
@@ -442,7 +450,8 @@ static void hm_tree_insert(struct hybridmount_rule *new_rule)
                 n4->keys[1] = key[depth + p];
                 n4->children[1] = ART_MAKE_LEAF(new_rule);
                 *node_ref = n4;
-                return;
+                list_add_tail(&new_rule->list_node, &hybridmount_rules_list);
+                return 0;
             }
         }
 
@@ -451,11 +460,15 @@ static void hm_tree_insert(struct hybridmount_rule *new_rule)
             node_ref = child;
             depth++;
         } else {
-            hm_art_add_child(node_ref, key[depth], ART_MAKE_LEAF(new_rule));
-            return;
+            int err = hm_art_add_child(node_ref, key[depth], ART_MAKE_LEAF(new_rule));
+            if (err) return err;
+            list_add_tail(&new_rule->list_node, &hybridmount_rules_list);
+            return 0;
         }
     }
     *node_ref = ART_MAKE_LEAF(new_rule);
+    list_add_tail(&new_rule->list_node, &hybridmount_rules_list);
+    return 0;
 }
 
 static void hm_art_free_tree(void *node)
