@@ -15,8 +15,6 @@ on:
   push:
     branches:
       - "dev"
-      # VFS experiment branch: not merged into dev yet. Remove this entry once the branch is merged or deleted.
-      - "feat/nomount-vfs"
     paths:
       - "module/vfs/**"
       - ".github/workflows/kernel-module.yml"

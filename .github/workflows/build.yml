@@ -6,9 +6,6 @@ on:
   push:
     branches:
       - "dev"
-      # VFS experiment branch: not merged into dev yet, but it needs the same packaging and TG notification
-      # so the artifacts can be confirmed buildable before on-device testing. Remove this entry once the branch is merged or deleted.
-      - "feat/nomount-vfs"
     paths:
       - "src/**"
       - "Cargo.*"
