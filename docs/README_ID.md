@@ -11,7 +11,7 @@ Hybrid Mount adalah metamodul mount hibrida untuk KernelSU dan APatch. Saat boot
 - OverlayFS mendukung mode penyimpanan tmpfs dan ext4.
 - Untuk staging ext4, KernelSU menggunakan ioctl resmi untuk menyembunyikan node sysfs; APatch dan lingkungan non-KSU lain menggunakan LKM kompatibilitas bawaan secara default.
 - Magic Mount mendukung file, direktori, tautan simbolis, `.replace`, dan semantik whiteout.
-- VFS memerlukan K2 kompatibel yang tertanam di kernel atau dipasang secara terpisah. Selama deklarasi lisensi upstream belum diselesaikan, rilis menyertakan sumber K2 tetapi tidak menyertakan modul K2 terkompilasi.
+- VFS mengirim aturan injeksi ke subsistem VFS milik Hybrid Mount (modul `hybridmount`) melalui keyring. Ini implementasi independen dan tidak berinteroperasi dengan kernel NoMount maupun CLI nm-nya. Rilis menyertakan sumber dan modul arm64 prakompilasi untuk setiap target Android/GKI yang didukung, dimuat saat boot bila kernel tidak membawanya; jika gagal, perilakunya mengikuti `vfs_strict`. VFS bukan mount sungguhan.
 - WebUI menyediakan antarmuka MD3 (bawaan) dan Miuix.
 - arm64, armv7, dan x86_64 didukung; penginstal otomatis memilih biner yang sesuai.
 
@@ -64,3 +64,4 @@ Sebelum menginstal atau melaporkan masalah, baca [Pemberitahuan Penggunaan](../U
 - Inti (Rust dan skrip modul): GPL-3.0-only (lihat [`LICENSE`](../LICENSE)).
 - WebUI: Apache-2.0 (lihat [`webui/LICENSE`](../webui/LICENSE)).
 - LKM sysfs ext4 opsional (sumber dan file `.ko` prabangun): GPL-2.0-only, diturunkan dari [Mountify](https://github.com/backslashxx/mountify); lihat [`module/lkm/README.md`](../module/lkm/README.md) dan [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE).
+- Subsistem VFS (modul `hybridmount`): GPL-2.0-only, diturunkan dari [NoMount](https://github.com/maxsteeel/nomount); lihat [`module/vfs/README.md`](../module/vfs/README.md), [`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE), dan [THIRD_PARTY.md](../THIRD_PARTY.md).

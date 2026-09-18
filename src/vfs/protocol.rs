@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! K2 wire protocol: a single `hm_payload` page passed to
+//! Hybrid Mount VFS wire protocol: a single `hm_payload` page passed to
 //! `add_key("hybridmount", "trigger", &payload_ptr)`. Byte codec only.
 
 use crate::errors::{Error, Result};

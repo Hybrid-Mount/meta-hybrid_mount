@@ -11,7 +11,7 @@ Hybrid Mount là siêu mô-đun gắn kết kết hợp dành cho KernelSU và A
 - OverlayFS hỗ trợ cả hai chế độ lưu trữ tmpfs và ext4.
 - Với vùng staging ext4, KernelSU sử dụng ioctl chính thức để ẩn các nút sysfs; APatch và các môi trường không phải KSU mặc định sử dụng LKM tương thích đi kèm.
 - Magic Mount hỗ trợ tệp, thư mục, liên kết tượng trưng, `.replace` và ngữ nghĩa whiteout.
-- VFS yêu cầu K2 tương thích được tích hợp trong kernel hoặc cài riêng. Cho đến khi tuyên bố giấy phép upstream được làm rõ, bản phát hành chỉ kèm mã nguồn K2, không kèm mô-đun K2 đã biên dịch.
+- VFS gửi quy tắc chèn vào hệ thống con VFS riêng của Hybrid Mount (mô-đun `hybridmount`) qua keyring. Đây là bản triển khai độc lập, không tương tác với kernel NoMount hay CLI nm của nó. Bản phát hành kèm mã nguồn và mô-đun arm64 biên dịch sẵn cho từng mục tiêu Android/GKI được hỗ trợ, được nạp khi khởi động nếu kernel không tích hợp sẵn; nếu thất bại, hành vi tuân theo `vfs_strict`. VFS không phải là mount thật.
 - WebUI cung cấp hai giao diện MD3 (mặc định) và Miuix.
 - Hỗ trợ arm64, armv7 và x86_64; trình cài đặt tự động chọn tệp nhị phân phù hợp.
 
@@ -64,3 +64,4 @@ Trước khi cài đặt hoặc báo cáo sự cố, hãy đọc [Lưu ý sử d
 - Phần lõi (Rust và các tập lệnh mô-đun): GPL-3.0-only (xem [`LICENSE`](../LICENSE)).
 - WebUI: Apache-2.0 (xem [`webui/LICENSE`](../webui/LICENSE)).
 - LKM sysfs ext4 tùy chọn (mã nguồn và tệp `.ko` dựng sẵn): GPL-2.0-only, bắt nguồn từ [Mountify](https://github.com/backslashxx/mountify); xem [`module/lkm/README.md`](../module/lkm/README.md) và [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE).
+- Hệ thống con VFS (mô-đun `hybridmount`): GPL-2.0-only, bắt nguồn từ [NoMount](https://github.com/maxsteeel/nomount); xem [`module/vfs/README.md`](../module/vfs/README.md), [`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE) và [THIRD_PARTY.md](../THIRD_PARTY.md).

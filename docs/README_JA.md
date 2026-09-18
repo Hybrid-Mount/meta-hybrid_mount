@@ -11,7 +11,7 @@ Hybrid Mount は、KernelSU と APatch 向けのハイブリッドマウント�
 - OverlayFS は tmpfs と ext4 の両方のストレージモードに対応します。
 - ext4 ステージングでは、KernelSU は公式 ioctl で sysfs ノードを非表示にします。APatch などの非 KSU 環境では、同梱の互換 LKM をデフォルトで使用します。
 - Magic Mount は、ファイル、ディレクトリ、シンボリックリンク、`.replace`、whiteout セマンティクスに対応します。
-- VFS には、カーネルに組み込まれたか別途導入された互換 K2 が必要です。上流のライセンス宣言が解決するまで、リリースには K2 ソースのみを含め、コンパイル済み K2 モジュールは配布しません。
+- VFS は keyring 経由で Hybrid Mount 独自の VFS サブシステム（`hybridmount` モジュール）に注入ルールを送ります。独立実装であり、NoMount のカーネルやその nm CLI とは相互運用しません。リリースにはソースと、対応する Android/GKI ターゲットごとの arm64 プリコンパイル済みモジュールが含まれ、カーネルに組み込まれていない場合は起動時に読み込まれます。失敗した場合は `vfs_strict` に従って縮退します。VFS は実際のマウントではありません。
 - WebUI には MD3（デフォルト）と Miuix の2種類のインターフェースがあります。
 - arm64、armv7、x86_64 に対応し、インストーラーが適切なバイナリを自動的に選択します。
 
@@ -64,3 +64,4 @@ default_mode = "magic"
 - コア（Rust およびモジュールスクリプト）：GPL-3.0-only（[`LICENSE`](../LICENSE) を参照）。
 - WebUI：Apache-2.0（[`webui/LICENSE`](../webui/LICENSE) を参照）。
 - オプションの ext4 sysfs LKM（ソースおよびビルド済み `.ko`）：[Mountify](https://github.com/backslashxx/mountify) 由来の GPL-2.0-only。詳しくは [`module/lkm/README.md`](../module/lkm/README.md) と [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE) を参照してください。
+- VFS サブシステム（`hybridmount` モジュール）：[NoMount](https://github.com/maxsteeel/nomount) 由来の GPL-2.0-only。詳しくは [`module/vfs/README.md`](../module/vfs/README.md)、[`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE)、[THIRD_PARTY.md](../THIRD_PARTY.md) を参照してください。

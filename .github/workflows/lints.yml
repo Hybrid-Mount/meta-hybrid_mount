@@ -75,24 +75,32 @@ jobs:
           grep -q "SPDX-License-Identifier: GPL-2.0-only" module/lkm/src/nuke.c
           (cd module/lkm/binaries && sha256sum --check list.txt)
 
-      - name: Verify VFS source provenance assets
+      - name: Verify VFS source and prebuilt provenance assets
         run: |
           set -euo pipefail
-          # Only sources ship while the upstream licence declaration is unresolved.
           test -f module/vfs/src/LICENSE
           test -f module/vfs/src/Kconfig
           test -f module/vfs/src/Makefile
           test -f module/vfs/src/PROVENANCE
           test -f module/vfs/README.md
           test -f module/vfs/setup.sh
-          grep -q "GPL-3.0-only" module/vfs/README.md
-          grep -q 'SPDX-License-Identifier: GPL-3.0-only' module/vfs/src/Makefile
-          # Upstream's sources carry no SPDX line; the module declares its licence
-          # through MODULE_LICENSE, which THIRD_PARTY.md records as inconsistent
-          # with the GPL-3.0 text upstream ships.
-          grep -q 'MODULE_LICENSE("GPL")' module/vfs/src/hybridmount.c
+          # The Hybrid Mount VFS module is GPL-2.0-only: the SPDX headers, the license text and the module
+          # declaration must all say so.
+          grep -q "GPL-2.0-only" module/vfs/README.md
+          grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/Makefile
+          grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/Kconfig
+          grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/hybridmount.c
+          grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/hybridmount.h
+          grep -q 'MODULE_LICENSE("GPL v2")' module/vfs/src/hybridmount.c
           grep -q 'MODULE_AUTHOR("maxsteeel")' module/vfs/src/hybridmount.c
-          test ! -e module/vfs/binaries
+          ! grep -q "Version 3" module/vfs/src/LICENSE
+          head -2 module/vfs/src/LICENSE | grep -q "Version 2"
+          # The prebuilt modules ship with the package; when they are present their
+          # digests must verify.
+          if [ -d module/vfs/binaries ]; then
+            test -f module/vfs/binaries/list.txt
+            (cd module/vfs/binaries && sha256sum --check list.txt)
+          fi
 
       - name: ShellCheck module scripts
         run: |

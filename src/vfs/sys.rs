@@ -9,7 +9,7 @@ pub use platform::{PageBuffer, add_key};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub use stub::{PageBuffer, add_key};
 
-/// Keyring channel. K2 is the only implementation rules are ever sent to; the upstream
+/// Keyring channel. Rules are only ever sent to `hybridmount`; the upstream
 /// NoMount key type is probed purely to detect a foreign implementation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyringChannel {

@@ -11,7 +11,7 @@ Hybrid Mount es un metamódulo de montaje híbrido para KernelSU y APatch. Duran
 - OverlayFS admite los modos de almacenamiento tmpfs y ext4.
 - Para la preparación ext4, KernelSU usa el ioctl oficial para ocultar los nodos sysfs; APatch y otros entornos que no son KSU usan de forma predeterminada el LKM de compatibilidad incluido.
 - Magic Mount admite archivos, directorios, enlaces simbólicos, `.replace` y la semántica whiteout.
-- VFS requiere un K2 compatible integrado en el kernel o instalado por separado. Mientras no se resuelva la declaración de licencia de origen, las versiones incluyen el código fuente de K2, pero no un módulo K2 compilado.
+- VFS envía reglas de inyección al subsistema VFS propio de Hybrid Mount (módulo `hybridmount`) mediante el keyring. Es una implementación independiente y no interopera con el kernel de NoMount ni con su CLI nm. Las versiones incluyen el código fuente y un módulo arm64 precompilado por cada objetivo Android/GKI compatible, que el arranque carga cuando el kernel no lo incorpora; si falla, se degrada según `vfs_strict`. VFS no es un montaje real.
 - La WebUI ofrece las interfaces MD3 (predeterminada) y Miuix.
 - Se admiten arm64, armv7 y x86_64; el instalador selecciona automáticamente el binario correspondiente.
 
@@ -64,3 +64,4 @@ Antes de instalar o informar de un problema, lee el [Aviso de uso](../USAGE_NOTI
 - Núcleo (Rust y scripts del módulo): GPL-3.0-only (consulta [`LICENSE`](../LICENSE)).
 - WebUI: Apache-2.0 (consulta [`webui/LICENSE`](../webui/LICENSE)).
 - LKM sysfs ext4 opcional (código fuente y archivos `.ko` precompilados): GPL-2.0-only, derivado de [Mountify](https://github.com/backslashxx/mountify); consulta [`module/lkm/README.md`](../module/lkm/README.md) y [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE).
+- Subsistema VFS (módulo `hybridmount`): GPL-2.0-only, derivado de [NoMount](https://github.com/maxsteeel/nomount); consulta [`module/vfs/README.md`](../module/vfs/README.md), [`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE) y [THIRD_PARTY.md](../THIRD_PARTY.md).

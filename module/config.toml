@@ -4,7 +4,8 @@ moduledir = "/data/adb/modules"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
-# default_mode also accepts "vfs", the NoMount-compatible VFS injection backend.
+# default_mode also accepts "vfs", the kernel-side injection backend driven by the
+# bundled hybridmount module (an independent implementation, not NoMount-compatible).
 # vfs_strict = false        # true fails the boot whenever VFS is unavailable
 # vfs_isolate_uids = []     # these UIDs see the native filesystem
 

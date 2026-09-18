@@ -11,7 +11,7 @@ Hybrid Mount — метамодуль гібридного монтування 
 - OverlayFS підтримує режими зберігання tmpfs і ext4.
 - Для підготовки ext4 KernelSU використовує офіційний ioctl, що приховує вузли sysfs; APatch та інші середовища без KSU типово використовують вбудований сумісний LKM.
 - Magic Mount підтримує файли, каталоги, символічні посилання, `.replace` і семантику whiteout.
-- VFS потребує сумісного K2, вбудованого в ядро або встановленого окремо. До уточнення ліцензії upstream релізи містять вихідний код K2, але не містять скомпільованого модуля K2.
+- VFS передає правила ін'єкції до власної підсистеми VFS Hybrid Mount (модуль `hybridmount`) через keyring. Це незалежна реалізація, не сумісна з ядром NoMount та його CLI nm. Релізи містять вихідний код і попередньо скомпільований модуль arm64 для кожної підтримуваної цілі Android/GKI; він завантажується під час завантаження, якщо ядро його не містить. У разі невдачі поведінка визначається `vfs_strict`. VFS не є справжнім монтуванням.
 - WebUI надає інтерфейси MD3 (типовий) і Miuix.
 - Підтримуються arm64, armv7 та x86_64; інсталятор автоматично вибирає відповідний бінарний файл.
 
@@ -64,3 +64,4 @@ default_mode = "magic"
 - Ядро (Rust і скрипти модуля): GPL-3.0-only (див. [`LICENSE`](../LICENSE)).
 - WebUI: Apache-2.0 (див. [`webui/LICENSE`](../webui/LICENSE)).
 - Необов'язковий LKM для sysfs ext4 (вихідний код і готові файли `.ko`): GPL-2.0-only, створений на основі [Mountify](https://github.com/backslashxx/mountify); див. [`module/lkm/README.md`](../module/lkm/README.md) і [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE).
+- Підсистема VFS (модуль `hybridmount`): GPL-2.0-only, створена на основі [NoMount](https://github.com/maxsteeel/nomount); див. [`module/vfs/README.md`](../module/vfs/README.md), [`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE) та [THIRD_PARTY.md](../THIRD_PARTY.md).

@@ -12,7 +12,7 @@ Les répertoires sources des modules sont toujours traités comme des entrées e
 - OverlayFS prend en charge les modes de stockage tmpfs et ext4.
 - Pour la zone tampon ext4, KernelSU utilise des appels ioctl officiels afin de masquer les nœuds sysfs ; APatch et les autres environnements sans KSU utilisent par défaut le mode de compatibilité de LKM fourni.
 - Magic Mount prend en charge les fichiers, les répertoires, les liens symboliques, `.replace` et la sémantique whiteout.
-- VFS nécessite un K2 compatible intégré au noyau ou installé séparément. Tant que la déclaration de licence en amont n'est pas clarifiée, les versions incluent les sources K2 mais aucun module K2 compilé.
+- VFS envoie les règles d'injection au sous-système VFS propre à Hybrid Mount (module `hybridmount`) via le keyring. C'est une implémentation indépendante qui n'interopère ni avec le noyau de NoMount ni avec sa CLI nm. Les versions incluent les sources et un module arm64 précompilé par cible Android/GKI prise en charge, chargé au démarrage lorsque le noyau ne l'intègre pas ; en cas d'échec, le comportement suit `vfs_strict`. VFS n'est pas un montage réel.
 - La WebUI propose un thème d'affichage Material Design 3 (par défaut) ou Miuix.
 - Les architectures arm64, armv7 et x86_64 sont prises en charge ; le programme d'installation sélectionne automatiquement le binaire correspondant.
 
@@ -66,3 +66,4 @@ Avant l'installation ou le signalement d'un problème, lire les [consignes d'uti
 - Code principal (Rust et scripts du module) : GPL-3.0-only (consulter [`LICENSE`](../LICENSE)).
 - WebUI : Apache-2.0 (consulter [`webui/LICENSE`](../webui/LICENSE)).
 - LKM sysfs ext4 facultatif (sources et fichiers `.ko` précompilés) : GPL-2.0-only, dérivé de [Mountify](https://github.com/backslashxx/mountify) ; consulter [`module/lkm/README.md`](../module/lkm/README.md) et [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE).
+- Sous-système VFS (module `hybridmount`) : GPL-2.0-only, dérivé de [NoMount](https://github.com/maxsteeel/nomount) ; consulter [`module/vfs/README.md`](../module/vfs/README.md), [`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE) et [THIRD_PARTY.md](../THIRD_PARTY.md).

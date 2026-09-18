@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `vfs doctor`: how the K2 provider is bound, and what it currently holds.
+//! `vfs doctor`: how the hybridmount provider is bound, and what it currently holds.
 //!
 //! Answers what the boot log cannot: whether hybridmount is compiled into the kernel,
 //! whether a separately installed module is loaded instead, and whether the wire magic was accepted.
@@ -34,7 +34,7 @@ pub struct VfsDoctorReport {
     pub supported_versions: Vec<String>,
     /// Whether the key type answered with a supported version.
     pub responds: bool,
-    /// Whether a compatible K2 must be supplied by the kernel or installed separately.
+    /// Whether a compatible `hybridmount` must be supplied by the kernel or installed separately.
     pub provider_install_required: bool,
     /// Plain-language verdict, so a bug report does not require the reader to infer one.
     pub diagnosis: &'static str,
@@ -54,7 +54,7 @@ pub fn classify_presence(in_proc_modules: bool, sys_module_exists: bool) -> Modu
     }
 }
 
-/// Whether the device still needs a compatible K2 provider supplied independently.
+/// Whether the device still needs a compatible hybridmount provider supplied independently.
 pub fn provider_install_required(presence: ModulePresence, responds: bool) -> bool {
     !responds && presence == ModulePresence::NotPresent
 }
@@ -81,7 +81,7 @@ pub fn diagnose(presence: ModulePresence, version: Option<&str>, responds: bool)
             "a hybridmount module is loaded but its key type did not answer; the wire magic may not match"
         }
         (ModulePresence::NotPresent, None) => {
-            "no hybridmount key type is registered; vfs requires a compatible built-in or separately installed K2"
+            "no hybridmount key type is registered; vfs needs it built into the kernel or separately installed"
         }
     }
 }

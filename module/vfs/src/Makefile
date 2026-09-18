@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Out-of-tree build of the Hybrid Mount VFS kernel module (K2).
 #

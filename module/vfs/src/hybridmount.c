@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
+//
+// Hybrid Mount VFS path redirection subsystem, forked from NoMount
+// (https://github.com/maxsteeel/nomount). Upstream copyright is retained; see
+// PROVENANCE and LICENSE in this directory.
+
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/file.h>
@@ -1683,7 +1689,7 @@ static void __exit hybridmount_exit(void)
     hm_info("Unloaded successfully\n");
 }
 
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("GPL v2");
 MODULE_VERSION(HYBRIDMOUNT_VERSION);
 MODULE_AUTHOR("maxsteeel");
 MODULE_DESCRIPTION("Hybrid Mount VFS Path Redirection Subsystem");

@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! VFS kernel provider binding. v2 supports only K2; a device already running a
+//! VFS kernel provider binding. Only `hybridmount` is supported; a device running a
 //! foreign NoMount implementation is refused. The binding is fixed for the boot.
 
 use crate::errors::{Error, Result};
 use crate::vfs::protocol::{self, EncodedRule, NmCommand};
 use crate::vfs::sys::{self, KeyringChannel, PageBuffer};
 
-/// Protocol versions K2 accepts. Upstream NoMount's "20" is not one of them.
+/// Protocol versions the module accepts. Upstream NoMount's "20" is not one of them.
 pub const SUPPORTED_VERSIONS: &[&str] = &["hm1"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

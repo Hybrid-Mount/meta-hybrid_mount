@@ -1,7 +1,7 @@
 #!/bin/sh
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: GPL-2.0-only
 #
-# Built-in integration of the Hybrid Mount VFS kernel subsystem (K2).
+# Built-in integration of the Hybrid Mount VFS kernel subsystem.
 #
 # Run this from the root of a kernel tree:
 #

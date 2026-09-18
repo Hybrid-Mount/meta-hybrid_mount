@@ -11,7 +11,7 @@ Hybrid Mount 是面向 KernelSU 與 APatch 的混合掛載元模組。它會在�
 - OverlayFS 支援 tmpfs 與 ext4 兩種儲存模式。
 - ext4 staging 在 KernelSU 使用官方 ioctl 隱藏 sysfs 節點；在 APatch 等非 KSU 環境預設使用隨附的 LKM 相容後備方案。
 - Magic Mount 支援檔案、目錄、符號連結、`.replace` 和 whiteout 語意。
-- VFS 需要核心已內建或使用者另行安裝相容 K2。在上游授權聲明澄清前，發佈包只包含 K2 原始碼，不分發已編譯的 K2 模組。
+- VFS 透過 keyring 將注入規則下發給 Hybrid Mount 自有的 VFS 子系統（`hybridmount` 模組）。這是獨立實作，不與 NoMount 核心或其 nm CLI 互通。發佈包同時提供原始碼與每個受支援 Android/GKI 目標的 arm64 預編譯模組，核心未內建時由啟動流程自動載入；仍不可用時依 `vfs_strict` 降級。VFS 不是真實掛載。
 - WebUI 提供 MD3（預設）與 Miuix 兩套介面。
 - 支援 arm64、armv7 與 x86_64，安裝程式會自動選擇對應的二進位檔案。
 
@@ -64,3 +64,4 @@ default_mode = "magic"
 - 核心（Rust、module 指令碼）：GPL-3.0-only（參閱 [`LICENSE`](../LICENSE)）。
 - WebUI：Apache-2.0（參閱 [`webui/LICENSE`](../webui/LICENSE)）。
 - 選用的 ext4 sysfs LKM（原始碼與預編譯 `.ko`）：GPL-2.0-only，源自 [Mountify](https://github.com/backslashxx/mountify)；參閱 [`module/lkm/README.md`](../module/lkm/README.md) 與 [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE)。
+- VFS 子系統（`hybridmount` 模組）：GPL-2.0-only，fork 自 [NoMount](https://github.com/maxsteeel/nomount)；參閱 [`module/vfs/README.md`](../module/vfs/README.md)、[`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE) 與 [THIRD_PARTY.md](../THIRD_PARTY.md)。

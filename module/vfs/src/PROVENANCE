@@ -7,9 +7,11 @@ commit    = 016375cd4a9e7da07b0519dd7bc492101de2a834
 date      = 2026-09-13
 protocol  = "20"
 imported  = Hybrid Mount commit 4485e41c (verbatim import, original filenames nomount.c / nomount.h)
-license   = see LICENSE in this directory. Upstream ships a GPL-3.0 text while the kernel
-            module declares MODULE_LICENSE("GPL") (GPL-2.0-or-later in kernel convention);
-            the two are inconsistent. See ../../THIRD_PARTY.md.
+license   = GPL-2.0-only, see LICENSE in this directory. Upstream shipped a GPL-3.0 text
+            while the kernel module declared a bare MODULE_LICENSE("GPL"); K2 is
+            distributed under the GPL-2.0-only grant and declares MODULE_LICENSE("GPL v2")
+            so the declaration, the SPDX headers and the license text agree.
+            See ../../THIRD_PARTY.md.
 
 ## Imported baseline (sha256, exactly as imported)
 
@@ -21,13 +23,15 @@ c85c0ebe247c77882c5ac9f776941bf3a50f859b7d6bfb5bca1e1ccf9bed5b47  Makefile
 c42cad879c216d643444b448e8bd461a757cc2754e716520c9d36da6e799324f  UPSTREAM_README.md
 
 These digests describe the files exactly as imported, under their original names. The
-working tree has since diverged. To compare against the pristine baseline, use the
-import commit, for example:
+working tree has since diverged; in particular LICENSE no longer matches the imported
+GPL-3.0 text. To compare against the pristine baseline, use the import commit:
 
     git show 4485e41c:module/vfs/src/nomount.c
 
 ## Hybrid Mount divergence applied so far
 
+- License: GPL-2.0-only text in LICENSE, `SPDX-License-Identifier: GPL-2.0-only` in
+  every source file, and MODULE_LICENSE("GPL v2") in the module.
 - Identity: files, include guard, key type name, protocol version, Kconfig symbol,
   Makefile object, module description.
 - Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*.

@@ -11,7 +11,7 @@ Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Aç�
 - OverlayFS, tmpfs ve ext4 depolama modlarını destekler.
 - ext4 hazırlama alanında KernelSU, sysfs düğümlerini gizlemek için resmi ioctl'u kullanır; APatch ve diğer KSU dışı ortamlar varsayılan olarak birlikte gelen uyumluluk LKM'sini kullanır.
 - Magic Mount; dosya, dizin, sembolik bağlantı, `.replace` ve whiteout semantiğini destekler.
-- VFS, çekirdeğe yerleşik veya ayrıca kurulmuş uyumlu bir K2 gerektirir. Upstream lisans bildirimi netleşene kadar sürümler K2 kaynak kodunu içerir, ancak derlenmiş K2 modülü dağıtmaz.
+- VFS, enjeksiyon kurallarını keyring üzerinden Hybrid Mount'un kendi VFS alt sistemine (`hybridmount` modülü) gönderir. Bağımsız bir uygulamadır; NoMount çekirdeği veya nm CLI'si ile birlikte çalışmaz. Sürümler kaynak kodu ve desteklenen her Android/GKI hedefi için önceden derlenmiş arm64 modülü içerir; çekirdek bunu barındırmıyorsa önyüklemede yüklenir. Başarısız olursa davranış `vfs_strict` ile belirlenir. VFS gerçek bir bağlama değildir.
 - WebUI, MD3 (varsayılan) ve Miuix arayüzlerini sunar.
 - arm64, armv7 ve x86_64 mimarileri desteklenir; yükleyici uygun ikili dosyayı otomatik olarak seçer.
 
@@ -64,3 +64,4 @@ Kurulumdan veya hata bildiriminden önce [kullanım bildirimini](../USAGE_NOTICE
 - Çekirdek (Rust ve module betikleri): GPL-3.0-only (bkz. [`LICENSE`](../LICENSE)).
 - WebUI: Apache-2.0 (bkz. [`webui/LICENSE`](../webui/LICENSE)).
 - İsteğe bağlı ext4 sysfs LKM (kaynak ve önceden derlenmiş `.ko` dosyaları): [Mountify](https://github.com/backslashxx/mountify) tabanlı GPL-2.0-only; [`module/lkm/README.md`](../module/lkm/README.md) ve [`module/lkm/src/LICENSE`](../module/lkm/src/LICENSE) dosyalarına bakın.
+- VFS alt sistemi (`hybridmount` modülü): [NoMount](https://github.com/maxsteeel/nomount) tabanlı GPL-2.0-only; [`module/vfs/README.md`](../module/vfs/README.md), [`module/vfs/src/LICENSE`](../module/vfs/src/LICENSE) ve [THIRD_PARTY.md](../THIRD_PARTY.md) dosyalarına bakın.

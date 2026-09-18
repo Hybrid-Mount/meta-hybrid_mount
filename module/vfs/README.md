@@ -1,35 +1,43 @@
-# VFS kernel subsystem (K2)
+# VFS kernel subsystem (`hybridmount`)
 
 Hybrid Mount's own VFS path-redirection kernel module. It is forked from NoMount
 and driven exclusively by the Hybrid Mount metamodule over the keyring; it does not
 interoperate with NoMount's metamodule or its nm CLI.
 
-The sources are compile-checked against every DDK target (see
-.github/workflows/kernel-module.yml), and the metamodule binds only to Hybrid Mount's
-K2 implementation. No compiled K2 module is distributed while the upstream licence
-declaration remains unresolved.
+The release package ships both halves: the sources (for built-in kernel integration)
+and one prebuilt `hybridmount-android<NN>-<kernel>.ko` per supported Android/GKI
+target, so a device whose kernel does not already carry the module can still use the VFS
+backend.
 
 ## Layout
 
-- src/ — the forked kernel sources
-- src/PROVENANCE — fork commit, baseline digests and sync instructions
-- src/UPSTREAM_README.md — upstream kernel integration README, retained verbatim
-- src/LICENSE — upstream license text
-- setup.sh — built-in integration into a kernel tree
+- `src/` — the forked kernel sources
+- `src/PROVENANCE` — fork commit, baseline digests and sync instructions
+- `src/UPSTREAM_README.md` — upstream kernel integration README, retained verbatim
+- `src/LICENSE` — GPL-2.0 license text
+- `binaries/` — the prebuilt modules and `list.txt` with their SHA-256 digests
+- `setup.sh` — built-in integration into a kernel tree
 
 ## License and provenance
 
-- The sources in src/ are derived from
+- The module is distributed under **GPL-2.0-only**. The complete license text is
+  [`src/LICENSE`](src/LICENSE), and every source file carries an
+  `SPDX-License-Identifier: GPL-2.0-only` header.
+- The sources are derived from
   [maxsteeel/nomount](https://github.com/maxsteeel/nomount) at snapshot
   [016375cd4a9e7da07b0519dd7bc492101de2a834](https://github.com/maxsteeel/nomount/commit/016375cd4a9e7da07b0519dd7bc492101de2a834).
-- Upstream ships a GPL-3.0 license text in src/LICENSE, but the kernel module declares
-  MODULE_LICENSE("GPL") — GPL-2.0-or-later in kernel convention. The two statements are
-  inconsistent. This is recorded in [THIRD_PARTY.md](../../THIRD_PARTY.md) and must be
-  clarified with the upstream author before any compiled artifact is distributed.
-- MODULE_AUTHOR("maxsteeel") and the upstream licence and attribution notices are kept.
-- K2 is a separately identified component from Hybrid Mount's GPL-3.0-only userspace
-  core and Apache-2.0 WebUI.
-- Baseline SHA-256 digests are recorded in src/PROVENANCE.
+  Upstream copyright and `MODULE_AUTHOR("maxsteeel")` are retained.
+- The module declares `MODULE_LICENSE("GPL v2")`. The kernel's own docs
+  (`include/linux/module.h`) list `"GPL v2"` as a free-software ident equivalent to
+  `"GPL"`, and explicitly note that neither string distinguishes "v2 only" from "v2 or
+  later" — that distinction comes from the SPDX header and the shipped license text, which
+  are both GPL-2.0-only here. `MODULE_LICENSE` exists to mark the module as free and to
+  permit binding `EXPORT_SYMBOL_GPL` symbols. Upstream shipped a conflicting GPL-3.0 text
+  alongside a bare `MODULE_LICENSE("GPL")`; this module carries the GPL-2.0-only grant
+  instead.
+- The module is a separately identified component from Hybrid Mount's GPL-3.0-only userspace
+  core and Apache-2.0 WebUI. See [THIRD_PARTY.md](../../THIRD_PARTY.md).
+- Baseline SHA-256 digests are recorded in `src/PROVENANCE`.
 
 ## Divergence applied
 
@@ -55,17 +63,37 @@ declaration remains unresolved.
 - HM_FLAG_OPAQUE marks a directory that replaces its whole subtree: it stays visible,
   hides every real child and shows only the injected ones. The userspace emits it for a
   .replace directory and for every directory below it, matching Magisk semantics.
+- The isolated-uid table stays sorted, so the per-lookup isolation check bisects
+  instead of scanning every entry.
 - Builds for pre-5.18 kernels need -std=gnu11, which the Makefile sets.
 - Not changed: the wire payload layout (field order, sizes and command numbering).
 
-## Divergence still to apply
+## Compatibility
 
-1. Additional kernel-side counters consumed by the hybrid-mount vfs status and doctor commands.
+Prebuilt modules are **aarch64-only**. The loader refuses other architectures, and
+`customize.sh` strips `vfs/binaries` on installs that cannot use them.
+
+| Android/GKI target | Prebuilt |
+| --- | --- |
+| 12 / 5.10 | `hybridmount-android12-5.10.ko` |
+| 13 / 5.10 | `hybridmount-android13-5.10.ko` |
+| 13 / 5.15 | `hybridmount-android13-5.15.ko` |
+| 14 / 5.15 | `hybridmount-android14-5.15.ko` |
+| 14 / 6.1 | `hybridmount-android14-6.1.ko` |
+| 15 / 6.6 | `hybridmount-android15-6.6.ko` |
+| 16 / 6.12 | `hybridmount-android16-6.12.ko` |
+
+Selection requires both the kernel line and its Android/GKI label to match; a merely
+similar version is refused. A matching version number still does not guarantee ABI
+compatibility, so a mismatched module can fail to load or crash the kernel. Before
+`insmod`, the loader writes `/data/adb/hybrid-mount/vfs_boot_guard` and removes it once
+the load returns; if the kernel crashes, the marker survives and the next boot skips
+the VFS backend while the rest of Hybrid Mount keeps working.
 
 ## Building
 
-The CI workflow compile-checks every supported DDK target but intentionally does not
-upload or commit the resulting `.ko`. For local kernel development with DDK:
+The CI workflow compile-checks every supported DDK target. For local kernel
+development with DDK:
 
 ~~~
 ddk build --target android14-6.1 -- -C module/vfs/src
@@ -76,6 +104,14 @@ ddk build --target android14-6.1 -- -C module/vfs/src
 ~~~
 make -C module/vfs/src KDIR=/path/to/kernel
 ~~~
+
+## Refreshing the prebuilt modules
+
+`.github/workflows/kernel-module.yml` builds every target with DDK, assembles
+`module/vfs/binaries/` plus `list.txt`, and uploads the result as an artifact. Run the
+workflow manually with `commit_binaries=true` to commit the refreshed modules back to
+the branch. `customize.sh` ships them in the release ZIP and `lints.yml` verifies their
+digests.
 
 ## Built-in integration
 
@@ -93,8 +129,7 @@ operations and the kernel will not stop them from coexisting.
 
 ## Packaging
 
-- xtask ships `module/vfs/src` and `setup.sh` in the release ZIP and strips any Kbuild
-  output a local build left in the working tree.
-- `customize.sh` keeps the sources on every platform for built-in kernel integration.
-- `lints.yml` fails if `module/vfs/binaries` is reintroduced before the licence issue is
-  resolved deliberately.
+- xtask ships `module/vfs/src`, `module/vfs/binaries` and `setup.sh` in the release
+  ZIP, and strips any Kbuild output a local build left in the working tree.
+- `customize.sh` keeps the sources on every platform and drops `vfs/binaries` where
+  the prebuilt modules cannot load.

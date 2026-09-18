@@ -11,7 +11,7 @@ Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot,
 - OverlayFS supports both tmpfs and ext4 storage modes.
 - For ext4 staging, KernelSU uses the official ioctl to hide sysfs nodes; APatch and other non-KSU environments use the bundled LKM compatibility fallback by default.
 - Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
-- VFS sends injection rules to Hybrid Mount's own VFS kernel subsystem (K2) through the keyring. K2 is an independent implementation and does not interoperate with NoMount's kernel or its nm CLI. While the upstream licence declaration is unresolved, releases ship K2 source but no compiled K2 module; VFS therefore requires a compatible built-in or separately installed K2 and otherwise falls back according to `vfs_strict`. VFS is not a real mount.
+- VFS sends injection rules to Hybrid Mount's own VFS kernel subsystem, the `hybridmount` module, through the keyring. It is an independent implementation and does not interoperate with NoMount's kernel or its nm CLI. Releases ship the sources and a prebuilt aarch64 module per supported Android/GKI target, which the boot pipeline loads when the kernel does not already carry one; if that fails it falls back according to `vfs_strict`. VFS is not a real mount.
 - The WebUI provides MD3 (default) and Miuix interfaces.
 - arm64, armv7, and x86_64 are supported; the installer automatically selects the matching binary.
 
@@ -64,4 +64,4 @@ Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.
 - Core (Rust and module scripts): GPL-3.0-only (see [`LICENSE`](LICENSE)).
 - WebUI: Apache-2.0 (see [`webui/LICENSE`](webui/LICENSE)).
 - Optional ext4 sysfs LKM (source and prebuilt `.ko` files): GPL-2.0-only, derived from [Mountify](https://github.com/backslashxx/mountify); see [`module/lkm/README.md`](module/lkm/README.md) and [`module/lkm/src/LICENSE`](module/lkm/src/LICENSE).
-- VFS kernel subsystem (K2): a fork of [NoMount](https://github.com/maxsteeel/nomount). Upstream's license is inconsistent (a GPL-3.0 text alongside `MODULE_LICENSE("GPL")`) and must be clarified with the upstream author before any compiled artifact is distributed; see [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and license details.
+- VFS kernel subsystem (`hybridmount` module): GPL-2.0-only, a fork of [NoMount](https://github.com/maxsteeel/nomount); see [`module/vfs/README.md`](module/vfs/README.md), [`module/vfs/src/LICENSE`](module/vfs/src/LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md) for attribution and license details.
