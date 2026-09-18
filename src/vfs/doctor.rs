@@ -3,7 +3,7 @@
 //! `vfs doctor`: how the K2 provider is bound, and what it currently holds.
 //!
 //! Answers what the boot log cannot: whether hybridmount is compiled into the kernel,
-//! whether a bundled module is loaded instead, and whether the wire magic was accepted.
+//! whether a separately installed module is loaded instead, and whether the wire magic was accepted.
 //! Read-only: it never loads or unloads anything.
 
 use serde::Serialize;
@@ -34,9 +34,8 @@ pub struct VfsDoctorReport {
     pub supported_versions: Vec<String>,
     /// Whether the key type answered with a supported version.
     pub responds: bool,
-    /// Whether the boot pipeline would have to load the bundled module. False for a
-    /// built-in kernel, and false for an already registered key type.
-    pub module_load_needed: bool,
+    /// Whether a compatible K2 must be supplied by the kernel or installed separately.
+    pub provider_install_required: bool,
     /// Plain-language verdict, so a bug report does not require the reader to infer one.
     pub diagnosis: &'static str,
     pub rules: Vec<ListedRule>,
@@ -55,11 +54,8 @@ pub fn classify_presence(in_proc_modules: bool, sys_module_exists: bool) -> Modu
     }
 }
 
-/// Whether the boot pipeline would need to load the bundled module for this state.
-///
-/// A built-in kernel never loads one: `/sys/module` already claims the name, so an
-/// `insmod` could only fail. A registered key type is likewise left alone.
-pub fn load_needed(presence: ModulePresence, responds: bool) -> bool {
+/// Whether the device still needs a compatible K2 provider supplied independently.
+pub fn provider_install_required(presence: ModulePresence, responds: bool) -> bool {
     !responds && presence == ModulePresence::NotPresent
 }
 
@@ -85,7 +81,7 @@ pub fn diagnose(presence: ModulePresence, version: Option<&str>, responds: bool)
             "a hybridmount module is loaded but its key type did not answer; the wire magic may not match"
         }
         (ModulePresence::NotPresent, None) => {
-            "no hybridmount key type is registered; vfs is unavailable and no bundled module was usable"
+            "no hybridmount key type is registered; vfs requires a compatible built-in or separately installed K2"
         }
     }
 }
@@ -112,7 +108,7 @@ pub fn summarize(
         provider: VfsProvider::Hm.as_str(),
         presence,
         responds,
-        module_load_needed: load_needed(presence, responds),
+        provider_install_required: provider_install_required(presence, responds),
         diagnosis: diagnose(presence, version.as_deref(), responds),
         version,
         supported_versions: SUPPORTED_VERSIONS.iter().map(|v| (*v).to_owned()).collect(),

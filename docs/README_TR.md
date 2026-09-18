@@ -2,15 +2,16 @@
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Açılış sırasında diğer modülleri tarar; genel, modül ve yol kurallarına göre her girdiyi OverlayFS, Magic Mount veya yoksayma moduna yönlendirir. Modül kaynak dizinleri her zaman salt okunur girdi olarak kabul edilir.
+Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Açılış sırasında diğer modülleri tarar; genel, modül ve yol kurallarına göre her girdiyi OverlayFS, Magic Mount, VFS veya yoksayma moduna yönlendirir. Modül kaynak dizinleri her zaman salt okunur girdi olarak kabul edilir.
 
 ## Özellikler
 
-- OverlayFS ve Magic Mount modül veya yol düzeyinde birlikte kullanılabilir.
+- OverlayFS, Magic Mount ve VFS modül veya yol düzeyinde birlikte kullanılabilir.
 - Yol kuralları modül varsayılanından, modül varsayılanı da genel varsayılandan önceliklidir.
 - OverlayFS, tmpfs ve ext4 depolama modlarını destekler.
 - ext4 hazırlama alanında KernelSU, sysfs düğümlerini gizlemek için resmi ioctl'u kullanır; APatch ve diğer KSU dışı ortamlar varsayılan olarak birlikte gelen uyumluluk LKM'sini kullanır.
 - Magic Mount; dosya, dizin, sembolik bağlantı, `.replace` ve whiteout semantiğini destekler.
+- VFS, çekirdeğe yerleşik veya ayrıca kurulmuş uyumlu bir K2 gerektirir. Upstream lisans bildirimi netleşene kadar sürümler K2 kaynak kodunu içerir, ancak derlenmiş K2 modülü dağıtmaz.
 - WebUI, MD3 (varsayılan) ve Miuix arayüzlerini sunar.
 - arm64, armv7 ve x86_64 mimarileri desteklenir; yükleyici uygun ikili dosyayı otomatik olarak seçer.
 
@@ -26,7 +27,7 @@ Varsayılan yapılandırma:
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic
+default_mode = "overlay" # overlay | magic | vfs
 
 [rules.example_module]
 default_mode = "magic"
@@ -35,7 +36,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-Kural yolları modül kök dizinine göre yazılır. Modül ve yol düzeyindeki kurallar `ignore` değerini de kullanabilir; genel varsayılan backend yalnızca `overlay` veya `magic` değerini kabul eder. Aynı dosya yolu iki bağlama backend'ine birden atanamaz. Normal dizinler iki backend tarafından ortak yapı düğümleri olarak kullanılabilir; dosya, tür veya `.replace` çakışmaları açılış planlama aşamasını doğrudan hatayla durdurur. Yapılandırma değişiklikleri yeniden başlatmadan sonra geçerli olur.
+Kural yolları modül kök dizinine göre yazılır. Modül ve yol düzeyindeki kurallar `ignore` değerini de kullanabilir; genel varsayılan backend `overlay`, `magic` veya `vfs` değerini kabul eder. VFS gerçek bir bağlama değil, bir enjeksiyon yoludur. Dosya, tür veya `.replace` çakışmaları açılış planlama aşamasını doğrudan hatayla durdurur. Yapılandırma değişiklikleri yeniden başlatmadan sonra geçerli olur.
 
 Bu yönlendirme, projenin mevcut `CONFIG_TMPFS_XATTR` yetenek denetimini değiştirmez. KernelSU kurulumunda modülün tüm `lkm/` dizini silinir ve çalışma zamanında yalnızca resmi `NukeExt4Sysfs` ioctl'u kullanılır. APatch ve diğer KSU dışı kurulumlar LKM'yi korur ve ext4 hazırlama alanı bağlandıktan sonra varsayılan olarak kullanmayı dener. Birlikte gelen `.ko` dosyaları yalnızca aarch64'ü destekler. Otomatik seçim için çekirdek serisi ile Android/GKI etiketinin tam olarak eşleşmesi gerekir; bilinmeyen kombinasyonlar reddedilir. Önceden derlenmiş LKM'lerin ABI uyumluluğu yine de ilgili gerçek cihazda doğrulanmalıdır. Cihaz `insmod` sırasında çökerse kalıcı bir devre kesici işareti, Hybrid Mount'un diğer işlevlerini korurken LKM'nin sonraki açılışta yeniden yüklenmesini önler. Destek matrisi, sağlama toplamları, kaynaklar ve lisanslar için [`module/lkm/README.md`](../module/lkm/README.md) dosyasına bakın.
 

@@ -42,8 +42,6 @@ use crate::vfs::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel, select_p
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::vfs::exec::{VfsApplied, VfsExecStats};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::vfs::lkm::VfsLkmLoader;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::vfs::sys::KeyringChannel;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::cell::RefCell;
@@ -74,7 +72,8 @@ pub fn pipeline_stats(
     ignored_entries: usize,
     magic_dirs: usize,
 ) -> MountStatistics {
-    let successful = overlay_dir_mounts + shallow_overlay_mounts + magic_files + magic_symlinks + magic_dirs;
+    let successful =
+        overlay_dir_mounts + shallow_overlay_mounts + magic_files + magic_symlinks + magic_dirs;
 
     MountStatistics {
         total_mounts: successful,
@@ -945,6 +944,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         &state.storage_mode,
         plan.overlay_module_ids.len(),
         plan.magic_module_ids.len(),
+        vfs_stats.mounted_module_ids.len(),
     );
 
     log::info!("mount pipeline completed");
@@ -1663,17 +1663,16 @@ fn apply_vfs_phase(
     let _guard = VfsBootGuard::arm()?;
 
     let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
-    let loader = VfsLkmLoader;
     let foreign_nomount = detect_foreign_nomount();
     state.vfs_foreign_nomount = foreign_nomount;
-    let provider = match select_provider(&mut kernel, &loader, SUPPORTED_VERSIONS, foreign_nomount)
-    {
+    let provider = match select_provider(&mut kernel, SUPPORTED_VERSIONS, foreign_nomount) {
         Ok(Some(provider)) => provider,
         Ok(None) => {
             log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
             if config.vfs_strict {
                 return Err(Error::VfsUnavailable {
-                    reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+                    reason: "no supported built-in VFS kernel provider and vfs_strict is enabled"
+                        .to_owned(),
                 });
             }
             return Ok(VfsExecStats::default());

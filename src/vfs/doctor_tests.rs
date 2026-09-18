@@ -47,22 +47,22 @@ fn proc_modules_matching_ignores_an_unrelated_table() {
     assert!(!listed_in_proc_modules(""));
 }
 
-/// The question the user actually asks: with hybridmount compiled in, must the boot
-/// pipeline load a module? It must not, and an `insmod` could only fail on the name.
+/// The question the user actually asks: with hybridmount compiled in, is another
+/// provider required? It is not, and an `insmod` could only fail on the name.
 #[test]
-fn a_built_in_kernel_needs_no_module_load() {
-    assert!(!load_needed(ModulePresence::BuiltIn, true));
-    assert!(!load_needed(ModulePresence::BuiltIn, false));
+fn a_built_in_kernel_needs_no_provider_install() {
+    assert!(!provider_install_required(ModulePresence::BuiltIn, true));
+    assert!(!provider_install_required(ModulePresence::BuiltIn, false));
 }
 
 #[test]
-fn an_already_registered_key_type_needs_no_module_load() {
-    assert!(!load_needed(ModulePresence::Loadable, true));
+fn an_already_registered_key_type_needs_no_provider_install() {
+    assert!(!provider_install_required(ModulePresence::Loadable, true));
 }
 
 #[test]
-fn a_missing_provider_does_need_a_module_load() {
-    assert!(load_needed(ModulePresence::NotPresent, false));
+fn a_missing_provider_requires_an_independent_install() {
+    assert!(provider_install_required(ModulePresence::NotPresent, false));
 }
 
 #[test]
@@ -79,9 +79,12 @@ fn a_loaded_module_is_diagnosed_as_registered() {
 }
 
 #[test]
-fn a_missing_key_type_points_at_the_bundled_module() {
+fn a_missing_key_type_points_at_an_independent_provider() {
     let text = diagnose(ModulePresence::NotPresent, None, false);
-    assert!(text.contains("bundled module"), "diagnosis was {text}");
+    assert!(
+        text.contains("separately installed"),
+        "diagnosis was {text}"
+    );
 }
 
 /// The magic mismatch signature: the key type is there but did not answer.
@@ -112,7 +115,7 @@ fn summarize_carries_both_tables_when_listing_succeeded() {
     assert_eq!(report.key_type, "hybridmount");
     assert_eq!(report.version, Some("hm1".to_owned()));
     assert!(report.responds);
-    assert!(!report.module_load_needed);
+    assert!(!report.provider_install_required);
     assert_eq!(report.rules.len(), 1);
     assert_eq!(report.uids, vec![1000, 10123]);
     assert!(report.list_error.is_none());
@@ -145,7 +148,7 @@ fn summarize_without_a_probe_reports_the_module_as_needed() {
     );
 
     assert!(!report.responds);
-    assert!(report.module_load_needed);
+    assert!(report.provider_install_required);
     assert_eq!(report.version, None);
 }
 

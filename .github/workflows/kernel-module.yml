@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 #
-# Build the Hybrid Mount VFS kernel module (K2) for every DDK target.
+# Compile-check the Hybrid Mount VFS kernel module (K2) for every DDK target.
 #
 # DDK (https://github.com/Ylarod/ddk) publishes one image per Android/GKI target
 # with the matching kernel headers and Clang toolchain baked in, and exports
-# KDIR/ARCH/LLVM for the module build. The assembled modules land in
-# module/vfs/binaries next to module/lkm/binaries, with the same list.txt digest
-# file; run the workflow manually with commit_binaries=true to refresh the copies
-# kept in the repository.
+# KDIR/ARCH/LLVM for the module build. Compiled artifacts are intentionally not
+# uploaded or committed while the upstream licence declaration remains unresolved.
 
 name: Build VFS kernel module
 
@@ -26,11 +24,6 @@ on:
       - "module/vfs/**"
       - ".github/workflows/kernel-module.yml"
   workflow_dispatch:
-    inputs:
-      commit_binaries:
-        description: "Commit the assembled module/vfs/binaries back to this branch"
-        type: boolean
-        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -66,54 +59,7 @@ jobs:
             "${DDK_IMAGE}:${TARGET}" \
             make -C module/vfs/src
 
-      - name: Stage the artifact
+      - name: Verify the build output locally
         run: |
-          mkdir -p dist
-          mv module/vfs/src/hybridmount.ko "dist/hybridmount-${TARGET}.ko"
-          ls -l dist
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: hybridmount-${{ matrix.target }}
-          path: dist/*.ko
-          if-no-files-found: error
-
-  package-binaries:
-    needs: build-module
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-
-      - name: Assemble module/vfs/binaries
-        run: |
-          set -euo pipefail
-          mkdir -p module/vfs/binaries
-          find artifacts -name '*.ko' -exec cp -f {} module/vfs/binaries/ \;
-          (cd module/vfs/binaries && sha256sum ./*.ko | sed 's|\./||' > list.txt)
-          cat module/vfs/binaries/list.txt
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: vfs-binaries
-          path: module/vfs/binaries/
-          if-no-files-found: error
-
-      - name: Commit the assembled binaries
-        if: github.event_name == 'workflow_dispatch' && inputs.commit_binaries
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add module/vfs/binaries
-          if git diff --cached --quiet; then
-            echo "module/vfs/binaries is already up to date"
-            exit 0
-          fi
-          git commit -m "chore(vfs): refresh the prebuilt K2 modules"
-          git push
+          test -s module/vfs/src/hybridmount.ko
+          rm -f module/vfs/src/hybridmount.ko

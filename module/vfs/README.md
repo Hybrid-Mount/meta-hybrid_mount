@@ -4,8 +4,10 @@ Hybrid Mount's own VFS path-redirection kernel module. It is forked from NoMount
 and driven exclusively by the Hybrid Mount metamodule over the keyring; it does not
 interoperate with NoMount's metamodule or its nm CLI.
 
-The sources compile against every DDK target (see .github/workflows/kernel-module.yml)
-and the metamodule binds to whichever implementation the kernel provides.
+The sources are compile-checked against every DDK target (see
+.github/workflows/kernel-module.yml), and the metamodule binds only to Hybrid Mount's
+K2 implementation. No compiled K2 module is distributed while the upstream licence
+declaration remains unresolved.
 
 ## Layout
 
@@ -13,8 +15,6 @@ and the metamodule binds to whichever implementation the kernel provides.
 - src/PROVENANCE — fork commit, baseline digests and sync instructions
 - src/UPSTREAM_README.md — upstream kernel integration README, retained verbatim
 - src/LICENSE — upstream license text
-- binaries/ — prebuilt hybridmount-<android>-<kernel>.ko plus list.txt (SHA-256),
-  produced by the DDK workflow and consumed by the runtime loader
 - setup.sh — built-in integration into a kernel tree
 
 ## License and provenance
@@ -60,19 +60,12 @@ and the metamodule binds to whichever implementation the kernel provides.
 
 ## Divergence still to apply
 
-1. UID isolation lookup that avoids a linear scan in the per-lookup hot path.
-2. Diagnostics consumed by the hybrid-mount vfs status and doctor commands.
+1. Additional kernel-side counters consumed by the hybrid-mount vfs status and doctor commands.
 
 ## Building
 
-**Prebuilt (default).** .github/workflows/kernel-module.yml builds one module per DDK
-target and the packaging job assembles them into binaries/ with a list.txt digest file.
-Run the workflow manually with commit_binaries=true to refresh the copies kept in the
-repository. The runtime loader matches the device's kernel release and Android version
-against that matrix, loads the exact match and treats the keyring response as
-authoritative.
-
-**Locally, with DDK:**
+The CI workflow compile-checks every supported DDK target but intentionally does not
+upload or commit the resulting `.ko`. For local kernel development with DDK:
 
 ~~~
 ddk build --target android14-6.1 -- -C module/vfs/src
@@ -100,9 +93,8 @@ operations and the kernel will not stop them from coexisting.
 
 ## Packaging
 
-- xtask ships module/vfs/src in the release ZIP next to binaries/, and strips any
-  Kbuild output a local build left in the working tree, so setup.sh works from an
-  installed module and the distributed .ko files stay accompanied by their sources.
-- customize.sh keeps src/ on every platform, like module/lkm, and prunes only the
-  prebuilt modules on non-arm64 installs, where they cannot load.
-- lints.yml verifies binaries/list.txt whenever it is committed.
+- xtask ships `module/vfs/src` and `setup.sh` in the release ZIP and strips any Kbuild
+  output a local build left in the working tree.
+- `customize.sh` keeps the sources on every platform for built-in kernel integration.
+- `lints.yml` fails if `module/vfs/binaries` is reintroduced before the licence issue is
+  resolved deliberately.

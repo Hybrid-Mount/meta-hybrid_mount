@@ -75,11 +75,10 @@ jobs:
           grep -q "SPDX-License-Identifier: GPL-2.0-only" module/lkm/src/nuke.c
           (cd module/lkm/binaries && sha256sum --check list.txt)
 
-      - name: Verify bundled VFS provenance assets
+      - name: Verify VFS source provenance assets
         run: |
           set -euo pipefail
-          # The kernel sources ship next to the prebuilt modules, so an installed
-          # module can still be integrated with setup.sh and stays GPL-complete.
+          # Only sources ship while the upstream licence declaration is unresolved.
           test -f module/vfs/src/LICENSE
           test -f module/vfs/src/Kconfig
           test -f module/vfs/src/Makefile
@@ -93,15 +92,7 @@ jobs:
           # with the GPL-3.0 text upstream ships.
           grep -q 'MODULE_LICENSE("GPL")' module/vfs/src/hybridmount.c
           grep -q 'MODULE_AUTHOR("maxsteeel")' module/vfs/src/hybridmount.c
-
-      - name: Verify bundled VFS module digests
-        run: |
-          set -euo pipefail
-          if [ -f module/vfs/binaries/list.txt ]; then
-            (cd module/vfs/binaries && sha256sum --check list.txt)
-          else
-            echo "module/vfs/binaries/list.txt is not committed yet; nothing to verify"
-          fi
+          test ! -e module/vfs/binaries
 
       - name: ShellCheck module scripts
         run: |

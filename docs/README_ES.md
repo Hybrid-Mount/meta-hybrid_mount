@@ -2,15 +2,16 @@
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount es un metamódulo de montaje híbrido para KernelSU y APatch. Durante el arranque, examina los demás módulos y selecciona OverlayFS, Magic Mount o ignorar para cada elemento según las reglas globales, de módulo y de ruta. Los directorios de origen de los módulos siempre se tratan como entradas de solo lectura.
+Hybrid Mount es un metamódulo de montaje híbrido para KernelSU y APatch. Durante el arranque, examina los demás módulos y selecciona OverlayFS, Magic Mount, VFS o ignorar para cada elemento según las reglas globales, de módulo y de ruta. Los directorios de origen de los módulos siempre se tratan como entradas de solo lectura.
 
 ## Funciones
 
-- OverlayFS y Magic Mount pueden combinarse por módulo y por ruta.
+- OverlayFS, Magic Mount y VFS pueden combinarse por módulo y por ruta.
 - Las reglas de ruta tienen prioridad sobre los valores predeterminados del módulo, y estos tienen prioridad sobre el valor predeterminado global.
 - OverlayFS admite los modos de almacenamiento tmpfs y ext4.
 - Para la preparación ext4, KernelSU usa el ioctl oficial para ocultar los nodos sysfs; APatch y otros entornos que no son KSU usan de forma predeterminada el LKM de compatibilidad incluido.
 - Magic Mount admite archivos, directorios, enlaces simbólicos, `.replace` y la semántica whiteout.
+- VFS requiere un K2 compatible integrado en el kernel o instalado por separado. Mientras no se resuelva la declaración de licencia de origen, las versiones incluyen el código fuente de K2, pero no un módulo K2 compilado.
 - La WebUI ofrece las interfaces MD3 (predeterminada) y Miuix.
 - Se admiten arm64, armv7 y x86_64; el instalador selecciona automáticamente el binario correspondiente.
 
@@ -26,7 +27,7 @@ Configuración predeterminada:
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic
+default_mode = "overlay" # overlay | magic | vfs
 
 [rules.example_module]
 default_mode = "magic"
@@ -35,7 +36,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-Las rutas de las reglas son relativas a la raíz del módulo. Las reglas de módulo y de ruta también pueden usar `ignore`; el backend global predeterminado solo acepta `overlay` o `magic`. Una misma ruta de archivo no puede asignarse a ambos backends de montaje. Los directorios normales pueden compartirse como nodos estructurales entre ambos backends, mientras que los conflictos de archivo, tipo o `.replace` hacen que la etapa de planificación del arranque falle inmediatamente. Los cambios de configuración se aplican después de reiniciar.
+Las rutas de las reglas son relativas a la raíz del módulo. Las reglas de módulo y de ruta también pueden usar `ignore`; el backend global predeterminado acepta `overlay`, `magic` o `vfs`. VFS es una ruta de inyección, no un montaje real. Los conflictos de archivo, tipo o `.replace` hacen que la etapa de planificación del arranque falle inmediatamente. Los cambios de configuración se aplican después de reiniciar.
 
 Este enrutamiento no modifica la comprobación de capacidad `CONFIG_TMPFS_XATTR` existente. En KernelSU, la instalación elimina por completo el directorio `lkm/` del módulo y, durante la ejecución, solo usa el ioctl oficial `NukeExt4Sysfs`. Las instalaciones de APatch y otros sistemas que no son KSU conservan el LKM y lo prueban de forma predeterminada después de montar la preparación ext4. Los archivos `.ko` incluidos solo admiten aarch64. La selección automática exige una coincidencia exacta de la línea del kernel y la etiqueta Android/GKI; las combinaciones desconocidas se rechazan. Los LKM precompilados deben validarse para comprobar la compatibilidad ABI en el dispositivo real correspondiente. Si el dispositivo falla durante `insmod`, un marcador persistente de protección evita que el LKM vuelva a cargarse en el siguiente arranque sin desactivar el resto de Hybrid Mount. Consulta [`module/lkm/README.md`](../module/lkm/README.md) para ver la matriz de compatibilidad, las sumas de comprobación, las fuentes y las licencias.
 

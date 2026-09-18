@@ -11,7 +11,7 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 - OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
 - ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
 - Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- VFS 通过 keyring 把注入规则下发给 HM 自有的 VFS 内核子系统（K2）。K2 是独立实现，不与 NoMount 内核或其 nm CLI 互操作。K2 内核产物由独立的「内核子系统」计划交付；在兼容的 K2 内核就绪前，VFS 不可用，HM 会按 vfs_strict 降级。VFS 不是真实挂载。
+- VFS 通过 keyring 把注入规则下发给 HM 自有的 VFS 内核子系统（K2）。K2 是独立实现，不与 NoMount 内核或其 nm CLI 互操作。在上游许可证声明澄清前，发布包只包含 K2 源码、不分发编译后的 K2 模块；因此 VFS 需要内核已内建或用户另行安装兼容 K2，否则按 `vfs_strict` 降级。VFS 不是真实挂载。
 - WebUI 提供 MD3（默认）与 Miuix 两套界面。
 - 支持 arm64、armv7 与 x86_64，安装脚本会自动选择对应二进制。
 

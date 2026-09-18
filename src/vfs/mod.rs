@@ -5,8 +5,6 @@
 pub mod backend;
 pub mod doctor;
 pub mod exec;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub mod lkm;
 pub mod lkm_target;
 pub mod protocol;
 pub mod rule;

@@ -23,7 +23,7 @@ const MODULE_ID: &str = "hybrid_mount";
 const MODULE_NAME: &str = "Hybrid Mount";
 const MODULE_AUTHOR: &str = "Hybrid Mount Developers";
 const MODULE_DESCRIPTION: &str =
-    "Hybrid Mount: mixed OverlayFS and Magic Mount for KernelSU and APatch";
+    "Hybrid Mount: mixed OverlayFS, Magic Mount, and VFS for KernelSU and APatch";
 const UPDATE_JSON_URL: &str =
     "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/update.json";
 
@@ -191,6 +191,11 @@ fn prune_kernel_build_output(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// K2 binaries are not distributable until the upstream licence declaration is resolved.
+fn remove_vfs_binaries_from_stage(stage: &Path) -> Result<()> {
+    remove_dir_if_exists(&stage.join("vfs").join("binaries"))
+}
+
 fn remove_file_if_exists(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -314,6 +319,8 @@ fn build(release: bool) -> Result<()> {
         &CopyOptions::new().content_only(true),
     )
     .context("failed to stage module files")?;
+
+    remove_vfs_binaries_from_stage(&stage)?;
 
     // The kernel sources ship with the package so installs stay GPL-complete,
     // but a working tree that was built in place must not carry its Kbuild
@@ -464,5 +471,21 @@ mod tests {
                 "{dropped} is kernel build output and must not reach the package"
             );
         }
+    }
+
+    #[test]
+    fn release_stage_drops_vfs_binaries_but_keeps_sources() {
+        let stage = tempfile::tempdir().expect("tempdir");
+        let source_dir = stage.path().join("vfs/src");
+        let binary_dir = stage.path().join("vfs/binaries");
+        fs::create_dir_all(&source_dir).expect("create source fixture");
+        fs::create_dir_all(&binary_dir).expect("create binary fixture");
+        fs::write(source_dir.join("hybridmount.c"), b"source").expect("write source fixture");
+        fs::write(binary_dir.join("hybridmount.ko"), b"binary").expect("write binary fixture");
+
+        remove_vfs_binaries_from_stage(stage.path()).expect("remove VFS binaries");
+
+        assert!(source_dir.join("hybridmount.c").is_file());
+        assert!(!binary_dir.exists());
     }
 }

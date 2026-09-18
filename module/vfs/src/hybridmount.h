@@ -542,18 +542,26 @@ static void hm_art_remove_leaf(void **ref, struct hybridmount_rule *target)
 }
 
 /* --- UIDs Array RCU Management --- */
+/* The array is kept sorted by uid so the per-lookup isolation check can bisect
+ * instead of scanning every entry. */
 static inline int hm_uid_add(uid_t target)
 {
     struct hm_uid_array *old, *new_arr;
-    int count = 0;
+    int count = 0, pos = 0;
+
     if ((old = rcu_dereference_protected(hybridmount_uids, lockdep_is_held(&hybridmount_rwsem)))) {
-        for (int i = 0; i < (count = old->count); i++) if (old->uids[i] == target) return -EEXIST;
+        count = old->count;
+        while (pos < count && old->uids[pos] < target) pos++;
+        if (pos < count && old->uids[pos] == target) return -EEXIST;
     }
 
     if (!(new_arr = kmalloc(sizeof(*new_arr) + (count + 1) * sizeof(uid_t), GFP_KERNEL))) return -ENOMEM;
     new_arr->count = count + 1;
-    if (old) memcpy(new_arr->uids, old->uids, count * sizeof(uid_t));
-    new_arr->uids[count] = target;
+    new_arr->uids[pos] = target;
+    if (old) {
+        if (pos > 0) memcpy(new_arr->uids, old->uids, pos * sizeof(uid_t));
+        if (pos < count) memcpy(new_arr->uids + pos + 1, old->uids + pos, (count - pos) * sizeof(uid_t));
+    }
     rcu_assign_pointer(hybridmount_uids, new_arr);
     if (old) kfree_rcu(old, rcu);
     return 0;
@@ -562,10 +570,16 @@ static inline int hm_uid_add(uid_t target)
 static inline int hm_uid_del(uid_t target)
 {
     struct hm_uid_array *old, *new_arr = NULL;
-    int count, target_idx = -1;
+    int count, lo = 0, hi, target_idx = -1;
 
     if (!(old = rcu_dereference_protected(hybridmount_uids, lockdep_is_held(&hybridmount_rwsem)))) return -ENOENT;
-    for (int i = 0; i < (count = old->count); i++) if (old->uids[i] == target) { target_idx = i; break; }
+    count = old->count;
+    hi = count;
+    while (lo < hi) {
+        int mid = lo + (hi - lo) / 2;
+        if (old->uids[mid] == target) { target_idx = mid; break; }
+        if (old->uids[mid] < target) lo = mid + 1; else hi = mid;
+    }
     if (target_idx < 0) return -ENOENT;
 
     if (count > 1) {

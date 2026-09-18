@@ -2,15 +2,16 @@
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount adalah metamodul mount hibrida untuk KernelSU dan APatch. Saat boot, modul ini memindai modul lain lalu memilih OverlayFS, Magic Mount, atau abaikan untuk setiap entri berdasarkan aturan global, modul, dan jalur. Direktori sumber modul selalu diperlakukan sebagai masukan hanya-baca.
+Hybrid Mount adalah metamodul mount hibrida untuk KernelSU dan APatch. Saat boot, modul ini memindai modul lain lalu memilih OverlayFS, Magic Mount, VFS, atau abaikan untuk setiap entri berdasarkan aturan global, modul, dan jalur. Direktori sumber modul selalu diperlakukan sebagai masukan hanya-baca.
 
 ## Fitur
 
-- OverlayFS dan Magic Mount dapat digunakan bersama per modul maupun per jalur.
+- OverlayFS, Magic Mount, dan VFS dapat digunakan bersama per modul maupun per jalur.
 - Aturan jalur lebih diprioritaskan daripada nilai bawaan modul, dan nilai bawaan modul lebih diprioritaskan daripada nilai bawaan global.
 - OverlayFS mendukung mode penyimpanan tmpfs dan ext4.
 - Untuk staging ext4, KernelSU menggunakan ioctl resmi untuk menyembunyikan node sysfs; APatch dan lingkungan non-KSU lain menggunakan LKM kompatibilitas bawaan secara default.
 - Magic Mount mendukung file, direktori, tautan simbolis, `.replace`, dan semantik whiteout.
+- VFS memerlukan K2 kompatibel yang tertanam di kernel atau dipasang secara terpisah. Selama deklarasi lisensi upstream belum diselesaikan, rilis menyertakan sumber K2 tetapi tidak menyertakan modul K2 terkompilasi.
 - WebUI menyediakan antarmuka MD3 (bawaan) dan Miuix.
 - arm64, armv7, dan x86_64 didukung; penginstal otomatis memilih biner yang sesuai.
 
@@ -26,7 +27,7 @@ Konfigurasi bawaan:
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic
+default_mode = "overlay" # overlay | magic | vfs
 
 [rules.example_module]
 default_mode = "magic"
@@ -35,7 +36,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-Jalur aturan ditulis relatif terhadap root modul. Aturan tingkat modul dan jalur juga dapat menggunakan `ignore`; backend bawaan global hanya menerima `overlay` atau `magic`. Jalur file yang sama tidak dapat ditetapkan ke kedua backend mount. Direktori biasa dapat dibagikan sebagai node struktur oleh kedua backend, sedangkan konflik file, tipe, atau `.replace` akan langsung menggagalkan tahap perencanaan saat boot. Perubahan konfigurasi berlaku setelah perangkat dimulai ulang.
+Jalur aturan ditulis relatif terhadap root modul. Aturan tingkat modul dan jalur juga dapat menggunakan `ignore`; backend bawaan global menerima `overlay`, `magic`, atau `vfs`. VFS adalah jalur injeksi, bukan mount nyata. Konflik file, tipe, atau `.replace` akan langsung menggagalkan tahap perencanaan saat boot. Perubahan konfigurasi berlaku setelah perangkat dimulai ulang.
 
 Perutean ini tidak mengubah pemeriksaan kemampuan `CONFIG_TMPFS_XATTR` yang sudah ada. Pada KernelSU, instalasi menghapus seluruh direktori `lkm/` milik modul dan saat berjalan hanya menggunakan ioctl resmi `NukeExt4Sysfs`. Instalasi APatch dan lingkungan non-KSU lain mempertahankan LKM dan secara default mencobanya setelah staging ext4 terpasang. File `.ko` bawaan hanya mendukung aarch64. Pemilihan otomatis memerlukan kecocokan persis antara lini kernel dan tag Android/GKI; kombinasi yang tidak dikenal akan ditolak. LKM prabangun tetap harus divalidasi kompatibilitas ABI-nya pada perangkat fisik yang sesuai. Jika perangkat mengalami crash selama `insmod`, penanda pemutus sirkuit persisten akan mencegah LKM dimuat kembali pada boot berikutnya tanpa menonaktifkan fungsi Hybrid Mount lainnya. Lihat [`module/lkm/README.md`](../module/lkm/README.md) untuk matriks dukungan, checksum, sumber, dan lisensi.
 

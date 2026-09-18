@@ -22,7 +22,7 @@ module/metamount.sh
   → 预写 scan.ret 与 run/state.json
   → 准备临时 staging
   → 从同一棵树物化并执行 OverlayFS，再执行 Magic Mount
-  → 再执行 VFS 注入（NoMount 兼容 Provider，二选一）
+  → 再执行 VFS 注入（HM 自有 K2 Provider）
   → 提交 KernelSU try-umount 列表
   → 更新状态快照并清理临时资源
 ```
@@ -37,10 +37,10 @@ module/metamount.sh
 - `src/plan/`：应用“路径规则 > 模块默认值 > 全局默认值”，在共享树上检测跨后端冲突并派生 Overlay 操作。
 - `src/overlayfs/`：从共享树物化文件、目录、符号链接、opaque `.replace` 与 whiteout，随后执行 64 层分段、子挂载重建与文件级 shallow layer。
 - `src/magic_mount/`：直接消费共享树，执行 tmpfs skeleton、mirror、bind、`.replace` 与 whiteout 语义；不再二次扫描模块目录。
-- `src/vfs/`：NoMount 兼容的 VFS 后端。`rule.rs` 把共享树映射为规则，`protocol.rs`
-  编解码 `nm_payload`，`sys.rs` 通过 keyring `add_key` 发送并维护页对齐缓冲，
-  `backend.rs` 选择唯一活动的内核 Provider（设备已有的 NoMount 或 HM 自有实现，
-  二选一、不并存、不热切换），`exec.rs` 应用规则并统计。
+- `src/vfs/`：HM 自有 K2 VFS 后端。`rule.rs` 把共享树映射为规则，`protocol.rs`
+  编解码 HM 专用 wire protocol，`sys.rs` 通过 keyring `add_key` 发送并维护页对齐缓冲，
+  `backend.rs` 只绑定 key type `hybridmount` 的 K2 Provider，并在检测到外来 NoMount 时拒绝并存，
+  `exec.rs` 应用规则并统计。发布包不分发或自动加载 K2 内核模块。
 - `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
@@ -100,15 +100,13 @@ try-umount 列表；其成功目标记录在 `vfs_active_mounts`。
 
 VFS 规则以虚拟路径为键，同一目标只下发一条（`node.sources` 中模块顺序靠后者获胜）。
 回滚是定向删除：下发前登记本次完整批次，失败时对其逐条 `DEL_RULE` 并容忍 `ENOENT`，
-不使用 `CLEAR_RULES`，因此复用设备上已有 NoMount Provider 时不会改动其它模块预先安装的规则。
+不使用 `CLEAR_RULES`，因此不会改动 K2 中其它调用方预先安装的规则。
 
-本分支 VFS 不支持 `.replace`：planner 对 `replace: true` 的 Vfs 来源在 plan 阶段
-fail-fast（`VfsReplaceUnsupported`），避免 `.replace` 静默退化为“覆盖合并”；目录
-whiteout 语义留待内核子系统与实机验证后再实现。
+VFS 的 `.replace` 目录会生成 opaque 规则，并在 planner 阶段独占整个子树；
+若子树中混入 OverlayFS 或 Magic Mount 目标，立即返回 `PlanConflict`。
 
-VFS Provider 二选一：K2（HM 自有内核实现）尚未接入，当前 loader 为 no-op，因此
-“同名 key type 双可见/二次注册”分支不可达。K2 接入时必须在 `select_provider` 实现该
-检测并触发 `VfsProviderConflict`。
+VFS Provider 只有 HM 自有 K2。系统会探测内建或由用户独立安装的 K2；若无可用
+Provider、版本不兼容或检测到外来 NoMount，则按 `vfs_strict` 选择失败或降级跳过。
 
 ## 验证边界
 

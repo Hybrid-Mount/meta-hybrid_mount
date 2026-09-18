@@ -18,7 +18,7 @@ use crate::sys::process::{CaptureMode, CommandSpec, ProcessErrorKind, run_comman
 const DESCRIPTION_OVERRIDE_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize) {
+pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize, vfs_count: usize) {
     let prop_path = Path::new(defs::SELF_MODULE_PROP);
     if !prop_path.exists() {
         log::warn!(
@@ -28,7 +28,7 @@ pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize) 
         return;
     }
 
-    let description = running_description(mode, overlay_count, magic_count);
+    let description = running_description(mode, overlay_count, magic_count, vfs_count);
     if set_temporary_override(&description) {
         log::debug!("temporary module description override updated");
         return;
@@ -42,7 +42,12 @@ pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize) 
     }
 }
 
-fn running_description(mode: &str, overlay_count: usize, magic_count: usize) -> String {
+fn running_description(
+    mode: &str,
+    overlay_count: usize,
+    magic_count: usize,
+    vfs_count: usize,
+) -> String {
     let (mode_name, mode_icon) = match mode {
         "tmpfs" => ("Tmpfs", "🐾"),
         "none" => ("", ""),
@@ -56,7 +61,7 @@ fn running_description(mode: &str, overlay_count: usize, magic_count: usize) -> 
     };
 
     format!(
-        "😋 运行中喵～{mode_tag} | OverlayFS: {overlay_count} | Magic Mount: {magic_count}"
+        "😋 运行中喵～{mode_tag} | OverlayFS: {overlay_count} | Magic Mount: {magic_count} | VFS: {vfs_count}"
     )
 }
 
@@ -130,31 +135,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn running_description_reports_both_backend_counts() {
-        let description = running_description("ext4", 2, 3);
+    fn running_description_reports_all_backend_counts() {
+        let description = running_description("ext4", 2, 3, 4);
 
         assert!(description.contains("(Ext4)"));
         assert!(description.contains("OverlayFS: 2"));
         assert!(description.contains("Magic Mount: 3"));
+        assert!(description.contains("VFS: 4"));
     }
 
     #[test]
     fn running_description_reports_tmpfs_mode() {
-        let description = running_description("tmpfs", 0, 1);
+        let description = running_description("tmpfs", 0, 1, 2);
 
         assert!(description.contains("(Tmpfs)"));
         assert!(description.contains("OverlayFS: 0"));
         assert!(description.contains("Magic Mount: 1"));
+        assert!(description.contains("VFS: 2"));
     }
 
     /// HM-RUST-014：Magic-only 运行时 storage_mode="none"，不能假装在跑 Ext4。
     #[test]
     fn running_description_with_none_reports_no_storage_backend() {
-        let description = running_description("none", 0, 1);
+        let description = running_description("none", 0, 1, 0);
 
         assert!(description.contains("OverlayFS: 0"));
         assert!(description.contains("Magic Mount: 1"));
-        assert!(!description.contains("Ext4"), "should not show Ext4 for Magic-only run");
+        assert!(description.contains("VFS: 0"));
+        assert!(
+            !description.contains("Ext4"),
+            "should not show Ext4 for Magic-only run"
+        );
     }
 
     #[test]

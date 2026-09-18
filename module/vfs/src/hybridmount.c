@@ -15,11 +15,12 @@ static __always_inline bool hybridmount_is_uid_blocked(uid_t target_uid)
     bool blocked = false;
     rcu_read_lock();
     if ((arr = rcu_dereference(hybridmount_uids))) {
-        for (int i = 0; i < arr->count; i++) {
-            if (arr->uids[i] == target_uid) {
-                blocked = true;
-                break;
-            }
+        int lo = 0, hi = arr->count;
+        while (lo < hi) {
+            int mid = lo + (hi - lo) / 2;
+            uid_t value = READ_ONCE(arr->uids[mid]);
+            if (value == target_uid) { blocked = true; break; }
+            if (value < target_uid) lo = mid + 1; else hi = mid;
         }
     }
     rcu_read_unlock();
@@ -314,15 +315,21 @@ static struct dentry *hybridmount_hijacked_lookup(struct inode *dir, struct dent
 {
     struct hm_iop *hm_iop = hm_get_hm_iop(smp_load_acquire(&dir->i_op));
     struct hybridmount_dir_node *dir_node = hm_iop ? READ_ONCE(hm_iop->dir_node) : NULL;
-    bool is_blocked = hybridmount_is_uid_blocked(current_fsuid().val);
     struct dentry *res;
     u32 hash = 0;
+    bool is_blocked = false;
 
-    if (unlikely(!hm_iop || !dir_node || is_blocked))
+    if (unlikely(!hm_iop || !dir_node))
         goto do_real_lookup;
 
     hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
+    /* The bloom filter is the cheap gate: only a potential rule is worth the uid
+     * isolation lookup. A miss means no rule carries this name, so the dentry-drop
+     * in the real-lookup path could not trigger either. */
     if (likely(!(READ_ONCE(dir_node->bloom_mask) & (1ULL << (hash & 63)))))
+        goto do_real_lookup;
+
+    if (unlikely((is_blocked = hybridmount_is_uid_blocked(current_fsuid().val))))
         goto do_real_lookup;
 
     if ((res = hybridmount_resolve_rule_dentry(dir, dentry, dir_node, hash)) != ERR_PTR(-ENODATA))

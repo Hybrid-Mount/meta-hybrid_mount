@@ -9,11 +9,6 @@ pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
 pub const MODULE_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/lkm/binaries";
 pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
 
-/// Hybrid Mount's own VFS kernel modules (K2), prebuilt per Android/GKI target and
-/// named hybridmount-<android>-<kernel>.ko.
-pub const VFS_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/vfs/binaries";
-pub const VFS_LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_lkm_boot_guard";
-
 /// VFS boot guard: written before rules are applied and cleared on success, so a hard
 /// crash leaves it behind and the next boot skips the VFS backend.
 pub const VFS_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_boot_guard";

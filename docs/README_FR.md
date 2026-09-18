@@ -2,16 +2,17 @@
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount est un méta-module de montage hybride pour KernelSU et APatch. Au démarrage, il analyse les autres modules et sélectionne pour chaque module une méhode de montage OverlayFS ou Magic Mount, ou l'ignore selon des règles globales, spécifiques au module et/ou spécifiques à un chemin de fichier. 
+Hybrid Mount est un méta-module de montage hybride pour KernelSU et APatch. Au démarrage, il analyse les autres modules et sélectionne OverlayFS, Magic Mount, VFS ou l'ignorance selon les règles globales, du module et du chemin.
 Les répertoires sources des modules sont toujours traités comme des entrées en lecture seule.
 
 ## Fonctionnalités
 
-- OverlayFS et Magic Mount peuvent être combinés par module et par chemin.
+- OverlayFS, Magic Mount et VFS peuvent être combinés par module et par chemin.
 - Les règles par chemin sont prioritaires aux règles par défaut des modules, elles-mêmes prioritaires aux règles globales par défaut.
 - OverlayFS prend en charge les modes de stockage tmpfs et ext4.
 - Pour la zone tampon ext4, KernelSU utilise des appels ioctl officiels afin de masquer les nœuds sysfs ; APatch et les autres environnements sans KSU utilisent par défaut le mode de compatibilité de LKM fourni.
 - Magic Mount prend en charge les fichiers, les répertoires, les liens symboliques, `.replace` et la sémantique whiteout.
+- VFS nécessite un K2 compatible intégré au noyau ou installé séparément. Tant que la déclaration de licence en amont n'est pas clarifiée, les versions incluent les sources K2 mais aucun module K2 compilé.
 - La WebUI propose un thème d'affichage Material Design 3 (par défaut) ou Miuix.
 - Les architectures arm64, armv7 et x86_64 sont prises en charge ; le programme d'installation sélectionne automatiquement le binaire correspondant.
 
@@ -28,7 +29,7 @@ Configuration par défaut :
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic
+default_mode = "overlay" # overlay | magic | vfs
 
 [rules.example_module]
 default_mode = "magic"
@@ -37,7 +38,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-Les chemins des règles sont relatifs à la racine du module. Les règles de module et de chemin de fichier peuvent également utiliser l'option `ignore` ; le backend global par défaut accepte uniquement `overlay` ou `magic`. Un même chemin de fichier ne peut pas être attribué aux deux backends de montage. Les répertoires ordinaires peuvent servir de nœuds structurels communs aux deux backends, tandis que les conflits de fichier, de type ou de `.replace` provoqueront l'échec immédiat de l'étape de planification du démarrage. Les modifications de configuration prennent effet après redémarrage.
+Les chemins des règles sont relatifs à la racine du module. Les règles de module et de chemin peuvent aussi utiliser `ignore` ; le backend global par défaut accepte `overlay`, `magic` ou `vfs`. VFS est un chemin d'injection, pas un montage réel. Les conflits de fichier, de type ou de `.replace` provoquent l'échec immédiat de la planification du démarrage. Les modifications prennent effet après redémarrage.
 
 Ce routage ne modifie pas la vérification de l'existence de la fonctionnalité `CONFIG_TMPFS_XATTR`. Avec KernelSU, l'installation supprime l'intégralité du répertoire `lkm/` du module et l'exécution utilise uniquement la fonction ioctl officielle `NukeExt4Sysfs`. Les installations sur APatch et les autres environnements sans KSU conservent le LKM et tentent de l'utiliser par défaut après le montage de la zone tampon ext4. Les fichiers `.ko` fournis prennent uniquement en charge l'architecture aarch64. La sélection automatique exige une correspondance exacte entre la branche du noyau et l'étiquette Android/GKI ; les combinaisons inconnues sont rejetées. La compatibilité ABI des LKM précompilés doit tout de même être validée sur l'appareil physique correspondant. Si l'appareil plante pendant `insmod`, un marqueur coupe-circuit persistant empêchera le chargement du LKM au démarrage suivant tout en préservant le reste des fonctionnalités de Hybrid Mount. Consulter [`module/lkm/README.md`](../module/lkm/README.md) pour la matrice de compatibilité, les sommes de contrôle, les sources et les licences.
 

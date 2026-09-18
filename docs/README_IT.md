@@ -2,15 +2,16 @@
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
-Hybrid Mount è un metamodulo di montaggio ibrido per KernelSU e APatch. Durante l'avvio analizza gli altri moduli e seleziona OverlayFS, Magic Mount oppure ignora ogni elemento in base alle regole globali, del modulo e del percorso. Le directory sorgente dei moduli vengono sempre trattate come input di sola lettura.
+Hybrid Mount è un metamodulo di montaggio ibrido per KernelSU e APatch. Durante l'avvio analizza gli altri moduli e seleziona OverlayFS, Magic Mount, VFS oppure ignora ogni elemento in base alle regole globali, del modulo e del percorso. Le directory sorgente dei moduli vengono sempre trattate come input di sola lettura.
 
 ## Funzionalità
 
-- OverlayFS e Magic Mount possono essere combinati per modulo e per percorso.
+- OverlayFS, Magic Mount e VFS possono essere combinati per modulo e per percorso.
 - Le regole del percorso hanno la precedenza sui valori predefiniti del modulo, che a loro volta hanno la precedenza sul valore predefinito globale.
 - OverlayFS supporta le modalità di archiviazione tmpfs ed ext4.
 - Per lo staging ext4, KernelSU usa l'ioctl ufficiale per nascondere i nodi sysfs; APatch e gli altri ambienti non KSU usano per impostazione predefinita l'LKM di compatibilità incluso.
 - Magic Mount supporta file, directory, collegamenti simbolici, `.replace` e la semantica whiteout.
+- VFS richiede un K2 compatibile integrato nel kernel o installato separatamente. Finché la dichiarazione di licenza upstream non sarà chiarita, le release includeranno i sorgenti K2 ma nessun modulo K2 compilato.
 - La WebUI offre le interfacce MD3 (predefinita) e Miuix.
 - Sono supportate le architetture arm64, armv7 e x86_64; il programma di installazione seleziona automaticamente il binario corretto.
 
@@ -26,7 +27,7 @@ Configurazione predefinita:
 moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
-default_mode = "overlay" # overlay | magic
+default_mode = "overlay" # overlay | magic | vfs
 
 [rules.example_module]
 default_mode = "magic"
@@ -35,7 +36,7 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-I percorsi delle regole sono relativi alla radice del modulo. Le regole a livello di modulo e di percorso possono usare anche `ignore`; il backend globale predefinito accetta solo `overlay` o `magic`. Lo stesso percorso di file non può essere assegnato a entrambi i backend di montaggio. Le directory normali possono essere condivise come nodi strutturali da entrambi i backend, mentre i conflitti di file, tipo o `.replace` causano l'arresto immediato della fase di pianificazione all'avvio. Le modifiche alla configurazione diventano effettive dopo il riavvio.
+I percorsi delle regole sono relativi alla radice del modulo. Le regole a livello di modulo e di percorso possono usare anche `ignore`; il backend globale predefinito accetta `overlay`, `magic` o `vfs`. VFS è un percorso di iniezione, non un montaggio reale. I conflitti di file, tipo o `.replace` causano l'arresto immediato della pianificazione all'avvio. Le modifiche alla configurazione diventano effettive dopo il riavvio.
 
 Questo instradamento non modifica il controllo esistente della funzionalità `CONFIG_TMPFS_XATTR`. Su KernelSU, l'installazione elimina l'intera directory `lkm/` del modulo e durante l'esecuzione usa solo l'ioctl ufficiale `NukeExt4Sysfs`. Le installazioni APatch e non KSU mantengono l'LKM e tentano di usarlo per impostazione predefinita dopo il montaggio dello staging ext4. I file `.ko` inclusi supportano solo aarch64. La selezione automatica richiede una corrispondenza esatta della linea del kernel e del tag Android/GKI; le combinazioni sconosciute vengono rifiutate. Gli LKM precompilati devono comunque essere verificati sul dispositivo reale corrispondente per la compatibilità ABI. Se il dispositivo si arresta in modo anomalo durante `insmod`, un indicatore persistente di protezione impedisce un nuovo caricamento dell'LKM all'avvio successivo, mantenendo operative le altre funzioni di Hybrid Mount. Consulta [`module/lkm/README.md`](../module/lkm/README.md) per la matrice di supporto, i checksum, le fonti e le licenze.
 

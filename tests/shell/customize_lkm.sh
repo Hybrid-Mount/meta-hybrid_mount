@@ -12,10 +12,9 @@ run_case() {
   apatch_value="$3"
   expect_lkm="$4"
   arch_value="${5:-arm64}"
-  expect_vfs="${6:-yes}"
   case_dir=$(mktemp -d)
   mkdir "$case_dir/lkm"
-  mkdir -p "$case_dir/vfs/src" "$case_dir/vfs/binaries"
+  mkdir -p "$case_dir/vfs/src"
   : > "$case_dir/vfs/src/hybridmount.c"
 
   (
@@ -39,14 +38,7 @@ run_case() {
   else
     test ! -e "$case_dir/lkm"
   fi
-  if [ "$expect_vfs" = "yes" ]; then
-    test -d "$case_dir/vfs/binaries"
-    rmdir "$case_dir/vfs/binaries"
-  else
-    test ! -e "$case_dir/vfs/binaries"
-  fi
-  # The kernel sources ship next to the prebuilt modules on every platform, the
-  # same way lkm/src does, so the installed tree stays GPL-complete.
+  # K2 sources remain available for built-in kernel integration on every platform.
   test -f "$case_dir/vfs/src/hybridmount.c" ||
     { echo "FAIL: $case_name dropped vfs/src" >&2; exit 1; }
   rm -rf "$case_dir/vfs/src"
@@ -57,4 +49,4 @@ run_case() {
 
 run_case "KernelSU arm64" "true" "" "no"
 run_case "APatch arm64" "" "true" "yes"
-run_case "APatch armv7" "" "true" "yes" "arm" "no"
+run_case "APatch armv7" "" "true" "yes" "arm"
