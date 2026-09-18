@@ -6,8 +6,13 @@
 # with the matching kernel headers and Clang toolchain baked in, and exports
 # KDIR/ARCH/LLVM for the module build. The assembled modules land in
 # module/vfs/binaries next to module/lkm/binaries, with the same list.txt digest
-# file; run the workflow manually with commit_binaries=true to refresh the copies
-# kept in the repository.
+# file.
+#
+# A push to dev that changes the module sources rebuilds and commits the binaries by
+# itself, so the shipped .ko files cannot drift behind the kernel sources they were
+# built from. lints.yml re-checks that link from the other side, by comparing the
+# recorded sources digest, and so still catches a drift that reached the branch by any
+# other route. Run the workflow manually with commit_binaries=true to force a refresh.
 
 name: Build VFS kernel module
 
@@ -96,6 +101,17 @@ jobs:
           (cd module/vfs/binaries && sha256sum ./*.ko | sed 's|\./||' > list.txt)
           cat module/vfs/binaries/list.txt
 
+      - name: Record the sources these modules were built from
+        run: |
+          set -euo pipefail
+          # One digest over the build inputs, in a fixed order, so a later lint run can tell
+          # whether the committed .ko files still correspond to the committed kernel sources.
+          # Written here, in the job that actually compiles them, so it cannot be hand-edited
+          # into agreement with a stale binary.
+          (cd module/vfs/src && sha256sum hybridmount.c hybridmount.h Kconfig Makefile) \
+            | sha256sum | cut -d' ' -f1 > module/vfs/binaries/sources.txt
+          cat module/vfs/binaries/sources.txt
+
       - uses: actions/upload-artifact@v7
         with:
           name: vfs-binaries
@@ -105,8 +121,16 @@ jobs:
       - name: Verify the assembled digests
         run: (cd module/vfs/binaries && sha256sum --check list.txt)
 
+      - name: Verify the modules match the sources digest
+        run: sh tests/shell/vfs_sources_digest.sh
+
       - name: Commit the assembled binaries
-        if: github.event_name == 'workflow_dispatch' && inputs.commit_binaries
+        # A push to dev has to update them, or the package would carry the previous build; a
+        # manual run only when asked. Parenthesised so the intent does not depend on how `&&`
+        # and `||` associate.
+        if: >-
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' && inputs.commit_binaries)
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -116,5 +140,15 @@ jobs:
             echo "module/vfs/binaries is already up to date"
             exit 0
           fi
-          git commit -m "chore(vfs): refresh the prebuilt hybridmount modules"
-          git push
+          # Name the branch explicitly rather than relying on a local branch being checked out,
+          # and refuse a tag ref, where committing build output would be wrong.
+          if [ "${GITHUB_REF_TYPE}" != "branch" ]; then
+            echo "refusing to commit build output to a non-branch ref: ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+          # `[skip ci]` keeps this build output from re-triggering CI. A push made with the
+          # default GITHUB_TOKEN does not start workflows anyway; the marker keeps that true
+          # if the push token is ever changed to one that would, which is the case where this
+          # commit would otherwise rebuild itself in a loop.
+          git commit -m "chore(vfs): refresh the prebuilt hybridmount modules [skip ci]"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

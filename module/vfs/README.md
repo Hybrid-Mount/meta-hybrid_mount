@@ -15,7 +15,8 @@ backend.
 - `src/PROVENANCE` — fork commit, baseline digests and sync instructions
 - `src/UPSTREAM_README.md` — upstream kernel integration README, retained verbatim
 - `src/LICENSE` — GPL-2.0 license text
-- `binaries/` — the prebuilt modules and `list.txt` with their SHA-256 digests
+- `binaries/` — the prebuilt modules, `list.txt` with their SHA-256 digests, and
+  `sources.txt` recording the source digest they were built from
 - `setup.sh` — built-in integration into a kernel tree
 
 ## License and provenance
@@ -108,10 +109,21 @@ make -C module/vfs/src KDIR=/path/to/kernel
 ## Refreshing the prebuilt modules
 
 `.github/workflows/kernel-module.yml` builds every target with DDK, assembles
-`module/vfs/binaries/` plus `list.txt`, and uploads the result as an artifact. Run the
-workflow manually with `commit_binaries=true` to commit the refreshed modules back to
-the branch. `customize.sh` ships them in the release ZIP and `lints.yml` verifies their
-digests.
+`module/vfs/binaries/` plus `list.txt`, and uploads the result as an artifact. A push to
+`dev` that changes `module/vfs/**` rebuilds and commits them automatically, so the shipped
+`.ko` files cannot drift behind the kernel sources beside them; run the workflow manually
+with `commit_binaries=true` to force a refresh.
+
+`sources.txt` holds one digest over the build inputs (`hybridmount.c`, `hybridmount.h`,
+`Kconfig`, `Makefile`), written by the job that compiles them.
+`tests/shell/vfs_sources_digest.sh` recomputes it and fails when the two disagree. `lints.yml`
+runs it on every change, and `release.yml` runs it before packaging, so a prebuilt set that no
+longer matches its sources is caught rather than shipped. `customize.sh` ships the modules in
+the release ZIP and `lints.yml` verifies their digests as well.
+
+Expect that check to fail on the push that changes the kernel sources, and to pass once the
+rebuild commit lands: the two are necessarily separate commits, since compiling a kernel
+module needs DDK. Judge such a change by the branch tip rather than the intermediate commit.
 
 ## Built-in integration
 

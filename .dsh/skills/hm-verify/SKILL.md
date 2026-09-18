@@ -66,6 +66,8 @@ fi
 shellcheck module/*.sh module/vfs/setup.sh tests/shell/*.sh
 sh tests/shell/customize_lkm.sh
 sh tests/shell/vfs_setup.sh
+sh tests/shell/vfs_sources_digest.sh
+sh tests/shell/vfs_sources_digest_test.sh
 sh tests/shell/boot_lock.sh
 ```
 

@@ -31,6 +31,13 @@ jobs:
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Verify the prebuilt VFS modules match their sources
+        # The zip contains both the kernel sources and the modules built from them, so a stale
+        # .ko would ship behaviour the bundled source does not describe. A tag can be created
+        # from any commit, including one where the sources moved on after the last rebuild, so
+        # this is checked here rather than trusted from the branch history.
+        run: sh tests/shell/vfs_sources_digest.sh
+
       - name: Apply tag version to package
         if: startsWith(github.ref, 'refs/tags/')
         env:

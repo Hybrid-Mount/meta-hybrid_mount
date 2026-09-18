@@ -102,6 +102,9 @@ jobs:
             (cd module/vfs/binaries && sha256sum --check list.txt)
           fi
 
+      - name: Verify prebuilt VFS modules still match their sources
+        run: sh tests/shell/vfs_sources_digest.sh
+
       - name: ShellCheck module scripts
         run: |
           set -euo pipefail
@@ -115,6 +118,9 @@ jobs:
 
       - name: Test VFS built-in integration script
         run: sh tests/shell/vfs_setup.sh
+
+      - name: Test the VFS sources digest checker
+        run: sh tests/shell/vfs_sources_digest_test.sh
 
       - name: Test installer platform split
         run: sh tests/shell/customize_lkm.sh
