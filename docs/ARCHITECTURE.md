@@ -111,9 +111,19 @@ VFS Provider 只有 HM 自有的 `hybridmount`。启动时先探测内建的 key
 `vfs/binaries/` 加载与内核线及 Android/GKI 标签精确匹配的预编译模块并重新探测。若仍无可用
 Provider、版本不兼容或检测到外来 NoMount，则按 `vfs_strict` 选择失败或降级跳过。
 
-探测结果同时喂给 planner：`PlanInput.vfs_available` 为 false 时，所有 `vfs` 规则（模块默认
-与路径规则）在规划阶段就解析为 `ignore`，避免配置、状态计数或 WebUI 页面向用户展示一个本机
-执行不了的后端。WebUI 的 VFS 选项、计数与说明行也都读取同一个探测结果。
+加载必须发生在规划**之前**：planner 在 `vfs_available` 为 false 时会把所有 `vfs` 规则
+（模块默认与路径规则）解析为 `ignore`，执行器随即看到空的 vfs 模块集合而提前返回，走不到
+自己的加载分支。若等到执行阶段才加载，这个先有鸡还是先有蛋的循环会让内核未内建
+`hybridmount` 的设备——也就是随附预编译模块唯一服务的对象——永远无法加载该模块。因此
+`vfs::ensure_loaded_for_plan` 先探测、必要时加载，再以加载后的探测结果作为
+`PlanInput.vfs_available`。
+
+该探测结果同时喂给所有对外展示面：为 false 时规划阶段即降级为 `ignore`，避免配置、状态计数
+或 WebUI 页面向用户展示一个本机执行不了的后端。WebUI 的 VFS 选项、计数与说明行也都读取同
+一个探测结果。
+
+`vfs_strict` 的失败判定同样在规划前完成，否则上述降级会让它失去作用。只有配置中确有规则选择
+`vfs` 时该选项才生效：配置为 overlay 或 magic 的设备即使打开它也能正常启动。
 
 ## 验证边界
 

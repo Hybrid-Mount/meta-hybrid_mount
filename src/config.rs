@@ -386,6 +386,25 @@ impl Config {
         self.module_blacklist.contains(module_id)
     }
 
+    /// Whether any rule anywhere selects the VFS backend.
+    ///
+    /// The boot pipeline loads the bundled kernel module only when this is true, so a device
+    /// configured for overlay or magic alone never tries to `insmod` anything. A rule that
+    /// names a module which is disabled, missing or blacklisted still counts: the config is
+    /// the only input available before the module scan, and an unnecessary load attempt is
+    /// harmless next to missing one the user asked for.
+    pub fn wants_vfs(&self) -> bool {
+        self.default_mode == Mode::Vfs
+            || self
+                .rules
+                .values()
+                .any(|rule| rule.default_mode == Some(Mode::Vfs))
+            || self
+                .rules
+                .values()
+                .any(|rule| rule.paths.values().any(|mode| *mode == Mode::Vfs))
+    }
+
     /// Loads the bundled and user-persisted module blacklists.
     ///
     /// A **missing** file means no blacklist from that source, which is normal.

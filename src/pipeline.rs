@@ -692,6 +692,26 @@ fn run_mount_pipeline_impl() -> Result<()> {
     }
     scan_phase.finish();
 
+    // Probe, then load the bundled module if one is wanted and the key type is still silent.
+    // This has to finish before planning: a plan built while the module is unloaded carries no
+    // vfs work, which would leave the executor's own load step unreachable. Afterwards the probe
+    // is authoritative for the plan and for every surface that advertises vfs.
+    let vfs_available = crate::vfs::ensure_loaded_for_plan(
+        config.wants_vfs(),
+        crate::vfs::available,
+        crate::vfs::lkm::load_hm_vfs,
+    );
+
+    // `vfs_strict` promises that an unavailable VFS fails the boot, and this is the only point
+    // where that is still decidable: the plan below rewrites every `vfs` rule to `ignore`, so
+    // `apply_vfs_phase` sees an empty module set and returns before its own strict checks. Without
+    // this the option would be silently ineffective for exactly the case it exists to catch.
+    if crate::vfs::unavailable_is_fatal(config.wants_vfs(), config.vfs_strict, vfs_available) {
+        return Err(Error::VfsUnavailable {
+            reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+        });
+    }
+
     let plan_phase = PhaseTimer::start("plan");
     let promoted = detect_promoted_partitions();
     log::info!(
@@ -705,7 +725,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             modules: &modules,
             config: &config,
             promoted_partitions: &promoted,
-            vfs_available: crate::vfs::available(),
+            vfs_available,
         }),
     )?;
     log::info!(

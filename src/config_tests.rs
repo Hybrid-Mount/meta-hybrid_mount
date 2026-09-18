@@ -874,3 +874,47 @@ fn vfs_fields_default_off() {
     assert!(!config.vfs_strict);
     assert!(config.vfs_isolate_uids.is_empty());
 }
+
+/// The boot pipeline loads the bundled kernel module only when the config actually asks for
+/// vfs, so this predicate decides whether an `insmod` is attempted at all. A false negative
+/// means the module is never loaded and every vfs rule silently degrades to `ignore`.
+#[test]
+fn wants_vfs_detects_every_place_a_rule_can_select_vfs() {
+    let global = crate::config::Config::from_toml("default_mode = \"vfs\"\n").unwrap();
+    assert!(global.wants_vfs(), "a global vfs default must count");
+
+    let module_default =
+        crate::config::Config::from_toml("[rules.demo]\ndefault_mode = \"vfs\"\n").unwrap();
+    assert!(module_default.wants_vfs(), "a module-level vfs must count");
+
+    let path_rule =
+        crate::config::Config::from_toml("[rules.demo.paths]\n\"system/etc/hosts\" = \"vfs\"\n")
+            .unwrap();
+    assert!(path_rule.wants_vfs(), "a path-level vfs must count");
+}
+
+/// A device configured for the real mount backends must not try to load a kernel module.
+#[test]
+fn wants_vfs_is_false_when_no_rule_selects_it() {
+    let defaults = crate::config::Config::from_toml("").unwrap();
+    assert!(!defaults.wants_vfs());
+
+    let overlay_and_magic = crate::config::Config::from_toml(
+        "default_mode = \"overlay\"\n\
+         [rules.a]\n\
+         default_mode = \"magic\"\n\
+         [rules.b.paths]\n\
+         \"system/etc/hosts\" = \"ignore\"\n",
+    )
+    .unwrap();
+    assert!(!overlay_and_magic.wants_vfs());
+}
+
+/// `vfs_isolate_uids` is only sent once a provider is bound, so on its own it must not
+/// trigger a load attempt.
+#[test]
+fn wants_vfs_ignores_isolate_uids_alone() {
+    let config =
+        crate::config::Config::from_toml("vfs_strict = true\nvfs_isolate_uids = [1000]\n").unwrap();
+    assert!(!config.wants_vfs());
+}

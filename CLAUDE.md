@@ -196,7 +196,7 @@ cargo test -- --nocapture
   - 仅 aarch64 预编译，按 Android/GKI 目标命名 `hybridmount-android<NN>-<kernel>.ko`
   - 校验: `module/vfs/binaries/list.txt` 包含 SHA256（由 `.github/workflows/kernel-module.yml` 生成）
 
-启动流程先探测内建的 key type `hybridmount`；未响应时从 `module/vfs/binaries/` 选择与内核线精确匹配的模块加载后再探测。
+启动流程先探测内建的 key type `hybridmount`；未响应且配置中确有规则选择 `vfs` 时，从 `module/vfs/binaries/` 选择与内核线精确匹配的模块加载后再探测。加载必须发生在规划之前：planner 会把无后端可用的 `vfs` 规则降级为 `ignore`，执行器随之提前返回而走不到加载分支，等到执行阶段才加载会永远加载不上。`vfs_strict` 的失败判定同样在规划前完成，且仅当确有规则选择 `vfs` 时生效。
 
 ### 熔断机制
 
