@@ -28,6 +28,7 @@ if grep -REn "normalize_symlinked_partition_layout|normalize_module_layout" src 
 
 ```bash
 set -euo pipefail
+# ext4 sysfs nuke LKM
 test -f module/lkm/src/LICENSE
 test -f module/lkm/src/Kconfig
 test -f module/lkm/src/Makefile
@@ -35,13 +36,37 @@ test -f module/lkm/README.md
 grep -q "GPL-2.0-only" module/lkm/README.md
 grep -q "SPDX-License-Identifier: GPL-2.0-only" module/lkm/src/nuke.c
 (cd module/lkm/binaries && sha256sum --check list.txt)
+
+# VFS 内核子系统（hybridmount）
+test -f module/vfs/src/LICENSE
+test -f module/vfs/src/Kconfig
+test -f module/vfs/src/Makefile
+test -f module/vfs/src/PROVENANCE
+test -f module/vfs/README.md
+test -f module/vfs/setup.sh
+grep -q "GPL-2.0-only" module/vfs/README.md
+grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/Makefile
+grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/Kconfig
+grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/hybridmount.c
+grep -q 'SPDX-License-Identifier: GPL-2.0-only' module/vfs/src/hybridmount.h
+grep -q 'MODULE_LICENSE("GPL v2")' module/vfs/src/hybridmount.c
+grep -q 'MODULE_AUTHOR("maxsteeel")' module/vfs/src/hybridmount.c
+! grep -q "Version 3" module/vfs/src/LICENSE
+head -2 module/vfs/src/LICENSE | grep -q "Version 2"
+# 预编译模块由 CI 产出；存在时校验摘要，尚未由 CI 提交时该目录可缺席。
+if [ -d module/vfs/binaries ]; then
+  test -f module/vfs/binaries/list.txt
+  (cd module/vfs/binaries && sha256sum --check list.txt)
+fi
 ```
 
 ## 模块脚本
 
 ```bash
-shellcheck module/*.sh tests/shell/*.sh
+shellcheck module/*.sh module/vfs/setup.sh tests/shell/*.sh
 sh tests/shell/customize_lkm.sh
+sh tests/shell/vfs_setup.sh
+sh tests/shell/boot_lock.sh
 ```
 
 ## Android 交叉检查

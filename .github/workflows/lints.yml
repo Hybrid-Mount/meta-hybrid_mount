@@ -119,6 +119,9 @@ jobs:
       - name: Test installer platform split
         run: sh tests/shell/customize_lkm.sh
 
+      - name: Test boot lock consistency
+        run: sh tests/shell/boot_lock.sh
+
   android-target-checks:
     name: Android check (${{ matrix.target }})
     runs-on: ubuntu-latest
