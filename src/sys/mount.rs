@@ -8,7 +8,6 @@
 use std::path::Path;
 use std::time::Duration;
 
-use procfs::process::Process;
 use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
 
 use crate::errors::{CausalError, ContextError, Error, Result};
@@ -134,34 +133,15 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
 /// `emulated-soft-reboot`: immediately unmounts every mountpoint whose source matches,
 /// simulating the mount cleanup before a soft reboot.
 pub fn emulated_soft_reboot(source: &str) -> Result<()> {
-    let process = Process::myself().map_err(|source| {
-        Error::Mount(Box::new(ContextError::new(
-            "read self process for emulated soft reboot",
-            None,
-            source,
-        )))
-    })?;
-    let mountinfo = process.mountinfo().map_err(|source| {
-        Error::Mount(Box::new(ContextError::new(
-            "read mountinfo for emulated soft reboot",
-            None,
-            source,
-        )))
-    })?;
+    let entries = crate::sys::mountinfo::mount_entries()?;
 
-    let mut mount_points = mountinfo
+    let mut mount_points = entries
         .into_iter()
         .filter(|entry| entry.mount_source.as_deref() == Some(source))
         .filter(|entry| entry.fs_type != "overlay")
         .map(|entry| entry.mount_point)
         .collect::<Vec<_>>();
-    mount_points.sort_by(|left, right| {
-        right
-            .components()
-            .count()
-            .cmp(&left.components().count())
-            .then_with(|| right.cmp(left))
-    });
+    crate::sys::mountinfo::deepest_first(&mut mount_points);
 
     for mount_point in mount_points {
         log::debug!(

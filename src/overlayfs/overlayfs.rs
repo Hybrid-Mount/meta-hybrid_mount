@@ -18,8 +18,6 @@ use crate::overlayfs::utils;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils::ksu::send_unmountable;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use procfs::process::Process;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::mount::{
@@ -147,10 +145,7 @@ pub fn child_relative_path(root: &str, mount_point: &str) -> Option<String> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn collect_child_mount_points(root_path: &Path) -> Result<Vec<String>> {
-    let mounts = Process::myself()
-        .map_err(|err| Error::msg(format!("get mountinfo: {err}")))?
-        .mountinfo()
-        .map_err(|err| Error::msg(format!("get mountinfo: {err}")))?;
+    let mounts = crate::sys::mountinfo::mount_entries()?;
 
     let mut mount_seq: Vec<String> = mounts
         .into_iter()

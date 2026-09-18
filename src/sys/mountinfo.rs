@@ -2,11 +2,90 @@
 
 //! Mountinfo snapshot shared by mount confirmation and rollback queries.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::errors::{Error, Result};
+
+/// One mount as `/proc/self/mountinfo` reports it, reduced to the fields Hybrid Mount
+/// reads. Every mountinfo consumer goes through [`mount_entries`] so the fault-injection
+/// switch reaches all of them, not just the snapshot path.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MountEntry {
+    pub mount_point: PathBuf,
+    pub fs_type: String,
+    pub mount_source: Option<String>,
+    pub mnt_id: i32,
+    /// Device major:minor, as reported by the kernel.
+    pub majmin: String,
+}
+
+/// Reads every mount visible to this process.
+///
+/// The cause is preserved as a `CausalError::Procfs` (rather than flattened into a
+/// formatted string) so `Error::classify()` keeps reporting the real error class to
+/// callers that decide between retry and manual recovery.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn mount_entries() -> Result<Vec<MountEntry>> {
+    if crate::sys::faults::should_fail_mountinfo_read() {
+        return Err(Error::msg("injected mountinfo read failure"));
+    }
+    Ok(read_mountinfo()?
+        .into_iter()
+        .map(|entry| MountEntry {
+            mount_point: entry.mount_point,
+            fs_type: entry.fs_type,
+            mount_source: entry.mount_source,
+            mnt_id: entry.mnt_id,
+            majmin: entry.majmin,
+        })
+        .collect())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_mountinfo() -> Result<Vec<procfs::process::MountInfo>> {
+    let process = procfs::process::Process::myself().map_err(|err| {
+        Error::Mount(Box::new(crate::errors::ContextError::new(
+            "get self process for mountinfo",
+            None,
+            err,
+        )))
+    })?;
+    let mountinfo = process.mountinfo().map_err(|err| {
+        Error::Mount(Box::new(crate::errors::ContextError::new(
+            "read mountinfo",
+            None,
+            err,
+        )))
+    })?;
+    Ok(mountinfo.0)
+}
+
+/// The mount whose mount point is exactly `path`, when one exists.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn mount_entry_at(path: &Path) -> Result<Option<MountEntry>> {
+    Ok(mount_entries()?
+        .into_iter()
+        .find(|entry| entry.mount_point == path))
+}
+
+/// Deepest-first, then reverse-lexicographic. Unmounting children before their parents is
+/// what makes a detach cascade safe, so this lives here rather than being respelled.
+pub fn deepest_first(paths: &mut [PathBuf]) {
+    paths.sort_by(|left, right| deepest_first_order(left, right));
+}
+
+/// The ordering relation behind [`deepest_first`], for callers holding borrowed paths.
+fn deepest_first_order(left: &Path, right: &Path) -> Ordering {
+    right
+        .components()
+        .count()
+        .cmp(&left.components().count())
+        .then_with(|| right.cmp(left))
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MountSnapshot {
@@ -46,13 +125,7 @@ impl MountSnapshot {
             .map(PathBuf::as_path)
             .filter(|point| point.starts_with(root) && *point != root)
             .collect::<Vec<_>>();
-        descendants.sort_by(|left, right| {
-            right
-                .components()
-                .count()
-                .cmp(&left.components().count())
-                .then_with(|| right.cmp(left))
-        });
+        descendants.sort_by(|left, right| deepest_first_order(left, right));
         descendants
     }
 
@@ -66,16 +139,8 @@ impl MountSnapshot {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn read() -> Result<Self> {
-        if crate::sys::faults::should_fail_mountinfo_read() {
-            return Err(Error::msg("injected mountinfo read failure"));
-        }
-        let process = procfs::process::Process::myself()
-            .map_err(|err| Error::msg(format!("get self process for mountinfo: {err}")))?;
-        let mountinfo = process
-            .mountinfo()
-            .map_err(|err| Error::msg(format!("read mountinfo: {err}")))?;
         Ok(Self::from_records(
-            mountinfo
+            mount_entries()?
                 .into_iter()
                 .map(|entry| (entry.mount_point, entry.mnt_id))
                 .collect(),

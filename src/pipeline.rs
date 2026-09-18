@@ -220,13 +220,8 @@ pub fn effective_mount_source(ksu_active: bool) -> &'static str {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn describe_path_mount(path: &Path) -> String {
-    use procfs::process::Process;
-
     let resolved = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    let Ok(process) = Process::myself() else {
-        return "mountinfo=process_unavailable".to_owned();
-    };
-    let Ok(mountinfo) = process.mountinfo() else {
+    let Ok(mountinfo) = crate::sys::mountinfo::mount_entries() else {
         return "mountinfo=unavailable".to_owned();
     };
     let Some(entry) = mountinfo
