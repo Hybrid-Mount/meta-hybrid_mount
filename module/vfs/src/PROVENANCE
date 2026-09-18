@@ -8,7 +8,7 @@ date      = 2026-09-13
 protocol  = "20"
 imported  = Hybrid Mount commit 4485e41c (verbatim import, original filenames nomount.c / nomount.h)
 license   = GPL-2.0-only, see LICENSE in this directory. Upstream shipped a GPL-3.0 text
-            while the kernel module declared a bare MODULE_LICENSE("GPL"); K2 is
+            while the kernel module declared a bare MODULE_LICENSE("GPL"); this module is
             distributed under the GPL-2.0-only grant and declares MODULE_LICENSE("GPL v2")
             so the declaration, the SPDX headers and the license text agree.
             See ../../THIRD_PARTY.md.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Kconfig for the Hybrid Mount VFS kernel subsystem (K2)
+# Kconfig for the Hybrid Mount VFS kernel subsystem (`hybridmount`)
 
 config HYBRIDMOUNT
 	tristate "Hybrid Mount VFS Path Redirection Subsystem"

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Out-of-tree build of the Hybrid Mount VFS kernel module (K2).
+# Out-of-tree build of the Hybrid Mount VFS kernel module (`hybridmount`).
 #
 # DDK (https://github.com/Ylarod/ddk) images export KDIR, ARCH, LLVM and the
 # Clang toolchain and mount the checkout at /build, so from the repository root:
