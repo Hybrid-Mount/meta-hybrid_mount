@@ -106,4 +106,29 @@ mod tests {
         assert!(VFS_BOOT_GUARD_PATH.starts_with("/data/adb/hybrid-mount/"));
         assert_ne!(VFS_BOOT_GUARD_PATH, LKM_BOOT_GUARD_PATH);
     }
+
+    /// `metainstall.sh` advertises this module's id to the module being installed. KernelSU
+    /// never reads the variable itself, but a module that does compares it against the
+    /// directory under `/data/adb/modules`, so it has to be the `module.prop` id — not the
+    /// binary name and not the `/data/adb/hybrid-mount` runtime directory.
+    #[test]
+    fn installer_advertises_the_module_prop_id() {
+        let metainstall = include_str!("../module/metainstall.sh");
+        let advertised = metainstall
+            .lines()
+            .filter_map(|line| line.trim().strip_prefix("export "))
+            .filter_map(|line| line.split_once('='))
+            .filter(|(name, _)| name.ends_with("_METAMODULE") && !name.ends_with("_HAS_METAMODULE"))
+            .map(|(name, value)| (name.to_owned(), value.trim_matches('"').to_owned()))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            advertised.len(),
+            2,
+            "expected one KSU and one APATCH metamodule export, found {advertised:?}"
+        );
+        for (name, value) in advertised {
+            assert_eq!(value, MODULE_ID, "{name} must advertise the module.prop id");
+        }
+    }
 }

@@ -5,14 +5,17 @@
 # Hard rule: the only permitted operation is `ln -sf "./system/$partition" "$MODPATH/$partition"`.
 # No cp -a && rm -rf, no mv system/<partition>, and no normalisation logic.
 
+# The value must be this module's id from module.prop, not the binary name or the
+# /data/adb/hybrid-mount runtime directory: a module being installed compares it against
+# the directory it sees under /data/adb/modules to work out which metamodule it is under.
 if [ "$KSU" = "true" ]; then
   export KSU_HAS_METAMODULE="true"
-  export KSU_METAMODULE="hybrid-mount"
+  export KSU_METAMODULE="hybrid_mount"
 fi
 
 if [ "$APATCH" = "true" ]; then
   export APATCH_HAS_METAMODULE="true"
-  export APATCH_METAMODULE="hybrid-mount"
+  export APATCH_METAMODULE="hybrid_mount"
 fi
 
 export HYBRID_MOUNT="true"
