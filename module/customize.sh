@@ -34,6 +34,17 @@ else
   ui_print "- Non-KernelSU environment: retained compatibility LKM"
 fi
 
+# The prebuilt VFS modules are aarch64-only. Unlike the ext4 compatibility LKM they are
+# kept on KernelSU as well: module loading is available there through ksud, and there is
+# no ioctl equivalent for the VFS backend. Only non-arm64 installs, where the prebuilt
+# modules cannot load at all, drop them. The sources stay on every platform.
+if [ "$ARCH" = "arm64" ]; then
+  ui_print "- arm64: retained prebuilt VFS modules"
+else
+  rm -rf "$MODPATH/vfs/binaries"
+  ui_print "- $ARCH: omitted aarch64-only VFS modules"
+fi
+
 BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
 BIN_TARGET="$MODPATH/hybrid-mount"
 if [ ! -f "$BIN_SOURCE" ]; then

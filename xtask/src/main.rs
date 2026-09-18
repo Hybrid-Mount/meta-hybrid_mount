@@ -191,11 +191,6 @@ fn prune_kernel_build_output(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// K2 binaries are not distributable until the upstream licence declaration is resolved.
-fn remove_vfs_binaries_from_stage(stage: &Path) -> Result<()> {
-    remove_dir_if_exists(&stage.join("vfs").join("binaries"))
-}
-
 fn remove_file_if_exists(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
@@ -320,11 +315,9 @@ fn build(release: bool) -> Result<()> {
     )
     .context("failed to stage module files")?;
 
-    remove_vfs_binaries_from_stage(&stage)?;
-
-    // The kernel sources ship with the package so installs stay GPL-complete,
-    // but a working tree that was built in place must not carry its Kbuild
-    // output into the release.
+    // The kernel sources ship with the package so installs stay GPL-complete, and so do
+    // the prebuilt modules. A working tree that was built in place must not carry its
+    // Kbuild output into the release, so that is stripped from both source trees.
     prune_kernel_build_output(&stage.join("vfs").join("src"))?;
     prune_kernel_build_output(&stage.join("lkm").join("src"))?;
 
@@ -473,19 +466,66 @@ mod tests {
         }
     }
 
+    /// The staged package must keep the prebuilt modules. `prune_kernel_build_output`
+    /// only strips Kbuild output from `src/`, so a `.ko` that ships deliberately under
+    /// `binaries/` survives staging.
     #[test]
-    fn release_stage_drops_vfs_binaries_but_keeps_sources() {
+    fn staging_keeps_deliberately_shipped_kernel_modules() {
         let stage = tempfile::tempdir().expect("tempdir");
-        let source_dir = stage.path().join("vfs/src");
-        let binary_dir = stage.path().join("vfs/binaries");
+        let binaries = stage.path().join("vfs").join("binaries");
+        let source_dir = stage.path().join("vfs").join("src");
+        fs::create_dir_all(&binaries).expect("create binaries fixture");
         fs::create_dir_all(&source_dir).expect("create source fixture");
-        fs::create_dir_all(&binary_dir).expect("create binary fixture");
-        fs::write(source_dir.join("hybridmount.c"), b"source").expect("write source fixture");
-        fs::write(binary_dir.join("hybridmount.ko"), b"binary").expect("write binary fixture");
+        fs::write(binaries.join("hybridmount-android14-6.1.ko"), b"module")
+            .expect("write module fixture");
+        fs::write(source_dir.join("hybridmount.ko"), b"local build output")
+            .expect("write source fixture");
 
-        remove_vfs_binaries_from_stage(stage.path()).expect("remove VFS binaries");
+        prune_kernel_build_output(&source_dir).expect("prune source tree");
 
-        assert!(source_dir.join("hybridmount.c").is_file());
-        assert!(!binary_dir.exists());
+        assert!(
+            binaries.join("hybridmount-android14-6.1.ko").is_file(),
+            "a prebuilt module under binaries/ must reach the package"
+        );
+        assert!(
+            !source_dir.join("hybridmount.ko").exists(),
+            "a locally built module inside src/ must not reach the package"
+        );
+    }
+
+    /// Every module the loader can select must be covered by a digest manifest.
+    #[test]
+    fn every_shipped_kernel_module_is_listed_in_its_manifest() {
+        let root = workspace_root().expect("workspace root");
+
+        for (dir, names) in [
+            (
+                "module/lkm/binaries",
+                &["nuke-android12-5.10.ko", "nuke-android-4.14.ko"][..],
+            ),
+            (
+                "module/vfs/binaries",
+                &[
+                    "hybridmount-android12-5.10.ko",
+                    "hybridmount-android16-6.12.ko",
+                ][..],
+            ),
+        ] {
+            let binaries = root.join(dir);
+            let manifest = binaries.join("list.txt");
+            if !manifest.is_file() {
+                // The hybridmount set is produced by the kernel-module workflow; until it has run
+                // there is nothing to verify. The ext4 set is committed and must be there.
+                assert_eq!(dir, "module/vfs/binaries", "{dir}/list.txt is missing");
+                continue;
+            }
+            let listed = fs::read_to_string(&manifest).expect("read list.txt");
+            for name in names {
+                assert!(
+                    listed.contains(name),
+                    "{name} is not listed in {dir}/list.txt"
+                );
+            }
+        }
     }
 }
