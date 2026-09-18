@@ -8,31 +8,27 @@
 //! failures are best-effort: a mounted staging filesystem must not be rolled
 //! back merely because concealment is unavailable.
 
-use std::fs::{self, OpenOptions};
-use std::io::{self, ErrorKind, Write};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use ::ksu::NukeExt4Sysfs;
-use procfs::process::Process;
 
 use crate::defs;
 use crate::errors::{ContextError, Error};
-use crate::sys::process::{CaptureMode, CommandSpec, run_command};
-use crate::utils::ksu;
-use crate::vfs::lkm_target::{
-    android_major_from_kernel_release, device_android_major, kernel_major_minor,
+use crate::sys::lkm::{
+    LoadAttemptGuard, describe_attempts, load_with_candidates, select_bundled_lkm_path,
 };
+use crate::utils::ksu;
+use crate::vfs::lkm_target::{android_major_from_kernel_release, kernel_major_minor};
 
 const KALLSYMS_PATH: &str = "/proc/kallsyms";
 const KPTR_RESTRICT_PATH: &str = "/proc/sys/kernel/kptr_restrict";
-const KERNEL_RELEASE_PATH: &str = "/proc/sys/kernel/osrelease";
 const LKM_OVERRIDE_ENV: &str = "HYBRID_MOUNT_LKM_PATH";
 /// A single LKM insmod has a known, bounded worst case.
 const INSMOD_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Conceal the ext4 staging superblock from `/proc/fs/ext4`.
-///
 pub fn nuke_ext4_sysfs(path: &Path) {
     log::info!("ext4 sysfs nuke start: path={}", path.display());
 
@@ -105,181 +101,38 @@ fn try_lkm_nuke_inner(path: &Path) -> Result<(), String> {
     let symbol = readable_symbol_address().ok_or_else(|| {
         "ext4_unregister_sysfs has no readable non-zero address in /proc/kallsyms".to_owned()
     })?;
-    let mount_parameter = format!("mount_point={}", path.display());
-    let symbol_parameter = format!("symaddr=0x{symbol}");
-    let _attempt_guard = LkmAttemptGuard::arm(&lkm_path, path)?;
-
-    let candidates: [(&str, Option<&str>); 4] = [
-        ("/system/bin/insmod", None),
-        ("/data/adb/ap/bin/busybox", Some("insmod")),
-        ("/data/adb/ksu/bin/busybox", Some("insmod")),
-        ("insmod", None),
+    let params = vec![
+        format!("mount_point={}", path.display()),
+        format!("symaddr=0x{symbol}"),
     ];
-    let mut attempts = Vec::new();
+    let _attempt_guard = LoadAttemptGuard::arm(
+        Path::new(defs::LKM_BOOT_GUARD_PATH),
+        "LKM",
+        &format!("lkm={} mount={}", lkm_path.display(), path.display()),
+    )?;
 
-    for (program, applet) in candidates {
-        let mut args = Vec::new();
-        if let Some(applet) = applet {
-            args.push(applet.to_owned());
-        }
-        args.push(lkm_path.display().to_string());
-        args.push(mount_parameter.clone());
-        args.push(symbol_parameter.clone());
-
-        let spec = CommandSpec::new(program)
-            .operation("load LKM for ext4 sysfs nuke")
-            .args(args)
-            .capture(CaptureMode::Stderr)
-            // The LKM deliberately returns -EAGAIN from module_init so it
-            // is not retained. A non-zero insmod status can therefore be
-            // the expected successful path; disappearance is authoritative.
-            .any_exit_status()
-            .timeout(INSMOD_TIMEOUT);
-
-        match run_command(&spec) {
-            Ok(outcome) => {
-                if !procfs_node.exists() {
-                    return Ok(());
-                }
-                let stderr = outcome.stderr_text().unwrap_or_default();
-                return Err(format!(
-                    "{program} executed once but did not remove {}: status={}, stderr={}; unavailable candidates: {}",
-                    procfs_node.display(),
-                    outcome.status,
-                    stderr.trim(),
-                    attempts.join("; ")
-                ));
-            }
-            Err(err) => attempts.push(format!("{program}: {err}")),
-        }
-    }
-
-    Err(format!(
-        "LKM did not remove {}; attempts: {}",
-        procfs_node.display(),
-        attempts.join("; ")
-    ))
-}
-
-#[derive(Debug)]
-struct LkmAttemptGuard {
-    marker_path: PathBuf,
-}
-
-impl LkmAttemptGuard {
-    fn arm(lkm_path: &Path, mount_path: &Path) -> Result<Self, String> {
-        Self::arm_at(Path::new(defs::LKM_BOOT_GUARD_PATH), lkm_path, mount_path)
-    }
-
-    fn arm_at(marker_path: &Path, lkm_path: &Path, mount_path: &Path) -> Result<Self, String> {
-        Self::arm_at_with_sync(
-            marker_path,
-            lkm_path,
-            mount_path,
-            crate::sys::fs::sync_parent_directory,
-        )
-    }
-
-    fn arm_at_with_sync(
-        marker_path: &Path,
-        lkm_path: &Path,
-        mount_path: &Path,
-        mut sync_parent: impl FnMut(&Path) -> io::Result<()>,
-    ) -> Result<Self, String> {
-        if let Some(parent) = marker_path
-            .parent()
-            .filter(|parent| !parent.as_os_str().is_empty())
-        {
-            fs::create_dir_all(parent).map_err(|err| {
-                format!(
-                    "create LKM boot-guard directory {}: {err}",
-                    parent.display()
-                )
-            })?;
-            sync_parent(parent).map_err(|err| {
-                format!(
-                    "sync LKM boot-guard directory entry {}: {err}",
-                    parent.display()
-                )
-            })?;
-        }
-
-        let mut marker = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(marker_path)
-            .map_err(|err| {
-                if err.kind() == ErrorKind::AlreadyExists {
-                    format!(
-                        "previous LKM attempt did not complete; refusing automatic retry. Verify the kernel ABI, then remove {} to retry",
-                        marker_path.display()
-                    )
-                } else {
-                    format!("create LKM boot guard {}: {err}", marker_path.display())
-                }
-            })?;
-        let guard = Self {
-            marker_path: marker_path.to_path_buf(),
-        };
-        if let Err(err) = writeln!(
-            marker,
-            "lkm={} mount={}",
-            lkm_path.display(),
-            mount_path.display()
-        ) {
-            drop(guard);
-            return Err(format!(
-                "write LKM boot guard {}: {err}",
-                marker_path.display()
-            ));
-        }
-        if let Err(err) = marker.sync_all() {
-            drop(guard);
-            return Err(format!(
-                "sync LKM boot guard {}: {err}",
-                marker_path.display()
-            ));
-        }
-        if let Err(err) = sync_parent(marker_path) {
-            drop(guard);
-            return Err(format!(
-                "sync LKM boot-guard parent for {}: {err}",
-                marker_path.display()
-            ));
-        }
-
-        Ok(guard)
-    }
-}
-
-impl Drop for LkmAttemptGuard {
-    fn drop(&mut self) {
-        match fs::remove_file(&self.marker_path) {
-            Ok(()) => {
-                if let Err(err) = crate::sys::fs::sync_parent_directory(&self.marker_path) {
-                    log::warn!(
-                        "failed to persist LKM boot guard removal {}: {err}",
-                        self.marker_path.display()
-                    );
-                }
-            }
-            Err(err) if err.kind() == ErrorKind::NotFound => {}
-            Err(err) => log::warn!(
-                "failed to clear LKM boot guard {}: {err}",
-                self.marker_path.display()
-            ),
-        }
+    // The node disappearing is the only success signal: the LKM deliberately returns
+    // -EAGAIN from module_init so it is not retained, which makes a non-zero insmod
+    // status an expected part of the successful path.
+    match load_with_candidates(
+        &lkm_path,
+        "load LKM for ext4 sysfs nuke",
+        &params,
+        INSMOD_TIMEOUT,
+        || !procfs_node.exists(),
+    ) {
+        Ok(()) => Ok(()),
+        Err(attempts) => Err(format!(
+            "LKM did not remove {}; attempts: {}",
+            procfs_node.display(),
+            describe_attempts(&attempts)
+        )),
     }
 }
 
 fn ext4_procfs_node(path: &Path) -> Result<PathBuf, String> {
-    let process = Process::myself().map_err(|err| format!("read current process: {err}"))?;
-    let mountinfo = process
-        .mountinfo()
-        .map_err(|err| format!("read /proc/self/mountinfo: {err}"))?;
-    let entry = mountinfo
-        .into_iter()
-        .find(|entry| entry.mount_point == path)
+    let entry = crate::sys::mountinfo::mount_entry_at(path)
+        .map_err(|err| format!("read /proc/self/mountinfo: {err}"))?
         .ok_or_else(|| format!("mount point not found in mountinfo: {}", path.display()))?;
 
     if entry.fs_type != "ext4" {
@@ -300,35 +153,12 @@ fn ext4_procfs_node(path: &Path) -> Result<PathBuf, String> {
 }
 
 fn select_lkm_path() -> Result<PathBuf, String> {
-    if let Some(path) = std::env::var_os(LKM_OVERRIDE_ENV).filter(|path| !path.is_empty()) {
-        return Ok(PathBuf::from(path));
-    }
-
-    if !is_bundled_lkm_arch_supported(std::env::consts::ARCH) {
-        return Err(format!(
-            "bundled LKM is aarch64-only, running architecture is {}",
-            std::env::consts::ARCH
-        ));
-    }
-
-    let release = fs::read_to_string(KERNEL_RELEASE_PATH)
-        .map_err(|err| format!("read kernel release: {err}"))?;
-    let android_major = android_major_from_kernel_release(&release).or_else(device_android_major);
-    let file_name = select_lkm_filename(release.trim(), android_major).ok_or_else(|| {
-        format!(
-            "no bundled LKM for kernel={} android={}",
-            release.trim(),
-            android_major
-                .map(|value| value.to_string())
-                .unwrap_or_else(|| "unknown".to_owned())
-        )
-    })?;
-
-    Ok(Path::new(defs::MODULE_LKM_DIR).join(file_name))
-}
-
-fn is_bundled_lkm_arch_supported(arch: &str) -> bool {
-    arch == "aarch64"
+    select_bundled_lkm_path(
+        defs::MODULE_LKM_DIR,
+        LKM_OVERRIDE_ENV,
+        "LKM",
+        select_lkm_filename,
+    )
 }
 
 fn readable_symbol_address() -> Option<String> {
@@ -437,75 +267,58 @@ mod tests {
 
     #[test]
     fn bundled_lkm_architecture_contract_is_explicit() {
-        assert!(is_bundled_lkm_arch_supported("aarch64"));
-        assert!(!is_bundled_lkm_arch_supported("arm"));
-        assert!(!is_bundled_lkm_arch_supported("x86_64"));
+        assert!(crate::sys::lkm::bundled_lkm_arch_supported("aarch64"));
+        assert!(!crate::sys::lkm::bundled_lkm_arch_supported("arm"));
+        assert!(!crate::sys::lkm::bundled_lkm_arch_supported("x86_64"));
     }
 
+    /// Every filename the selector can return must be one the package actually ships.
+    /// A stale arm here would silently lose ext4 sysfs concealment on APatch.
     #[test]
-    fn lkm_attempt_guard_refuses_stale_marker_and_clears_on_drop() {
-        let root =
-            std::env::temp_dir().join(format!("hybrid-mount-lkm-guard-{}", std::process::id()));
-        let marker = root.join("guard");
-        let guard = LkmAttemptGuard::arm_at(
-            &marker,
-            Path::new("/module/nuke.ko"),
-            Path::new("/mnt/staging"),
-        )
-        .unwrap();
+    fn selection_matrix_matches_the_shipped_manifest() {
+        let manifest = include_str!("../../module/lkm/binaries/list.txt");
+        let shipped: Vec<&str> = manifest
+            .lines()
+            .filter_map(|line| line.split_whitespace().nth(1))
+            .collect();
 
-        assert!(marker.is_file());
-        assert!(
-            LkmAttemptGuard::arm_at(
-                &marker,
-                Path::new("/module/nuke.ko"),
-                Path::new("/mnt/staging")
-            )
-            .unwrap_err()
-            .contains("refusing automatic retry")
+        let selectable = [
+            ("4.14.336-gki", None),
+            ("5.10.198-android12-9", None),
+            ("5.10.198-android13-8", None),
+            ("5.15.137-android13-11", None),
+            ("5.15.149-android14-12", None),
+            ("6.1.75-android14-13", None),
+            ("6.6.30-android15-8", None),
+            ("6.12.30-android16-6", None),
+        ];
+
+        let mut selected: Vec<&str> = selectable
+            .iter()
+            .map(|(release, android)| {
+                select_lkm_filename(release, *android)
+                    .unwrap_or_else(|| panic!("{release} is not selectable"))
+            })
+            .collect();
+        selected.sort_unstable();
+
+        let mut expected = shipped.clone();
+        expected.sort_unstable();
+
+        assert_eq!(
+            selected, expected,
+            "the selector matrix and module/lkm/binaries/list.txt disagree"
         );
-
-        drop(guard);
-        assert!(!marker.exists());
-        fs::remove_dir(root).unwrap();
     }
 
+    /// The nuke module is not retained (`module_init` returns -EAGAIN), so the object
+    /// name must keep matching what the Makefile builds.
     #[test]
-    fn lkm_attempt_guard_aborts_when_marker_parent_sync_fails() {
-        use std::cell::Cell;
-
-        let root = std::env::temp_dir().join(format!(
-            "hybrid-mount-lkm-guard-sync-fail-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&root);
-        let marker = root.join("guard");
-        let sync_calls = Cell::new(0);
-        let marker_was_visible = Cell::new(false);
-
-        let err = LkmAttemptGuard::arm_at_with_sync(
-            &marker,
-            Path::new("/module/nuke.ko"),
-            Path::new("/mnt/staging"),
-            |path| {
-                let call = sync_calls.get() + 1;
-                sync_calls.set(call);
-                if call == 2 {
-                    marker_was_visible.set(path == marker && marker.is_file());
-                    return Err(io::Error::other("injected marker parent sync failure"));
-                }
-                Ok(())
-            },
-        )
-        .unwrap_err();
-
+    fn the_module_object_name_is_stable() {
+        let makefile = include_str!("../../module/lkm/src/Makefile");
         assert!(
-            sync_calls.get() == 2
-                && marker_was_visible.get()
-                && !marker.exists()
-                && err.contains("sync LKM boot-guard parent"),
-            "{err}"
+            makefile.contains("obj-m += nuke.o"),
+            "the nuke Makefile no longer builds nuke.o"
         );
-        fs::remove_dir(root).unwrap();
     }
 }

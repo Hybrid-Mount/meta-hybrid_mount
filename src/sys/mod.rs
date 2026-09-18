@@ -4,6 +4,7 @@
 
 pub mod faults;
 pub mod fs;
+pub mod lkm;
 pub mod mountinfo;
 pub mod process;
 pub mod temp;
