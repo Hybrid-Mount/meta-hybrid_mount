@@ -161,6 +161,33 @@ fn observe() -> (Option<String>, Result<ListedTables>) {
     (None, Ok((Vec::new(), Vec::new())))
 }
 
+/// Whether the kernel answers as a supported hybridmount provider this boot.
+///
+/// The single authority for advertising VFS anywhere: pages, counts and the dynamic module
+/// description all read this. A device whose kernel does not carry the module and whose
+/// bundled module is absent or cannot load reports `false`, and the front ends hide the
+/// backend entirely.
+///
+/// Read-only with respect to module loading: it probes the key type only, so a status or
+/// doctor query never turns into an `insmod`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn responds_now() -> bool {
+    use crate::vfs::backend::KeyringKernel;
+    use crate::vfs::sys::KeyringChannel;
+
+    let Ok(mut kernel) = KeyringKernel::new(KeyringChannel::Hybridmount) else {
+        return false;
+    };
+    kernel
+        .probe_version()
+        .is_some_and(|found| SUPPORTED_VERSIONS.contains(&found.as_str()))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn responds_now() -> bool {
+    false
+}
+
 /// Prints the diagnostic report as JSON on stdout.
 pub fn handle() -> Result<()> {
     let (version, listed) = observe();

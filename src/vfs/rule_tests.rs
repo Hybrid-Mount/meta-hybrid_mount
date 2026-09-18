@@ -2,20 +2,8 @@
 
 use super::*;
 use crate::config::Mode;
-use crate::module_id::ModuleId;
-use crate::mount_tree::{MountSource, MountTree, NodeFileType};
-use std::path::PathBuf;
-
-fn source(module: &str, relative: &str, file_type: NodeFileType, backend: Mode) -> MountSource {
-    MountSource {
-        module_id: ModuleId::try_from(module).unwrap(),
-        relative: relative.to_owned(),
-        source_path: PathBuf::from(format!("/data/adb/modules/{module}/{relative}")),
-        file_type,
-        replace: false,
-        backend,
-    }
-}
+use crate::mount_tree::{MountTree, NodeFileType};
+use crate::vfs::test_support::source;
 
 #[test]
 fn file_and_symlink_become_inject_rules_in_tree_order() {

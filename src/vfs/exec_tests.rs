@@ -3,9 +3,9 @@
 use super::*;
 use crate::config::Mode;
 use crate::errors::Error;
-use crate::mount_tree::{MountSource, MountTree, NodeFileType};
+use crate::mount_tree::{MountTree, NodeFileType};
 use crate::vfs::protocol::FLAG_WHITEOUT;
-use std::path::PathBuf;
+use crate::vfs::test_support::source;
 
 /// Kernel double: counts calls, captures the uids sent, and can fail mid-batch.
 #[derive(Default)]
@@ -42,22 +42,14 @@ impl VfsKernel for RecordingKernel {
     }
 }
 
-fn source(module: &str, relative: &str, file_type: NodeFileType) -> MountSource {
-    MountSource {
-        module_id: ModuleId::try_from(module).unwrap(),
-        relative: relative.to_owned(),
-        source_path: PathBuf::from(format!("/data/adb/modules/{module}/{relative}")),
-        file_type,
-        replace: false,
-        backend: Mode::Vfs,
-    }
-}
-
 /// A single-module plan; each key is both the in-module path and the target path.
 fn plan_for(entries: &[(&str, NodeFileType)]) -> MountPlan {
     let mut tree = MountTree::default();
     for (relative, file_type) in entries {
-        tree.insert(&format!("/{relative}"), source("m", relative, *file_type));
+        tree.insert(
+            &format!("/{relative}"),
+            source("m", relative, *file_type, Mode::Vfs),
+        );
     }
     MountPlan {
         tree,

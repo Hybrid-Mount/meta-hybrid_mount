@@ -71,15 +71,23 @@ pub fn lgetfilecon(path: &Path) -> Result<String> {
     Ok(String::from_utf8_lossy(&context).to_string())
 }
 
+/// Whether `path` is `prefix` itself or lies below it on a path-segment boundary.
+///
+/// A plain `starts_with` is wrong here: `/system_ext` is not under `/system`. Rule
+/// matching, try-umount partition filtering and sub-mount collection all need that
+/// segment check, so they share this implementation.
+pub fn is_same_or_below(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
 /// Whether the path falls in a partition excluded from try-umount registration (v4.2.0 pairip workaround).
 pub fn is_ignored_unmount_partition(path: &str) -> bool {
-    defs::IGNORE_UNMOUNT_PARTITIONS.iter().any(|ignored| {
-        let ignored = ignored.trim_end_matches('/');
-        path == ignored
-            || path
-                .strip_prefix(ignored)
-                .is_some_and(|rest| rest.starts_with('/'))
-    })
+    defs::IGNORE_UNMOUNT_PARTITIONS
+        .iter()
+        .any(|ignored| is_same_or_below(path, ignored.trim_end_matches('/')))
 }
 
 /// KernelSU try-umount list integration (Linux/Android only).
@@ -100,6 +108,20 @@ mod tests {
         assert!(nested.is_dir());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn same_or_below_matches_only_on_segment_boundaries() {
+        assert!(is_same_or_below("/system", "/system"));
+        assert!(is_same_or_below("/system/etc", "/system"));
+        assert!(is_same_or_below("/system/etc/hosts", "/system"));
+
+        // A shared string prefix is not a path prefix.
+        assert!(!is_same_or_below("/system_ext", "/system"));
+        assert!(!is_same_or_below("/systemd", "/system"));
+        assert!(!is_same_or_below("/systematic/etc", "/system"));
+        assert!(!is_same_or_below("/", "/system"));
+        assert!(!is_same_or_below("/system", "/system/etc"));
     }
 
     #[test]

@@ -44,6 +44,10 @@ pub struct PlanInput<'a> {
     pub config: &'a Config,
     /// Promoted partitions discovered by the executor from the built-in promotion rules.
     pub promoted_partitions: &'a BTreeSet<String>,
+    /// Whether the kernel provides the VFS backend this boot. When false, every `vfs`
+    /// rule degrades to `ignore` so no plan, count or page can advertise a backend the
+    /// executor cannot use.
+    pub vfs_available: bool,
 }
 
 /// Builds the mount plan; cross-backend file, type and `.replace` conflicts are errors.
@@ -60,7 +64,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
             log::debug!("plan skip module: id={}, reason=blacklisted", module.id);
             continue;
         }
-        let rules = ModuleRulesView::new(&module.id, input.config);
+        let rules = ModuleRulesView::new(&module.id, input.config, input.vfs_available);
         process_module(module, &rules, input.promoted_partitions, &mut builder)?;
     }
 
@@ -77,7 +81,7 @@ struct ModuleRulesView {
 }
 
 impl ModuleRulesView {
-    fn new(module_id: &ModuleId, config: &Config) -> Self {
+    fn new(module_id: &ModuleId, config: &Config, vfs_available: bool) -> Self {
         let module_rule = config.rules.get(module_id);
         let default_mode = module_rule
             .and_then(|rule| rule.default_mode)
@@ -99,21 +103,29 @@ impl ModuleRulesView {
                 .then_with(|| left.0.cmp(&right.0))
         });
 
+        // A kernel without the module has no VFS backend to send rules to, so a configured `vfs`
+        // rule resolves to `ignore` instead of producing a plan the executor cannot run.
+        let degrade = |mode: Mode| {
+            if mode == Mode::Vfs && !vfs_available {
+                Mode::Ignore
+            } else {
+                mode
+            }
+        };
+
         Self {
-            default_mode,
-            path_rules,
+            default_mode: degrade(default_mode),
+            path_rules: path_rules
+                .into_iter()
+                .map(|(key, mode)| (key, degrade(mode)))
+                .collect(),
         }
     }
 
     fn resolve_mode(&self, relative: &str) -> Mode {
         self.path_rules
             .iter()
-            .find(|(key, _)| {
-                relative == key.as_str()
-                    || relative
-                        .strip_prefix(key)
-                        .is_some_and(|suffix| suffix.starts_with('/'))
-            })
+            .find(|(key, _)| crate::utils::is_same_or_below(relative, key))
             .map(|(_, mode)| *mode)
             .unwrap_or(self.default_mode)
     }
@@ -713,11 +725,21 @@ mod tests {
     }
 
     fn plan(modules: &[ModuleRecord], config: &Config, promoted: &[&str]) -> MountPlan {
+        plan_with_vfs(modules, config, promoted, true)
+    }
+
+    fn plan_with_vfs(
+        modules: &[ModuleRecord],
+        config: &Config,
+        promoted: &[&str],
+        vfs_available: bool,
+    ) -> MountPlan {
         let promoted: BTreeSet<String> = promoted.iter().map(|name| (*name).to_owned()).collect();
         let input = PlanInput {
             modules,
             config,
             promoted_partitions: &promoted,
+            vfs_available,
         };
         build_plan(&input).unwrap()
     }
@@ -728,6 +750,7 @@ mod tests {
             modules,
             config,
             promoted_partitions: &promoted,
+            vfs_available: true,
         };
         build_plan(&input).unwrap_err()
     }
@@ -1507,6 +1530,48 @@ mod tests {
         );
         assert!(result.overlay_module_ids.is_empty());
         assert!(result.magic_module_ids.is_empty());
+    }
+
+    /// A kernel without the module has nothing to send rules to: a global `vfs` default must
+    /// degrade to `ignore` rather than plan work the executor cannot run.
+    #[test]
+    fn vfs_default_degrades_to_ignore_without_a_kernel_backend() {
+        let module = record("vfs_mod", &[("system/etc/hosts", false)]);
+        let result = plan_with_vfs(&[module], &config(Mode::Vfs, no_rules()), &[], false);
+
+        assert!(result.vfs_module_ids.is_empty());
+        assert!(result.overlay_module_ids.is_empty());
+        assert!(result.magic_module_ids.is_empty());
+    }
+
+    #[test]
+    fn vfs_path_rule_degrades_to_ignore_without_a_kernel_backend() {
+        let mut rules = no_rules();
+        rules.insert(
+            "vfs_mod".to_owned(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::from([("system/etc/hosts".to_owned(), Mode::Vfs)]),
+            },
+        );
+        let module = record("vfs_mod", &[("system/etc/hosts", false)]);
+        let result = plan_with_vfs(&[module], &config(Mode::Overlay, rules), &[], false);
+
+        assert!(result.vfs_module_ids.is_empty());
+        assert!(result.magic_module_ids.is_empty());
+    }
+
+    /// The capability must gate VFS only: a magic plan stays intact on the same device.
+    #[test]
+    fn missing_vfs_backend_keeps_other_backends() {
+        let module = record("magic_mod", &[("system/etc/hosts", false)]);
+        let result = plan_with_vfs(&[module], &config(Mode::Magic, no_rules()), &[], false);
+
+        assert_eq!(
+            result.magic_module_ids,
+            vec![ModuleId::try_from("magic_mod").unwrap()]
+        );
+        assert!(result.vfs_module_ids.is_empty());
     }
 
     #[test]

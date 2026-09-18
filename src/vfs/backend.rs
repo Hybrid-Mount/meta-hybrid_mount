@@ -134,13 +134,12 @@ impl VfsKernel for KeyringKernel {
     }
 }
 
-/// Binds the single active VFS kernel provider (v2: K2 only).
+/// Binds the single active VFS kernel provider (`hybridmount` only).
 ///
 /// 1. If a foreign NoMount implementation is present, refuse to attach.
-/// 2. If K2 already responds, use it without loading anything.
-/// 3. Otherwise return `Ok(None)`, leaving the caller to degrade or fail. Hybrid Mount
-///    does not distribute or automatically load a K2 module while its upstream licence
-///    declaration remains unresolved.
+/// 2. If the module already responds, use it without loading anything.
+/// 3. Otherwise load the bundled hybridmount module and probe again.
+/// 4. Still unavailable: `Ok(None)`, leaving the caller to degrade or fail.
 ///
 /// The magic must match the kernel header's `HYBRIDMOUNT_MAGIC_SIG`; on a mismatch the
 /// kernel rejects the page with `-EFAULT` and the probe fails, which degrades rather
@@ -149,12 +148,26 @@ pub fn select_provider(
     kernel: &mut dyn VfsKernel,
     supported: &[&str],
     foreign_nomount: bool,
+    load_lkm: impl FnOnce() -> Result<()>,
 ) -> Result<Option<VfsProvider>> {
     if foreign_nomount {
         return Err(Error::VfsForeignNomount {
             detail: "a foreign NoMount kernel implementation is present".to_owned(),
         });
     }
+
+    match kernel.version() {
+        Ok(found) if supported.contains(&found.as_str()) => return Ok(Some(VfsProvider::Hm)),
+        Ok(found) => {
+            return Err(Error::VfsUnsupportedVersion {
+                found,
+                supported: supported.join(","),
+            });
+        }
+        Err(_) => {}
+    }
+
+    load_lkm()?;
 
     match kernel.version() {
         Ok(found) if supported.contains(&found.as_str()) => Ok(Some(VfsProvider::Hm)),

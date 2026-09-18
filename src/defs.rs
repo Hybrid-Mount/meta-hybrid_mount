@@ -6,8 +6,14 @@ pub const MODULE_ID: &str = "hybrid_mount";
 pub const DEFAULT_MODULE_DIR: &str = "/data/adb/modules";
 pub const SELF_MODULE_DIR: &str = "/data/adb/modules/hybrid_mount";
 pub const SELF_MODULE_PROP: &str = "/data/adb/modules/hybrid_mount/module.prop";
+/// Mountify's ext4 sysfs LKM, shipped for non-KernelSU installs.
 pub const MODULE_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/lkm/binaries";
 pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
+
+/// Hybrid Mount's own VFS kernel module (`hybridmount`), prebuilt per Android/GKI target and
+/// named hybridmount-<android>-<kernel>.ko.
+pub const VFS_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/vfs/binaries";
+pub const VFS_LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_lkm_boot_guard";
 
 /// VFS boot guard: written before rules are applied and cleared on success, so a hard
 /// crash leaves it behind and the next boot skips the VFS backend.

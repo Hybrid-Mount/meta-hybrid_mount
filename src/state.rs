@@ -583,6 +583,7 @@ fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppMod
         modules,
         config,
         promoted_partitions: &promoted_partitions,
+        vfs_available: crate::vfs::available(),
     })
     .unwrap_or_else(|err| {
         log::warn!("fallback module plan failed, returning raw module list: {err}");

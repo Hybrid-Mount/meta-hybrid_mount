@@ -705,6 +705,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             modules: &modules,
             config: &config,
             promoted_partitions: &promoted,
+            vfs_available: crate::vfs::available(),
         }),
     )?;
     log::info!(
@@ -1597,7 +1598,8 @@ impl Drop for VfsBootGuard {
 ///
 /// Probed once, without reading the other side's rules or arbitrating. A failed probe (key
 /// type unregistered, unsupported platform, allocation failure) counts as "absent", so this
-/// is defence in depth rather than the only guarantee: K2 and NoMount use different key types, and setup.sh refuses to let both coexist.
+/// is defence in depth rather than the only guarantee: `hybridmount` and NoMount use different
+/// key types, and setup.sh refuses to let both coexist.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn detect_foreign_nomount() -> bool {
     match KeyringKernel::new(KeyringChannel::Nomount) {
@@ -1660,14 +1662,18 @@ fn apply_vfs_phase(
     let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
     let foreign_nomount = detect_foreign_nomount();
     state.vfs_foreign_nomount = foreign_nomount;
-    let provider = match select_provider(&mut kernel, SUPPORTED_VERSIONS, foreign_nomount) {
+    let provider = match select_provider(
+        &mut kernel,
+        SUPPORTED_VERSIONS,
+        foreign_nomount,
+        crate::vfs::lkm::load_hm_vfs,
+    ) {
         Ok(Some(provider)) => provider,
         Ok(None) => {
             log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
             if config.vfs_strict {
                 return Err(Error::VfsUnavailable {
-                    reason: "no supported built-in VFS kernel provider and vfs_strict is enabled"
-                        .to_owned(),
+                    reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
                 });
             }
             return Ok(VfsExecStats::default());
