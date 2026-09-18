@@ -183,15 +183,24 @@ cargo test -- --nocapture
 
 ### LKM（可选）
 
-- 位置: `module/lkm/`
-- 许可证: GPL-2.0-only
-- 仅 aarch64 预编译
-- 来源: Mountify 项目
-- 校验: `module/lkm/binaries/list.txt` 包含 SHA256
+随包提供两个独立的内核模块，均由 CI 在 DDK 镜像中编译，产物连同 SHA256 清单提交回仓库：
+
+- **ext4 sysfs nuke LKM**
+  - 位置: `module/lkm/`
+  - 许可证: GPL-2.0-only
+  - 仅 aarch64 预编译，来源: Mountify 项目
+  - 校验: `module/lkm/binaries/list.txt` 包含 SHA256
+- **VFS 内核子系统（`hybridmount`）**
+  - 位置: `module/vfs/`（源码在 `module/vfs/src/`）
+  - 许可证: GPL-2.0-only，fork 自 NoMount
+  - 仅 aarch64 预编译，按 Android/GKI 目标命名 `hybridmount-android<NN>-<kernel>.ko`
+  - 校验: `module/vfs/binaries/list.txt` 包含 SHA256（由 `.github/workflows/kernel-module.yml` 生成）
+
+启动流程先探测内建的 key type `hybridmount`；未响应时从 `module/vfs/binaries/` 选择与内核线精确匹配的模块加载后再探测。
 
 ### 熔断机制
 
-ext4 LKM 在调用 `insmod` 前持久化熔断标记，加载尝试正常返回时移除标记。若内核在加载期间崩溃，标记会保留，下次启动跳过 LKM 加载但保留 Hybrid Mount 其他功能。
+两个模块共用 `src/sys/lkm.rs` 的熔断逻辑：在调用 `insmod` 前持久化熔断标记，加载尝试正常返回时移除标记。若内核在加载期间崩溃，标记会保留，下次启动跳过对应模块但保留 Hybrid Mount 其他功能。
 
 ## Important Files
 

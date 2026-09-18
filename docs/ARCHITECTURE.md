@@ -22,7 +22,7 @@ module/metamount.sh
   → 预写 scan.ret 与 run/state.json
   → 准备临时 staging
   → 从同一棵树物化并执行 OverlayFS，再执行 Magic Mount
-  → 再执行 VFS 注入（HM 自有 K2 Provider）
+  → 再执行 VFS 注入（HM 自有的 hybridmount Provider）
   → 提交 KernelSU try-umount 列表
   → 更新状态快照并清理临时资源
 ```
@@ -37,10 +37,11 @@ module/metamount.sh
 - `src/plan/`：应用“路径规则 > 模块默认值 > 全局默认值”，在共享树上检测跨后端冲突并派生 Overlay 操作。
 - `src/overlayfs/`：从共享树物化文件、目录、符号链接、opaque `.replace` 与 whiteout，随后执行 64 层分段、子挂载重建与文件级 shallow layer。
 - `src/magic_mount/`：直接消费共享树，执行 tmpfs skeleton、mirror、bind、`.replace` 与 whiteout 语义；不再二次扫描模块目录。
-- `src/vfs/`：HM 自有 K2 VFS 后端。`rule.rs` 把共享树映射为规则，`protocol.rs`
+- `src/vfs/`：HM 自有的 VFS 后端（`hybridmount` 模块）。`rule.rs` 把共享树映射为规则，`protocol.rs`
   编解码 HM 专用 wire protocol，`sys.rs` 通过 keyring `add_key` 发送并维护页对齐缓冲，
-  `backend.rs` 只绑定 key type `hybridmount` 的 K2 Provider，并在检测到外来 NoMount 时拒绝并存，
-  `exec.rs` 应用规则并统计。发布包不分发或自动加载 K2 内核模块。
+  `backend.rs` 只绑定 key type `hybridmount` 的 Provider，并在检测到外来 NoMount 时拒绝并存，
+  `lkm.rs` 在内核未内建时从 `vfs/binaries/` 加载精确匹配的预编译模块，
+  `exec.rs` 应用规则并统计。
 - `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
@@ -79,6 +80,7 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 | `status` | 输出上次启动状态 |
 | `install-state` | 输出安装与内核兼容状态 |
 | `clear-mount-errors` | 清理模块的 `mount_error` 标记 |
+| `vfs-doctor` | 诊断 VFS 后端：探测 key type `hybridmount`、报告模块版本与不兼容原因 |
 | `emulated-soft-reboot` | 按有效 mount source 懒卸载现有挂载，用于模拟软重启前的清理 |
 | `version` | 输出版本 JSON |
 
@@ -86,7 +88,7 @@ WebUI 不持有第二套业务协议：配置与状态请求都映射到以上�
 
 `status` 中的 `active_mounts` 是 OverlayFS 与 Magic Mount 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts` 与 `magic_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。
 
-`status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（v2 只有 `hm`，即 HM 自有的 K2 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
+`status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（只有 `hm`，即 HM 自有的 `hybridmount` 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
 
 ## 共享节点树契约
 
@@ -100,13 +102,18 @@ try-umount 列表；其成功目标记录在 `vfs_active_mounts`。
 
 VFS 规则以虚拟路径为键，同一目标只下发一条（`node.sources` 中模块顺序靠后者获胜）。
 回滚是定向删除：下发前登记本次完整批次，失败时对其逐条 `DEL_RULE` 并容忍 `ENOENT`，
-不使用 `CLEAR_RULES`，因此不会改动 K2 中其它调用方预先安装的规则。
+不使用 `CLEAR_RULES`，因此不会改动 `hybridmount` 中其它调用方预先安装的规则。
 
 VFS 的 `.replace` 目录会生成 opaque 规则，并在 planner 阶段独占整个子树；
 若子树中混入 OverlayFS 或 Magic Mount 目标，立即返回 `PlanConflict`。
 
-VFS Provider 只有 HM 自有 K2。系统会探测内建或由用户独立安装的 K2；若无可用
+VFS Provider 只有 HM 自有的 `hybridmount`。启动时先探测内建的 key type `hybridmount`；未响应则从
+`vfs/binaries/` 加载与内核线及 Android/GKI 标签精确匹配的预编译模块并重新探测。若仍无可用
 Provider、版本不兼容或检测到外来 NoMount，则按 `vfs_strict` 选择失败或降级跳过。
+
+探测结果同时喂给 planner：`PlanInput.vfs_available` 为 false 时，所有 `vfs` 规则（模块默认
+与路径规则）在规划阶段就解析为 `ignore`，避免配置、状态计数或 WebUI 页面向用户展示一个本机
+执行不了的后端。WebUI 的 VFS 选项、计数与说明行也都读取同一个探测结果。
 
 ## 验证边界
 
