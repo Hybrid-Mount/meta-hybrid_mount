@@ -326,12 +326,8 @@ fn is_replace_dir(path: &Path) -> bool {
 mod tests {
     use super::*;
 
-    fn module_dir(tag: &str) -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-scanner-{tag}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    fn module_dir(tag: &str) -> crate::test_support::Fixture {
+        crate::test_support::Fixture::new(&format!("scanner-{tag}"))
     }
 
     fn write_module(root: &Path, id: &str) -> PathBuf {
@@ -376,8 +372,6 @@ mod tests {
                 .any(|entry| entry.relative == "system/etc"
                     && entry.file_type == NodeFileType::Directory)
         );
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -399,8 +393,6 @@ mod tests {
         fs::write(path.join("remove"), "").unwrap();
         let modules = scan(&root, &[]);
         assert!(modules[0].disabled);
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -420,8 +412,6 @@ mod tests {
         fs::create_dir_all(path.join("product")).unwrap();
         let modules = scan(&root, &["product".to_owned()]);
         assert!(modules[0].has_mount_files);
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -432,7 +422,6 @@ mod tests {
         fs::write(path.join("module.prop"), "id=bad\n").unwrap();
 
         assert!(scan(&root, &[]).is_empty());
-        fs::remove_dir_all(&root).ok();
     }
 
     #[cfg(unix)]
@@ -454,9 +443,6 @@ mod tests {
         .unwrap();
 
         assert!(scan(&root, &[]).is_empty());
-
-        fs::remove_dir_all(&root).ok();
-        fs::remove_dir_all(&outside).ok();
     }
 
     #[test]
@@ -474,8 +460,6 @@ mod tests {
                 .iter()
                 .any(|entry| entry.relative == "product/app/x.apk")
         );
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[cfg(unix)]
@@ -513,8 +497,6 @@ mod tests {
                 .count(),
             2
         );
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -537,8 +519,6 @@ mod tests {
                 .iter()
                 .all(|entry| entry.relative != "system/etc/.replace")
         );
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -553,8 +533,6 @@ mod tests {
         .unwrap();
 
         assert!(scan(&root, &[]).is_empty());
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -586,8 +564,6 @@ mod tests {
             }
             other => panic!("expected duplicate module id error, got: {other}"),
         }
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -605,8 +581,6 @@ mod tests {
         let modules = scan(&root, &[]);
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].id, "good");
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
@@ -617,8 +591,6 @@ mod tests {
         fs::create_dir(path.join("module.prop")).unwrap();
 
         assert!(scan(&root, &[]).is_empty());
-
-        fs::remove_dir_all(&root).ok();
     }
 
     #[test]

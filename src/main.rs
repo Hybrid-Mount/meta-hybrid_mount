@@ -19,6 +19,8 @@ mod scanner;
 mod state;
 mod storage;
 mod sys;
+#[cfg(test)]
+mod test_support;
 mod timing;
 mod utils;
 mod vfs;

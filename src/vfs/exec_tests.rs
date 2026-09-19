@@ -4,8 +4,8 @@ use super::*;
 use crate::config::Mode;
 use crate::errors::Error;
 use crate::mount_tree::{MountTree, NodeFileType};
+use crate::test_support::mount_source as source;
 use crate::vfs::protocol::{FLAG_WHITEOUT, ListedRule};
-use crate::vfs::test_support::source;
 
 /// Kernel double: counts calls, captures the uids sent, and can fail mid-batch.
 #[derive(Default)]

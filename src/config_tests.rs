@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use super::*;
+use crate::test_support::Fixture;
 
 fn module_id(id: &str) -> ModuleId {
     ModuleId::try_from(id).unwrap()
@@ -107,8 +108,7 @@ custom_mounts = []
 
 #[test]
 fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
-    let dir = test_dir("legacy-daemon-mode");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("legacy-daemon-mode");
     let path = dir.join("config.toml");
     // This obsolete key previously caused strict boot loading to abort.
     let original = r#"moduledir = "/data/adb/modules"
@@ -146,7 +146,6 @@ default_mode = "ignore"
             .contains("daemon_startup_mode")
     );
     assert_eq!(Config::load_for_boot(&path).unwrap(), loaded);
-    cleanup(&dir);
 }
 
 #[test]
@@ -162,8 +161,7 @@ fn retired_daemon_mode_does_not_allow_unknown_or_malformed_config() {
             "daemon_startup_mode = \"persistent\"\nrules = [",
         ),
     ] {
-        let dir = test_dir(&format!("legacy-daemon-{name}"));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = Fixture::new(&format!("legacy-daemon-{name}"));
         let path = dir.join("config.toml");
         fs::write(&path, text).unwrap();
 
@@ -172,7 +170,6 @@ fn retired_daemon_mode_does_not_allow_unknown_or_malformed_config() {
             Err(Error::ConfigParse { .. })
         ));
         assert_eq!(fs::read_to_string(&path).unwrap(), text);
-        cleanup(&dir);
     }
 }
 
@@ -296,7 +293,7 @@ fn webui_json_exposes_config_missing_but_toml_never_persists_it() {
 
 #[test]
 fn save_creates_parent_and_load_roundtrips() {
-    let dir = test_dir("save-load");
+    let dir = Fixture::new("save-load");
     let path = dir.join("nested").join("config.toml");
 
     let mut config = Config {
@@ -315,12 +312,11 @@ fn save_creates_parent_and_load_roundtrips() {
     let loaded = Config::load(&path).unwrap();
 
     assert_eq!(loaded, config);
-    cleanup(&dir);
 }
 
 #[test]
 fn write_default_resets_disk_content() {
-    let dir = test_dir("write-default");
+    let dir = Fixture::new("write-default");
     let path = dir.join("config.toml");
 
     let config = Config {
@@ -333,13 +329,11 @@ fn write_default_resets_disk_content() {
 
     assert_eq!(written, Config::default());
     assert_eq!(Config::load(&path).unwrap(), Config::default());
-    cleanup(&dir);
 }
 
 #[test]
 fn save_rejects_global_ignore_and_leaves_existing_file_untouched() {
-    let dir = test_dir("save-reject-ignore");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("save-reject-ignore");
     let path = dir.join("config.toml");
     Config::default().save(&path).unwrap();
     let before = fs::read_to_string(&path).unwrap();
@@ -352,7 +346,6 @@ fn save_rejects_global_ignore_and_leaves_existing_file_untouched() {
 
     assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
     assert_eq!(fs::read_to_string(&path).unwrap(), before);
-    cleanup(&dir);
 }
 
 #[cfg(unix)]
@@ -360,8 +353,7 @@ fn save_rejects_global_ignore_and_leaves_existing_file_untouched() {
 fn save_refuses_to_replace_symlinked_config() {
     use std::os::unix::fs::symlink;
 
-    let dir = test_dir("save-symlink");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("save-symlink");
     let target = dir.join("real.toml");
     Config::default().save(&target).unwrap();
     let before = fs::read_to_string(&target).unwrap();
@@ -379,12 +371,11 @@ fn save_refuses_to_replace_symlinked_config() {
             .file_type()
             .is_symlink()
     );
-    cleanup(&dir);
 }
 
 #[test]
 fn load_or_default_uses_defaults_and_marks_missing_file() {
-    let dir = test_dir("load-or-default");
+    let dir = Fixture::new("load-or-default");
     let missing = dir.join("missing.toml");
 
     let config = Config::load_or_default(&missing).unwrap();
@@ -395,14 +386,11 @@ fn load_or_default_uses_defaults_and_marks_missing_file() {
         ..Config::default()
     };
     assert_eq!(config, expected);
-
-    cleanup(&dir);
 }
 
 #[test]
 fn load_or_default_uses_defaults_for_corrupt_config_without_overwriting_it() {
-    let dir = test_dir("load-or-default-corrupt");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-or-default-corrupt");
     let path = dir.join("config.toml");
     let corrupt = "default_mode = not-valid";
     fs::write(&path, corrupt).unwrap();
@@ -418,13 +406,11 @@ fn load_or_default_uses_defaults_for_corrupt_config_without_overwriting_it() {
     expected.module_blacklist.insert(module_id("blocked"));
     assert_eq!(config, expected);
     assert_eq!(fs::read_to_string(&path).unwrap(), corrupt);
-    cleanup(&dir);
 }
 
 #[test]
 fn load_or_default_uses_defaults_for_unsupported_config_without_overwriting_it() {
-    let dir = test_dir("load-or-default-unsupported");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-or-default-unsupported");
     let path = dir.join("config.toml");
     let unsupported = "default_mode = \"ignore\"\n";
     fs::write(&path, unsupported).unwrap();
@@ -433,13 +419,11 @@ fn load_or_default_uses_defaults_for_unsupported_config_without_overwriting_it()
 
     assert_eq!(config, Config::default());
     assert_eq!(fs::read_to_string(&path).unwrap(), unsupported);
-    cleanup(&dir);
 }
 
 #[test]
 fn load_or_default_uses_defaults_when_config_cannot_be_read() {
-    let dir = test_dir("load-or-default-read-error");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-or-default-read-error");
     let path = dir.join("unreadable.toml");
     fs::create_dir_all(&path).unwrap();
 
@@ -447,12 +431,11 @@ fn load_or_default_uses_defaults_when_config_cannot_be_read() {
 
     assert_eq!(config, Config::default());
     assert!(path.is_dir());
-    cleanup(&dir);
 }
 
 #[test]
 fn load_for_boot_accepts_valid_config() {
-    let dir = test_dir("load-for-boot-valid");
+    let dir = Fixture::new("load-for-boot-valid");
     let path = dir.join("config.toml");
     let expected = Config {
         default_mode: Mode::Magic,
@@ -463,13 +446,11 @@ fn load_for_boot_accepts_valid_config() {
     let loaded = Config::load_for_boot(&path).unwrap();
 
     assert_eq!(loaded, expected);
-    cleanup(&dir);
 }
 
 #[test]
 fn load_for_boot_uses_defaults_only_when_main_config_is_genuinely_missing() {
-    let dir = test_dir("load-for-boot-missing");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-for-boot-missing");
     let path = dir.join("config.toml");
     fs::write(
         dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
@@ -485,12 +466,11 @@ fn load_for_boot_uses_defaults_only_when_main_config_is_genuinely_missing() {
     expected.module_blacklist.insert(module_id("blocked"));
 
     assert_eq!(loaded, expected);
-    cleanup(&dir);
 }
 
 #[test]
 fn load_for_boot_rejects_missing_config_parent() {
-    let dir = test_dir("load-for-boot-missing-parent");
+    let dir = Fixture::new("load-for-boot-missing-parent");
     let path = dir.join("missing-parent/config.toml");
 
     let err = Config::load_for_boot(&path).unwrap_err();
@@ -505,13 +485,11 @@ fn load_for_boot_rejects_missing_config_parent() {
         ),
         "{err}"
     );
-    cleanup(&dir);
 }
 
 #[test]
 fn load_for_boot_rejects_corrupt_config_without_overwriting_it() {
-    let dir = test_dir("load-for-boot-corrupt");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-for-boot-corrupt");
     let path = dir.join("config.toml");
     let corrupt = "default_mode = not-valid";
     fs::write(&path, corrupt).unwrap();
@@ -523,26 +501,22 @@ fn load_for_boot_rejects_corrupt_config_without_overwriting_it() {
             && fs::read_to_string(&path).unwrap() == corrupt,
         "{err}"
     );
-    cleanup(&dir);
 }
 
 #[test]
 fn load_for_boot_rejects_unsupported_config() {
-    let dir = test_dir("load-for-boot-unsupported");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-for-boot-unsupported");
     let path = dir.join("config.toml");
     fs::write(&path, "default_mode = \"ignore\"\n").unwrap();
 
     let err = Config::load_for_boot(&path).unwrap_err();
 
     assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
-    cleanup(&dir);
 }
 
 #[test]
 fn load_for_boot_rejects_unreadable_main_config() {
-    let dir = test_dir("load-for-boot-unreadable");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-for-boot-unreadable");
     let path = dir.join("config.toml");
     fs::create_dir_all(&path).unwrap();
 
@@ -552,7 +526,6 @@ fn load_for_boot_rejects_unreadable_main_config() {
         matches!(err, Error::ConfigRead { path: ref error_path, .. } if error_path == &path),
         "{err}"
     );
-    cleanup(&dir);
 }
 
 #[cfg(unix)]
@@ -560,8 +533,7 @@ fn load_for_boot_rejects_unreadable_main_config() {
 fn load_for_boot_rejects_dangling_config_symlink() {
     use std::os::unix::fs::symlink;
 
-    let dir = test_dir("load-for-boot-dangling-symlink");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-for-boot-dangling-symlink");
     let path = dir.join("config.toml");
     symlink("missing-target", &path).unwrap();
 
@@ -577,13 +549,11 @@ fn load_for_boot_rejects_dangling_config_symlink() {
         ),
         "{err}"
     );
-    cleanup(&dir);
 }
 
 #[test]
 fn load_wraps_read_errors_with_path_context() {
-    let dir = test_dir("load-read-error");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("load-read-error");
     // A directory is not a readable TOML file, so `read_to_string` fails on every platform.
     let path = dir.join("unreadable.toml");
     fs::create_dir_all(&path).unwrap();
@@ -592,13 +562,11 @@ fn load_wraps_read_errors_with_path_context() {
     let message = err.to_string();
     assert!(message.contains(&path.display().to_string()), "{message}");
     assert!(message.contains("read config"), "{message}");
-
-    cleanup(&dir);
 }
 
 #[test]
 fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
-    let dir = test_dir("module-blacklist");
+    let dir = Fixture::new("module-blacklist");
     let path = dir.join("config.toml");
     Config::default().save(&path).unwrap();
     fs::write(
@@ -614,7 +582,6 @@ fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
     assert_eq!(loaded.module_blacklist.len(), 2);
     assert!(!loaded.to_toml().unwrap().contains("module_blacklist"));
     assert!(!loaded.to_toml().unwrap().contains("blocked"));
-    cleanup(&dir);
 }
 
 #[test]
@@ -630,7 +597,7 @@ fn bundled_blacklist_contains_move_certificate() {
 
 #[test]
 fn invalid_blacklist_module_id_fails_closed_with_path_context() {
-    let dir = test_dir("module-blacklist-invalid-id");
+    let dir = Fixture::new("module-blacklist-invalid-id");
     let path = dir.join("config.toml");
     Config::default().save(&path).unwrap();
     let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
@@ -646,14 +613,11 @@ fn invalid_blacklist_module_id_fails_closed_with_path_context() {
         message.contains(&blacklist_path.display().to_string()),
         "{message}"
     );
-
-    cleanup(&dir);
 }
 
 #[test]
 fn missing_main_config_loads_blacklist_but_corrupt_blacklist_fails_closed() {
-    let dir = test_dir("module-blacklist-fallback");
-    fs::create_dir_all(&dir).unwrap();
+    let dir = Fixture::new("module-blacklist-fallback");
     let path = dir.join("config.toml");
     let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
     fs::write(&blacklist_path, r#"blacklist = ["blocked"]"#).unwrap();
@@ -676,7 +640,6 @@ fn missing_main_config_loads_blacklist_but_corrupt_blacklist_fails_closed() {
     // A corrupt blacklist is fail-closed even when the config exists.
     fs::write(&path, "default_mode = \"magic\"\n").unwrap();
     assert!(Config::load_or_default(&path).is_err());
-    cleanup(&dir);
 }
 
 #[test]
@@ -764,7 +727,7 @@ fn patch_can_replace_all_rules_for_full_editor_save() {
 
 #[test]
 fn payload_hex_roundtrips_through_save() {
-    let dir = test_dir("payload");
+    let dir = Fixture::new("payload");
     let path = dir.join("config.toml");
 
     let json = r#"{"default_mode":"magic","disable_umount":true}"#;
@@ -775,8 +738,6 @@ fn payload_hex_roundtrips_through_save() {
     assert_eq!(saved.default_mode, Mode::Magic);
     assert!(saved.disable_umount);
     assert_eq!(saved.moduledir, PathBuf::from("/data/adb/modules"));
-
-    cleanup(&dir);
 }
 
 #[test]
@@ -792,9 +753,8 @@ fn payload_arg_requires_marker_and_rejects_invalid_hex() {
 
 #[test]
 fn boot_loader_ignores_legacy_mountsource_and_preserves_settings() {
-    let dir = test_dir("legacy-mountsource");
+    let dir = Fixture::new("legacy-mountsource");
     let path = dir.join("config.toml");
-    fs::create_dir_all(&dir).unwrap();
 
     for source in ["MIUI", "KSU", "APatch", "overlay", "/data/adb/custom", ""] {
         fs::write(
@@ -820,20 +780,11 @@ default_mode = "overlay"
         assert!(!config.to_webui_json(false).unwrap().contains("mountsource"));
         assert_eq!(Config::from_toml(&saved).unwrap(), config);
     }
-    cleanup(&dir);
 }
 
 #[test]
 fn config_patch_rejects_retired_mountsource() {
     assert!(serde_json::from_str::<ConfigPatch>(r#"{"mountsource":"MIUI"}"#).is_err());
-}
-
-fn test_dir(tag: &str) -> PathBuf {
-    std::env::temp_dir().join(format!("hybrid-mount-{tag}-{}", std::process::id()))
-}
-
-fn cleanup(dir: &Path) {
-    fs::remove_dir_all(dir).ok();
 }
 
 #[test]

@@ -6,7 +6,7 @@
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 use std::cell::Cell;
 #[cfg(test)]
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -25,7 +25,7 @@ static FAIL_NEXT_MAGIC_REMOUNT: AtomicBool = AtomicBool::new(false);
 static FAIL_NEXT_MAGIC_MOVE: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 static FAIL_NEXT_MAGIC_SYMLINK: AtomicBool = AtomicBool::new(false);
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 thread_local! {
     static FAKE_MAGIC_MOUNT_OPS: Cell<bool> = const { Cell::new(false) };
 }
@@ -97,11 +97,11 @@ pub fn should_fail_next_magic_symlink() -> bool {
 }
 
 pub fn use_fake_magic_mount_ops() -> bool {
-    #[cfg(test)]
+    #[cfg(all(test, target_os = "linux"))]
     {
         FAKE_MAGIC_MOUNT_OPS.with(Cell::get)
     }
-    #[cfg(not(test))]
+    #[cfg(not(all(test, target_os = "linux")))]
     {
         false
     }
@@ -163,17 +163,17 @@ pub fn enable_next_magic_symlink_failure() {
     FAIL_NEXT_MAGIC_SYMLINK.store(true, Ordering::SeqCst);
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 pub struct FakeMagicMountOpsGuard;
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 impl Drop for FakeMagicMountOpsGuard {
     fn drop(&mut self) {
         FAKE_MAGIC_MOUNT_OPS.with(|enabled| enabled.set(false));
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 pub fn fake_magic_mount_ops() -> FakeMagicMountOpsGuard {
     FAKE_MAGIC_MOUNT_OPS.with(|enabled| enabled.set(true));
     FakeMagicMountOpsGuard
@@ -229,6 +229,7 @@ pub fn reset() {
     ] {
         gate.store(false, Ordering::SeqCst);
     }
+    #[cfg(target_os = "linux")]
     FAKE_MAGIC_MOUNT_OPS.with(|enabled| enabled.set(false));
 }
 

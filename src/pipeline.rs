@@ -607,7 +607,10 @@ fn confirmed_mount_targets(
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn log_phase_failure<T>(phase: &'static str, result: Result<T>) -> Result<T> {
     if let Err(err) = &result {
-        log::error!("phase={phase} failed: {err}");
+        log::error!(
+            "phase={phase} failed class={}: {err}",
+            err.classify().label()
+        );
     }
     result
 }
@@ -2091,18 +2094,11 @@ mod tests {
 
         let _fault_guard = crate::sys::faults::test_lock();
 
-        if let Err(err) =
-            unsafe { rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWNS) }
-        {
-            eprintln!("skipping overlay rollback test: unshare failed: {err}");
+        if !crate::test_support::require_mount_namespace() {
             return;
         }
 
-        let root = std::env::temp_dir().join(format!(
-            "hybrid-mount-overlay-rollback-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
+        let root = crate::test_support::Fixture::new("overlay-rollback");
         let first = root.join("first");
         let second = root.join("second");
         let lower = root.join("lower");
@@ -2144,11 +2140,7 @@ mod tests {
 
         match result {
             Err(err) if err.to_string().contains("injected overlay mount failure") => {}
-            Err(err) => {
-                eprintln!("skipping overlay rollback assertion: {err}");
-                let _ = std::fs::remove_dir_all(&root);
-                return;
-            }
+            Err(err) => panic!("expected injected overlay mount failure: {err}"),
             Ok(_) => panic!("injected overlay mount failure was not triggered"),
         }
 
@@ -2164,16 +2156,12 @@ mod tests {
         let snapshot = crate::sys::mountinfo::MountSnapshot::read().unwrap();
         assert!(!snapshot.contains(&first));
         assert!(!snapshot.contains(&second));
-
-        let _ = std::fs::remove_dir_all(&root);
     }
 
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     #[test]
     fn run_mount_pipeline_reports_unsupported_platform_on_host() {
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
-        {
-            let err = run_mount_pipeline().unwrap_err();
-            assert!(err.to_string().contains("linux/android"), "{err}");
-        }
+        let err = run_mount_pipeline().unwrap_err();
+        assert!(err.to_string().contains("linux/android"), "{err}");
     }
 }

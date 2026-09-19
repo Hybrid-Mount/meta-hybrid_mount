@@ -3,7 +3,7 @@
 use super::*;
 use crate::config::Mode;
 use crate::mount_tree::{MountTree, NodeFileType};
-use crate::vfs::test_support::source;
+use crate::test_support::mount_source as source;
 
 #[test]
 fn file_and_symlink_become_inject_rules_in_tree_order() {

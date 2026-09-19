@@ -146,3 +146,12 @@ fn vfs_errors_have_explicit_classes_and_messages() {
     };
     assert_eq!(protocol.classify(), crate::errors::ErrorClass::Permanent);
 }
+
+#[test]
+fn error_class_labels_are_a_stable_log_contract() {
+    use crate::errors::ErrorClass;
+
+    assert_eq!(ErrorClass::Transient.label(), "transient");
+    assert_eq!(ErrorClass::Permanent.label(), "permanent");
+    assert_eq!(ErrorClass::ManualRecovery.label(), "manual_recovery");
+}

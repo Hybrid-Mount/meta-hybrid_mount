@@ -12,10 +12,6 @@ pub mod protocol;
 pub mod rule;
 pub mod sys;
 
-#[cfg(test)]
-#[path = "test_support.rs"]
-mod test_support;
-
 /// Whether the VFS backend can be offered on this device right now.
 ///
 /// Every surface that advertises VFS reads this, so a kernel without the module shows no VFS

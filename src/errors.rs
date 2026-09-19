@@ -21,6 +21,17 @@ pub enum ErrorClass {
     ManualRecovery,
 }
 
+impl ErrorClass {
+    /// Stable error-class token used in boot logs.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Transient => "transient",
+            Self::Permanent => "permanent",
+            Self::ManualRecovery => "manual_recovery",
+        }
+    }
+}
+
 /// I/O error carrying context, path and source. Fields stay structured and the
 /// Display text is generated here, so call sites never pre-format strings.
 #[derive(Debug)]

@@ -27,11 +27,6 @@ fn payload_has_exact_wire_layout() {
     assert_eq!(u32::from_le_bytes(page[24..28].try_into().unwrap()), 0);
 }
 
-/// Checks the constants against the kernel header so the two cannot drift apart.
-///
-/// A mismatch makes the kernel answer -EFAULT and VFS degrade silently with no rule
-/// applied, which is hard to diagnose. The `page[0..8] == MAGIC.to_le_bytes()` assertion
-/// in `payload_has_exact_wire_layout` is self-referential and would pass for any value.
 #[test]
 fn wire_magic_and_version_match_the_kernel_header() {
     let header = include_str!("../../module/vfs/src/hybridmount.h");
@@ -66,6 +61,69 @@ fn wire_magic_and_version_match_the_kernel_header() {
         crate::vfs::backend::SUPPORTED_VERSIONS.contains(&version),
         "内核版本串 {version} 不在用户态 SUPPORTED_VERSIONS 内，Provider 会被判为不支持"
     );
+}
+
+// Compare with the C header so independently edited Rust and kernel definitions cannot drift.
+#[test]
+fn command_numbers_match_the_kernel_enum() {
+    let header = include_str!("../../module/vfs/src/hybridmount.h");
+    let body = header
+        .split_once("HM_CMD_UNSPEC = 0,")
+        .unwrap()
+        .1
+        .split_once("};")
+        .unwrap()
+        .0;
+    let kernel: Vec<_> = body
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect();
+    let commands = [
+        ("HM_CMD_GET_VERSION", NmCommand::GetVersion),
+        ("HM_CMD_ADD_RULE", NmCommand::AddRule),
+        ("HM_CMD_DEL_RULE", NmCommand::DelRule),
+        ("HM_CMD_ADD_UID", NmCommand::AddUid),
+        ("HM_CMD_DEL_UID", NmCommand::DelUid),
+        ("HM_CMD_CLEAR_ALL", NmCommand::ClearAll),
+        ("HM_CMD_CLEAR_RULES", NmCommand::ClearRules),
+        ("HM_CMD_CLEAR_UIDS", NmCommand::ClearUids),
+        ("HM_CMD_GET_LIST", NmCommand::GetList),
+        ("HM_CMD_GET_UIDS", NmCommand::GetUids),
+    ];
+    assert_eq!(kernel, commands.map(|(name, _)| name));
+    for (index, (name, command)) in commands.iter().enumerate() {
+        assert_eq!(*command as usize, index + 1, "{name}");
+    }
+}
+
+#[test]
+fn record_layout_and_flags_match_the_kernel_structs() {
+    let header: String = include_str!("../../module/vfs/src/hybridmount.h")
+        .split_whitespace()
+        .collect();
+    for declaration in [
+        "structhm_rule_hdr{u32flags;u32uid;u16v_len;u16r_len;}__attribute__((packed));".to_owned(),
+        "structhm_del_hdr{u32uid;u16v_len;}__attribute__((packed));".to_owned(),
+        format!(
+            "structhm_payload{{u64magic;u32cmd;u32target_uid;intstatus;u32arg1;u32data_size;charbuffer[{BUFFER_LEN}];}}__attribute__((packed));"
+        ),
+    ] {
+        assert!(
+            header.contains(&declaration),
+            "kernel layout changed: {declaration}"
+        );
+    }
+    assert_eq!(RULE_HEADER_LEN, 12);
+    assert_eq!(DEL_HEADER_LEN, 6);
+    assert_eq!(PAYLOAD_LEN, 28 + BUFFER_LEN);
+    for (name, flag, bit) in [
+        ("HM_FLAG_WHITEOUT", FLAG_WHITEOUT, 2),
+        ("HM_FLAG_OPAQUE", FLAG_OPAQUE, 3),
+    ] {
+        assert!(header.contains(&format!("#define{name}(1<<{bit})")));
+        assert_eq!(flag, 1 << bit);
+    }
 }
 
 #[test]

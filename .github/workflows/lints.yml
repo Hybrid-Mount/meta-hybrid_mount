@@ -29,6 +29,8 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+      # Mount rollback tests need private namespaces and tmpfs mounts.
+      options: --cap-add SYS_ADMIN
     defaults:
       run:
         shell: bash

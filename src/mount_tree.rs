@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+//! Shared mount tree: one target per real mount path, carrying every module's contribution.
 //!
 //! The scanner identifies node types and `.replace` / whiteout semantics read-only, then the
-//! planner labels each module contribution overlay, magic or ignore. Execution only consumes
+//! planner labels each module contribution overlay, magic, VFS or ignore. Execution only consumes
 //! this tree; it never rescans module directories or keeps a second path-filtering protocol.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -21,7 +22,7 @@ pub const BUILTIN_PARTITIONS: [(&str, bool); 4] = [
     ("odm", false),
 ];
 
-/// Node types both mount backends care about.
+/// Node types recorded by the scanner and consumed by each backend.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NodeFileType {
     RegularFile,
@@ -295,14 +296,13 @@ mod tests {
     use super::*;
 
     fn source(module: &str, relative: &str, file_type: NodeFileType, backend: Mode) -> MountSource {
-        MountSource {
-            module_id: ModuleId::try_from(module).unwrap(),
-            relative: relative.to_owned(),
-            source_path: PathBuf::from(format!("/modules/{module}/{relative}")),
+        crate::test_support::mount_source_at(
+            module,
+            relative,
             file_type,
-            replace: false,
             backend,
-        }
+            PathBuf::from(format!("/modules/{module}/{relative}")),
+        )
     }
 
     #[test]

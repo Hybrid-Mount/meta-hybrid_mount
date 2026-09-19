@@ -20,8 +20,7 @@ pub const FLAG_WHITEOUT: u32 = 1 << 2;
 /// hidden and only injected children show through.
 pub const FLAG_OPAQUE: u32 = 1 << 3;
 
-// Command numbering is part of the wire contract and must not change. Only
-// AddRule/DelRule/AddUid/GetVersion are issued today.
+// Command numbers must match the kernel enum and remain stable across releases.
 //
 // `allow` rather than `expect`: the crate-level allow(dead_code) in main.rs covers the
 // non-Linux targets, where `expect` would trip unfulfilled_lint_expectations under

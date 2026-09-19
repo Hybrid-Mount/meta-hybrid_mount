@@ -574,8 +574,7 @@ mod tests {
 
     #[test]
     fn remove_path_handles_missing_and_files() {
-        let dir = std::env::temp_dir().join(format!("hybrid-mount-remove-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("remove");
         let file = dir.join("a.txt");
         std::fs::write(&file, "x").unwrap();
 
@@ -588,8 +587,7 @@ mod tests {
 
     #[test]
     fn atomic_write_creates_and_replaces_content() {
-        let dir = std::env::temp_dir().join(format!("hybrid-mount-atomic-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("atomic");
         let path = dir.join("state.txt");
 
         atomic_write(&path, b"first").unwrap();
@@ -603,7 +601,6 @@ mod tests {
             .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
             .count();
         assert_eq!(leftovers, 0);
-        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[cfg(unix)]
@@ -611,9 +608,7 @@ mod tests {
     fn atomic_write_retries_collisions_without_removing_existing_entries() {
         use std::os::unix::fs::symlink;
 
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-collision-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("collision");
         let target = dir.join("state.json");
         let candidate =
             |sequence| dir.join(format!(".state.json.{}.{sequence}.tmp", std::process::id()));
@@ -628,17 +623,12 @@ mod tests {
         assert!(candidate(1).is_dir());
         assert!(candidate(2).is_symlink());
         assert!(!candidate(3).exists());
-        fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(unix)]
     #[test]
     fn atomic_write_bounds_collision_retries_and_preserves_original_content() {
-        let dir = std::env::temp_dir().join(format!(
-            "hybrid-mount-collision-limit-{}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("collision-limit");
         let target = dir.join("state.json");
         fs::write(&target, b"original").unwrap();
         for sequence in 0..32 {
@@ -658,7 +648,6 @@ mod tests {
         assert_eq!(source.kind(), io::ErrorKind::AlreadyExists);
         assert_eq!(fs::read(&target).unwrap(), b"original");
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 33);
-        fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(unix)]
@@ -666,9 +655,7 @@ mod tests {
     fn atomic_write_preserves_existing_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-atomic-mode-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("atomic-mode");
         let target = dir.join("config.toml");
         fs::write(&target, b"original").unwrap();
         fs::set_permissions(&target, fs::Permissions::from_mode(0o600)).unwrap();
@@ -679,15 +666,12 @@ mod tests {
             fs::metadata(&target).unwrap().permissions().mode() & 0o777,
             0o600
         );
-        fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(unix)]
     #[test]
     fn atomic_write_removes_temp_file_when_rename_fails() {
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-atomic-fail-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("atomic-fail");
         let target = dir.join("target");
         std::fs::create_dir_all(&target).unwrap();
 
@@ -704,14 +688,11 @@ mod tests {
             .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
             .count();
         assert_eq!(leftovers, 0, "rename 失败后不能遗留临时文件");
-        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn atomic_write_fails_when_parent_is_not_a_directory() {
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-parent-file-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("parent-file");
         let parent_file = dir.join("parent");
         std::fs::write(&parent_file, b"occupied").unwrap();
         let target = parent_file.join("config.toml");
@@ -723,22 +704,18 @@ mod tests {
         assert_ne!(source.kind(), std::io::ErrorKind::NotFound);
 
         assert_eq!(std::fs::read(&parent_file).unwrap(), b"occupied");
-        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[cfg(unix)]
     #[test]
     fn stale_temp_cleanup_preserves_current_process_writes() {
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-temp-active-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("temp-active");
         let active = dir.join(format!(".state.json.{}.0.tmp", std::process::id()));
         fs::write(&active, b"in progress").unwrap();
 
         cleanup_stale_atomic_temp_files(&dir).unwrap();
 
         assert!(active.is_file(), "cleanup must not remove an active write");
-        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[cfg(unix)]
@@ -748,9 +725,7 @@ mod tests {
         use std::os::unix::fs::symlink;
         use std::time::{Duration, SystemTime};
 
-        let dir =
-            std::env::temp_dir().join(format!("hybrid-mount-temp-stale-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::Fixture::new("temp-stale");
         let old = SystemTime::now() - Duration::from_secs(2 * 86400);
         let stale = ".state.json.4294967295.1.tmp";
         let unrelated = [
@@ -779,19 +754,12 @@ mod tests {
         assert!(recent.is_file());
         assert!(link.is_symlink());
         assert!(directory.is_dir());
-        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[test]
     fn shared_tree_staging_keeps_overlay_nodes_and_excludes_magic_nodes() {
-        use crate::mount_tree::MountSource;
-
-        let fixture = std::env::temp_dir().join(format!(
-            "hybrid-mount-shared-tree-stage-{}",
-            std::process::id()
-        ));
-        remove_path(&fixture).unwrap();
+        let fixture = crate::test_support::Fixture::new("shared-tree-stage");
         let module = fixture.join("source/m");
         let etc = module.join("system/etc");
         fs::create_dir_all(&etc).unwrap();
@@ -799,15 +767,14 @@ mod tests {
         fs::write(etc.join("magic.conf"), "magic").unwrap();
         symlink("overlay.conf", etc.join("overlay.link")).unwrap();
 
-        let source = |relative: &str, file_type: NodeFileType, backend: MountMode| MountSource {
-            module_id: crate::module_id::ModuleId::try_from("m").unwrap(),
-            relative: relative.to_owned(),
-            source_path: relative
-                .split('/')
-                .fold(module.clone(), |path, component| path.join(component)),
-            file_type,
-            replace: false,
-            backend,
+        let source = |relative: &str, file_type, backend| {
+            crate::test_support::mount_source_at(
+                "m",
+                relative,
+                file_type,
+                backend,
+                module.join(relative),
+            )
         };
         let mut tree = MountTree::default();
         tree.insert(
@@ -853,8 +820,6 @@ mod tests {
         assert!(!staged_etc.join("magic.conf").exists());
         assert_eq!(stats.files, 1);
         assert_eq!(stats.symlinks, 1);
-
-        remove_path(&fixture).unwrap();
     }
 
     #[cfg(unix)]
@@ -862,19 +827,13 @@ mod tests {
     fn directory_metadata_follows_symlink_to_stock_directory() {
         use std::os::unix::fs::symlink;
 
-        let fixture = std::env::temp_dir().join(format!(
-            "hybrid-mount-directory-metadata-symlink-{}",
-            std::process::id()
-        ));
+        let fixture = crate::test_support::Fixture::new("directory-metadata-symlink");
         let stock = fixture.join("stock/media");
         let target = fixture.join("target/media");
-        remove_path(&fixture).unwrap();
         std::fs::create_dir_all(&stock).unwrap();
         std::fs::create_dir_all(target.parent().unwrap()).unwrap();
         symlink("../stock/media", &target).unwrap();
 
         assert!(directory_metadata(&target).unwrap().is_dir());
-
-        remove_path(&fixture).unwrap();
     }
 }

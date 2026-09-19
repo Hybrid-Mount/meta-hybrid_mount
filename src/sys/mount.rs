@@ -176,70 +176,50 @@ mod tests {
         }
     }
 
-    fn unshare_mount_namespace() -> bool {
-        match unsafe { rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWNS) } {
-            Ok(()) => true,
-            Err(err) => {
-                eprintln!("skipping mount namespace test: unshare failed: {err}");
-                false
-            }
+    struct TmpfsMount(PathBuf);
+
+    impl TmpfsMount {
+        fn new(path: &Path) -> std::io::Result<Self> {
+            fs::create_dir_all(path)?;
+            mount("hybrid-test", path, c"tmpfs", MountFlags::empty(), None)?;
+            Ok(Self(path.to_path_buf()))
         }
     }
 
-    fn test_root(tag: &str) -> PathBuf {
-        let root =
-            std::env::temp_dir().join(format!("hybrid-mount-mount-{tag}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root)
-            .unwrap_or_else(|err| panic!("create test root {}: {err}", root.display()));
-        root
-    }
-
-    fn cleanup_root(root: &Path) {
-        let _ = unmount(root, UnmountFlags::DETACH);
-        let _ = fs::remove_dir_all(root);
+    impl Drop for TmpfsMount {
+        fn drop(&mut self) {
+            let _ = unmount(&self.0, UnmountFlags::DETACH);
+        }
     }
 
     #[test]
     fn rollback_mount_target_removes_nested_mounts_and_confirms() {
-        if !unshare_mount_namespace() {
+        let _fault_guard = faults::test_lock();
+        if !crate::test_support::require_mount_namespace() {
             return;
         }
-        let root = test_root("rollback");
+        let root = crate::test_support::Fixture::new("rollback");
         let parent = root.join("parent");
         let child = parent.join("child");
-        fs::create_dir_all(&child).unwrap();
-
-        if mount("hybrid-test", &parent, c"tmpfs", MountFlags::empty(), None).is_err()
-            || mount("hybrid-test", &child, c"tmpfs", MountFlags::empty(), None).is_err()
-        {
-            eprintln!("skipping rollback test: nested tmpfs mounts are unavailable");
-            cleanup_root(&root);
-            return;
-        }
+        let _parent_mount = TmpfsMount::new(&parent).unwrap();
+        // Create the child after mounting its parent, or the parent hides it.
+        let _child_mount = TmpfsMount::new(&child).unwrap();
 
         assert!(rollback_mount_target(&parent).is_ok());
         let snapshot = MountSnapshot::read().unwrap();
         assert!(!snapshot.contains(&parent));
         assert!(!snapshot.contains(&child));
-
-        cleanup_root(&root);
     }
 
     #[test]
     fn injected_ebusy_fails_rollback_with_target() {
         let _fault_guard = faults::test_lock();
-        if !unshare_mount_namespace() {
+        if !crate::test_support::require_mount_namespace() {
             return;
         }
-        let root = test_root("ebusy");
+        let root = crate::test_support::Fixture::new("ebusy");
         let parent = root.join("parent");
-        fs::create_dir_all(&parent).unwrap();
-        if mount("hybrid-test", &parent, c"tmpfs", MountFlags::empty(), None).is_err() {
-            eprintln!("skipping EBUSY injection test: tmpfs mount unavailable");
-            cleanup_root(&root);
-            return;
-        }
+        let _parent_mount = TmpfsMount::new(&parent).unwrap();
 
         faults::enable_next_unmount_ebusy_failure();
         let err = rollback_mount_target(&parent).unwrap_err();
@@ -248,15 +228,11 @@ mod tests {
         assert!(message.contains(&parent.display().to_string()), "{message}");
 
         faults::reset();
-        cleanup_root(&root);
     }
 
     #[test]
     fn injected_mountinfo_failure_propagates_from_rollback() {
         let _fault_guard = faults::test_lock();
-        if !unshare_mount_namespace() {
-            return;
-        }
         faults::enable_mountinfo_read_failure();
         let err = rollback_mount_target(Path::new("/unused")).unwrap_err();
         assert!(err.to_string().contains("injected mountinfo"), "{err}");

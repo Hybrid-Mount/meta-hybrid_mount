@@ -28,7 +28,7 @@ pub struct OverlayOperation {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MountPlan {
-    /// The single node tree produced by the scanner and planner and consumed by both executors.
+    /// Shared tree for staging, Magic Mount and VFS; OverlayFS uses `overlay_ops`.
     pub tree: MountTree,
     /// Directory-level overlay: target mountpoint to ordered lowerdirs, sorted by module id.
     pub overlay_ops: Vec<OverlayOperation>,
