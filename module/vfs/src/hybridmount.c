@@ -1539,10 +1539,17 @@ static int hm_process_payload(unsigned long user_addr)
     unsigned long pg_off = offset_in_page(user_addr);
     char *buf_ptr, *buf_end;
 
-    if (pg_off + sizeof(*payload) > PAGE_SIZE || get_user_pages_fast(user_addr, 1, FOLL_WRITE, &page) != 1) 
+    if (pg_off + sizeof(*payload) > PAGE_SIZE || get_user_pages_fast(user_addr, 1, FOLL_WRITE, &page) != 1) {
+        hm_err("page pin failed for payload at 0x%lx\n", user_addr);
         return -EFAULT;
+    }
 
     if ((payload = (void *)((char *)kmap(page) + pg_off))->magic != HYBRIDMOUNT_MAGIC_SIG) {
+        /* The only symptom is -EFAULT, which a caller cannot tell apart from "no module
+         * loaded". Log both magic values so a mismatched userspace build is obvious. */
+        hm_err("payload magic mismatch: got 0x%llx, expected 0x%llx\n",
+               (unsigned long long)payload->magic,
+               (unsigned long long)HYBRIDMOUNT_MAGIC_SIG);
         kunmap(page);
         put_page(page);
         return -EFAULT;
@@ -1590,7 +1597,14 @@ static int hm_process_payload(unsigned long user_addr)
             }
             /* Report the first failure and where it happened; a later success must not
              * mask it. On success arg1 stays the consumed cursor. */
-            if (first_err) { payload->status = first_err; payload->arg1 = err_offset; }
+            if (first_err) {
+                /* Userspace only sees a status and an offset; the reason a rule was
+                 * rejected (a real path that does not resolve, ENOMEM) is otherwise
+                 * invisible on a device. */
+                hm_warn("add_rule batch failed: status=%d, offset=%u, bytes=%u\n",
+                        first_err, err_offset, payload->data_size);
+                payload->status = first_err; payload->arg1 = err_offset;
+            }
             else payload->arg1 = buf_ptr - payload->buffer;
 
             if (!list_empty(&r_victims)) {
@@ -1630,7 +1644,13 @@ static int hm_process_payload(unsigned long user_addr)
             }
             up_write(&hybridmount_rwsem);
             /* As in ADD_RULE: report the first error and its offset, else the cursor. */
-            if (first_err) { payload->status = first_err; payload->arg1 = err_offset; }
+            if (first_err) {
+                /* ENOENT below is the normal "nothing to delete" rollback result, so only
+                 * a genuine parse failure is noisy here. */
+                hm_warn("del_rule batch failed: status=%d, offset=%u, bytes=%u\n",
+                        first_err, err_offset, payload->data_size);
+                payload->status = first_err; payload->arg1 = err_offset;
+            }
             else payload->arg1 = buf_ptr - payload->buffer;
 
             if (!list_empty(&r_victims)) {
