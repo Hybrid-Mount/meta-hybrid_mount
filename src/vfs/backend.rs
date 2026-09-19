@@ -29,6 +29,8 @@ pub trait VfsKernel {
     fn add_uids(&mut self, uids: &[u32]) -> Result<()>;
     /// Deletes the given rules only, leaving rules from other sources in place.
     fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()>;
+    /// Every rule currently installed, so a caller can verify a batch actually landed.
+    fn list_rules(&mut self) -> Result<Vec<protocol::ListedRule>>;
 }
 
 pub struct KeyringKernel {
@@ -50,17 +52,6 @@ impl KeyringKernel {
         let request = protocol::build_payload(NmCommand::GetVersion, 0, &[]).ok()?;
         let response = self.exchange(&request).ok()?;
         protocol::parse_version(&response).ok()
-    }
-
-    /// Every rule currently installed in the provider.
-    pub fn list_rules(&mut self) -> Result<Vec<protocol::ListedRule>> {
-        protocol::paginate(
-            |cursor| {
-                let page = protocol::build_list_payload(NmCommand::GetList, cursor)?;
-                self.exchange(&page)
-            },
-            protocol::parse_list,
-        )
     }
 
     /// Every isolated uid currently installed in the provider.
@@ -131,6 +122,16 @@ impl VfsKernel for KeyringKernel {
             protocol::ensure_status_allow_enoent(&response)?;
         }
         Ok(())
+    }
+
+    fn list_rules(&mut self) -> Result<Vec<protocol::ListedRule>> {
+        protocol::paginate(
+            |cursor| {
+                let page = protocol::build_list_payload(NmCommand::GetList, cursor)?;
+                self.exchange(&page)
+            },
+            protocol::parse_list,
+        )
     }
 }
 

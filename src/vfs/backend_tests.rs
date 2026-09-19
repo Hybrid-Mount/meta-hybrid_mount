@@ -57,6 +57,10 @@ impl VfsKernel for MockKernel {
         self.applied = self.applied.saturating_sub(rules.len());
         Ok(())
     }
+
+    fn list_rules(&mut self) -> Result<Vec<crate::vfs::protocol::ListedRule>> {
+        Ok(Vec::new())
+    }
 }
 
 #[test]

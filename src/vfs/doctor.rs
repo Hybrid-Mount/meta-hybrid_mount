@@ -138,7 +138,7 @@ fn presence_on_device() -> ModulePresence {
 /// Probes the key type and, when it answers, reads both tables. Never loads anything.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn observe() -> (Option<String>, Result<ListedTables>) {
-    use crate::vfs::backend::KeyringKernel;
+    use crate::vfs::backend::{KeyringKernel, VfsKernel};
     use crate::vfs::sys::KeyringChannel;
 
     let Ok(mut kernel) = KeyringKernel::new(KeyringChannel::Hybridmount) else {

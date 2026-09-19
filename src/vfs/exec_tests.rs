@@ -4,7 +4,7 @@ use super::*;
 use crate::config::Mode;
 use crate::errors::Error;
 use crate::mount_tree::{MountTree, NodeFileType};
-use crate::vfs::protocol::FLAG_WHITEOUT;
+use crate::vfs::protocol::{FLAG_WHITEOUT, ListedRule};
 use crate::vfs::test_support::source;
 
 /// Kernel double: counts calls, captures the uids sent, and can fail mid-batch.
@@ -14,6 +14,8 @@ struct RecordingKernel {
     removed: usize,
     uids_added: Vec<u32>,
     fail_apply: bool,
+    /// Reported back by `list_rules`, so a test can simulate a rule the kernel dropped.
+    installed: Vec<ListedRule>,
 }
 
 impl VfsKernel for RecordingKernel {
@@ -39,6 +41,10 @@ impl VfsKernel for RecordingKernel {
     fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
         self.removed += rules.len();
         Ok(())
+    }
+
+    fn list_rules(&mut self) -> Result<Vec<ListedRule>> {
+        Ok(self.installed.clone())
     }
 }
 
@@ -183,4 +189,50 @@ fn strict_apply_failure_still_removes_the_prefix_and_reports_the_error() {
 
     assert!(matches!(err, Error::VfsProtocol { .. }));
     assert_eq!(kernel.removed, 1);
+}
+
+fn listed(virtual_path: &str) -> ListedRule {
+    ListedRule {
+        flags: 0,
+        uid: 0,
+        virtual_path: virtual_path.to_owned(),
+        real_path: String::new(),
+    }
+}
+
+/// The case the read-back exists for: the kernel acknowledged the batch but the rule is not
+/// there, which must surface as a difference rather than a silent success.
+#[test]
+fn a_rule_the_provider_did_not_report_back_is_missing() {
+    let planned = plan_rules(&hosts_and_whiteout()).unwrap();
+    let reported = vec![listed("/system/etc/hosts")];
+
+    let missing = missing_rules(&planned.rules, &reported);
+
+    assert_eq!(missing, vec!["/system/etc/hidden.xml".to_owned()]);
+}
+
+#[test]
+fn a_fully_reported_batch_reports_nothing_missing() {
+    let planned = plan_rules(&hosts_and_whiteout()).unwrap();
+    let reported = vec![
+        listed("/system/etc/hidden.xml"),
+        listed("/system/etc/hosts"),
+    ];
+
+    assert!(missing_rules(&planned.rules, &reported).is_empty());
+}
+
+/// Rules from an earlier pipeline run in the same boot stay in the table, so the read-back
+/// must compare only what this batch sent and never treat the table as an exact match.
+#[test]
+fn unrelated_installed_rules_are_not_reported_as_missing() {
+    let planned = plan_rules(&plan_for(&[(
+        "system/etc/hosts",
+        NodeFileType::RegularFile,
+    )]))
+    .unwrap();
+    let reported = vec![listed("/system/etc/hosts"), listed("/system/priv-app/Old")];
+
+    assert!(missing_rules(&planned.rules, &reported).is_empty());
 }

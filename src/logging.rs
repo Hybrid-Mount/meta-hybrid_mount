@@ -12,13 +12,22 @@ use log::LevelFilter;
 #[cfg(not(target_os = "android"))]
 use log::{Log, Metadata, Record};
 
+/// The logcat tag every record carries, so a device session can follow one boot with
+/// `logcat -s HybridMount`. The module path is folded into the message when a tag is set.
+#[cfg(target_os = "android")]
+const LOGCAT_TAG: &str = "HybridMount";
+
 /// Initialises the log backend and sets the global level. Safe to call repeatedly.
 pub fn init() {
     let level = detect_level_filter();
     log::set_max_level(level);
 
     #[cfg(target_os = "android")]
-    android_logger::init_once(android_logger::Config::default().with_max_level(level));
+    android_logger::init_once(
+        android_logger::Config::default()
+            .with_max_level(level)
+            .with_tag(LOGCAT_TAG),
+    );
 
     #[cfg(not(target_os = "android"))]
     if log::set_logger(&StderrLogger).is_ok() {

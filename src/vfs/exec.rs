@@ -10,7 +10,7 @@ use crate::errors::Result;
 use crate::module_id::ModuleId;
 use crate::plan::MountPlan;
 use crate::vfs::backend::VfsKernel;
-use crate::vfs::protocol::{EncodedRule, encode_rule};
+use crate::vfs::protocol::{EncodedRule, ListedRule, encode_rule};
 use crate::vfs::rule::{VfsAction, build_vfs_rules};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -107,6 +107,25 @@ pub fn apply_rules_with_policy(
             }
         }
     }
+}
+
+/// Virtual paths of `expected` rules the provider did not report back.
+///
+/// An acknowledged batch is not proof the rules are installed, so the pipeline reads the table
+/// back after applying and reports the difference; a device log can then distinguish "VFS is
+/// active" from "the kernel accepted the batch and dropped it". Comparison is by virtual path
+/// because that is the module's own key: re-adding one shadows the existing rule rather than
+/// creating a second, which is why `DEL_RULE` indexes by path too.
+pub fn missing_rules(expected: &[EncodedRule], listed: &[ListedRule]) -> Vec<String> {
+    let installed: BTreeSet<&str> = listed
+        .iter()
+        .map(|rule| rule.virtual_path.as_str())
+        .collect();
+    expected
+        .iter()
+        .map(|rule| String::from_utf8_lossy(&rule.virtual_path).into_owned())
+        .filter(|path| !installed.contains(path.as_str()))
+        .collect()
 }
 
 /// Order-preserving dedupe. The kernel rejects an already-isolated uid with `-EEXIST`,

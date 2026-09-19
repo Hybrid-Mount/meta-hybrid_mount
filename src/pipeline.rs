@@ -701,6 +701,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
         crate::vfs::available,
         crate::vfs::lkm::load_hm_vfs,
     );
+    log::info!(
+        "vfs provider probe: wants_vfs={}, available={}, strict={}",
+        config.wants_vfs(),
+        vfs_available,
+        config.vfs_strict
+    );
 
     // `vfs_strict` promises that an unavailable VFS fails the boot, and this is the only point
     // where that is still decidable: the plan below rewrites every `vfs` rule to `ignore`, so
@@ -729,19 +735,21 @@ fn run_mount_pipeline_impl() -> Result<()> {
         }),
     )?;
     log::info!(
-        "plan: overlay_ops={}, overlay_modules={}, magic_modules={}",
+        "plan: overlay_ops={}, overlay_modules={}, magic_modules={}, vfs_modules={}",
         plan.overlay_ops.len(),
         plan.overlay_module_ids.len(),
-        plan.magic_module_ids.len()
+        plan.magic_module_ids.len(),
+        plan.vfs_module_ids.len()
     );
     log::info!(
-        "plan metrics: modules={}, nodes={}, overlay_ops={}, shallow_targets={}, overlay_modules={}, magic_modules={}",
+        "plan metrics: modules={}, nodes={}, overlay_ops={}, shallow_targets={}, overlay_modules={}, magic_modules={}, vfs_modules={}",
         modules.len(),
         plan.tree.node_count(),
         plan.overlay_ops.len(),
         plan.overlay_files.len(),
         plan.overlay_module_ids.len(),
-        plan.magic_module_ids.len()
+        plan.magic_module_ids.len(),
+        plan.vfs_module_ids.len()
     );
     for (index, op) in plan.overlay_ops.iter().enumerate() {
         log::debug!(
@@ -1669,8 +1677,20 @@ fn apply_vfs_phase(
     transaction: &mut crate::sys::transaction::MountTransaction<'_>,
 ) -> Result<VfsExecStats> {
     if plan.vfs_module_ids.is_empty() {
+        log::info!("vfs phase skipped: reason=no_vfs_modules");
         return Ok(VfsExecStats::default());
     }
+    log::info!(
+        "vfs phase start: modules={}, module_ids={}, isolate_uids={}, strict={}",
+        plan.vfs_module_ids.len(),
+        plan.vfs_module_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(","),
+        config.vfs_isolate_uids.len(),
+        config.vfs_strict
+    );
     let guard = Path::new(defs::VFS_BOOT_GUARD_PATH);
     if guard.exists() {
         log::warn!("vfs boot guard present; skipping vfs backend this boot");
@@ -1713,6 +1733,12 @@ fn apply_vfs_phase(
     // applies non-atomically, so a mid-batch failure leaves an applied prefix to undo.
     // Rollback is always targeted, never a CLEAR_RULES of the whole provider table.
     let planned = crate::vfs::exec::plan_rules(plan)?;
+    let planned_rule_count = planned.rules.len();
+    log::info!(
+        "vfs batch planned: rules={}, targets={}",
+        planned_rule_count,
+        planned.stats.active_targets.len()
+    );
     let shared = Rc::new(RefCell::new(kernel));
     let applied = Rc::new(RefCell::new(planned));
     transaction.register_rollback_only(
@@ -1734,7 +1760,10 @@ fn apply_vfs_phase(
     let Some(stats) = outcome else {
         // Already deleted inline; clearing avoids a duplicate DEL_RULE at rollback.
         applied.borrow_mut().rules.clear();
-        log::warn!("vfs backend degraded: rules were rolled back and vfs is skipped this boot");
+        log::warn!(
+            "vfs backend degraded: rules were rolled back and vfs is skipped this boot (rules={})",
+            planned_rule_count
+        );
         return Ok(VfsExecStats::default());
     };
 
@@ -1746,6 +1775,39 @@ fn apply_vfs_phase(
         stats.whiteouts,
         stats.opaque
     );
+
+    // An acknowledged batch is not proof the rules are installed, so read the table back and
+    // report the difference. This is the line that tells a device log whether VFS is really
+    // active, and a listing failure is logged rather than raised: the rules were applied.
+    let expected = applied.borrow();
+    for rule in &expected.rules {
+        log::debug!(
+            "vfs rule applied: flags={:#x}, target={}, source={}",
+            rule.flags,
+            String::from_utf8_lossy(&rule.virtual_path),
+            String::from_utf8_lossy(&rule.real_path)
+        );
+    }
+    match shared.borrow_mut().list_rules() {
+        Ok(listed) => {
+            let missing = crate::vfs::exec::missing_rules(&expected.rules, &listed);
+            if missing.is_empty() {
+                log::info!(
+                    "vfs read-back confirmed: installed={}, expected={}",
+                    listed.len(),
+                    expected.rules.len()
+                );
+            } else {
+                log::warn!(
+                    "vfs read-back found {} of {} rules missing after apply: {}",
+                    missing.len(),
+                    expected.rules.len(),
+                    missing.join(",")
+                );
+            }
+        }
+        Err(err) => log::warn!("vfs read-back failed, rules were applied: {err}"),
+    }
     Ok(stats)
 }
 
