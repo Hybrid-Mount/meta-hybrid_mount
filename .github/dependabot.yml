@@ -19,9 +19,10 @@ updates:
       # parse_mode as '"HTML"' and Telegram answers `400 unsupported parse_mode`.
       # The wire-level tests in tools/notify/src/lib.rs are the gate for lifting
       # this; a bump that skips them breaks the release notification, not the build
-      # alone. Ignore every version so the upgrade is a deliberate, tested change.
+      # alone. Naming the dependency with no `versions` ignores every update, so
+      # the upgrade stays a deliberate, tested change. The previous `0.47.x` range
+      # was what let 0.48 through.
       - dependency-name: "tgbot"
-        versions: ["*"]
 
   - package-ecosystem: "npm"
     directory: "/webui"
