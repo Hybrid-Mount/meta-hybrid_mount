@@ -40,6 +40,24 @@ Las rutas de las reglas son relativas a la raíz del módulo. Las reglas de mód
 
 Este enrutamiento no modifica la comprobación de capacidad `CONFIG_TMPFS_XATTR` existente. En KernelSU, la instalación elimina por completo el directorio `lkm/` del módulo y, durante la ejecución, solo usa el ioctl oficial `NukeExt4Sysfs`. Las instalaciones de APatch y otros sistemas que no son KSU conservan el LKM y lo prueban de forma predeterminada después de montar la preparación ext4. Los archivos `.ko` incluidos solo admiten aarch64. La selección automática exige una coincidencia exacta de la línea del kernel y la etiqueta Android/GKI; las combinaciones desconocidas se rechazan. Los LKM precompilados deben validarse para comprobar la compatibilidad ABI en el dispositivo real correspondiente. Si el dispositivo falla durante `insmod`, un marcador persistente de protección evita que el LKM vuelva a cargarse en el siguiente arranque sin desactivar el resto de Hybrid Mount. Consulta [`module/lkm/README.md`](../module/lkm/README.md) para ver la matriz de compatibilidad, las sumas de comprobación, las fuentes y las licencias.
 
+## Backend VFS
+
+VFS es la ruta de inyección del propio Hybrid Mount en el lado del kernel, controlada a través del keyring por el módulo `hybridmount`. Es una implementación independiente y no interopera con NoMount.
+
+**Cómo se identifica el proveedor.** La decisión de arranque se basa únicamente en una sonda de solo lectura del tipo de clave del kernel `hybridmount`: si responde con una versión compatible, el proveedor es utilizable. Por separado, `vfs-doctor` clasifica cómo está presente: una entrada en `/proc/modules` significa que lo registró un módulo cargable; un directorio `/sys/module/hybridmount` sin esa entrada significa que está compilado en la imagen del kernel; si no existe ninguna de las dos cosas, no hay ningún proveedor. La sonda es de solo lectura, por lo que `status` y `vfs-doctor` nunca desencadenan un `insmod`.
+
+**Lógica de arranque.** Si el tipo de clave responde con una versión compatible, el proveedor se vincula y no se carga nada. Si ninguna regla selecciona VFS, tampoco se carga el módulo incluido. Si alguna regla sí selecciona VFS mientras la sonda permanece muda, la secuencia de arranque elige el módulo incluido que coincide exactamente con la línea del kernel y la etiqueta Android/GKI, lo carga y vuelve a sondear; si sigue sin estar disponible, todas las reglas `vfs` se degradan a `ignore`, o el arranque falla cuando `vfs_strict = true`. La carga se ejecuta antes de construir el plan de montaje, porque la planificación reescribe las reglas `vfs` a `ignore` mientras el proveedor está mudo y el ejecutor saldría antes de tiempo. Antes de `insmod` se escribe un marcador de protección y se elimina cuando el intento retorna, de modo que solo un fallo del kernel lo deja atrás; el siguiente arranque entonces rechaza un reintento automático hasta que el marcador se elimine manualmente.
+
+**Integrar VFS en un kernel.** Las versiones incluyen un módulo aarch64 precompilado para cada objetivo Android/GKI compatible y lo cargan automáticamente, por lo que esos kernels no necesitan ningún paso de integración. Compílalo dentro del kernel cuando quieras evitar el `insmod`, o cuando tu línea del kernel no tenga precompilado. Desde la raíz de un árbol del kernel:
+
+```sh
+sh /path/to/metamodule/module/vfs/setup.sh
+```
+
+Esto copia las fuentes en `fs/hybridmount/` y las añade a `fs/Makefile` y `fs/Kconfig`; habilita `CONFIG_HYBRIDMOUNT=y` para compilarlo dentro del kernel o `=m` para compilarlo como módulo. `--cleanup` revierte todos los cambios. Un árbol que ya integra NoMount se rechaza: ambas implementaciones secuestran las operaciones de inodo y el kernel no impedirá que coexistan, ya que registran tipos de clave diferentes.
+
+**Diagnóstico.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` informa del estado de presencia, de la versión que respondió el tipo de clave, de las versiones compatibles y, cuando un proveedor no es utilizable, del motivo.
+
 ## Comentarios y errores
 
 Antes de instalar o informar de un problema, lee el [Aviso de uso](../USAGE_NOTICE.md). Incluye el bugreport de KernelSU/APatch, la versión del módulo y los pasos para reproducir el problema. Ponte en contacto mediante [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) o el [grupo de Telegram](https://t.me/hybridmountchat).

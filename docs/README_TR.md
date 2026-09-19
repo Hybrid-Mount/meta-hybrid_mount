@@ -40,6 +40,24 @@ Kural yolları modül kök dizinine göre yazılır. Modül ve yol düzeyindeki 
 
 Bu yönlendirme, projenin mevcut `CONFIG_TMPFS_XATTR` yetenek denetimini değiştirmez. KernelSU kurulumunda modülün tüm `lkm/` dizini silinir ve çalışma zamanında yalnızca resmi `NukeExt4Sysfs` ioctl'u kullanılır. APatch ve diğer KSU dışı kurulumlar LKM'yi korur ve ext4 hazırlama alanı bağlandıktan sonra varsayılan olarak kullanmayı dener. Birlikte gelen `.ko` dosyaları yalnızca aarch64'ü destekler. Otomatik seçim için çekirdek serisi ile Android/GKI etiketinin tam olarak eşleşmesi gerekir; bilinmeyen kombinasyonlar reddedilir. Önceden derlenmiş LKM'lerin ABI uyumluluğu yine de ilgili gerçek cihazda doğrulanmalıdır. Cihaz `insmod` sırasında çökerse kalıcı bir devre kesici işareti, Hybrid Mount'un diğer işlevlerini korurken LKM'nin sonraki açılışta yeniden yüklenmesini önler. Destek matrisi, sağlama toplamları, kaynaklar ve lisanslar için [`module/lkm/README.md`](../module/lkm/README.md) dosyasına bakın.
 
+## VFS arka ucu
+
+VFS, Hybrid Mount'un çekirdek tarafındaki kendi enjeksiyon yoludur ve `hybridmount` modülü tarafından keyring üzerinden yönetilir. Bağımsız bir uygulamadır ve NoMount ile birlikte çalışmaz.
+
+**Sağlayıcı nasıl belirlenir.** Önyükleme kararı yalnızca `hybridmount` çekirdek anahtar türünün salt okunur yoklamasına dayanır: desteklenen bir sürümle yanıt verirse sağlayıcı kullanılabilir. Ayrıca `vfs-doctor`, sağlayıcının nasıl mevcut olduğunu sınıflandırır — `/proc/modules` içindeki bir girdi, onu yüklenebilir bir modülün kaydettiği anlamına gelir; bu girdi olmadan var olan bir `/sys/module/hybridmount` dizini, çekirdek imajına derlendiği anlamına gelir; ikisi de yoksa sağlayıcı yoktur. Yoklama salt okunurdur, bu nedenle `status` ve `vfs-doctor` hiçbir zaman bir `insmod` tetiklemez.
+
+**Önyükleme mantığı.** Anahtar türü desteklenen bir sürümle yanıt verirse sağlayıcı bağlanır ve hiçbir şey yüklenmez. Hiçbir kural VFS'yi seçmiyorsa birlikte gelen modül de yüklenmez. Bir kural VFS'yi seçtiği hâlde yoklama sessiz kalırsa ardışık düzen, çekirdek serisi ve Android/GKI etiketiyle tam olarak eşleşen birlikte gelen modülü seçer, yükler ve yeniden yoklar; hâlâ kullanılamıyorsa her `vfs` kuralı `ignore` durumuna düşer veya `vfs_strict = true` olduğunda önyükleme başarısız olur. Yükleme, bağlama planı oluşturulmadan önce çalışır; çünkü sağlayıcı sessizken planlama `vfs` kurallarını `ignore` olarak yeniden yazar ve yürütücü de bu durumda erken döner. Devre kesici işareti `insmod` öncesinde yazılır ve girişim döndüğünde temizlenir; dolayısıyla geride yalnızca bir çekirdek çökmesi bırakır ve bir sonraki önyükleme, işaret elle silinene kadar otomatik yeniden denemeyi reddeder.
+
+**VFS'yi çekirdeğe entegre etme.** Sürümler, desteklenen her Android/GKI hedefi için önceden derlenmiş bir aarch64 modülü sunar ve bunu otomatik olarak yükler; dolayısıyla bu çekirdekler entegrasyon adımı gerektirmez. `insmod` kullanmak istemiyorsanız veya çekirdek seriniz için önceden derlenmiş modül yoksa modülü çekirdeğe dahil edin. Bir çekirdek ağacının kök dizininden:
+
+```sh
+sh /path/to/metamodule/module/vfs/setup.sh
+```
+
+Bu, kaynakları `fs/hybridmount/` dizinine kopyalar ve `fs/Makefile` ile `fs/Kconfig` dosyalarına ekler; çekirdeğe dahil etmek için `CONFIG_HYBRIDMOUNT=y`, modül olarak derlemek için `=m` etkinleştirin. `--cleanup` tüm değişiklikleri geri alır. NoMount'un zaten entegre olduğu bir ağaç reddedilir: her iki uygulama da inode işlemlerini ele geçirir ve farklı anahtar türleri kaydettikleri için çekirdek bunların bir arada var olmasını engellemez.
+
+**Tanılama.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor`, varlık durumunu, anahtar türünün yanıtladığı sürümü, desteklenen sürümleri ve sağlayıcı kullanılamadığında bunun nedenini bildirir.
+
 ## Geri bildirim
 
 Kurulumdan veya hata bildiriminden önce [kullanım bildirimini](../USAGE_NOTICE.md) okuyun. Hata raporuna KernelSU/APatch bugreport, modül sürümü ve yeniden üretme adımlarını ekleyin. Bize [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) veya [Telegram grubu](https://t.me/hybridmountchat) üzerinden ulaşabilirsiniz.

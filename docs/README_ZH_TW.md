@@ -40,6 +40,24 @@ default_mode = "magic"
 
 這套路由不會改變專案現有的 `CONFIG_TMPFS_XATTR` 能力判斷。KernelSU 安裝時會刪除模組中的整個 `lkm/` 目錄，執行時只使用官方 `NukeExt4Sysfs` ioctl；APatch 等非 KSU 安裝會保留 LKM，並在 ext4 staging 掛載後預設嘗試使用。隨附的 `.ko` 僅支援 aarch64；自動選擇要求核心系列和 Android/GKI 標籤完全相符，未知組合會直接拒絕，但預編譯 LKM 仍必須在對應的實機上驗證 ABI 相容性。若裝置在 `insmod` 期間當機，持久熔斷標記會阻止下次啟動再次載入 LKM，同時保留 Hybrid Mount 的其他功能。支援矩陣、校驗值、來源與授權請參閱 [`module/lkm/README.md`](../module/lkm/README.md)。
 
+## VFS 後端
+
+VFS 是 Hybrid Mount 自有的核心端注入路徑，由 `hybridmount` 模組經由 keyring 驅動。這是獨立實作，不與 NoMount 互通。
+
+**如何識別 Provider。** 啟動決策只看對核心 key type `hybridmount` 的一次唯讀探測：只要它回應受支援的版本，Provider 即可使用。`vfs-doctor` 另外負責判斷它以何種方式存在——出現在 `/proc/modules` 中，代表由可載入模組註冊；有 `/sys/module/hybridmount` 目錄但沒有上述項目，代表已編譯進核心映像；兩者皆無，代表本機沒有 Provider。探測是唯讀的，因此 `status` 與 `vfs-doctor` 都不會觸發 `insmod`。
+
+**啟動邏輯。** 若 key type 回應受支援的版本，Provider 即被綁定，不會載入任何東西。若沒有規則選擇 VFS，隨附模組同樣不會載入。若確有規則選擇 VFS 而探測沒有回應，啟動流程會挑選與核心線及 Android/GKI 標籤完全相符的隨附模組，載入後重新探測；仍不可用時，所有 `vfs` 規則降級為 `ignore`，`vfs_strict = true` 時則啟動失敗。載入發生在掛載計畫建構之前，因為規劃階段會在 Provider 沒有回應時把 `vfs` 規則改寫為 `ignore`，執行器隨後就會提前返回。熔斷標記在 `insmod` 前寫入，嘗試返回時清除，因此只有核心崩潰才會把它留下；下次啟動將拒絕自動重試，直到手動刪除該標記。
+
+**把 VFS 整合進核心。** 發佈包為每個受支援的 Android/GKI 目標都提供 aarch64 預編譯模組並自動載入，因此這些核心無需任何整合步驟。當你想避免 `insmod`，或你的核心線沒有對應預編譯模組時，可以將它內建進核心。在核心原始碼樹根目錄執行：
+
+```sh
+sh /path/to/metamodule/module/vfs/setup.sh
+```
+
+這會把原始碼複製到 `fs/hybridmount/`，並加入 `fs/Makefile` 與 `fs/Kconfig`；啟用 `CONFIG_HYBRIDMOUNT=y` 表示內建，`=m` 表示編譯為模組。`--cleanup` 會還原全部變更。已整合 NoMount 的核心樹會被拒絕：兩種實作都會劫持 inode 操作，而由於它們註冊的 key type 不同，核心不會阻止二者並存。
+
+**診斷。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` 會報告存在狀態、key type 回應的版本、受支援的版本，以及 Provider 無法使用時的原因。
+
 ## 意見回饋
 
 安裝或回報問題前，請閱讀[使用須知](../USAGE_NOTICE.md)。回報時請附上 KernelSU/APatch bugreport、模組版本與可重現步驟，可透過 [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) 或 [Telegram 群組](https://t.me/hybridmountchat)聯絡我們。

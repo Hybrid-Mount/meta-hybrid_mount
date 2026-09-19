@@ -40,6 +40,24 @@ default_mode = "magic"
 
 Cơ chế phân luồng này không thay đổi bước kiểm tra khả năng `CONFIG_TMPFS_XATTR` hiện có của dự án. Trên KernelSU, quá trình cài đặt xóa toàn bộ thư mục `lkm/` của mô-đun và khi chạy chỉ sử dụng ioctl `NukeExt4Sysfs` chính thức. Các bản cài đặt APatch và môi trường không phải KSU giữ lại LKM và mặc định thử dùng nó sau khi gắn kết vùng staging ext4. Các tệp `.ko` đi kèm chỉ hỗ trợ aarch64. Việc chọn tự động yêu cầu dòng kernel và thẻ Android/GKI khớp chính xác; các tổ hợp không xác định sẽ bị từ chối. LKM dựng sẵn vẫn phải được kiểm tra khả năng tương thích ABI trên thiết bị thực tương ứng. Nếu thiết bị gặp sự cố trong lúc chạy `insmod`, một dấu ngắt mạch bền vững sẽ ngăn LKM được tải lại ở lần khởi động tiếp theo mà vẫn giữ các chức năng khác của Hybrid Mount. Xem [`module/lkm/README.md`](../module/lkm/README.md) để biết ma trận hỗ trợ, checksum, nguồn và giấy phép.
 
+## Backend VFS
+
+VFS là đường dẫn tiêm phía kernel của riêng Hybrid Mount, được điều khiển qua keyring bởi mô-đun `hybridmount`. Đây là bản triển khai độc lập và không tương tác với NoMount.
+
+**Cách nhận diện nhà cung cấp.** Quyết định khởi động dựa trên thao tác thăm dò chỉ đọc đối với kiểu khóa kernel `hybridmount`: nếu kiểu khóa trả lời bằng một phiên bản được hỗ trợ thì nhà cung cấp dùng được. Riêng `vfs-doctor` phân loại cách nhà cung cấp hiện diện — một mục trong `/proc/modules` nghĩa là có mô-đun có thể nạp đã đăng ký nó, thư mục `/sys/module/hybridmount` không có mục đó nghĩa là nó được biên dịch thẳng vào ảnh kernel, và không có cả hai nghĩa là không có nhà cung cấp nào. Thao tác thăm dò chỉ đọc, nên `status` và `vfs-doctor` không bao giờ kích hoạt `insmod`.
+
+**Logic khởi động.** Nếu kiểu khóa trả lời bằng một phiên bản được hỗ trợ, nhà cung cấp được ràng buộc và không nạp thêm gì cả. Nếu không có quy tắc nào chọn VFS, mô-đun đi kèm cũng không được nạp. Nếu có quy tắc chọn VFS trong khi thao tác thăm dò không phản hồi, quy trình sẽ chọn mô-đun đi kèm khớp chính xác với dòng kernel và thẻ Android/GKI, nạp nó rồi thăm dò lại; nếu vẫn không khả dụng, mọi quy tắc `vfs` bị hạ cấp thành `ignore`, hoặc khiến khởi động thất bại khi `vfs_strict = true`. Việc nạp diễn ra trước khi kế hoạch gắn kết được lập, vì giai đoạn lập kế hoạch ghi lại các quy tắc `vfs` thành `ignore` khi nhà cung cấp không phản hồi và bộ thực thi sau đó sẽ trả về sớm. Một dấu ngắt mạch được ghi trước `insmod` và được xóa khi lần thử đó kết thúc, nên chỉ khi kernel gặp sự cố thì dấu này mới còn sót lại; lần khởi động kế tiếp sau đó sẽ từ chối thử lại tự động cho đến khi dấu được xóa thủ công.
+
+**Tích hợp VFS vào kernel.** Bản phát hành kèm mô-đun aarch64 dựng sẵn cho mọi mục tiêu Android/GKI được hỗ trợ và tự động nạp nó, nên những kernel đó không cần bước tích hợp nào. Hãy biên dịch nó vào kernel khi bạn muốn tránh `insmod`, hoặc khi dòng kernel của bạn không có bản dựng sẵn. Từ thư mục gốc của cây nguồn kernel:
+
+```sh
+sh /path/to/metamodule/module/vfs/setup.sh
+```
+
+Lệnh này sao chép mã nguồn vào `fs/hybridmount/` và thêm chúng vào `fs/Makefile` và `fs/Kconfig`; bật `CONFIG_HYBRIDMOUNT=y` để biên dịch vào kernel hoặc `=m` để biên dịch thành mô-đun. `--cleanup` hoàn tác mọi thay đổi. Cây nguồn đã tích hợp NoMount sẽ bị từ chối: cả hai bản triển khai đều chiếm đoạt các thao tác inode và kernel sẽ không ngăn cản việc chúng cùng tồn tại, vì chúng đăng ký những kiểu khóa khác nhau.
+
+**Chẩn đoán.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` báo cáo trạng thái hiện diện, phiên bản mà kiểu khóa trả lời, các phiên bản được hỗ trợ, và lý do nhà cung cấp không dùng được khi nó ở trạng thái đó.
+
 ## Phản hồi
 
 Trước khi cài đặt hoặc báo cáo sự cố, hãy đọc [Lưu ý sử dụng](../USAGE_NOTICE.md). Vui lòng đính kèm bugreport KernelSU/APatch, phiên bản mô-đun và các bước tái hiện. Liên hệ với chúng tôi qua [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) hoặc [nhóm Telegram](https://t.me/hybridmountchat).

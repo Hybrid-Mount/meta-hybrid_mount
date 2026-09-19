@@ -40,6 +40,24 @@ default_mode = "magic"
 
 この振り分けによって、プロジェクト既存の `CONFIG_TMPFS_XATTR` 機能判定が変更されることはありません。KernelSU では、インストール時にモジュール内の `lkm/` ディレクトリ全体を削除し、実行時には公式の `NukeExt4Sysfs` ioctl のみを使用します。APatch などの非 KSU 環境では LKM を保持し、ext4 ステージングのマウント後にデフォルトで使用を試みます。同梱の `.ko` は aarch64 のみに対応しています。自動選択にはカーネル系列と Android/GKI タグの完全一致が必要で、不明な組み合わせは拒否されます。ビルド済み LKM についても、対応する実機で ABI 互換性を検証する必要があります。`insmod` 中に端末がクラッシュした場合、永続的なサーキットブレーカーマーカーによって次回起動時の LKM 再読み込みを防ぎ、Hybrid Mount のその他の機能は維持されます。対応表、チェックサム、ソース、ライセンスについては [`module/lkm/README.md`](../module/lkm/README.md) を参照してください。
 
+## VFS バックエンド
+
+VFS は Hybrid Mount 独自のカーネル側注入パスであり、`hybridmount` モジュールが keyring 経由で操作します。独立した実装であり、NoMount とは相互運用しません。
+
+**Provider の識別方法。** 起動時の判断は、カーネルの key type `hybridmount` に対する読み取り専用のプローブだけに基づきます。対応バージョンを返せば、その Provider は使用可能です。これとは別に `vfs-doctor` が、どのような形で存在するかを判定します。`/proc/modules` にエントリがあればローダブルモジュールが登録したもので、そのエントリがなく `/sys/module/hybridmount` ディレクトリがあればカーネルイメージに組み込まれており、どちらもなければ Provider は存在しません。プローブは読み取り専用のため、`status` と `vfs-doctor` が `insmod` を引き起こすことはありません。
+
+**起動ロジック。** key type が対応バージョンを返せば、Provider がバインドされ、何も読み込みません。VFS を選択するルールがなければ、同梱モジュールも読み込みません。プローブが応答しない状態で VFS を選択するルールがある場合、パイプラインはカーネル系列と Android/GKI タグが完全一致する同梱モジュールを選んで読み込み、再度プローブします。それでも使用できなければ、すべての `vfs` ルールは `ignore` に縮退し、`vfs_strict = true` の場合は起動に失敗します。読み込みはマウントプランの構築前に実行されます。プランニング段階では Provider が応答しない間 `vfs` ルールを `ignore` に書き換えるため、実行側がそのまま早期リターンしてしまうからです。サーキットブレーカーマーカーは `insmod` の前に書き込まれ、試行が戻ると消去されるので、カーネルクラッシュの場合にだけ残ります。次回起動では、このマーカーを手動で削除するまで自動再試行を拒否します。
+
+**VFS をカーネルに統合する。** リリースには対応するすべての Android/GKI ターゲット向けの aarch64 プリコンパイル済みモジュールが含まれ、自動的に読み込まれるため、これらのカーネルに統合作業は不要です。`insmod` を避けたい場合や、お使いのカーネル系列にプリコンパイル済みモジュールがない場合は、カーネルに組み込んでビルドしてください。カーネルツリーのルートで次を実行します。
+
+```sh
+sh /path/to/metamodule/module/vfs/setup.sh
+```
+
+ソースが `fs/hybridmount/` にコピーされ、`fs/Makefile` と `fs/Kconfig` に追加されます。組み込む場合は `CONFIG_HYBRIDMOUNT=y`、モジュールとしてビルドする場合は `=m` を有効にします。`--cleanup` はすべての変更を元に戻します。すでに NoMount を統合しているツリーは拒否されます。両実装はどちらも inode 操作を乗っ取り、登録する key type が異なるため、カーネルはこれらの共存を止められません。
+
+**診断。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` は、存在状態、key type が返したバージョン、対応バージョン、そして Provider が使用できない場合はその理由を報告します。
+
 ## フィードバック
 
 インストールまたは問題を報告する前に、[使用上の注意](../USAGE_NOTICE.md)をお読みください。KernelSU/APatch の bugreport、モジュールのバージョン、再現手順を添えてください。[GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) または [Telegram グループ](https://t.me/hybridmountchat)からお問い合わせいただけます。

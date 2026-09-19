@@ -40,6 +40,24 @@ Jalur aturan ditulis relatif terhadap root modul. Aturan tingkat modul dan jalur
 
 Perutean ini tidak mengubah pemeriksaan kemampuan `CONFIG_TMPFS_XATTR` yang sudah ada. Pada KernelSU, instalasi menghapus seluruh direktori `lkm/` milik modul dan saat berjalan hanya menggunakan ioctl resmi `NukeExt4Sysfs`. Instalasi APatch dan lingkungan non-KSU lain mempertahankan LKM dan secara default mencobanya setelah staging ext4 terpasang. File `.ko` bawaan hanya mendukung aarch64. Pemilihan otomatis memerlukan kecocokan persis antara lini kernel dan tag Android/GKI; kombinasi yang tidak dikenal akan ditolak. LKM prabangun tetap harus divalidasi kompatibilitas ABI-nya pada perangkat fisik yang sesuai. Jika perangkat mengalami crash selama `insmod`, penanda pemutus sirkuit persisten akan mencegah LKM dimuat kembali pada boot berikutnya tanpa menonaktifkan fungsi Hybrid Mount lainnya. Lihat [`module/lkm/README.md`](../module/lkm/README.md) untuk matriks dukungan, checksum, sumber, dan lisensi.
 
+## Backend VFS
+
+VFS adalah jalur injeksi sisi kernel milik Hybrid Mount, yang dikendalikan melalui keyring oleh modul `hybridmount`. Ini adalah implementasi independen dan tidak berinteroperasi dengan NoMount.
+
+**Cara penyedia diidentifikasi.** Keputusan boot bertumpu pada pemeriksaan hanya-baca terhadap jenis kunci kernel `hybridmount`: jika jenis kunci itu menjawab dengan versi yang didukung, penyedia dapat digunakan. Secara terpisah, `vfs-doctor` mengklasifikasikan bagaimana penyedia hadir — entri di `/proc/modules` berarti ada modul yang dapat dimuat yang mendaftarkannya, direktori `/sys/module/hybridmount` tanpa entri tersebut berarti jenis kunci dikompilasi ke dalam image kernel, dan tidak ada keduanya berarti tidak ada penyedia yang tersedia. Pemeriksaan bersifat hanya-baca, sehingga `status` dan `vfs-doctor` tidak pernah memicu `insmod`.
+
+**Logika boot.** Jika jenis kunci menjawab dengan versi yang didukung, penyedia diikat dan tidak ada yang dimuat. Jika tidak ada aturan yang memilih VFS, modul bawaan juga tidak dimuat. Jika ada aturan yang memilih VFS sementara pemeriksaan tidak memberi jawaban, pipeline memilih modul bawaan yang cocok persis dengan lini kernel dan tag Android/GKI, memuatnya, lalu memeriksa ulang; jika tetap tidak tersedia, setiap aturan `vfs` diturunkan menjadi `ignore`, atau menggagalkan boot saat `vfs_strict = true`. Pemuatan berjalan sebelum rencana mount dibangun, karena perencanaan menulis ulang aturan `vfs` menjadi `ignore` selagi penyedia tidak memberi jawaban dan eksekutor kemudian akan kembali lebih awal. Penanda pemutus sirkuit ditulis sebelum `insmod` dan dihapus saat upaya itu kembali, sehingga hanya crash kernel yang meninggalkannya; boot berikutnya kemudian menolak upaya otomatis ulang sampai penanda itu dihapus secara manual.
+
+**Mengintegrasikan VFS ke dalam kernel.** Rilis menyertakan modul aarch64 prabangun untuk setiap target Android/GKI yang didukung dan memuatnya secara otomatis, sehingga kernel tersebut tidak memerlukan langkah integrasi. Bangun modul itu menyatu ke dalam kernel bila Anda ingin menghindari `insmod`, atau bila lini kernel Anda tidak memiliki versi prabangun. Dari akar pohon kernel:
+
+```sh
+sh /path/to/metamodule/module/vfs/setup.sh
+```
+
+Perintah ini menyalin kode sumber ke `fs/hybridmount/` dan menambahkannya ke `fs/Makefile` dan `fs/Kconfig`; aktifkan `CONFIG_HYBRIDMOUNT=y` untuk membangunnya menyatu atau `=m` untuk membangunnya sebagai modul. `--cleanup` mengembalikan semua perubahan. Pohon yang sudah mengintegrasikan NoMount akan ditolak: kedua implementasi membajak operasi inode dan kernel tidak akan mencegah keduanya berdampingan, karena keduanya mendaftarkan jenis kunci yang berbeda.
+
+**Diagnosis.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` melaporkan status keberadaan, versi yang dijawab jenis kunci, versi yang didukung, dan alasan penyedia tidak dapat digunakan bila memang demikian.
+
 ## Umpan balik
 
 Sebelum menginstal atau melaporkan masalah, baca [Pemberitahuan Penggunaan](../USAGE_NOTICE.md). Sertakan bugreport KernelSU/APatch, versi modul, dan langkah reproduksi. Hubungi kami melalui [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) atau [grup Telegram](https://t.me/hybridmountchat).
