@@ -51,10 +51,16 @@ VFS は Hybrid Mount 独自のカーネル側注入パスであり、`hybridmoun
 **VFS をカーネルに統合する。** リリースには対応するすべての Android/GKI ターゲット向けの aarch64 プリコンパイル済みモジュールが含まれ、自動的に読み込まれるため、これらのカーネルに統合作業は不要です。`insmod` を避けたい場合や、お使いのカーネル系列にプリコンパイル済みモジュールがない場合は、カーネルに組み込んでビルドしてください。カーネルツリーのルートで次を実行します。
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-ソースが `fs/hybridmount/` にコピーされ、`fs/Makefile` と `fs/Kconfig` に追加されます。組み込む場合は `CONFIG_HYBRIDMOUNT=y`、モジュールとしてビルドする場合は `=m` を有効にします。`--cleanup` はすべての変更を元に戻します。すでに NoMount を統合しているツリーは拒否されます。両実装はどちらも inode 操作を乗っ取り、登録する key type が異なるため、カーネルはこれらの共存を止められません。
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+ソースが `fs/hybridmount/` にコピーされ、`fs/Makefile` と `fs/Kconfig` に追加されます。組み込む場合は `CONFIG_HYBRIDMOUNT=y`、モジュールとしてビルドする場合は `=m` を有効にします。`bash -s -- --cleanup` はすべての変更を元に戻します。すでに NoMount を統合しているツリーは拒否されます。両実装はどちらも inode 操作を乗っ取り、登録する key type が異なるため、カーネルはこれらの共存を止められません。
 
 **診断。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` は、存在状態、key type が返したバージョン、対応バージョン、そして Provider が使用できない場合はその理由を報告します。
 

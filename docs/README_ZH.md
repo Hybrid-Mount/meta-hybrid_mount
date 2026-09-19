@@ -51,10 +51,16 @@ VFS 是 Hybrid Mount 自有的内核侧注入路径，由 `hybridmount` 模块�
 **把 VFS 集成进内核。** 发布包为每个受支持的 Android/GKI 目标都提供 aarch64 预编译模块并自动加载，因此这些内核无需任何集成步骤。当你希望避免 `insmod`，或你的内核线没有对应预编译模块时，可以把它内建进内核。在内核源码树根目录执行：
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-这会把源码复制到 `fs/hybridmount/`，并加入 `fs/Makefile` 与 `fs/Kconfig`；启用 `CONFIG_HYBRIDMOUNT=y` 表示内建，`=m` 表示编译为模块。`--cleanup` 会撤销全部改动。已集成 NoMount 的内核树会被拒绝：两种实现都会劫持 inode 操作，而由于它们注册的 key type 不同，内核不会阻止二者并存。
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+这会把源码复制到 `fs/hybridmount/`，并加入 `fs/Makefile` 与 `fs/Kconfig`；启用 `CONFIG_HYBRIDMOUNT=y` 表示内建，`=m` 表示编译为模块。`bash -s -- --cleanup` 会撤销全部改动。已集成 NoMount 的内核树会被拒绝：两种实现都会劫持 inode 操作，而由于它们注册的 key type 不同，内核不会阻止二者并存。
 
 **诊断。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` 会报告存在状态、key type 返回的版本、受支持的版本，以及 Provider 不可用时的原因。
 

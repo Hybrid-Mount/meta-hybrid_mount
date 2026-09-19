@@ -130,7 +130,13 @@ module needs DDK. Judge such a change by the branch tip rather than the intermed
 From the root of a kernel tree:
 
 ~~~
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
+~~~
+
+`--cleanup`:
+
+~~~sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
 ~~~
 
 It copies the sources into fs/hybridmount/, adds the fs/hybridmount entry to

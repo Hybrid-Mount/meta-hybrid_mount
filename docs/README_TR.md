@@ -51,10 +51,16 @@ VFS, Hybrid Mount'un çekirdek tarafındaki kendi enjeksiyon yoludur ve `hybridm
 **VFS'yi çekirdeğe entegre etme.** Sürümler, desteklenen her Android/GKI hedefi için önceden derlenmiş bir aarch64 modülü sunar ve bunu otomatik olarak yükler; dolayısıyla bu çekirdekler entegrasyon adımı gerektirmez. `insmod` kullanmak istemiyorsanız veya çekirdek seriniz için önceden derlenmiş modül yoksa modülü çekirdeğe dahil edin. Bir çekirdek ağacının kök dizininden:
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-Bu, kaynakları `fs/hybridmount/` dizinine kopyalar ve `fs/Makefile` ile `fs/Kconfig` dosyalarına ekler; çekirdeğe dahil etmek için `CONFIG_HYBRIDMOUNT=y`, modül olarak derlemek için `=m` etkinleştirin. `--cleanup` tüm değişiklikleri geri alır. NoMount'un zaten entegre olduğu bir ağaç reddedilir: her iki uygulama da inode işlemlerini ele geçirir ve farklı anahtar türleri kaydettikleri için çekirdek bunların bir arada var olmasını engellemez.
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+Bu, kaynakları `fs/hybridmount/` dizinine kopyalar ve `fs/Makefile` ile `fs/Kconfig` dosyalarına ekler; çekirdeğe dahil etmek için `CONFIG_HYBRIDMOUNT=y`, modül olarak derlemek için `=m` etkinleştirin. `bash -s -- --cleanup` tüm değişiklikleri geri alır. NoMount'un zaten entegre olduğu bir ağaç reddedilir: her iki uygulama da inode işlemlerini ele geçirir ve farklı anahtar türleri kaydettikleri için çekirdek bunların bir arada var olmasını engellemez.
 
 **Tanılama.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor`, varlık durumunu, anahtar türünün yanıtladığı sürümü, desteklenen sürümleri ve sağlayıcı kullanılamadığında bunun nedenini bildirir.
 

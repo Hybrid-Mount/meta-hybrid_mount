@@ -53,10 +53,16 @@ VFS est le chemin d'injection côté noyau propre à Hybrid Mount, piloté via l
 **Intégrer VFS dans un noyau.** Les versions incluent un module aarch64 précompilé pour chaque cible Android/GKI prise en charge et le chargent automatiquement, ces noyaux n'ont donc besoin d'aucune étape d'intégration. Intégrez-le à la compilation pour éviter l'`insmod`, ou lorsque votre branche de noyau n'a pas de précompilé. Depuis la racine d'une arborescence de noyau :
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-Cela copie les sources dans `fs/hybridmount/` et les ajoute à `fs/Makefile` et `fs/Kconfig` ; activez `CONFIG_HYBRIDMOUNT=y` pour l'intégrer à la compilation ou `=m` pour le compiler comme module. `--cleanup` annule toutes les modifications. Une arborescence qui intègre déjà NoMount est refusée : les deux implémentations détournent les opérations d'inode et le noyau ne les empêchera pas de coexister, puisqu'elles enregistrent des types de clé différents.
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+Cela copie les sources dans `fs/hybridmount/` et les ajoute à `fs/Makefile` et `fs/Kconfig` ; activez `CONFIG_HYBRIDMOUNT=y` pour l'intégrer à la compilation ou `=m` pour le compiler comme module. `bash -s -- --cleanup` annule toutes les modifications. Une arborescence qui intègre déjà NoMount est refusée : les deux implémentations détournent les opérations d'inode et le noyau ne les empêchera pas de coexister, puisqu'elles enregistrent des types de clé différents.
 
 **Diagnostic.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` indique l'état de présence, la version à laquelle le type de clé a répondu, les versions prises en charge et, lorsqu'un fournisseur est inutilisable, la raison.
 

@@ -51,10 +51,16 @@ VFS è il percorso di iniezione lato kernel di Hybrid Mount, pilotato tramite il
 **Integrare VFS in un kernel.** Le release includono un modulo aarch64 precompilato per ogni target Android/GKI supportato e lo caricano automaticamente, quindi quei kernel non richiedono alcun passaggio di integrazione. Compilalo nel kernel quando vuoi evitare l'`insmod`, o quando la tua linea del kernel non ha un precompilato. Dalla radice di un albero del kernel:
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-Questo copia i sorgenti in `fs/hybridmount/` e li aggiunge a `fs/Makefile` e `fs/Kconfig`; abilita `CONFIG_HYBRIDMOUNT=y` per compilarlo nel kernel oppure `=m` per compilarlo come modulo. `--cleanup` annulla tutte le modifiche. Un albero che integra già NoMount viene rifiutato: entrambe le implementazioni dirottano le operazioni sugli inode e il kernel non impedirà che coesistano, dato che registrano tipi di chiave diversi.
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+Questo copia i sorgenti in `fs/hybridmount/` e li aggiunge a `fs/Makefile` e `fs/Kconfig`; abilita `CONFIG_HYBRIDMOUNT=y` per compilarlo nel kernel oppure `=m` per compilarlo come modulo. `bash -s -- --cleanup` annulla tutte le modifiche. Un albero che integra già NoMount viene rifiutato: entrambe le implementazioni dirottano le operazioni sugli inode e il kernel non impedirà che coesistano, dato che registrano tipi di chiave diversi.
 
 **Diagnosi.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` riporta lo stato di presenza, la versione con cui ha risposto il tipo di chiave, le versioni supportate e, quando un provider non è utilizzabile, il motivo.
 

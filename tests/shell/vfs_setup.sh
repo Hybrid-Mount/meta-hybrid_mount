@@ -64,4 +64,40 @@ fi
 grep -qF 'hybridmount' "$tree/fs/Makefile" && fail "cleanup left fs/Makefile patched"
 grep -qF 'hybridmount' "$tree/fs/Kconfig" && fail "cleanup left fs/Kconfig patched"
 
-echo "PASS: vfs setup.sh integration, guard and cleanup behave as expected"
+# 6. Piped installation fetches sources without a local checkout.
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/curl" <<'EOF'
+#!/bin/sh
+set -eu
+[ "$1" = "-fLSs" ]
+[ "$3" = "-o" ]
+case "$2" in
+    https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/src/*) ;;
+    *) exit 1 ;;
+esac
+[ "${FAIL_DOWNLOAD:-0}" = 0 ] || exit 22
+cp "$TEST_SOURCE_DIR/${2##*/}" "$4"
+EOF
+chmod +x "$WORK/bin/curl"
+export TEST_SOURCE_DIR="$REPO_ROOT/module/vfs/src"
+export PATH="$WORK/bin:$PATH"
+remote="$WORK/remote-kernel"
+make_kernel_tree "$remote"
+(cd "$remote" && bash < "$SETUP" > /dev/null)
+cmp "$TEST_SOURCE_DIR/hybridmount.c" "$remote/fs/hybridmount/hybridmount.c" ||
+    fail "piped setup did not fetch the correct sources"
+# Cleanup must work even if source downloads are unavailable.
+(cd "$remote" && FAIL_DOWNLOAD=1 bash -s -- --cleanup < "$SETUP" > /dev/null)
+[ ! -d "$remote/fs/hybridmount" ] || fail "piped cleanup left sources behind"
+
+# 7. A failed download must leave the kernel tree untouched.
+cp "$remote/fs/Makefile" "$WORK/Makefile.before"
+cp "$remote/fs/Kconfig" "$WORK/Kconfig.before"
+if (cd "$remote" && FAIL_DOWNLOAD=1 bash < "$SETUP" > /dev/null 2>&1); then
+    fail "failed download should fail setup"
+fi
+[ ! -d "$remote/fs/hybridmount" ] || fail "failed download left partial integration"
+cmp "$WORK/Makefile.before" "$remote/fs/Makefile" || fail "failed download modified Makefile"
+cmp "$WORK/Kconfig.before" "$remote/fs/Kconfig" || fail "failed download modified Kconfig"
+
+echo "PASS: vfs setup.sh local/piped integration, download failure, guard and cleanup"

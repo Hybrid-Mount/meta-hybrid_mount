@@ -51,10 +51,16 @@ VFS là đường dẫn tiêm phía kernel của riêng Hybrid Mount, được �
 **Tích hợp VFS vào kernel.** Bản phát hành kèm mô-đun aarch64 dựng sẵn cho mọi mục tiêu Android/GKI được hỗ trợ và tự động nạp nó, nên những kernel đó không cần bước tích hợp nào. Hãy biên dịch nó vào kernel khi bạn muốn tránh `insmod`, hoặc khi dòng kernel của bạn không có bản dựng sẵn. Từ thư mục gốc của cây nguồn kernel:
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-Lệnh này sao chép mã nguồn vào `fs/hybridmount/` và thêm chúng vào `fs/Makefile` và `fs/Kconfig`; bật `CONFIG_HYBRIDMOUNT=y` để biên dịch vào kernel hoặc `=m` để biên dịch thành mô-đun. `--cleanup` hoàn tác mọi thay đổi. Cây nguồn đã tích hợp NoMount sẽ bị từ chối: cả hai bản triển khai đều chiếm đoạt các thao tác inode và kernel sẽ không ngăn cản việc chúng cùng tồn tại, vì chúng đăng ký những kiểu khóa khác nhau.
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+Lệnh này sao chép mã nguồn vào `fs/hybridmount/` và thêm chúng vào `fs/Makefile` và `fs/Kconfig`; bật `CONFIG_HYBRIDMOUNT=y` để biên dịch vào kernel hoặc `=m` để biên dịch thành mô-đun. `bash -s -- --cleanup` hoàn tác mọi thay đổi. Cây nguồn đã tích hợp NoMount sẽ bị từ chối: cả hai bản triển khai đều chiếm đoạt các thao tác inode và kernel sẽ không ngăn cản việc chúng cùng tồn tại, vì chúng đăng ký những kiểu khóa khác nhau.
 
 **Chẩn đoán.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` báo cáo trạng thái hiện diện, phiên bản mà kiểu khóa trả lời, các phiên bản được hỗ trợ, và lý do nhà cung cấp không dùng được khi nó ở trạng thái đó.
 

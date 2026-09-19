@@ -51,10 +51,16 @@ VFS is Hybrid Mount's own kernel-side injection path, driven over the keyring by
 **Integrating VFS into a kernel.** Releases ship a prebuilt aarch64 module for every supported Android/GKI target and load it automatically, so those kernels need no integration step. Build it in when you want to avoid the `insmod`, or when your kernel line has no prebuilt. From the root of a kernel tree:
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-This copies the sources into `fs/hybridmount/` and adds them to `fs/Makefile` and `fs/Kconfig`; enable `CONFIG_HYBRIDMOUNT=y` to build it in or `=m` to build it as a module. `--cleanup` reverts every change. A tree that already integrates NoMount is refused: both implementations hijack inode operations and the kernel will not stop them coexisting, since they register different key types.
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+This copies the sources into `fs/hybridmount/` and adds them to `fs/Makefile` and `fs/Kconfig`; enable `CONFIG_HYBRIDMOUNT=y` to build it in or `=m` to build it as a module. `bash -s -- --cleanup` reverts every change. A tree that already integrates NoMount is refused: both implementations hijack inode operations and the kernel will not stop them coexisting, since they register different key types.
 
 **Diagnosing.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` reports the presence state, the version the key type answered, the supported versions, and why a provider is unusable when it is.
 

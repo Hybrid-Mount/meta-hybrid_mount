@@ -5,8 +5,8 @@
 #
 # Run this from the root of a kernel tree:
 #
-#   sh /path/to/metamodule/module/vfs/setup.sh
-#   sh /path/to/metamodule/module/vfs/setup.sh --cleanup
+#   curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
+#   curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
 #
 # It copies src/ into fs/hybridmount/ and wires up that directory's Kconfig and
 # Makefile. The script refuses to touch a tree that already integrates NoMount:
@@ -16,8 +16,39 @@
 set -eu
 
 KERNEL_ROOT=$(pwd)
-SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
-SRC_DIR="$SELF_DIR/src"
+# A piped script has no adjacent checkout. Only use local sources when invoked
+# through a file path; otherwise fetch them before modifying the kernel tree.
+SRC_DIR=""
+case "$0" in
+    */*)
+        SELF_DIR=$(cd -- "$(dirname -- "$0")" && pwd)
+        if [ -f "$SELF_DIR/src/hybridmount.c" ]; then
+            SRC_DIR="$SELF_DIR/src"
+        fi
+        ;;
+esac
+DOWNLOAD_DIR=""
+cleanup_download() {
+    if [ -n "$DOWNLOAD_DIR" ]; then
+        rm -rf "$DOWNLOAD_DIR"
+    fi
+}
+trap cleanup_download EXIT
+trap 'exit 1' HUP INT TERM
+
+resolve_sources() {
+    [ -n "$SRC_DIR" ] && return 0
+    DOWNLOAD_DIR=$(mktemp -d)
+    SRC_DIR="$DOWNLOAD_DIR"
+    source_url="https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/src"
+    for source_file in hybridmount.c hybridmount.h Kconfig LICENSE; do
+        curl -fLSs "$source_url/$source_file" -o "$SRC_DIR/$source_file"
+        if [ ! -s "$SRC_DIR/$source_file" ]; then
+            echo "[ERROR] downloaded source is empty: $source_file" >&2
+            exit 1
+        fi
+    done
+}
 DIR_NAME="hybridmount"
 # The make and Kconfig syntax below must stay literal: it is compared with grep -F
 # and appended verbatim.
@@ -95,6 +126,7 @@ do_setup() {
         exit 1
     fi
 
+    resolve_sources
     mkdir -p "$FS_DIR/$DIR_NAME"
     cp -f "$SRC_DIR"/*.c "$SRC_DIR"/*.h "$SRC_DIR/Kconfig" "$SRC_DIR/LICENSE" "$FS_DIR/$DIR_NAME/"
     # The out-of-tree Makefile targets a DDK build; in-tree Kbuild needs the

@@ -51,10 +51,16 @@ VFS 是 Hybrid Mount 自有的核心端注入路徑，由 `hybridmount` 模組�
 **把 VFS 整合進核心。** 發佈包為每個受支援的 Android/GKI 目標都提供 aarch64 預編譯模組並自動載入，因此這些核心無需任何整合步驟。當你想避免 `insmod`，或你的核心線沒有對應預編譯模組時，可以將它內建進核心。在核心原始碼樹根目錄執行：
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-這會把原始碼複製到 `fs/hybridmount/`，並加入 `fs/Makefile` 與 `fs/Kconfig`；啟用 `CONFIG_HYBRIDMOUNT=y` 表示內建，`=m` 表示編譯為模組。`--cleanup` 會還原全部變更。已整合 NoMount 的核心樹會被拒絕：兩種實作都會劫持 inode 操作，而由於它們註冊的 key type 不同，核心不會阻止二者並存。
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+這會把原始碼複製到 `fs/hybridmount/`，並加入 `fs/Makefile` 與 `fs/Kconfig`；啟用 `CONFIG_HYBRIDMOUNT=y` 表示內建，`=m` 表示編譯為模組。`bash -s -- --cleanup` 會還原全部變更。已整合 NoMount 的核心樹會被拒絕：兩種實作都會劫持 inode 操作，而由於它們註冊的 key type 不同，核心不會阻止二者並存。
 
 **診斷。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` 會報告存在狀態、key type 回應的版本、受支援的版本，以及 Provider 無法使用時的原因。
 

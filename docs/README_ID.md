@@ -51,10 +51,16 @@ VFS adalah jalur injeksi sisi kernel milik Hybrid Mount, yang dikendalikan melal
 **Mengintegrasikan VFS ke dalam kernel.** Rilis menyertakan modul aarch64 prabangun untuk setiap target Android/GKI yang didukung dan memuatnya secara otomatis, sehingga kernel tersebut tidak memerlukan langkah integrasi. Bangun modul itu menyatu ke dalam kernel bila Anda ingin menghindari `insmod`, atau bila lini kernel Anda tidak memiliki versi prabangun. Dari akar pohon kernel:
 
 ```sh
-sh /path/to/metamodule/module/vfs/setup.sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
 ```
 
-Perintah ini menyalin kode sumber ke `fs/hybridmount/` dan menambahkannya ke `fs/Makefile` dan `fs/Kconfig`; aktifkan `CONFIG_HYBRIDMOUNT=y` untuk membangunnya menyatu atau `=m` untuk membangunnya sebagai modul. `--cleanup` mengembalikan semua perubahan. Pohon yang sudah mengintegrasikan NoMount akan ditolak: kedua implementasi membajak operasi inode dan kernel tidak akan mencegah keduanya berdampingan, karena keduanya mendaftarkan jenis kunci yang berbeda.
+`--cleanup`:
+
+```sh
+curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
+```
+
+Perintah ini menyalin kode sumber ke `fs/hybridmount/` dan menambahkannya ke `fs/Makefile` dan `fs/Kconfig`; aktifkan `CONFIG_HYBRIDMOUNT=y` untuk membangunnya menyatu atau `=m` untuk membangunnya sebagai modul. `bash -s -- --cleanup` mengembalikan semua perubahan. Pohon yang sudah mengintegrasikan NoMount akan ditolak: kedua implementasi membajak operasi inode dan kernel tidak akan mencegah keduanya berdampingan, karena keduanya mendaftarkan jenis kunci yang berbeda.
 
 **Diagnosis.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` melaporkan status keberadaan, versi yang dijawab jenis kunci, versi yang didukung, dan alasan penyedia tidak dapat digunakan bila memang demikian.
 
