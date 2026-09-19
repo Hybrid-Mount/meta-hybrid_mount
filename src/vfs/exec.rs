@@ -128,6 +128,24 @@ pub fn missing_rules(expected: &[EncodedRule], listed: &[ListedRule]) -> Vec<Str
         .collect()
 }
 
+/// Decides whether a VFS read-back mismatch may degrade or must fail the boot.
+/// Returns `true` only when every expected rule was confirmed.
+pub fn evaluate_readback(missing: &[String], strict: bool) -> Result<bool> {
+    if missing.is_empty() {
+        return Ok(true);
+    }
+    if strict {
+        return Err(crate::errors::Error::VfsProtocol {
+            detail: format!(
+                "read-back did not confirm {} installed rule(s): {}",
+                missing.len(),
+                missing.join(",")
+            ),
+        });
+    }
+    Ok(false)
+}
+
 /// Order-preserving dedupe. The kernel rejects an already-isolated uid with `-EEXIST`,
 /// which the protocol layer treats as a hard error.
 fn dedupe_uids(uids: &[u32]) -> Vec<u32> {

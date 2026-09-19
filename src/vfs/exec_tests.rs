@@ -156,6 +156,21 @@ fn apply_rules_deduplicates_isolated_uids() {
     assert_eq!(kernel.uids_added, vec![1000, 1010]);
 }
 
+#[test]
+fn readback_mismatch_degrades_when_not_strict() {
+    let missing = vec!["/system/etc/hosts".to_owned()];
+
+    assert!(!evaluate_readback(&missing, false).unwrap());
+}
+
+#[test]
+fn readback_mismatch_fails_when_strict() {
+    let missing = vec!["/system/etc/hosts".to_owned()];
+
+    let err = evaluate_readback(&missing, true).unwrap_err();
+    assert!(err.to_string().contains("/system/etc/hosts"), "{err}");
+}
+
 /// The batch is not atomic, so the applied prefix must be deleted after a failure.
 /// Non-strict VFS is optional and must not take Overlay / Magic down with it.
 #[test]

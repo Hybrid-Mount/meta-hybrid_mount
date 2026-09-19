@@ -1807,31 +1807,55 @@ fn apply_vfs_phase(
     // An acknowledged batch is not proof the rules are installed, so read the table back and
     // report the difference. This is the line that tells a device log whether VFS is really
     // active, and a listing failure is logged rather than raised: the rules were applied.
-    let expected = applied.borrow();
-    for rule in &expected.rules {
-        log::debug!(
-            "vfs rule applied: flags={:#x}, target={}, source={}",
-            rule.flags,
-            String::from_utf8_lossy(&rule.virtual_path),
-            String::from_utf8_lossy(&rule.real_path)
-        );
+    {
+        let expected = applied.borrow();
+        for rule in &expected.rules {
+            log::debug!(
+                "vfs rule applied: flags={:#x}, target={}, source={}",
+                rule.flags,
+                String::from_utf8_lossy(&rule.virtual_path),
+                String::from_utf8_lossy(&rule.real_path)
+            );
+        }
     }
     match shared.borrow_mut().list_rules() {
         Ok(listed) => {
-            let missing = crate::vfs::exec::missing_rules(&expected.rules, &listed);
+            let missing = {
+                let expected = applied.borrow();
+                crate::vfs::exec::missing_rules(&expected.rules, &listed)
+            };
             if missing.is_empty() {
                 log::info!(
                     "vfs read-back confirmed: installed={}, expected={}",
                     listed.len(),
-                    expected.rules.len()
+                    planned_rule_count
                 );
             } else {
                 log::warn!(
                     "vfs read-back found {} of {} rules missing after apply: {}",
                     missing.len(),
-                    expected.rules.len(),
+                    planned_rule_count,
                     missing.join(",")
                 );
+                let cleanup = {
+                    let expected = applied.borrow();
+                    shared.borrow_mut().remove_rules(&expected.rules)
+                };
+                if let Err(cleanup_err) = cleanup {
+                    return Err(Error::VfsProtocol {
+                        detail: format!(
+                            "vfs read-back was incomplete and targeted cleanup failed: {cleanup_err}"
+                        ),
+                    });
+                }
+                applied.borrow_mut().rules.clear();
+                if !crate::vfs::exec::evaluate_readback(&missing, config.vfs_strict)? {
+                    log::warn!(
+                        "vfs read-back mismatch degraded: removed this run's rules and marked vfs inactive"
+                    );
+                    state.vfs_provider = None;
+                    return Ok(VfsExecStats::default());
+                }
             }
         }
         Err(err) => log::warn!("vfs read-back failed, rules were applied: {err}"),
