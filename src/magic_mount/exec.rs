@@ -22,7 +22,7 @@ use rustix::mount::{
 use crate::config::Mode as MountMode;
 use crate::errors::{Error, Result};
 use crate::mount_tree::{MountNode, MountTree, NodeFileType};
-use crate::utils::{ensure_dir_exists, lgetfilecon, lsetfilecon};
+use crate::utils::{ensure_dir_exists, getfilecon, lgetfilecon, lsetfilecon};
 
 /// A single externally visible result from the Magic Mount executor.
 ///
@@ -519,7 +519,7 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
         Some(Gid::from_raw(metadata.gid())),
     )?;
     if !crate::sys::faults::use_fake_magic_mount_ops() {
-        lsetfilecon(work_dir_path, &lgetfilecon(&reference)?)?;
+        lsetfilecon(work_dir_path, &getfilecon(&reference)?)?;
     }
     Ok(())
 }
@@ -553,7 +553,7 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
             Some(Gid::from_raw(metadata.gid())),
         )?;
         if !crate::sys::faults::use_fake_magic_mount_ops() {
-            lsetfilecon(&work_dir_path, &lgetfilecon(&path)?)?;
+            lsetfilecon(&work_dir_path, &getfilecon(&path)?)?;
         }
 
         for child in path.read_dir()? {

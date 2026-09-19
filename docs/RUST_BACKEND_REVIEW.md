@@ -8,13 +8,6 @@
 
 ## 仍未闭环
 
-- **HM-RUST-005 — 符号链接的 stat / xattr follow policy 不一致。**
-  `src/sys/fs.rs` 的 `clone_entry_metadata` 对目录符号链接取跟随后的 stat，但用
-  `lgetfilecon` / `lsetfilecon` 读取与写入 SELinux 上下文；同一份元数据里的 uid/gid 走
-  `chownat(..., SYMLINK_NOFOLLOW)`，SELinux 上下文却指向链接之外的对象。需要在
-  `src/sys/fs.rs`、`src/magic_mount/exec.rs` 与 `src/utils/mod.rs` 三处确认“跟随目录链接”
-  与“不跟随文件链接”的边界，统一成一个明确策略后再补齐回归测试。
-
 - **HM-RUST-012 — scanner 记录与 staging 使用之间存在类型竞态。**
   `src/scanner.rs` 记录的节点类型在 `src/sys/fs.rs` 物化时没有重新核对；模块源目录在扫描与
   被读取之间若被改写，staging 可能按旧类型处理新对象。模块源目录按约定是只读输入，因此这是

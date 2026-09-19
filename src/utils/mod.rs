@@ -9,7 +9,7 @@ use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::buffer::spare_capacity;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fs::{XattrFlags, lgetxattr, lsetxattr};
+use rustix::fs::{XattrFlags, getxattr, lgetxattr, lsetxattr};
 
 use crate::defs;
 use crate::errors::{Error, Result};
@@ -41,6 +41,21 @@ pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
     Ok(value)
 }
 
+/// Reads an extended attribute from the final symlink target.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_xattr_following(path: &Path, name: &str) -> io::Result<Vec<u8>> {
+    let mut empty = [0_u8; 0];
+    let size = getxattr(path, name, &mut empty)?;
+    if size == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut value = Vec::with_capacity(size);
+    let filled = getxattr(path, name, spare_capacity(&mut value))?;
+    value.truncate(filled);
+    Ok(value)
+}
+
 /// Sets a path's extended attribute without following a symlink in the final component.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) fn write_xattr(path: &Path, name: &str, value: &[u8]) -> io::Result<()> {
@@ -65,6 +80,18 @@ pub fn lgetfilecon(path: &Path) -> Result<String> {
     let context = read_xattr(path, defs::SELINUX_XATTR).map_err(|err| {
         Error::msg(format!(
             "failed to get SELinux context for {}: {err}",
+            path.display()
+        ))
+    })?;
+    Ok(String::from_utf8_lossy(&context).to_string())
+}
+
+/// Reads a path's SELinux context after following the final symlink.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn getfilecon(path: &Path) -> Result<String> {
+    let context = read_xattr_following(path, defs::SELINUX_XATTR).map_err(|err| {
+        Error::msg(format!(
+            "failed to get target SELinux context for {}: {err}",
             path.display()
         ))
     })?;
@@ -155,6 +182,15 @@ mod tests {
 mod linux_tests {
     use super::*;
 
+    fn xattr_unavailable(err: &std::io::Error) -> bool {
+        err.raw_os_error().is_some_and(|code| {
+            code == rustix::io::Errno::NOTSUP.raw_os_error()
+                || code == rustix::io::Errno::OPNOTSUPP.raw_os_error()
+                || code == rustix::io::Errno::PERM.raw_os_error()
+                || code == rustix::io::Errno::NOSPC.raw_os_error()
+        })
+    }
+
     #[test]
     fn xattr_roundtrip_handles_long_contexts() {
         let dir = std::env::temp_dir().join(format!("hybrid-mount-xattr-{}", std::process::id()));
@@ -164,13 +200,7 @@ mod linux_tests {
 
         let long_value = vec![b'x'; 16 * 1024];
         if let Err(err) = write_xattr(&path, "user.hybrid_mount_test", &long_value) {
-            let unsupported = err.raw_os_error().is_some_and(|code| {
-                code == rustix::io::Errno::NOTSUP.raw_os_error()
-                    || code == rustix::io::Errno::OPNOTSUPP.raw_os_error()
-                    || code == rustix::io::Errno::PERM.raw_os_error()
-                    || code == rustix::io::Errno::NOSPC.raw_os_error()
-            });
-            if unsupported {
+            if xattr_unavailable(&err) {
                 eprintln!(
                     "skipping long xattr test: filesystem cannot store the requested xattr: {err}"
                 );
@@ -182,6 +212,33 @@ mod linux_tests {
 
         let read_back = read_xattr(&path, "user.hybrid_mount_test").unwrap();
         assert_eq!(read_back, long_value);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn following_xattr_read_uses_the_symlink_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-follow-xattr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target");
+        let link = dir.join("link");
+        std::fs::write(&target, b"data").unwrap();
+        symlink(&target, &link).unwrap();
+        let value = b"target-context";
+        if let Err(err) = write_xattr(&target, "user.hybrid_mount_follow", value) {
+            if xattr_unavailable(&err) {
+                eprintln!("skipping following xattr test: {err}");
+                let _ = std::fs::remove_dir_all(&dir);
+                return;
+            }
+            panic!("set target xattr failed: {err}");
+        }
+
+        let read_back = read_xattr_following(&link, "user.hybrid_mount_follow").unwrap();
+        assert_eq!(read_back, value);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -496,7 +496,7 @@ pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()>
         ))
     })?;
 
-    let context = crate::utils::lgetfilecon(source)?;
+    let context = crate::utils::getfilecon(source)?;
     crate::utils::lsetfilecon(destination, &context).map_err(|err| {
         Error::msg(format!(
             "copy overlay layer SELinux context {} -> {}: {err}",
