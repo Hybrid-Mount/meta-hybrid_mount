@@ -161,6 +161,9 @@ export function normalizeModule(raw: Record<string, unknown>): Module {
 const normalizeStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.map(String) : [];
 
+const optionalString = (value: unknown): string | null =>
+  typeof value === "string" && value.length > 0 ? value : null;
+
 export function normalizeStatus(payload: Record<string, unknown>): RunState {
   const overlayActiveMounts = normalizeStringArray(payload.overlay_active_mounts);
   const magicActiveMounts = normalizeStringArray(payload.magic_active_mounts);
@@ -190,6 +193,8 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
     vfs_modules: normalizeStringArray(payload.vfs_modules),
     vfs_active_mounts: normalizeStringArray(payload.vfs_active_mounts),
     vfs_provider: typeof payload.vfs_provider === "string" ? payload.vfs_provider : null,
+    vfs_foreign_nomount: payload.vfs_foreign_nomount === true,
+    confirmed_active_mounts: normalizeStringArray(payload.confirmed_active_mounts),
     mount_error_modules: Array.isArray(payload.mount_error_modules)
       ? payload.mount_error_modules.map(String)
       : [],
@@ -227,6 +232,18 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
       ),
       vfs: Number((payload.mode_stats as Record<string, unknown>)?.vfs ?? 0),
     },
+    state_load: {
+      kind: String(
+        (payload.state_load as Record<string, unknown> | undefined)?.kind ?? "missing",
+      ),
+      detail: optionalString(
+        (payload.state_load as Record<string, unknown> | undefined)?.detail,
+      ),
+    },
+    failed_stage: optionalString(payload.failed_stage),
+    failure_reason: optionalString(payload.failure_reason),
+    rollback_status: optionalString(payload.rollback_status),
+    leftover_mount_targets: normalizeStringArray(payload.leftover_mount_targets),
   };
 }
 

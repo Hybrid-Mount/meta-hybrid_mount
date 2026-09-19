@@ -51,6 +51,11 @@ export interface ModeStats {
   vfs: number;
 }
 
+export interface StateLoadInfo {
+  kind: string;
+  detail: string | null;
+}
+
 export interface RunState {
   timestamp: number;
   pid: number;
@@ -65,10 +70,17 @@ export interface RunState {
   vfs_modules: string[];
   vfs_active_mounts: string[];
   vfs_provider?: string | null;
+  vfs_foreign_nomount: boolean;
+  confirmed_active_mounts: string[];
   mount_error_modules: string[];
   mount_error_reasons: Record<string, string>;
   mount_stats: MountStatistics;
   mode_stats: ModeStats;
+  state_load: StateLoadInfo;
+  failed_stage: string | null;
+  failure_reason: string | null;
+  rollback_status: string | null;
+  leftover_mount_targets: string[];
 }
 
 export interface InstallState {

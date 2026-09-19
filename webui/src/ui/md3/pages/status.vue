@@ -48,6 +48,22 @@ const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
 const activeMountStatus = computed(() =>
   activeMountState(sysStore.state, activeMounts.value),
 );
+const failureSummary = computed(() => {
+  const state = sysStore.state;
+  if (!state) return null;
+  if (state.failure_reason) return state.failure_reason;
+  if (state.failed_stage) return `${t("status.abnormal")}: ${state.failed_stage}`;
+  if (state.mount_stats.failed_mounts > 0) {
+    return t("status.mountFailures", { count: state.mount_stats.failed_mounts });
+  }
+  if (state.rollback_status === "incomplete" || state.rollback_status === "unverified") {
+    return `${t("status.abnormal")}: rollback ${state.rollback_status}`;
+  }
+  if (state.state_load.kind === "corrupt" || state.state_load.kind === "io_error") {
+    return state.state_load.detail || t("status.loadError");
+  }
+  return null;
+});
 
 async function refresh(): Promise<void> {
   await Promise.all([
@@ -68,6 +84,13 @@ onMounted(refresh);
 <template>
   <div class="page">
     <div class="dashboard-grid">
+      <section v-if="failureSummary" class="failure-card" role="alert">
+        <strong>{{ t("status.abnormal") }}</strong>
+        <span>{{ failureSummary }}</span>
+        <code v-if="sysStore.state?.leftover_mount_targets.length">
+          {{ sysStore.state.leftover_mount_targets.join(", ") }}
+        </code>
+      </section>
       <section class="hero-card">
         <div v-if="sysStore.loading" class="skeleton-col">
           <md-circular-progress indeterminate />

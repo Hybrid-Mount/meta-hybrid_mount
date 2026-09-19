@@ -56,7 +56,12 @@ const statusKind = computed<"checking" | "normal" | "abnormal">(() => {
     !installState?.installed ||
     !installState.compatible ||
     state.value.timestamp <= 0 ||
-    state.value.mount_stats.failed_mounts > 0
+    state.value.mount_stats.failed_mounts > 0 ||
+    state.value.failed_stage !== null ||
+    state.value.rollback_status === "incomplete" ||
+    state.value.rollback_status === "unverified" ||
+    state.value.state_load.kind === "corrupt" ||
+    state.value.state_load.kind === "io_error"
   ) {
     return "abnormal";
   }
@@ -74,6 +79,10 @@ const statusSummary = computed(() => {
     return t("status.installIncomplete");
   }
   if (!state.value || state.value.timestamp <= 0) return t("status.notReady");
+  if (state.value.failure_reason) return state.value.failure_reason;
+  if (state.value.failed_stage) {
+    return `${t("status.abnormal")}: ${state.value.failed_stage}`;
+  }
   if (state.value.mount_stats.failed_mounts > 0) {
     return t("status.mountFailures", {
       count: state.value.mount_stats.failed_mounts,

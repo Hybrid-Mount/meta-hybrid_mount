@@ -115,6 +115,12 @@ export const MockAPI: AppAPI = {
       ],
       vfs_modules: [],
       vfs_active_mounts: [],
+      vfs_foreign_nomount: false,
+      confirmed_active_mounts: [
+        "/system/etc/hosts",
+        "/system/framework/services.jar",
+        "/vendor/etc/audio_effects.xml",
+      ],
       mount_error_modules: ["sound-enhancer"],
       mount_error_reasons: {
         "sound-enhancer": "mount_error marker present",
@@ -129,6 +135,11 @@ export const MockAPI: AppAPI = {
         ignored_entries: 0,
       },
       mode_stats: { overlayfs: 0, magicmount: 2, vfs: 0 },
+      state_load: { kind: "loaded", detail: null },
+      failed_stage: null,
+      failure_reason: null,
+      rollback_status: "committed",
+      leftover_mount_targets: [],
     };
   },
 

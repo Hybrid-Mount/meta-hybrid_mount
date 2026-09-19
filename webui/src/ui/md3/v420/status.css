@@ -21,6 +21,21 @@
   padding-bottom: 24px;
 }
 
+.failure-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px 20px;
+  border-radius: var(--radius-xl);
+  color: var(--md-sys-color-on-error-container);
+  background: var(--md-sys-color-error-container);
+}
+
+.failure-card span,
+.failure-card code {
+  overflow-wrap: anywhere;
+}
+
 .hero-card {
   background-color: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);

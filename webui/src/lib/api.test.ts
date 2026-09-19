@@ -129,4 +129,27 @@ describe("WebUI configuration contract", () => {
     expect(status.overlay_active_mounts).toEqual([]);
     expect(status.magic_active_mounts).toEqual([]);
   });
+
+  it("preserves startup and rollback diagnostics", () => {
+    const status = normalizeStatus({
+      timestamp: 1,
+      state_load: { kind: "loaded", detail: "snapshot detail" },
+      failed_stage: "mount_execution",
+      failure_reason: "overlay failed",
+      rollback_status: "incomplete",
+      leftover_mount_targets: ["/system"],
+      confirmed_active_mounts: ["/vendor"],
+      vfs_foreign_nomount: true,
+    });
+
+    expect(status).toMatchObject({
+      state_load: { kind: "loaded", detail: "snapshot detail" },
+      failed_stage: "mount_execution",
+      failure_reason: "overlay failed",
+      rollback_status: "incomplete",
+      leftover_mount_targets: ["/system"],
+      confirmed_active_mounts: ["/vendor"],
+      vfs_foreign_nomount: true,
+    });
+  });
 });
