@@ -1540,7 +1540,9 @@ static int hm_process_payload(unsigned long user_addr)
     char *buf_ptr, *buf_end;
 
     if (pg_off + sizeof(*payload) > PAGE_SIZE || get_user_pages_fast(user_addr, 1, FOLL_WRITE, &page) != 1) {
-        hm_err("page pin failed for payload at 0x%lx\n", user_addr);
+        /* Either the payload straddles a page boundary or it could not be pinned; the
+         * offset separates the two, since a correctly aligned page always pins. */
+        hm_err("payload page pin failed: addr=0x%lx, offset=%lu\n", user_addr, pg_off);
         return -EFAULT;
     }
 
@@ -1645,8 +1647,8 @@ static int hm_process_payload(unsigned long user_addr)
             up_write(&hybridmount_rwsem);
             /* As in ADD_RULE: report the first error and its offset, else the cursor. */
             if (first_err) {
-                /* ENOENT below is the normal "nothing to delete" rollback result, so only
-                 * a genuine parse failure is noisy here. */
+                /* Reached only on a malformed or truncated record: the benign "nothing
+                 * matched" result is reported as -ENOENT further down instead. */
                 hm_warn("del_rule batch failed: status=%d, offset=%u, bytes=%u\n",
                         first_err, err_offset, payload->data_size);
                 payload->status = first_err; payload->arg1 = err_offset;
