@@ -28,7 +28,7 @@ async function loadConfig(): Promise<void> {
     } catch (error) {
       console.error("configStore: failed to load config", error);
       setConfig(DEFAULT_CONFIG);
-      hasLoaded = true;
+      hasLoaded = false;
       uiStore.showToast("Failed to load config; using defaults");
     } finally {
       loading.value = false;
@@ -43,6 +43,7 @@ function ensureConfigLoaded(): Promise<void> {
 }
 
 async function saveConfig(): Promise<boolean> {
+  if (!hasLoaded) return false;
   saving.value = true;
   try {
     await API.saveConfig(config.value);

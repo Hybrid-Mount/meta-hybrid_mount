@@ -577,7 +577,9 @@ pub fn save_config_payload(path: &Path, payload_hex: &str) -> Result<()> {
         ))
     })?;
 
-    let mut config = Config::load_or_default(path)?;
+    // Saving must not turn a corrupt or unreadable config into defaults. A genuinely
+    // missing file is the only fallback that is safe to materialize on disk.
+    let mut config = Config::load_or_missing_tolerant(path)?;
     config.apply_patch(patch)?;
     config.save(path)
 }

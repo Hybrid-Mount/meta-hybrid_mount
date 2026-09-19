@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../api", () => ({
   API: {
     loadConfig: vi.fn(),
+    saveConfig: vi.fn(),
   },
 }));
 
@@ -22,8 +23,8 @@ import { uiStore } from "./uiStore";
 describe("configStore", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("replaces stale state with defaults when config loading fails", async () => {
-    vi.mocked(API.loadConfig).mockRejectedValueOnce(new Error("unreadable config"));
+  it("keeps failed config loads retryable and refuses to save defaults", async () => {
+    vi.mocked(API.loadConfig).mockRejectedValue(new Error("unreadable config"));
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     configStore.setConfig({
       ...DEFAULT_CONFIG,
@@ -32,13 +33,29 @@ describe("configStore", () => {
     });
 
     await configStore.loadConfig();
-    await configStore.ensureConfigLoaded();
+    const saved = await configStore.saveConfig();
 
     expect(configStore.config).toEqual(DEFAULT_CONFIG);
-    expect(configStore.hasLoaded).toBe(true);
+    expect(configStore.hasLoaded).toBe(false);
     expect(API.loadConfig).toHaveBeenCalledTimes(1);
+    expect(API.saveConfig).not.toHaveBeenCalled();
+    expect(saved).toBe(false);
     expect(uiStore.showToast).toHaveBeenCalledWith(
       "Failed to load config; using defaults",
     );
+  });
+
+  it("retries loading after a temporary failure", async () => {
+    vi.mocked(API.loadConfig)
+      .mockRejectedValueOnce(new Error("bridge unavailable"))
+      .mockResolvedValueOnce({ ...DEFAULT_CONFIG, default_mode: "magic" });
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await configStore.loadConfig();
+    await configStore.ensureConfigLoaded();
+
+    expect(API.loadConfig).toHaveBeenCalledTimes(2);
+    expect(configStore.config.default_mode).toBe("magic");
+    expect(configStore.hasLoaded).toBe(true);
   });
 });
