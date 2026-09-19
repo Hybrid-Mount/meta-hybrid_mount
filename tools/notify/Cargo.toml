@@ -15,7 +15,7 @@ workspace = true
 anyhow = "1.0.102"
 # 0.48 JSON-quotes flattened multipart strings (parse_mode becomes '"HTML"').
 # Keep pinned until a release passes the wire-level upload regression tests.
-tgbot = "=0.46.0"
+tgbot = "=0.48.0"
 tokio = { version = "1.52.1", features = ["rt-multi-thread"] }
 
 [dev-dependencies]
