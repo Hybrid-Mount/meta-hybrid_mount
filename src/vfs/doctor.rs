@@ -42,6 +42,8 @@ pub struct VfsDoctorReport {
     pub uids: Vec<u32>,
     /// Set when the rule or uid table could not be read.
     pub list_error: Option<String>,
+    /// The original GET_VERSION error, distinct from rule/UID listing failures.
+    pub probe_error: Option<String>,
 }
 
 /// `/proc/modules` lists loadable modules only, so an answering key type with a
@@ -115,6 +117,7 @@ pub fn summarize(
         rules,
         uids,
         list_error,
+        probe_error: None,
     }
 }
 
@@ -128,7 +131,7 @@ fn listed_in_proc_modules(text: &str) -> bool {
         .any(|name| name == "hybridmount")
 }
 
-fn presence_on_device() -> ModulePresence {
+pub(crate) fn presence_on_device() -> ModulePresence {
     let in_proc = std::fs::read_to_string(PROC_MODULES)
         .map(|text| listed_in_proc_modules(&text))
         .unwrap_or(false);
@@ -137,15 +140,17 @@ fn presence_on_device() -> ModulePresence {
 
 /// Probes the key type and, when it answers, reads both tables. Never loads anything.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn observe() -> (Option<String>, Result<ListedTables>) {
+fn observe() -> (Option<String>, Result<ListedTables>, Option<String>) {
     use crate::vfs::backend::{KeyringKernel, VfsKernel};
     use crate::vfs::sys::KeyringChannel;
 
-    let Ok(mut kernel) = KeyringKernel::new(KeyringChannel::Hybridmount) else {
-        return (None, Ok((Vec::new(), Vec::new())));
+    let mut kernel = match KeyringKernel::new(KeyringChannel::Hybridmount) {
+        Ok(kernel) => kernel,
+        Err(err) => return (None, Ok((Vec::new(), Vec::new())), Some(err.to_string())),
     };
-    let Some(version) = kernel.probe_version() else {
-        return (None, Ok((Vec::new(), Vec::new())));
+    let version = match kernel.version() {
+        Ok(version) => version,
+        Err(err) => return (None, Ok((Vec::new(), Vec::new())), Some(err.to_string())),
     };
 
     let rules = kernel.list_rules();
@@ -153,12 +158,13 @@ fn observe() -> (Option<String>, Result<ListedTables>) {
     (
         Some(version),
         rules.and_then(|rules| uids.map(|uids| (rules, uids))),
+        None,
     )
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn observe() -> (Option<String>, Result<ListedTables>) {
-    (None, Ok((Vec::new(), Vec::new())))
+fn observe() -> (Option<String>, Result<ListedTables>, Option<String>) {
+    (None, Ok((Vec::new(), Vec::new())), None)
 }
 
 /// Whether the kernel answers as a supported hybridmount provider this boot.
@@ -190,8 +196,9 @@ pub fn responds_now() -> bool {
 
 /// Prints the diagnostic report as JSON on stdout.
 pub fn handle() -> Result<()> {
-    let (version, listed) = observe();
-    let report = summarize(version, presence_on_device(), listed);
+    let (version, listed, probe_error) = observe();
+    let mut report = summarize(version, presence_on_device(), listed);
+    report.probe_error = probe_error;
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
 }
@@ -199,3 +206,15 @@ pub fn handle() -> Result<()> {
 #[cfg(test)]
 #[path = "doctor_tests.rs"]
 mod tests;
+
+/// Never insert or unload a second module over an existing provider, even when
+/// its protocol is incompatible. A built-in provider can only change on reboot.
+pub(crate) fn ensure_provider_absent(presence: ModulePresence) -> std::result::Result<(), String> {
+    match presence {
+        ModulePresence::NotPresent => Ok(()),
+        ModulePresence::BuiltIn | ModulePresence::Loadable => Err(format!(
+            "hybridmount is already present ({presence:?}); refusing duplicate insmod/unload; \
+             run vfs-doctor and update the existing provider to match the userspace protocol"
+        )),
+    }
+}

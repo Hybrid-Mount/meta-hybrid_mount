@@ -155,3 +155,24 @@ fn exchange_rejects_request_that_is_not_one_page() {
     let full = kernel.exchange(&[0_u8; crate::vfs::protocol::PAYLOAD_LEN]);
     assert!(matches!(full, Err(Error::Io(_))));
 }
+
+#[test]
+fn rejected_magic_is_reported_as_an_unprocessed_payload() {
+    let response = protocol::build_payload(protocol::NmCommand::GetVersion, 0, &[]).unwrap();
+    let err = parse_version_response(&response).unwrap_err().to_string();
+    assert!(err.contains("GET_VERSION payload was not processed"));
+    assert!(err.contains("0x4859425249444d4f"));
+    assert!(err.contains("rebuild the kernel"));
+}
+
+#[test]
+fn processed_version_response_is_still_accepted() {
+    let mut response = protocol::build_payload(protocol::NmCommand::GetVersion, 0, b"hm1").unwrap();
+    response[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    assert_eq!(parse_version_response(&response).unwrap(), "hm1");
+}
+
+#[test]
+fn truncated_version_response_remains_an_error() {
+    assert!(parse_version_response(&[]).is_err());
+}

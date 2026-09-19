@@ -49,9 +49,9 @@ impl KeyringKernel {
     /// `None` covers both "no such key type" and "the page was rejected"; the caller
     /// distinguishes those from the device's module tables rather than from the errno.
     pub fn probe_version(&mut self) -> Option<String> {
-        let request = protocol::build_payload(NmCommand::GetVersion, 0, &[]).ok()?;
-        let response = self.exchange(&request).ok()?;
-        protocol::parse_version(&response).ok()
+        self.version()
+            .inspect_err(|err| log::warn!("vfs {:?} version probe failed: {err}", self.channel))
+            .ok()
     }
 
     /// Every isolated uid currently installed in the provider.
@@ -83,11 +83,27 @@ impl KeyringKernel {
     }
 }
 
+/// Older built-in providers return ECANCELED even when they reject the magic.
+/// Preserve this distinction instead of reporting that the provider is absent.
+fn parse_version_response(response: &[u8]) -> Result<String> {
+    if response.get(16..20) == Some((-1_i32).to_le_bytes().as_slice()) {
+        return Err(Error::VfsProtocol {
+            detail: format!(
+                "GET_VERSION payload was not processed (status=-1, magic={:#018x}); \
+                 an existing hybridmount may use an older wire magic; rebuild the kernel \
+                 with matching Hybrid Mount VFS sources",
+                protocol::MAGIC
+            ),
+        });
+    }
+    protocol::parse_version(response)
+}
+
 impl VfsKernel for KeyringKernel {
     fn version(&mut self) -> Result<String> {
         let request = protocol::build_payload(NmCommand::GetVersion, 0, &[])?;
         let response = self.exchange(&request)?;
-        protocol::parse_version(&response)
+        parse_version_response(&response)
     }
 
     fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {

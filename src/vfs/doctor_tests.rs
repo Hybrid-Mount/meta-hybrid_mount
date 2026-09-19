@@ -166,3 +166,12 @@ fn the_report_serializes_to_snake_case() {
         "json was {json}"
     );
 }
+
+#[test]
+fn existing_providers_block_loading_even_when_the_probe_is_silent() {
+    for presence in [ModulePresence::BuiltIn, ModulePresence::Loadable] {
+        let err = ensure_provider_absent(presence).unwrap_err();
+        assert!(err.contains("refusing duplicate insmod/unload"));
+    }
+    assert!(ensure_provider_absent(ModulePresence::NotPresent).is_ok());
+}

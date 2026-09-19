@@ -38,6 +38,7 @@ pub fn load_hm_vfs() -> Result<()> {
 }
 
 fn load() -> std::result::Result<(), String> {
+    crate::vfs::doctor::ensure_provider_absent(crate::vfs::doctor::presence_on_device())?;
     let lkm_path = select_bundled_lkm_path(
         defs::VFS_LKM_DIR,
         LKM_OVERRIDE_ENV,

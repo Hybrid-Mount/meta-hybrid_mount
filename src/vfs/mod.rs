@@ -43,7 +43,9 @@ pub fn ensure_loaded_for_plan(
         return available();
     }
 
-    log::info!("vfs is configured but the key type does not answer; loading the bundled module");
+    log::info!(
+        "vfs is configured but the key type does not answer; checking whether the bundled module can be loaded"
+    );
     if let Err(err) = load() {
         log::warn!("bundled vfs module load failed: {err}");
     }
