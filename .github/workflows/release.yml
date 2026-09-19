@@ -12,6 +12,10 @@ jobs:
     name: Build package
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      version: ${{ steps.release_version.outputs.version }}
+      version_code: ${{ steps.release_version.outputs.version_code }}
+      prerelease: ${{ steps.release_version.outputs.prerelease }}
     container:
       image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
       credentials:
@@ -31,6 +35,21 @@ jobs:
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Resolve the release tag
+        # Every version fact the release needs comes from here: the version injected into
+        # Cargo.toml and module.prop, the versionCode published in update.json, and whether the
+        # release is a pre-release. Deriving them in one place is what keeps them in step, and it
+        # validates the tag as semver before any build work — a tag Cargo would reject fails here,
+        # while it is still just a failed run, rather than after the release is public.
+        id: release_version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cargo xtask release-version "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
       - name: Verify the prebuilt VFS modules match their sources
         # The zip contains both the kernel sources and the modules built from them, so a stale
         # .ko would ship behaviour the bundled source does not describe. A tag can be created
@@ -42,17 +61,12 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           set -euo pipefail
-          release_version="${RELEASE_TAG#v}"
-          if [[ ! "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "invalid release tag: $RELEASE_TAG" >&2
-            exit 1
-          fi
-
-          sed -i "s/^version = \".*\"/version = \"$release_version\"/" Cargo.toml
-          grep -q "^version = \"$release_version\"$" Cargo.toml
-          echo "building package version $release_version from tag $RELEASE_TAG"
+          sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+          grep -q "^version = \"$RELEASE_VERSION\"$" Cargo.toml
+          echo "building package version $RELEASE_VERSION from tag $RELEASE_TAG"
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -95,6 +109,11 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      # Resolved once by the build job, from the tag, by the same code that versions the package.
+      RELEASE_VERSION: ${{ needs.build.outputs.version }}
+      VERSION_CODE: ${{ needs.build.outputs.version_code }}
+      PRERELEASE: ${{ needs.build.outputs.prerelease }}
 
     steps:
       - name: Checkout Code
@@ -104,19 +123,6 @@ jobs:
 
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Detect release type
-        id: release_type
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          prerelease=false
-          # Only tags with an exactly two-digit patch version are prereleases.
-          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]{2}$ ]]; then
-            prerelease=true
-          fi
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
 
       - name: Download package artifact
         uses: actions/download-artifact@v8
@@ -150,11 +156,12 @@ jobs:
             --topic-id 6
 
       - name: Prepare release metadata
+        # Needs the tag-derived versionCode, which only exists for a tag: a manual dispatch builds
+        # and notifies without publishing, so there is no metadata to prepare.
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           set -euo pipefail
           TAG="${{ github.ref_name }}"
-          CLEAN_VERSION="${TAG#v}"
-          VERSION_CODE=$(awk -F. '{print $1 * 100000 + $2 * 1000 + $3}' <<< "$CLEAN_VERSION")
           ZIP_NAME="${{ steps.paths.outputs.name }}"
 
           # Reuse the xtask serializer so the release metadata and the local
@@ -181,7 +188,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           draft: false
-          prerelease: ${{ steps.release_type.outputs.prerelease }}
+          prerelease: ${{ env.PRERELEASE }}
           files: ${{ steps.paths.outputs.zip }}
           body_path: /tmp/changelog.md
 
@@ -195,7 +202,7 @@ jobs:
           tag="${{ github.ref_name }}"
 
           prerelease_flag=""
-          if [[ "${{ steps.release_type.outputs.prerelease }}" == "true" ]]; then
+          if [[ "$PRERELEASE" == "true" ]]; then
             prerelease_flag="--prerelease"
           fi
 
@@ -224,9 +231,10 @@ jobs:
           mv /tmp/update.json update.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
 
-          TAG="${{ github.ref_name }}"
-          CLEAN_VERSION="${TAG#v}"
-          sed -i "s/^version = \".*\"/version = \"${CLEAN_VERSION}\"/" Cargo.toml
+          # The same semver-checked version the package was built with, so a tag that Cargo would
+          # reject can never be written back to the development branch.
+          sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
+          grep -q "^version = \"$RELEASE_VERSION\"$" Cargo.toml
           cargo update
 
           git add update.json changelog.md Cargo.toml Cargo.lock

@@ -225,6 +225,18 @@ cargo test -- --nocapture
 
 `.github/workflows/release.yml` 负责发布与更新 `update.json`、`changelog.md` 和版本信息；`cargo xtask update-json` 也可单独生成更新元数据。Telegram 通知由独立的 `cargo xtask notify` 命令发送，构建命令不会自动发送。
 
+### Tag 约定
+
+发布 tag 必须是合法 semver，**patch 不允许前导零**：`v6.2.1` 可以，`v6.2.01` 不行（Cargo 会拒绝 `version = "6.2.01"`）。预发布写成 `-<stage>.<number>`，stage 取 `alpha`、`beta`、`rc`，number 为 1–99：
+
+```bash
+cargo xtask release-version v6.2.1-rc.1   # 输出 version / version_code / prerelease
+```
+
+tag 到版本、versionCode 与预发布标志的换算只由 `xtask` 的 `ReleaseVersion` 决定，workflow 不再自带正则或 awk，避免出现「workflow 接受的 tag 被 Cargo 拒绝」这类只在构建阶段暴露的偏差。
+
+versionCode 为 `major*100000 + minor*1000 + patch` 再乘 1000 加槽位；预发布槽位**低于**对应正式版（`v6.2.1-rc.1` = 602001301 < `v6.2.1` = 602001999），否则试过预发布的设备永远收不到正式版。新 code 一律高于历史上按整数发布的 code（如 `v6.2.0` = 602000），升级链路不受影响。
+
 ## Git Workflow
 
 - 主分支: `main`
