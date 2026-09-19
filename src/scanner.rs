@@ -263,11 +263,13 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
             let Ok(relative) = path.strip_prefix(root) else {
                 continue;
             };
-            let relative = relative
-                .components()
-                .filter_map(|component| component.as_os_str().to_str())
-                .collect::<Vec<_>>()
-                .join("/");
+            let Some(relative) = relative_path_to_string(relative) else {
+                log::warn!(
+                    "module entry path is not valid UTF-8 and will be skipped: {}",
+                    path.display()
+                );
+                continue;
+            };
             if relative.is_empty() {
                 continue;
             }
@@ -300,6 +302,13 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
     let mut out = Vec::new();
     walk(partition_dir, partition_dir, partition, &mut out);
     out
+}
+
+fn relative_path_to_string(path: &Path) -> Option<String> {
+    path.components()
+        .map(|component| component.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>()
+        .map(|components| components.join("/"))
 }
 
 fn classify_file_type(metadata: &fs::Metadata) -> Option<NodeFileType> {
@@ -605,5 +614,17 @@ mod tests {
         assert!(matches!(err, Error::ScanReadDir { .. }), "{err}");
 
         fs::remove_file(&file).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_component_is_not_removed_from_the_scanned_path() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let invalid =
+            PathBuf::from("system/etc").join(OsString::from_vec(vec![b'b', b'a', b'd', 0xff]));
+
+        assert_eq!(relative_path_to_string(&invalid), None);
     }
 }
