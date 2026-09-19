@@ -519,8 +519,11 @@ fn sync_app_module_rules(modules: &mut [AppModule], config: &Config) {
 }
 
 pub fn write_scan_ret(modules: &[AppModule]) -> Result<()> {
+    write_scan_ret_to(modules, Path::new(defs::SCAN_RET_PATH))
+}
+
+pub(crate) fn write_scan_ret_to(modules: &[AppModule], path: &Path) -> Result<()> {
     let json = serde_json::to_string_pretty(modules)?;
-    let path = Path::new(defs::SCAN_RET_PATH);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

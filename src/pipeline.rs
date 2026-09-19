@@ -31,8 +31,10 @@ use crate::scanner::ModuleRecord;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::scanner::list_modules;
 use crate::state::MountStatistics;
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+use crate::state::RunState;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::state::{RunState, app_modules, mounted_module_ids_for_snapshot, write_scan_ret};
+use crate::state::{app_modules, mounted_module_ids_for_snapshot, write_scan_ret};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::timing::PhaseTimer;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -615,14 +617,40 @@ fn log_phase_failure<T>(phase: &'static str, result: Result<T>) -> Result<T> {
     result
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn persist_startup_failure_state(stage: &str, error: &Error) {
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+fn persist_startup_failure_state_to(
+    stage: &str,
+    error: &Error,
+    state_path: &Path,
+    scan_ret_path: &Path,
+) {
     let state = RunState::from_startup_failure(stage, error.to_string());
-    if let Err(state_err) = state.save() {
+    if let Err(state_err) = state.save_to(state_path) {
         log::error!("failed to persist {stage} startup failure state: {state_err}");
     }
-    if let Err(snapshot_err) = write_scan_ret(&[]) {
+    if let Err(snapshot_err) = crate::state::write_scan_ret_to(&[], scan_ret_path) {
         log::error!("failed to clear module snapshot after {stage} failure: {snapshot_err}");
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn persist_startup_failure_state(stage: &str, error: &Error) {
+    persist_startup_failure_state_to(
+        stage,
+        error,
+        Path::new(defs::STATE_PATH),
+        Path::new(defs::SCAN_RET_PATH),
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn startup_phase<T>(stage: &'static str, result: Result<T>) -> Result<T> {
+    match log_phase_failure(stage, result) {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            persist_startup_failure_state(stage, &err);
+            Err(err)
+        }
     }
 }
 
@@ -643,21 +671,15 @@ fn run_mount_pipeline_impl() -> Result<()> {
     startup.finish();
 
     let config_phase = PhaseTimer::start("config");
-    let config = match log_phase_failure(
+    let config = startup_phase(
         "config",
         Config::load_for_boot(Path::new(defs::CONFIG_PATH)),
-    ) {
-        Ok(config) => config,
-        Err(err) => {
-            persist_startup_failure_state("config", &err);
-            return Err(err);
-        }
-    };
+    )?;
     let ksu_active = utils::ksu::is_active();
     let mount_source = effective_mount_source(ksu_active);
     log::info!(
         "config info: {}",
-        log_phase_failure("config", config.to_toml())?
+        startup_phase("config", config.to_toml())?
     );
     log::info!(
         "runtime: pid={}, effective_mount_source={}, ksu_ioctl_active={}",
@@ -670,7 +692,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
 
     let scan_phase = PhaseTimer::start("scan");
     let managed_partitions = managed_partition_names();
-    let modules = log_phase_failure("scan", list_modules(&config.moduledir, &managed_partitions))?;
+    let modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {
         let entry_roots = module
@@ -716,9 +738,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // `apply_vfs_phase` sees an empty module set and returns before its own strict checks. Without
     // this the option would be silently ineffective for exactly the case it exists to catch.
     if crate::vfs::unavailable_is_fatal(config.wants_vfs(), config.vfs_strict, vfs_available) {
-        return Err(Error::VfsUnavailable {
-            reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
-        });
+        return startup_phase(
+            "vfs",
+            Err(Error::VfsUnavailable {
+                reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+            }),
+        );
     }
 
     let plan_phase = PhaseTimer::start("plan");
@@ -728,7 +753,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         managed_partitions.join(","),
         promoted.iter().cloned().collect::<Vec<_>>().join(",")
     );
-    let mut plan = log_phase_failure(
+    let mut plan = startup_phase(
         "plan",
         build_plan(&PlanInput {
             modules: &modules,
@@ -788,7 +813,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         &initial_mount_errors,
         &BTreeSet::new(),
     );
-    log_phase_failure("state", write_scan_ret(&initial_app_modules))?;
+    startup_phase("state", write_scan_ret(&initial_app_modules))?;
     log::info!(
         "module snapshot saved: modules={}",
         initial_app_modules.len()
@@ -798,7 +823,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // before any fallible mount operation so `status` and the WebUI can still
     // report the selected backends when the device rejects a later mount.
     let mut state = RunState::from_plan(&config, &modules, &plan, initial_mount_errors);
-    log_phase_failure("state", state.save())?;
+    startup_phase("state", state.save())?;
     state_phase.finish();
     log::info!(
         "planned state saved: overlay_modules={}, magic_modules={}",
@@ -806,7 +831,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         state.magic_modules.len()
     );
 
-    let baseline = log_phase_failure("baseline", crate::sys::mountinfo::MountSnapshot::read())?;
+    let baseline = startup_phase("baseline", crate::sys::mountinfo::MountSnapshot::read())?;
     let mut transaction = crate::sys::transaction::MountTransaction::new();
     transaction.register_rollback_only("ksu_try_umount_list", || {
         crate::utils::ksu::clear_unmount_list()
@@ -1854,6 +1879,28 @@ fn mount_magic_phase(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn startup_failure_replaces_stale_state_and_module_snapshot() {
+        let fixture = crate::test_support::Fixture::new("startup-failure-state");
+        let state_path = fixture.join("run/state.json");
+        let scan_ret_path = fixture.join("scan.ret");
+        let stale = RunState {
+            timestamp: 1,
+            active_mounts: vec!["/system".to_owned()],
+            ..RunState::default()
+        };
+        stale.save_to(&state_path).unwrap();
+        std::fs::write(&scan_ret_path, br#"[{"id":"stale"}]"#).unwrap();
+
+        let error = Error::msg("scan failed");
+        persist_startup_failure_state_to("scan", &error, &state_path, &scan_ret_path);
+
+        let state = RunState::load_from(&state_path);
+        assert_eq!(state.failed_stage.as_deref(), Some("scan"));
+        assert!(state.active_mounts.is_empty());
+        assert_eq!(std::fs::read_to_string(scan_ret_path).unwrap(), "[]");
+    }
 
     #[test]
     fn pipeline_stats_aggregates_all_sources() {
