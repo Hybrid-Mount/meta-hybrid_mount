@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# pnpm generates this file in its own style (single quotes, its own line wrapping).
+# Formatting it with Prettier rewrote ~2000 lines, and the next dependency bump
+# regenerated it unconformingly, so every Dependabot npm PR failed `prettier --check`.
+# The lockfile belongs to pnpm; linting it only creates churn.
+pnpm-lock.yaml

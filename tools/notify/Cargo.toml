@@ -13,9 +13,12 @@ workspace = true
 
 [dependencies]
 anyhow = "1.0.102"
-# 0.48 JSON-quotes flattened multipart strings (parse_mode becomes '"HTML"').
-# Keep pinned until a release passes the wire-level upload regression tests.
-tgbot = "=0.48.0"
+# Pinned, not a caret range: 0.47 and 0.48 JSON-quote flattened multipart strings, so a
+# single-file upload sends parse_mode as '"HTML"' and Telegram rejects it with
+# `400 unsupported parse_mode`. Media groups nest the value in JSON and are unaffected,
+# which is why a Debug-level test cannot tell the two encodings apart. The wire-level
+# tests in src/lib.rs assert the raw multipart body and are the gate for lifting this.
+tgbot = "=0.46.0"
 tokio = { version = "1.52.1", features = ["rt-multi-thread"] }
 
 [dev-dependencies]

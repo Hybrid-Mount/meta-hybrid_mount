@@ -14,9 +14,14 @@ updates:
         patterns: ["*"]
         update-types: ["patch"]
     ignore:
-      # tgbot 0.47 serializes flattened multipart captions incorrectly at runtime.
+      # tgbot is pinned exactly in tools/notify/Cargo.toml because 0.47 and 0.48
+      # JSON-quote flattened multipart strings: a single-file upload then sends
+      # parse_mode as '"HTML"' and Telegram answers `400 unsupported parse_mode`.
+      # The wire-level tests in tools/notify/src/lib.rs are the gate for lifting
+      # this; a bump that skips them breaks the release notification, not the build
+      # alone. Ignore every version so the upgrade is a deliberate, tested change.
       - dependency-name: "tgbot"
-        versions: ["0.47.x"]
+        versions: ["*"]
 
   - package-ecosystem: "npm"
     directory: "/webui"
