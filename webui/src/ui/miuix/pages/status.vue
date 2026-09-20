@@ -12,7 +12,9 @@ import { moduleStore } from "../../../lib/stores/moduleStore";
 import { configStore } from "../../../lib/stores/configStore";
 import {
   activeMountState,
+  backendDisplayKeys,
   groupActiveMounts,
+  storageModeKey,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
 
@@ -33,6 +35,16 @@ const showvfsmodule = ref(false);
 const vfsCount = computed(() => state.value?.mode_stats.vfs ?? 0);
 const expandMountPath = ref(false);
 const activeMounts = computed(() => uniqueActiveMounts(state.value?.active_mounts ?? []));
+// Name the backends that actually ran. A VFS-only boot created no Tmpfs/Ext4 staging,
+// so it must read "VFS" instead of a storage mode that never started.
+const backendSummary = computed(() => {
+  const labels = backendDisplayKeys(state.value).map((key) => t(key));
+  return labels.length > 0 ? labels.join(" · ") : "-";
+});
+const storageModeLabel = computed(() => {
+  const key = storageModeKey(state.value);
+  return key ? t(key) : "-";
+});
 const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
 const activeMountStatus = computed(() =>
   activeMountState(state.value, activeMounts.value),
@@ -111,7 +123,7 @@ onMounted(async () => {
       :status="statusKind"
       :label="statusTitle"
       :summary="statusSummary"
-      :description="state?.storage_mode.toUpperCase()"
+      :description="backendSummary"
     ></StatusCard>
 
     <div class="card-row">
@@ -143,10 +155,7 @@ onMounted(async () => {
 
     <MiuixSmallTitle :text="t('status.backendTitle')" />
     <MiuixCard class="card backend-card">
-      <MiuixBasicComponent
-        :title="t('status.storageMode')"
-        :summary="state?.storage_mode ?? '-'"
-      />
+      <MiuixBasicComponent :title="t('status.storageMode')" :summary="storageModeLabel" />
       <MiuixBasicComponent
         class="backend-row"
         :title="t('status.overlayModules')"

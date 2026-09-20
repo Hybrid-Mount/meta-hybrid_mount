@@ -27,6 +27,11 @@ pub const BUNDLED_MODULE_BLACKLIST_PATH: &str =
 pub const SCAN_RET_PATH: &str = "/data/adb/hybrid-mount/scan.ret";
 pub const STATE_PATH: &str = "/data/adb/hybrid-mount/run/state.json";
 
+/// `RunState.storage_mode` sentinel for a boot that created no overlay staging backend
+/// (VFS-only or Magic-only). The module description and WebUI render it as "no backend"
+/// instead of claiming Tmpfs/Ext4.
+pub const NO_STORAGE_MODE: &str = "none";
+
 /// ext4 staging images (v4.2.0 behaviour).
 pub const MODULES_IMG_FILE: &str = "/data/adb/hybrid-mount/modules.img";
 

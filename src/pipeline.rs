@@ -89,11 +89,15 @@ pub fn pipeline_stats(
     }
 }
 
-/// Merge successful targets from both backends into the stable WebUI contract.
-pub fn merge_active_mounts(overlay: &[String], magic: &[String]) -> Vec<String> {
+/// Merge successful targets from every backend into the stable WebUI contract.
+///
+/// VFS targets are injection points rather than kernel mounts, but the WebUI counts
+/// them as active mount points, so they join the same sorted, deduplicated list.
+pub fn merge_active_mounts(overlay: &[String], magic: &[String], vfs: &[String]) -> Vec<String> {
     overlay
         .iter()
         .chain(magic)
+        .chain(vfs)
         .cloned()
         .collect::<BTreeSet<_>>()
         .into_iter()
@@ -400,7 +404,11 @@ fn execute_mount_phases(
         prepare_overlay_storage(modules, plan, &mut overlay_execution_plan, &storage_root)?;
         Some(storage_root)
     } else {
+        // No overlay staging was created, so TMPFS/EXT4 never started. Record the
+        // explicit sentinel instead of leaving the string empty: the module description
+        // and the WebUI must not claim a storage backend that never ran (VFS-only boot).
         log::info!("overlay storage skipped: reason=no_overlay_operations");
+        state.storage_mode = defs::NO_STORAGE_MODE.to_owned();
         None
     };
     storage_phase.finish();
@@ -569,6 +577,7 @@ fn persist_mount_failure_state(
     state.active_mounts.clear();
     state.overlay_active_mounts.clear();
     state.magic_active_mounts.clear();
+    state.vfs_active_mounts.clear();
     state.confirmed_active_mounts.clear();
     state.mount_stats = MountStatistics {
         total_mounts: 1,
@@ -877,9 +886,20 @@ fn run_mount_pipeline_impl() -> Result<()> {
     let confirmed_overlay_targets = confirmed_mount_targets(&active_mounts, &final_mountinfo);
     let confirmed_magic_targets =
         confirmed_mount_targets(&magic_stats.active_mounts, &final_mountinfo);
-    let confirmed_active_mounts =
-        merge_active_mounts(&confirmed_overlay_targets, &confirmed_magic_targets);
-    let attempted_active_mounts = merge_active_mounts(&active_mounts, &magic_stats.active_mounts);
+    // VFS injection points are not kernel mounts, so mountinfo can never confirm them.
+    // They are confirmed by the provider read-back in `apply_vfs_phase`, which drops a
+    // batch whose rules did not survive, so the stats targets are already trustworthy.
+    let confirmed_vfs_targets = vfs_stats.active_targets.clone();
+    let confirmed_active_mounts = merge_active_mounts(
+        &confirmed_overlay_targets,
+        &confirmed_magic_targets,
+        &confirmed_vfs_targets,
+    );
+    let attempted_active_mounts = merge_active_mounts(
+        &active_mounts,
+        &magic_stats.active_mounts,
+        &vfs_stats.active_targets,
+    );
     if confirmed_active_mounts != attempted_active_mounts {
         log::warn!(
             "executor targets not fully confirmed by mountinfo: executed={}, confirmed={}",
@@ -1955,14 +1975,34 @@ mod tests {
     fn active_mounts_merge_backends_in_sorted_deduplicated_order() {
         let overlay = vec!["/vendor".to_owned(), "/system".to_owned()];
         let magic = vec!["/system".to_owned(), "/system/etc/hosts".to_owned()];
+        let vfs = vec![
+            "/system/etc/hosts".to_owned(),
+            "/product/etc/build.prop".to_owned(),
+        ];
 
         assert_eq!(
-            merge_active_mounts(&overlay, &magic),
+            merge_active_mounts(&overlay, &magic, &vfs),
             vec![
+                "/product/etc/build.prop".to_owned(),
                 "/system".to_owned(),
                 "/system/etc/hosts".to_owned(),
                 "/vendor".to_owned(),
             ]
+        );
+    }
+
+    /// A VFS-only boot reports its injection points as active mount points even though
+    /// the kernel never confirms them through mountinfo.
+    #[test]
+    fn vfs_targets_join_active_mounts_without_overlay_or_magic() {
+        let vfs = vec![
+            "/system/etc/hosts".to_owned(),
+            "/system/etc/hosts".to_owned(),
+        ];
+
+        assert_eq!(
+            merge_active_mounts(&[], &[], &vfs),
+            vec!["/system/etc/hosts".to_owned()]
         );
     }
 

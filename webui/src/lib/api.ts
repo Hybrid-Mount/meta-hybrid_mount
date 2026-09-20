@@ -164,19 +164,26 @@ const normalizeStringArray = (value: unknown): string[] =>
 const optionalString = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
+// A boot that created no overlay staging backend reports the explicit `none` sentinel.
+// Legacy snapshots may carry an empty string, which must not be read as `ext4`.
+const normalizeStorageMode = (value: unknown): string =>
+  typeof value === "string" && value.length > 0 ? value : "none";
+
 export function normalizeStatus(payload: Record<string, unknown>): RunState {
   const overlayActiveMounts = normalizeStringArray(payload.overlay_active_mounts);
   const magicActiveMounts = normalizeStringArray(payload.magic_active_mounts);
+  const vfsActiveMounts = normalizeStringArray(payload.vfs_active_mounts);
   const activeMounts = [
     ...normalizeStringArray(payload.active_mounts),
     ...overlayActiveMounts,
     ...magicActiveMounts,
+    ...vfsActiveMounts,
   ];
 
   return {
     timestamp: Number(payload.timestamp ?? 0),
     pid: Number(payload.pid ?? 0),
-    storage_mode: String(payload.storage_mode ?? "ext4"),
+    storage_mode: normalizeStorageMode(payload.storage_mode),
     mount_point: String(payload.mount_point ?? ""),
     overlay_modules: Array.isArray(payload.overlay_modules)
       ? payload.overlay_modules.map(String)
@@ -191,7 +198,7 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
     overlay_active_mounts: [...new Set(overlayActiveMounts)].sort(),
     magic_active_mounts: [...new Set(magicActiveMounts)].sort(),
     vfs_modules: normalizeStringArray(payload.vfs_modules),
-    vfs_active_mounts: normalizeStringArray(payload.vfs_active_mounts),
+    vfs_active_mounts: [...new Set(vfsActiveMounts)].sort(),
     vfs_provider: typeof payload.vfs_provider === "string" ? payload.vfs_provider : null,
     vfs_foreign_nomount: payload.vfs_foreign_nomount === true,
     confirmed_active_mounts: normalizeStringArray(payload.confirmed_active_mounts),

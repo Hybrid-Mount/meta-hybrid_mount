@@ -7,6 +7,7 @@ import { moduleStore } from "../../../lib/stores/moduleStore";
 import { configStore } from "../../../lib/stores/configStore";
 import {
   activeMountState,
+  backendDisplayKeys,
   groupActiveMounts,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
@@ -44,6 +45,12 @@ const vfsWidth = computed(() =>
 const activeMounts = computed(() =>
   uniqueActiveMounts(sysStore.state?.active_mounts ?? []),
 );
+// Name the backends that actually ran. A VFS-only boot created no Tmpfs/Ext4 staging,
+// so it must read "VFS" instead of a storage mode that never started.
+const backendSummary = computed(() => {
+  const labels = backendDisplayKeys(sysStore.state).map((key) => t(key));
+  return labels.length > 0 ? labels.join(" · ") : "-";
+});
 const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
 const activeMountStatus = computed(() =>
   activeMountState(sysStore.state, activeMounts.value),
@@ -99,7 +106,7 @@ onMounted(refresh);
           <div class="hero-content">
             <span class="hero-label">{{ t("status.backendTitle") }}</span>
             <span class="hero-value">
-              {{ (sysStore.state?.storage_mode || "-").toUpperCase() }}
+              {{ backendSummary }}
             </span>
           </div>
         </template>

@@ -97,7 +97,8 @@ export const MockAPI: AppAPI = {
     return {
       timestamp: Math.floor(Date.now() / 1000),
       pid: 1,
-      storage_mode: "ext4",
+      // Magic-only boot: no Tmpfs/Ext4 staging backend was created.
+      storage_mode: "none",
       mount_point: "/data/adb/hybrid-mount/run",
       overlay_modules: [],
       magic_modules: ["youtube-revanced", "hosts-redirect"],

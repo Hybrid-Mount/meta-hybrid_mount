@@ -48,10 +48,13 @@ fn running_description(
     magic_count: usize,
     vfs_count: usize,
 ) -> String {
+    // Only the two real overlay staging backends may claim a tag. A VFS-only or
+    // Magic-only boot starts neither, so it must report no storage backend instead of
+    // falling through to Ext4.
     let (mode_name, mode_icon) = match mode {
         "tmpfs" => ("Tmpfs", "🐾"),
-        "none" => ("", ""),
-        _ => ("Ext4", "💿"),
+        "ext4" => ("Ext4", "💿"),
+        _ => ("", ""),
     };
 
     let mode_tag = if mode_name.is_empty() {
@@ -166,6 +169,34 @@ mod tests {
             !description.contains("Ext4"),
             "should not show Ext4 for Magic-only run"
         );
+    }
+
+    /// VFS-only 启动既不建 tmpfs 也不建 ext4，描述必须只报 VFS 计数。
+    #[test]
+    fn running_description_without_overlay_storage_reports_vfs_only() {
+        let description = running_description("none", 0, 0, 3);
+
+        assert!(description.contains("OverlayFS: 0"));
+        assert!(description.contains("Magic Mount: 0"));
+        assert!(description.contains("VFS: 3"));
+        assert!(
+            !description.contains("Ext4"),
+            "VFS-only run must not claim Ext4"
+        );
+        assert!(
+            !description.contains("Tmpfs"),
+            "VFS-only run must not claim Tmpfs"
+        );
+    }
+
+    /// 空字符串是旧快照的遗留值，同样不能回落到 Ext4。
+    #[test]
+    fn running_description_with_empty_mode_reports_no_storage_backend() {
+        let description = running_description("", 0, 0, 2);
+
+        assert!(description.contains("VFS: 2"));
+        assert!(!description.contains("Ext4"));
+        assert!(!description.contains("Tmpfs"));
     }
 
     #[test]

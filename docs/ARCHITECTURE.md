@@ -86,9 +86,11 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 
 WebUI 不持有第二套业务协议：配置与状态请求都映射到以上命令。状态是启动快照，不是 daemon 提供的实时流。
 
-`status` 中的 `active_mounts` 是 OverlayFS 与 Magic Mount 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts` 与 `magic_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。
+`status` 中的 `active_mounts` 是 OverlayFS、Magic Mount 与 VFS 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts`、`magic_active_mounts` 与 `vfs_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。OverlayFS 与 Magic Mount 的目标必须经 mountinfo 确认；VFS 注入点不是内核挂载，改由 `apply_vfs_phase` 的 Provider 读回确认，读回失败的批次会被整体丢弃，因此不会进入 `active_mounts`。
 
 `status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（只有 `hm`，即 HM 自有的 `hybridmount` 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
+
+`storage_mode` 记录本次启动实际创建的 overlay staging 后端，取值为 `tmpfs`、`ext4` 或哨兵值 `none`。只使用 VFS 或 Magic Mount 的启动不会创建 staging，此时写入 `none`：动态模块描述与 WebUI 都据此显示实际运行的挂载后端（例如 VFS），不会假报 Tmpfs 或 Ext4。
 
 ## 共享节点树契约
 
@@ -97,8 +99,8 @@ scanner 对每个模块源节点只读记录类型、源路径和 `.replace` 标
 OverlayFS staging 只物化树中标注为 `overlay` 的节点，因此同模块内的 magic/ignore 子树不会被整目录复制进 lowerdir，Overlay 目录可以安全包含后续由 Magic 处理的子路径。目录 `.replace` 转换为 `trusted.overlay.opaque=y`，whiteout 保留为设备节点，符号链接不跟随。Magic Mount 在 OverlayFS 完成后遍历同一棵树的 `magic` 分支；未被选中但承载选中后代的目录只作为结构父链，不会改变后端归属。由于执行顺序固定为 OverlayFS → Magic Mount，Magic `.replace` 目录若包含 Overlay 后代会在规划阶段报冲突，避免后执行的目录替换遮住先前挂载。
 
 VFS 目标不得存在被 Overlay/Magic 挂载的祖先目录（反之亦然），否则 plan 阶段报
-`PlanConflict`。VFS 不是真实挂载，因此不进入 `active_mounts`，也不参与 KSU
-try-umount 列表；其成功目标记录在 `vfs_active_mounts`。
+`PlanConflict`。VFS 不是真实挂载，因此不参与 KSU try-umount 列表；其成功目标记录在
+`vfs_active_mounts`，并计入 `active_mounts` 供 WebUI 展示活动挂载点。
 
 VFS 规则以虚拟路径为键，同一目标只下发一条（`node.sources` 中模块顺序靠后者获胜）。
 回滚是定向删除：下发前登记本次完整批次，失败时对其逐条 `DEL_RULE` 并容忍 `ENOENT`，

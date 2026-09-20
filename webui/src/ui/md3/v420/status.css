@@ -81,6 +81,8 @@
   line-height: 1.1;
   font-weight: 600;
   letter-spacing: -1px;
+  /* The value names every backend that ran, so it can exceed one line. */
+  overflow-wrap: anywhere;
 }
 
 .metrics-row {

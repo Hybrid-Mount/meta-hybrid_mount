@@ -127,13 +127,15 @@ pub struct RunState {
     pub overlay_modules: Vec<String>,
     pub magic_modules: Vec<String>,
     pub skip_mount_modules: Vec<String>,
-    /// Deduplicated OverlayFS and Magic Mount targets for existing WebUI clients.
+    /// Deduplicated active targets from every backend for existing WebUI clients.
     pub active_mounts: Vec<String>,
     /// Successful OverlayFS targets from the same boot snapshot.
     pub overlay_active_mounts: Vec<String>,
     /// Successful Magic Mount bind and directory targets from the same boot snapshot.
     pub magic_active_mounts: Vec<String>,
-    /// VFS-injected modules and successful targets. VFS is not a real mount, so it stays out of `active_mounts`.
+    /// VFS-injected modules and successful targets. VFS is not a real kernel mount, so
+    /// it stays out of the KSU try-umount list, but its targets are counted as active
+    /// mount points in `active_mounts`.
     pub vfs_modules: Vec<String>,
     pub vfs_active_mounts: Vec<String>,
     /// The provider actually bound this boot (v2 has only `hm`).
@@ -142,7 +144,8 @@ pub struct RunState {
     /// One-way guard result: whether a foreign NoMount implementation exists on the device.
     #[serde(default)]
     pub vfs_foreign_nomount: bool,
-    /// Final mountinfo-confirmed targets; executor attempts stay in `mount_stats`.
+    /// Final confirmed targets: mountinfo-confirmed for OverlayFS and Magic Mount,
+    /// provider read-back confirmed for VFS. Executor attempts stay in `mount_stats`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub confirmed_active_mounts: Vec<String>,
     pub mount_error_modules: Vec<String>,
@@ -299,7 +302,9 @@ impl RunState {
             .collect();
 
         let mut state = Self::new(
-            String::new(),
+            // No overlay staging exists yet at plan time; the storage phase replaces this
+            // with the real Tmpfs/Ext4 mode, or leaves the sentinel for VFS-only boots.
+            crate::defs::NO_STORAGE_MODE.to_owned(),
             PathBuf::new(),
             plan.overlay_module_ids
                 .iter()
@@ -334,7 +339,7 @@ impl RunState {
     /// mount side effect or module snapshot can be created.
     pub fn from_startup_failure(stage: &str, reason: impl Into<String>) -> Self {
         let mut state = Self::new(
-            "none".to_owned(),
+            crate::defs::NO_STORAGE_MODE.to_owned(),
             PathBuf::new(),
             Vec::new(),
             Vec::new(),
@@ -1173,6 +1178,9 @@ mod tests {
         assert_eq!(state.skip_mount_modules, vec!["skipped_mod".to_owned()]);
         assert!(state.mount_point.as_os_str().is_empty());
         assert!(state.active_mounts.is_empty());
+        // The planned snapshot never claims an overlay storage backend before the
+        // storage phase actually creates one.
+        assert_eq!(state.storage_mode, crate::defs::NO_STORAGE_MODE);
         assert_eq!(state.mount_stats, MountStatistics::default());
         assert_eq!(state.mode_stats.overlayfs, 1);
         assert_eq!(state.mode_stats.magicmount, 1);

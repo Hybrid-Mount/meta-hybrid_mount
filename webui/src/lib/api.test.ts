@@ -102,15 +102,17 @@ describe("WebUI configuration contract", () => {
     expect(config.default_mode).toBe("overlay");
   });
 
-  it("merges and deduplicates active mounts from both backends", () => {
+  it("merges and deduplicates active mounts from every backend", () => {
     const status = normalizeStatus({
       timestamp: 1,
       active_mounts: ["/system", "/system/etc/hosts"],
       overlay_active_mounts: ["/system"],
       magic_active_mounts: ["/system/etc/hosts", "/vendor/etc/audio.xml"],
+      vfs_active_mounts: ["/vendor/etc/audio.xml", "/product/etc/build.prop"],
     });
 
     expect(status.active_mounts).toEqual([
+      "/product/etc/build.prop",
       "/system",
       "/system/etc/hosts",
       "/vendor/etc/audio.xml",
@@ -120,6 +122,31 @@ describe("WebUI configuration contract", () => {
       "/system/etc/hosts",
       "/vendor/etc/audio.xml",
     ]);
+    expect(status.vfs_active_mounts).toEqual([
+      "/product/etc/build.prop",
+      "/vendor/etc/audio.xml",
+    ]);
+  });
+
+  it("counts VFS injection points as active mounts for a VFS-only snapshot", () => {
+    const status = normalizeStatus({
+      timestamp: 1,
+      storage_mode: "none",
+      active_mounts: [],
+      overlay_active_mounts: [],
+      magic_active_mounts: [],
+      vfs_active_mounts: ["/system/etc/hosts"],
+    });
+
+    expect(status.active_mounts).toEqual(["/system/etc/hosts"]);
+  });
+
+  it("does not read a missing overlay storage mode as ext4", () => {
+    expect(normalizeStatus({ timestamp: 1 }).storage_mode).toBe("none");
+    expect(normalizeStatus({ timestamp: 1, storage_mode: "" }).storage_mode).toBe("none");
+    expect(normalizeStatus({ timestamp: 1, storage_mode: "ext4" }).storage_mode).toBe(
+      "ext4",
+    );
   });
 
   it("defaults backend-specific mount lists for older snapshots", () => {
@@ -128,6 +155,7 @@ describe("WebUI configuration contract", () => {
     expect(status.active_mounts).toEqual(["/system"]);
     expect(status.overlay_active_mounts).toEqual([]);
     expect(status.magic_active_mounts).toEqual([]);
+    expect(status.vfs_active_mounts).toEqual([]);
   });
 
   it("preserves startup and rollback diagnostics", () => {
