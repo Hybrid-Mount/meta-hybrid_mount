@@ -29,8 +29,10 @@ jobs:
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-      # Mount rollback tests need private namespaces and tmpfs mounts.
-      options: --cap-add SYS_ADMIN
+      # Mount rollback tests need private namespaces and tmpfs mounts. SYS_ADMIN alone is
+      # not enough: the docker-default AppArmor profile denies mount(2) with EACCES, and
+      # capabilities cannot override a profile, so the namespace step must run unconfined.
+      options: --cap-add SYS_ADMIN --security-opt apparmor=unconfined
     defaults:
       run:
         shell: bash
