@@ -20,6 +20,8 @@ pub struct VfsExecStats {
     pub injected: usize,
     pub whiteouts: usize,
     pub opaque: usize,
+    /// A non-strict VFS failure that was deliberately degraded so other backends could boot.
+    pub failure: Option<String>,
 }
 
 /// The result of one apply: statistics plus the rules needed to roll back each record.
@@ -27,6 +29,12 @@ pub struct VfsExecStats {
 pub struct VfsApplied {
     pub stats: VfsExecStats,
     pub rules: Vec<EncodedRule>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct VfsPolicyOutcome {
+    pub stats: Option<VfsExecStats>,
+    pub failure: Option<String>,
 }
 
 /// Build the full batch and its statistics without touching the kernel.
@@ -66,6 +74,7 @@ pub fn plan_rules(plan: &MountPlan) -> Result<VfsApplied> {
             injected,
             whiteouts,
             opaque,
+            failure: None,
         },
         rules: encoded,
     })
@@ -85,25 +94,47 @@ pub fn apply_rules(
     Ok(applied.stats.clone())
 }
 
-/// `Ok(Some(stats))` when the batch took effect, `Ok(None)` when a non-strict failure
-/// degraded to running without VFS. Both error paths first delete the applied prefix.
+/// Compatibility wrapper for callers that only need to know whether VFS applied.
+#[allow(dead_code)]
 pub fn apply_rules_with_policy(
     kernel: &mut dyn VfsKernel,
     applied: &VfsApplied,
     uids: &[u32],
     strict: bool,
 ) -> Result<Option<VfsExecStats>> {
+    apply_rules_with_policy_diagnosed(kernel, applied, uids, strict).map(|outcome| outcome.stats)
+}
+
+/// Returns a successful batch or a non-strict failure diagnosis. Both error paths first delete
+/// the applied prefix, so a caller can safely continue with other backends.
+pub fn apply_rules_with_policy_diagnosed(
+    kernel: &mut dyn VfsKernel,
+    applied: &VfsApplied,
+    uids: &[u32],
+    strict: bool,
+) -> Result<VfsPolicyOutcome> {
     match apply_rules(kernel, applied, uids) {
-        Ok(stats) => Ok(Some(stats)),
+        Ok(stats) => Ok(VfsPolicyOutcome {
+            stats: Some(stats),
+            failure: None,
+        }),
         Err(err) => {
             if let Err(cleanup) = kernel.remove_rules(&applied.rules) {
                 log::error!("vfs rollback after a failed apply also failed: {cleanup}");
+                return Err(crate::errors::Error::VfsProtocol {
+                    detail: format!(
+                        "vfs apply failed and targeted cleanup failed: {cleanup}; apply error: {err}"
+                    ),
+                });
             }
             if strict {
                 Err(err)
             } else {
                 log::warn!("vfs apply failed, continuing without the vfs backend: {err}");
-                Ok(None)
+                Ok(VfsPolicyOutcome {
+                    stats: None,
+                    failure: Some(err.to_string()),
+                })
             }
         }
     }

@@ -200,6 +200,8 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
     vfs_modules: normalizeStringArray(payload.vfs_modules),
     vfs_active_mounts: [...new Set(vfsActiveMounts)].sort(),
     vfs_provider: typeof payload.vfs_provider === "string" ? payload.vfs_provider : null,
+    vfs_error: optionalString(payload.vfs_error),
+    vfs_error_modules: normalizeStringArray(payload.vfs_error_modules),
     vfs_foreign_nomount: payload.vfs_foreign_nomount === true,
     confirmed_active_mounts: normalizeStringArray(payload.confirmed_active_mounts),
     mount_error_modules: Array.isArray(payload.mount_error_modules)

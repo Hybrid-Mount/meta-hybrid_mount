@@ -9,6 +9,7 @@ import {
   activeMountState,
   backendDisplayKeys,
   groupActiveMounts,
+  statusFailureSummary,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
@@ -56,20 +57,11 @@ const activeMountStatus = computed(() =>
   activeMountState(sysStore.state, activeMounts.value),
 );
 const failureSummary = computed(() => {
-  const state = sysStore.state;
-  if (!state) return null;
-  if (state.failure_reason) return state.failure_reason;
-  if (state.failed_stage) return `${t("status.abnormal")}: ${state.failed_stage}`;
-  if (state.mount_stats.failed_mounts > 0) {
-    return t("status.mountFailures", { count: state.mount_stats.failed_mounts });
-  }
-  if (state.rollback_status === "incomplete" || state.rollback_status === "unverified") {
-    return `${t("status.abnormal")}: rollback ${state.rollback_status}`;
-  }
-  if (state.state_load.kind === "corrupt" || state.state_load.kind === "io_error") {
-    return state.state_load.detail || t("status.loadError");
-  }
-  return null;
+  return statusFailureSummary(sysStore.state, {
+    abnormal: t("status.abnormal"),
+    loadError: t("status.loadError"),
+    mountFailures: (count) => t("status.mountFailures", { count }),
+  });
 });
 
 async function refresh(): Promise<void> {
@@ -96,6 +88,9 @@ onMounted(refresh);
         <span>{{ failureSummary }}</span>
         <code v-if="sysStore.state?.leftover_mount_targets.length">
           {{ sysStore.state.leftover_mount_targets.join(", ") }}
+        </code>
+        <code v-if="sysStore.state?.vfs_error_modules.length">
+          VFS: {{ sysStore.state.vfs_error_modules.join(", ") }}
         </code>
       </section>
       <section class="hero-card">

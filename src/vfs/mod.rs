@@ -30,13 +30,36 @@ pub fn available() -> bool {
 /// `available` is the read-only probe and `load` performs the `insmod`; both are injected so the
 /// ordering and the no-load-when-unwanted rule are testable without a device. A load failure is
 /// not an error here — the plan then degrades exactly as it does when no module is bundled.
+#[allow(dead_code)]
 pub fn ensure_loaded_for_plan(
     wants_vfs: bool,
     available: impl Fn() -> bool,
     load: impl FnOnce() -> crate::errors::Result<()>,
 ) -> bool {
-    if !wants_vfs || available() {
+    ensure_loaded_for_plan_with_guard(wants_vfs, false, available, load)
+}
+
+/// Same as [`ensure_loaded_for_plan`], but refuses to load Hybrid Mount when another VFS
+/// implementation was observed before planning. The guard belongs before the load decision:
+/// once a foreign provider is present, probing again after `insmod` is too late to prevent both
+/// implementations from taking effect.
+pub fn ensure_loaded_for_plan_with_guard(
+    wants_vfs: bool,
+    foreign_provider: bool,
+    available: impl Fn() -> bool,
+    load: impl FnOnce() -> crate::errors::Result<()>,
+) -> bool {
+    if !wants_vfs {
         return available();
+    }
+
+    if foreign_provider {
+        log::warn!("foreign vfs provider is present; refusing to load hybridmount");
+        return false;
+    }
+
+    if available() {
+        return true;
     }
 
     log::info!(
@@ -77,8 +100,9 @@ mod tests {
         let available = Cell::new(false);
         let loads = Cell::new(0);
 
-        let ready = ensure_loaded_for_plan(
+        let ready = ensure_loaded_for_plan_with_guard(
             true,
+            false,
             || available.get(),
             || {
                 loads.set(loads.get() + 1);
@@ -96,8 +120,9 @@ mod tests {
     fn an_answering_provider_is_never_reloaded() {
         let loads = Cell::new(0);
 
-        let ready = ensure_loaded_for_plan(
+        let ready = ensure_loaded_for_plan_with_guard(
             true,
+            false,
             || true,
             || {
                 loads.set(loads.get() + 1);
@@ -114,7 +139,8 @@ mod tests {
     fn vfs_is_not_loaded_when_no_rule_asks_for_it() {
         let loads = Cell::new(0);
 
-        let ready = ensure_loaded_for_plan(
+        let ready = ensure_loaded_for_plan_with_guard(
+            false,
             false,
             || false,
             || {
@@ -130,11 +156,12 @@ mod tests {
     /// A failed load degrades instead of aborting the boot, which is what `vfs_strict` is for.
     #[test]
     fn a_failed_load_reports_unavailable_without_aborting() {
-        let ready = ensure_loaded_for_plan(false, || false, || Ok(()));
+        let ready = ensure_loaded_for_plan_with_guard(false, false, || false, || Ok(()));
         assert!(!ready);
 
-        let ready = ensure_loaded_for_plan(
+        let ready = ensure_loaded_for_plan_with_guard(
             true,
+            false,
             || false,
             || {
                 Err(crate::errors::Error::msg(
@@ -146,6 +173,24 @@ mod tests {
             !ready,
             "a failed load must degrade rather than claim success"
         );
+    }
+
+    #[test]
+    fn a_foreign_provider_blocks_the_loader_before_planning() {
+        let loads = Cell::new(0);
+
+        let ready = ensure_loaded_for_plan_with_guard(
+            true,
+            true,
+            || false,
+            || {
+                loads.set(loads.get() + 1);
+                Ok(())
+            },
+        );
+
+        assert!(!ready);
+        assert_eq!(loads.get(), 0, "a foreign provider must block insmod");
     }
 
     /// `vfs_strict` must actually fail the boot when a requested backend is missing. The plan

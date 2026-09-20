@@ -141,6 +141,12 @@ pub struct RunState {
     /// The provider actually bound this boot (v2 has only `hm`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vfs_provider: Option<String>,
+    /// Explicit VFS failure detail when the backend was requested but could not be confirmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vfs_error: Option<String>,
+    /// VFS modules whose planned rules were not applied or confirmed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub vfs_error_modules: Vec<String>,
     /// One-way guard result: whether a foreign NoMount implementation exists on the device.
     #[serde(default)]
     pub vfs_foreign_nomount: bool,
@@ -269,6 +275,8 @@ impl RunState {
             vfs_modules: Vec::new(),
             vfs_active_mounts: Vec::new(),
             vfs_provider: None,
+            vfs_error: None,
+            vfs_error_modules: Vec::new(),
             vfs_foreign_nomount: false,
             confirmed_active_mounts: Vec::new(),
             mount_error_modules: Vec::new(),
@@ -1341,6 +1349,8 @@ mod tests {
             vfs_modules: Vec::new(),
             vfs_active_mounts: Vec::new(),
             vfs_provider: None,
+            vfs_error: None,
+            vfs_error_modules: Vec::new(),
             vfs_foreign_nomount: false,
             confirmed_active_mounts: vec!["/system".to_owned()],
             mount_error_modules: Vec::new(),

@@ -9,6 +9,38 @@ export interface ActiveMountGroup {
   count: number;
 }
 
+export interface StatusFailureLabels {
+  abnormal: string;
+  loadError: string;
+  mountFailures: (count: number) => string;
+}
+
+/** Returns the same failure priority for every status skin. */
+export function statusFailureSummary(
+  state: RunState | null | undefined,
+  labels: StatusFailureLabels,
+): string | null {
+  if (!state) return null;
+  if (state.failure_reason) return state.failure_reason;
+  if (state.vfs_error) {
+    const modules = state.vfs_error_modules.filter(Boolean);
+    return modules.length > 0
+      ? `${state.vfs_error} (${modules.join(", ")})`
+      : state.vfs_error;
+  }
+  if (state.failed_stage) return `${labels.abnormal}: ${state.failed_stage}`;
+  if (state.mount_stats.failed_mounts > 0) {
+    return labels.mountFailures(state.mount_stats.failed_mounts);
+  }
+  if (state.rollback_status === "incomplete" || state.rollback_status === "unverified") {
+    return `${labels.abnormal}: rollback ${state.rollback_status}`;
+  }
+  if (state.state_load.kind === "corrupt" || state.state_load.kind === "io_error") {
+    return state.state_load.detail || labels.loadError;
+  }
+  return null;
+}
+
 /// Backends that can do work in one boot, in pipeline order.
 export type BackendId = "overlay" | "magic" | "vfs";
 

@@ -6,6 +6,7 @@ import {
   activeMountState,
   backendDisplayKeys,
   groupActiveMounts,
+  statusFailureSummary,
   storageModeKey,
   uniqueActiveMounts,
 } from "./statusMounts";
@@ -24,6 +25,9 @@ const state = (timestamp: number): RunState => ({
   magic_active_mounts: [],
   vfs_modules: [],
   vfs_active_mounts: [],
+  vfs_provider: null,
+  vfs_error: null,
+  vfs_error_modules: [],
   vfs_foreign_nomount: false,
   confirmed_active_mounts: [],
   mount_error_modules: [],
@@ -69,6 +73,34 @@ describe("active mount presentation", () => {
       { root: "/system", count: 2 },
       { root: "/vendor", count: 1 },
     ]);
+  });
+});
+
+describe("status failure presentation", () => {
+  const labels = {
+    abnormal: "Needs attention",
+    loadError: "Failed to load system status",
+    mountFailures: (count: number) => `Detected ${count} failed mounts`,
+  };
+
+  it("prioritizes explicit VFS failures and names affected modules", () => {
+    const snapshot = state(1);
+    snapshot.vfs_error = "VFS read-back failed";
+    snapshot.vfs_error_modules = ["vfs_mod"];
+
+    expect(statusFailureSummary(snapshot, labels)).toBe("VFS read-back failed (vfs_mod)");
+  });
+
+  it("does not hide rollback or state-load failures behind a working version", () => {
+    const snapshot = state(1);
+    snapshot.rollback_status = "unverified";
+    expect(statusFailureSummary(snapshot, labels)).toBe(
+      "Needs attention: rollback unverified",
+    );
+
+    snapshot.rollback_status = "committed";
+    snapshot.state_load = { kind: "io_error", detail: "state unreadable" };
+    expect(statusFailureSummary(snapshot, labels)).toBe("state unreadable");
   });
 });
 

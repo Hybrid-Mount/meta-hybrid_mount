@@ -454,7 +454,8 @@ fn execute_mount_phases(
     magic_phase.finish();
 
     let vfs_phase = PhaseTimer::start("vfs");
-    let vfs_stats = apply_vfs_phase(config, plan, state, transaction)?;
+    let foreign_nomount = state.vfs_foreign_nomount;
+    let vfs_stats = apply_vfs_phase(config, plan, state, foreign_nomount, transaction)?;
     vfs_phase.finish();
 
     crate::utils::ksu::commit_unmount_list()?;
@@ -571,6 +572,7 @@ fn rollback_mount_pipeline(
 fn persist_mount_failure_state(
     state: &mut RunState,
     failed_stage: &str,
+    failure_reason: &str,
     rollback: &RollbackSummary,
 ) {
     state.mount_point = PathBuf::new();
@@ -585,6 +587,7 @@ fn persist_mount_failure_state(
         ..MountStatistics::default()
     };
     state.failed_stage = Some(failed_stage.to_owned());
+    state.failure_reason = Some(failure_reason.to_owned());
     state.rollback_status = Some(rollback.status.clone());
     state.leftover_mount_targets = rollback.leftover_targets.clone();
     if let Err(state_err) = state.save() {
@@ -726,19 +729,33 @@ fn run_mount_pipeline_impl() -> Result<()> {
     }
     scan_phase.finish();
 
-    // Probe, then load the bundled module if one is wanted and the key type is still silent.
-    // This has to finish before planning: a plan built while the module is unloaded carries no
-    // vfs work, which would leave the executor's own load step unreachable. Afterwards the probe
-    // is authoritative for the plan and for every surface that advertises vfs.
-    let vfs_available = crate::vfs::ensure_loaded_for_plan(
-        config.wants_vfs(),
-        crate::vfs::available,
-        crate::vfs::lkm::load_hm_vfs,
-    );
+    // Detect a foreign provider before considering insmod. This has to finish before planning:
+    // a plan built while the module is unloaded carries no VFS work, while loading next to a
+    // foreign provider would let two inode-hooking implementations coexist.
+    let nomount_probe = if config.wants_vfs() {
+        detect_foreign_nomount()
+    } else {
+        ForeignNomountProbe::default()
+    };
+    let vfs_available = if nomount_probe.blocked() {
+        crate::vfs::ensure_loaded_for_plan_with_guard(
+            config.wants_vfs(),
+            true,
+            crate::vfs::available,
+            crate::vfs::lkm::load_hm_vfs,
+        )
+    } else {
+        crate::vfs::ensure_loaded_for_plan(
+            config.wants_vfs(),
+            crate::vfs::available,
+            crate::vfs::lkm::load_hm_vfs,
+        )
+    };
     log::info!(
-        "vfs provider probe: wants_vfs={}, available={}, strict={}",
+        "vfs provider probe: wants_vfs={}, available={}, foreign_nomount={}, strict={}",
         config.wants_vfs(),
         vfs_available,
+        nomount_probe.present,
         config.vfs_strict
     );
 
@@ -747,12 +764,14 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // `apply_vfs_phase` sees an empty module set and returns before its own strict checks. Without
     // this the option would be silently ineffective for exactly the case it exists to catch.
     if crate::vfs::unavailable_is_fatal(config.wants_vfs(), config.vfs_strict, vfs_available) {
-        return startup_phase(
-            "vfs",
-            Err(Error::VfsUnavailable {
-                reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
-            }),
-        );
+        let reason = if nomount_probe.present {
+            "foreign NoMount VFS provider detected; refusing to load hybridmount".to_owned()
+        } else if let Some(error) = &nomount_probe.error {
+            format!("VFS provider guard failed closed: {error}")
+        } else {
+            "no supported VFS kernel provider and vfs_strict is enabled".to_owned()
+        };
+        return startup_phase("vfs", Err(Error::VfsUnavailable { reason }));
     }
 
     let plan_phase = PhaseTimer::start("plan");
@@ -832,6 +851,18 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // before any fallible mount operation so `status` and the WebUI can still
     // report the selected backends when the device rejects a later mount.
     let mut state = RunState::from_plan(&config, &modules, &plan, initial_mount_errors);
+    state.vfs_foreign_nomount = nomount_probe.present;
+    if config.wants_vfs() && !vfs_available {
+        state.vfs_error = Some(nomount_probe.error.as_ref().map_or_else(
+            || "VFS provider unavailable; configured VFS rules were skipped".to_owned(),
+            |error| format!("VFS provider guard failed closed: {error}"),
+        ));
+        state.vfs_error_modules = plan
+            .vfs_module_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+    }
     startup_phase("state", state.save())?;
     state_phase.finish();
     log::info!(
@@ -864,7 +895,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
                     plan.magic_module_ids.join(",")
                 );
                 let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-                persist_mount_failure_state(&mut state, "mount_execution", &rollback);
+                persist_mount_failure_state(
+                    &mut state,
+                    "mount_execution",
+                    &err.to_string(),
+                    &rollback,
+                );
                 persist_unmounted_module_snapshot(&modules, &config, &plan);
                 return Err(err);
             }
@@ -878,7 +914,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
         Err(err) => {
             log::error!("phase=mountinfo_confirm failed: {err}");
             let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-            persist_mount_failure_state(&mut state, "mountinfo_confirm", &rollback);
+            persist_mount_failure_state(
+                &mut state,
+                "mountinfo_confirm",
+                &err.to_string(),
+                &rollback,
+            );
             persist_unmounted_module_snapshot(&modules, &config, &plan);
             return Err(err);
         }
@@ -929,7 +970,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
     if let Err(err) = write_scan_ret(&app_modules) {
         log::error!("phase=module_snapshot_save failed, rolling back mounts: {err}");
         let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-        persist_mount_failure_state(&mut state, "module_snapshot_save", &rollback);
+        persist_mount_failure_state(
+            &mut state,
+            "module_snapshot_save",
+            &err.to_string(),
+            &rollback,
+        );
         persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
@@ -953,6 +999,15 @@ fn run_mount_pipeline_impl() -> Result<()> {
         magic_stats.ignored_files as usize,
         magic_stats.mounted_dirs as usize,
     );
+    state.mode_stats.vfs = vfs_stats.mounted_module_ids.len();
+    if let Some(failure) = &vfs_stats.failure {
+        state.vfs_error = Some(failure.clone());
+        state.vfs_error_modules = plan
+            .vfs_module_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+    }
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;
     state.failed_stage = None;
@@ -964,7 +1019,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     if let Err(err) = state.save() {
         log::error!("phase=state_save failed, rolling back mounts: {err}");
         let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-        persist_mount_failure_state(&mut state, "state_save", &rollback);
+        persist_mount_failure_state(&mut state, "state_save", &err.to_string(), &rollback);
         persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
@@ -992,7 +1047,12 @@ fn run_mount_pipeline_impl() -> Result<()> {
                 RollbackSummary::unverified()
             }
         };
-        persist_mount_failure_state(&mut state, "mount_transaction_commit", &rollback);
+        persist_mount_failure_state(
+            &mut state,
+            "mount_transaction_commit",
+            &err.to_string(),
+            &rollback,
+        );
         persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
     }
@@ -1670,23 +1730,78 @@ impl Drop for VfsBootGuard {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug, Default)]
+struct ForeignNomountProbe {
+    present: bool,
+    /// A probe infrastructure failure blocks an automatic load just like a positive detection.
+    /// Loading a second inode-hooking provider while the guard is uncertain is unsafe.
+    error: Option<String>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl ForeignNomountProbe {
+    fn blocked(&self) -> bool {
+        self.present || self.error.is_some()
+    }
+}
+
 /// One-way guard: detects whether a foreign NoMount implementation already exists on the device.
 ///
-/// Probed once, without reading the other side's rules or arbitrating. A failed probe (key
-/// type unregistered, unsupported platform, allocation failure) counts as "absent", so this
-/// is defence in depth rather than the only guarantee: `hybridmount` and NoMount use different
-/// key types, and setup.sh refuses to let both coexist.
+/// Module tables are checked first because an absent key type is the normal result on devices
+/// without NoMount. If those tables cannot be read, the decision fails closed and no bundled
+/// `hybridmount` module is loaded. The keyring probe catches built-in or renamed providers that
+/// are not visible in the usual module tables.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn detect_foreign_nomount() -> bool {
+fn detect_foreign_nomount() -> ForeignNomountProbe {
+    const PROC_MODULES: &str = "/proc/modules";
+    const SYS_MODULE_DIR: &str = "/sys/module/nomount";
+
+    let proc_modules = match fs::read_to_string(PROC_MODULES) {
+        Ok(text) => text,
+        Err(err) => {
+            return ForeignNomountProbe {
+                present: false,
+                error: Some(format!("read {PROC_MODULES}: {err}")),
+            };
+        }
+    };
+    let listed_in_proc = proc_modules
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .any(|name| name == "nomount");
+    let listed_in_sys = Path::new(SYS_MODULE_DIR).exists();
+    if listed_in_proc || listed_in_sys {
+        log::warn!(
+            "foreign NoMount VFS implementation detected: proc_modules={}, sys_module={}",
+            listed_in_proc,
+            listed_in_sys
+        );
+        return ForeignNomountProbe {
+            present: true,
+            error: None,
+        };
+    }
+
     match KeyringKernel::new(KeyringChannel::Nomount) {
         Ok(mut probe) => match probe.version() {
             Ok(version) => {
                 log::warn!("foreign NoMount VFS implementation detected (version {version})");
-                true
+                ForeignNomountProbe {
+                    present: true,
+                    error: None,
+                }
             }
-            Err(_) => false,
+            Err(err) => {
+                // No module-table entry plus an unanswered key type is the expected absent case.
+                log::debug!("NoMount key type did not answer: {err}");
+                ForeignNomountProbe::default()
+            }
         },
-        Err(_) => false,
+        Err(err) => ForeignNomountProbe {
+            present: false,
+            error: Some(format!("create NoMount probe: {err}")),
+        },
     }
 }
 
@@ -1718,10 +1833,30 @@ fn rollback_vfs_rules(
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+fn vfs_failure_stats(detail: impl Into<String>) -> VfsExecStats {
+    VfsExecStats {
+        failure: Some(detail.into()),
+        ..VfsExecStats::default()
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn record_vfs_failure(state: &mut RunState, plan: &MountPlan, detail: impl Into<String>) {
+    state.vfs_provider = None;
+    state.vfs_error = Some(detail.into());
+    state.vfs_error_modules = plan
+        .vfs_module_ids
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn apply_vfs_phase(
     config: &Config,
     plan: &MountPlan,
     state: &mut RunState,
+    foreign_nomount: bool,
     transaction: &mut crate::sys::transaction::MountTransaction<'_>,
 ) -> Result<VfsExecStats> {
     if plan.vfs_module_ids.is_empty() {
@@ -1741,14 +1876,27 @@ fn apply_vfs_phase(
     );
     let guard = Path::new(defs::VFS_BOOT_GUARD_PATH);
     if guard.exists() {
-        log::warn!("vfs boot guard present; skipping vfs backend this boot");
-        return Ok(VfsExecStats::default());
+        let detail = "VFS boot guard present; VFS backend skipped this boot";
+        record_vfs_failure(state, plan, detail);
+        log::warn!("{detail}");
+        return Ok(vfs_failure_stats(detail));
     }
     // Any handled return past this point clears the guard on Drop.
-    let _guard = VfsBootGuard::arm()?;
+    let _guard = match VfsBootGuard::arm() {
+        Ok(guard) => guard,
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            return Err(err);
+        }
+    };
 
-    let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
-    let foreign_nomount = detect_foreign_nomount();
+    let mut kernel = match KeyringKernel::new(KeyringChannel::Hybridmount) {
+        Ok(kernel) => kernel,
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            return Err(err);
+        }
+    };
     state.vfs_foreign_nomount = foreign_nomount;
     let provider = match select_provider(
         &mut kernel,
@@ -1758,29 +1906,42 @@ fn apply_vfs_phase(
     ) {
         Ok(Some(provider)) => provider,
         Ok(None) => {
-            log::warn!("vfs backend unavailable; vfs modules are skipped this boot");
+            let detail = "VFS provider unavailable; configured VFS rules were skipped";
+            record_vfs_failure(state, plan, detail);
+            log::warn!("{detail}");
             if config.vfs_strict {
                 return Err(Error::VfsUnavailable {
-                    reason: "no supported VFS kernel provider and vfs_strict is enabled".to_owned(),
+                    reason: detail.to_owned(),
                 });
             }
-            return Ok(VfsExecStats::default());
+            return Ok(vfs_failure_stats(detail));
         }
         // Unsupported version or a foreign NoMount: degrade unless vfs_strict.
         Err(err @ (Error::VfsUnsupportedVersion { .. } | Error::VfsForeignNomount { .. })) => {
+            let detail = err.to_string();
+            record_vfs_failure(state, plan, &detail);
             log::warn!("vfs backend is not attached, treating it as unavailable: {err}");
             if config.vfs_strict {
                 return Err(err);
             }
-            return Ok(VfsExecStats::default());
+            return Ok(vfs_failure_stats(detail));
         }
-        Err(err) => return Err(err),
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            return Err(err);
+        }
     };
 
     // Build the full batch and register it for rollback before applying: the kernel
     // applies non-atomically, so a mid-batch failure leaves an applied prefix to undo.
     // Rollback is always targeted, never a CLEAR_RULES of the whole provider table.
-    let planned = crate::vfs::exec::plan_rules(plan)?;
+    let planned = match crate::vfs::exec::plan_rules(plan) {
+        Ok(planned) => planned,
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            return Err(err);
+        }
+    };
     let planned_rule_count = planned.rules.len();
     log::info!(
         "vfs batch planned: rules={}, targets={}",
@@ -1797,25 +1958,41 @@ fn apply_vfs_phase(
     let outcome = {
         let mut kernel = shared.borrow_mut();
         let batch = applied.borrow();
-        crate::vfs::exec::apply_rules_with_policy(
+        crate::vfs::exec::apply_rules_with_policy_diagnosed(
             &mut *kernel,
             &batch,
             &config.vfs_isolate_uids,
             config.vfs_strict,
-        )?
+        )
     };
 
-    let Some(stats) = outcome else {
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            return Err(err);
+        }
+    };
+    let Some(stats) = outcome.stats else {
         // Already deleted inline; clearing avoids a duplicate DEL_RULE at rollback.
         applied.borrow_mut().rules.clear();
+        let detail = format!(
+            "VFS apply failed; rules were rolled back: {}",
+            outcome
+                .failure
+                .unwrap_or_else(|| "unknown provider error".to_owned())
+        );
+        record_vfs_failure(state, plan, &detail);
         log::warn!(
-            "vfs backend degraded: rules were rolled back and vfs is skipped this boot (rules={})",
+            "vfs backend degraded: {detail} (rules={})",
             planned_rule_count
         );
-        return Ok(VfsExecStats::default());
+        return Ok(vfs_failure_stats(detail));
     };
 
     state.vfs_provider = Some(provider.as_str().to_owned());
+    state.vfs_error = None;
+    state.vfs_error_modules.clear();
     log::info!(
         "vfs phase complete: provider={}, injected={}, whiteouts={}, opaque={}",
         provider.as_str(),
@@ -1826,7 +2003,8 @@ fn apply_vfs_phase(
 
     // An acknowledged batch is not proof the rules are installed, so read the table back and
     // report the difference. This is the line that tells a device log whether VFS is really
-    // active, and a listing failure is logged rather than raised: the rules were applied.
+    // active. A listing failure is treated as unconfirmed and the batch is removed before the
+    // strict/non-strict policy is applied.
     {
         let expected = applied.borrow();
         for rule in &expected.rules {
@@ -1862,23 +2040,60 @@ fn apply_vfs_phase(
                     shared.borrow_mut().remove_rules(&expected.rules)
                 };
                 if let Err(cleanup_err) = cleanup {
-                    return Err(Error::VfsProtocol {
+                    let err = Error::VfsProtocol {
                         detail: format!(
                             "vfs read-back was incomplete and targeted cleanup failed: {cleanup_err}"
                         ),
-                    });
+                    };
+                    record_vfs_failure(state, plan, err.to_string());
+                    return Err(err);
                 }
                 applied.borrow_mut().rules.clear();
-                if !crate::vfs::exec::evaluate_readback(&missing, config.vfs_strict)? {
+                let confirmed =
+                    match crate::vfs::exec::evaluate_readback(&missing, config.vfs_strict) {
+                        Ok(confirmed) => confirmed,
+                        Err(err) => {
+                            record_vfs_failure(state, plan, err.to_string());
+                            return Err(err);
+                        }
+                    };
+                if !confirmed {
+                    let detail = format!(
+                        "VFS read-back did not confirm {} rule(s): {}",
+                        missing.len(),
+                        missing.join(",")
+                    );
+                    record_vfs_failure(state, plan, &detail);
                     log::warn!(
                         "vfs read-back mismatch degraded: removed this run's rules and marked vfs inactive"
                     );
-                    state.vfs_provider = None;
-                    return Ok(VfsExecStats::default());
+                    return Ok(vfs_failure_stats(detail));
                 }
             }
         }
-        Err(err) => log::warn!("vfs read-back failed, rules were applied: {err}"),
+        Err(err) => {
+            let cleanup = {
+                let expected = applied.borrow();
+                shared.borrow_mut().remove_rules(&expected.rules)
+            };
+            if let Err(cleanup_err) = cleanup {
+                let cleanup_failure = Error::VfsProtocol {
+                    detail: format!(
+                        "vfs read-back failed and targeted cleanup failed: {cleanup_err}; read-back error: {err}"
+                    ),
+                };
+                record_vfs_failure(state, plan, cleanup_failure.to_string());
+                return Err(cleanup_failure);
+            }
+            applied.borrow_mut().rules.clear();
+            let detail = format!("VFS read-back failed; rules were rolled back: {err}");
+            record_vfs_failure(state, plan, &detail);
+            if config.vfs_strict {
+                return Err(Error::VfsProtocol { detail });
+            }
+            log::warn!("{detail}");
+            return Ok(vfs_failure_stats(detail));
+        }
     }
     Ok(stats)
 }

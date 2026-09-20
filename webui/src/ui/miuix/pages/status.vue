@@ -14,6 +14,7 @@ import {
   activeMountState,
   backendDisplayKeys,
   groupActiveMounts,
+  statusFailureSummary,
   storageModeKey,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
@@ -69,6 +70,7 @@ const statusKind = computed<"checking" | "normal" | "abnormal">(() => {
     !installState.compatible ||
     state.value.timestamp <= 0 ||
     state.value.mount_stats.failed_mounts > 0 ||
+    state.value.vfs_error !== null ||
     state.value.failed_stage !== null ||
     state.value.rollback_status === "incomplete" ||
     state.value.rollback_status === "unverified" ||
@@ -91,16 +93,13 @@ const statusSummary = computed(() => {
     return t("status.installIncomplete");
   }
   if (!state.value || state.value.timestamp <= 0) return t("status.notReady");
-  if (state.value.failure_reason) return state.value.failure_reason;
-  if (state.value.failed_stage) {
-    return `${t("status.abnormal")}: ${state.value.failed_stage}`;
-  }
-  if (state.value.mount_stats.failed_mounts > 0) {
-    return t("status.mountFailures", {
-      count: state.value.mount_stats.failed_mounts,
-    });
-  }
-  return t("status.workingVersion", { version: sysStore.version });
+  return (
+    statusFailureSummary(state.value, {
+      abnormal: t("status.abnormal"),
+      loadError: t("status.loadError"),
+      mountFailures: (count) => t("status.mountFailures", { count }),
+    }) ?? t("status.workingVersion", { version: sysStore.version })
+  );
 });
 function handleSetNav(index: number): void {
   if (!sysStore.loading) uiStore.setNavindex(index);

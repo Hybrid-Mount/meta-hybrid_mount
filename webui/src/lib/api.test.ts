@@ -158,6 +158,13 @@ describe("WebUI configuration contract", () => {
     expect(status.vfs_active_mounts).toEqual([]);
   });
 
+  it("defaults VFS failure diagnostics for older snapshots", () => {
+    const status = normalizeStatus({ timestamp: 1 });
+
+    expect(status.vfs_error).toBeNull();
+    expect(status.vfs_error_modules).toEqual([]);
+  });
+
   it("preserves startup and rollback diagnostics", () => {
     const status = normalizeStatus({
       timestamp: 1,

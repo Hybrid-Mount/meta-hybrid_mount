@@ -70,6 +70,8 @@ export interface RunState {
   vfs_modules: string[];
   vfs_active_mounts: string[];
   vfs_provider?: string | null;
+  vfs_error: string | null;
+  vfs_error_modules: string[];
   vfs_foreign_nomount: boolean;
   confirmed_active_mounts: string[];
   mount_error_modules: string[];

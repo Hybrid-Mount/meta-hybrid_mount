@@ -181,9 +181,13 @@ fn non_strict_apply_failure_removes_the_prefix_and_degrades() {
         ..RecordingKernel::default()
     };
 
-    let stats = apply_rules_with_policy(&mut kernel, &planned, &[], false).unwrap();
+    let stats = apply_rules_with_policy_diagnosed(&mut kernel, &planned, &[], false).unwrap();
 
-    assert_eq!(stats, None);
+    assert!(stats.stats.is_none());
+    assert_eq!(
+        stats.failure.as_deref(),
+        Some("VFS protocol error: mid-batch failure")
+    );
     assert_eq!(kernel.applied, 2);
     assert_eq!(kernel.removed, 2);
 }

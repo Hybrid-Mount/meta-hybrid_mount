@@ -116,6 +116,9 @@ export const MockAPI: AppAPI = {
       ],
       vfs_modules: [],
       vfs_active_mounts: [],
+      vfs_provider: null,
+      vfs_error: null,
+      vfs_error_modules: [],
       vfs_foreign_nomount: false,
       confirmed_active_mounts: [
         "/system/etc/hosts",
