@@ -33,6 +33,12 @@ SELinux policy. A mismatched kernel module can reject loading or crash the
 kernel. Automatic selection is therefore exact and refuses unknown
 combinations.
 
+The LKM uses the same loading code and candidate list as the VFS module:
+`/data/adb/ksud insmod` first, then ordinary system/BusyBox `insmod`. Missing or
+failed loaders fall through to the next candidate. Success is determined by the
+target `/proc/fs/ext4` node disappearing: this module deliberately returns
+`-EAGAIN` after doing its work, so a non-zero loader exit is expected.
+
 `HYBRID_MOUNT_LKM_PATH=/absolute/path/to/nuke.ko` can override automatic
 selection for controlled device testing. The loader restores
 `/proc/sys/kernel/kptr_restrict` after a temporary symbol-address read attempt,

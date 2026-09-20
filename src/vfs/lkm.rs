@@ -5,7 +5,8 @@
 //! The DDK builds one hybridmount-<android>-<kernel>.ko per Android/GKI target (see
 //! .github/workflows/kernel-module.yml). Selection matches the kernel release and
 //! Android version exactly; a boot guard is written before insmod, and whether the key
-//! type answers is what decides success.
+//! type answers is what decides success. Try KernelSU's symbol-aware loader first,
+//! then ordinary insmod.
 //!
 //! A failed load is not fatal: the caller probes again and degrades or reports
 //! according to vfs_strict, the same path taken when the module is absent entirely.
@@ -59,6 +60,7 @@ fn load() -> std::result::Result<(), String> {
     )?;
 
     match load_with_candidates(
+        crate::sys::lkm::INSMOD_CANDIDATES.iter().copied(),
         &lkm_path,
         "load the Hybrid Mount VFS kernel module",
         &[],

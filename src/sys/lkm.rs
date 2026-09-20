@@ -80,9 +80,10 @@ fn select_for_release(
     Ok(Path::new(directory).join(file_name))
 }
 
-/// `insmod` entry points in preference order, paired with the busybox applet to request
-/// when the program is a multi-call binary.
+/// Shared VFS/nuke loading order: ksud, then ordinary insmod entry points.
+/// The optional subcommand precedes the module path and parameters.
 pub const INSMOD_CANDIDATES: &[(&str, Option<&str>)] = &[
+    ("/data/adb/ksud", Some("insmod")),
     ("/system/bin/insmod", None),
     ("/data/adb/ap/bin/busybox", Some("insmod")),
     ("/data/adb/ksu/bin/busybox", Some("insmod")),
@@ -126,7 +127,7 @@ pub fn rmmod_args(applet: Option<&str>, module_name: &str) -> Vec<String> {
     args
 }
 
-/// Tries every `insmod` candidate until `accepted` reports the module took effect.
+/// Tries the supplied loader candidates until the caller confirms the module's effect.
 ///
 /// The `insmod` exit code is never authoritative: an already-loaded module and a
 /// deliberately self-unloading one both exit non-zero on the successful path. `accepted`
@@ -135,6 +136,7 @@ pub fn rmmod_args(applet: Option<&str>, module_name: &str) -> Vec<String> {
 ///
 /// `params` are appended after the module path on every attempt.
 pub fn load_with_candidates(
+    candidates: impl IntoIterator<Item = (&'static str, Option<&'static str>)>,
     lkm_path: &Path,
     operation: &'static str,
     params: &[String],
@@ -143,10 +145,10 @@ pub fn load_with_candidates(
 ) -> Result<(), Vec<InsmodAttempt>> {
     let mut attempts = Vec::new();
 
-    for (program, applet) in INSMOD_CANDIDATES {
-        let spec = CommandSpec::new(*program)
+    for (program, applet) in candidates {
+        let spec = CommandSpec::new(program)
             .operation(operation)
-            .args(insmod_args(*applet, lkm_path, params))
+            .args(insmod_args(applet, lkm_path, params))
             .capture(CaptureMode::Stderr)
             // A non-zero exit can be the expected successful path, so the acceptance
             // probe decides rather than the status.
@@ -156,6 +158,7 @@ pub fn load_with_candidates(
         match run_command(&spec) {
             Ok(outcome) => {
                 if accepted() {
+                    log::info!("kernel module effect confirmed: loader={program}");
                     return Ok(());
                 }
                 attempts.push(InsmodAttempt {
@@ -321,6 +324,64 @@ impl Drop for LoadAttemptGuard {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[cfg(unix)]
+    #[test]
+    fn loader_fallback_can_succeed_after_insmod_failure_despite_nonzero_exit() {
+        let root = crate::test_support::Fixture::new("ko-loader-fallback");
+        let script = root.join("loader.sh");
+        let ready = root.join("ready");
+        fs::write(&script, "touch \"$1\"\nexit 11\n").unwrap();
+        let candidates = [("false", None), ("sh", None)];
+        let result = load_with_candidates(
+            candidates,
+            &script,
+            "test loader fallback",
+            &[ready.display().to_string()],
+            std::time::Duration::from_secs(2),
+            || ready.is_file(),
+        );
+        assert!(
+            result.is_ok(),
+            "{}",
+            describe_attempts(&result.err().unwrap_or_default())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn zero_exit_without_provider_is_failure_and_keeps_loader_diagnostics() {
+        let result = load_with_candidates(
+            [("true", None), ("/nonexistent/hm-ko-loader", None)],
+            Path::new("/m/hybridmount.ko"),
+            "test absent provider",
+            &[],
+            std::time::Duration::from_secs(2),
+            || false,
+        );
+        let attempts = result.expect_err("no provider must fail");
+        assert_eq!(attempts.len(), 2);
+        assert!(describe_attempts(&attempts).contains("/nonexistent/hm-ko-loader"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn responding_provider_stops_before_fallback() {
+        let probes = Cell::new(0);
+        let result = load_with_candidates(
+            [("true", None), ("false", None)],
+            Path::new("/m/hybridmount.ko"),
+            "test ready provider",
+            &[],
+            std::time::Duration::from_secs(2),
+            || {
+                probes.set(probes.get() + 1);
+                true
+            },
+        );
+        assert!(result.is_ok());
+        assert_eq!(probes.get(), 1);
+    }
 
     #[test]
     fn candidate_arguments_place_the_applet_first_and_parameters_last() {

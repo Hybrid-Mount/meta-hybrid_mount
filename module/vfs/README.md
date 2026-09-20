@@ -87,9 +87,20 @@ Prebuilt modules are **aarch64-only**. The loader refuses other architectures, a
 Selection requires both the kernel line and its Android/GKI label to match; a merely
 similar version is refused. A matching version number still does not guarantee ABI
 compatibility, so a mismatched module can fail to load or crash the kernel. Before
-`insmod`, the loader writes `/data/adb/hybrid-mount/vfs_boot_guard` and removes it once
+`insmod`, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` and removes it once
 the load returns; if the kernel crashes, the marker survives and the next boot skips
 the VFS backend while the rest of Hybrid Mount keeps working.
+
+The VFS loader first tries `/data/adb/ksud insmod`, then the ordinary
+system/BusyBox `insmod` entry points. Each attempt is followed by an `hm1` keyring
+probe; a zero exit code alone is not success. An already present provider is not
+loaded again. The ext4 sysfs nuke LKM shares the same candidate list and execution
+code, but confirms success by checking that its target procfs node disappeared.
+
+Symbol-aware loading depends on the installed ksud supporting it. If ksud is
+missing or cannot load the module, ordinary insmod is still attempted; it cannot
+resolve functions whose kernel exports have been trimmed. If every attempt fails,
+Hybrid Mount reports the attempts and follows the existing VFS degradation policy.
 
 ## Building
 

@@ -115,6 +115,7 @@ fn try_lkm_nuke_inner(path: &Path) -> Result<(), String> {
     // -EAGAIN from module_init so it is not retained, which makes a non-zero insmod
     // status an expected part of the successful path.
     match load_with_candidates(
+        crate::sys::lkm::INSMOD_CANDIDATES.iter().copied(),
         &lkm_path,
         "load LKM for ext4 sysfs nuke",
         &params,
