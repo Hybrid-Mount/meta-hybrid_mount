@@ -280,6 +280,9 @@ pub enum Error {
     #[error("unsupported VFS protocol version {found:?} (supported: {supported})")]
     VfsUnsupportedVersion { found: String, supported: String },
 
+    #[error("{detail}\nRun 'hybrid-mount vfs help' for usage.")]
+    VfsCliUsage { detail: String },
+
     #[error("{0}")]
     Subprocess(#[from] ProcessError),
 
@@ -288,6 +291,15 @@ pub enum Error {
 }
 
 impl Error {
+    /// Only the new VFS argument contract uses exit code 2; old commands keep code 1.
+    pub fn exit_code(&self) -> i32 {
+        if matches!(self, Self::VfsCliUsage { .. }) {
+            2
+        } else {
+            1
+        }
+    }
+
     pub fn msg(message: impl Into<String>) -> Self {
         Self::Msg(message.into())
     }
@@ -320,7 +332,7 @@ impl Error {
             | Self::Lkm(err)
             | Self::State(err)
             | Self::Vfs(err) => err.source.classify(),
-            Self::VfsProtocol { .. } => ErrorClass::Permanent,
+            Self::VfsProtocol { .. } | Self::VfsCliUsage { .. } => ErrorClass::Permanent,
             Self::VfsUnavailable { .. }
             | Self::VfsForeignNomount { .. }
             | Self::VfsUnsupportedVersion { .. } => ErrorClass::ManualRecovery,

@@ -125,6 +125,34 @@ fn missing_provider_stays_unavailable_when_the_load_does_not_help() {
 }
 
 #[test]
+fn explicit_loader_failure_preserves_diagnostics() {
+    let mut kernel = MockKernel::absent();
+    let error = select_provider(&mut kernel, SUPPORTED_VERSIONS, false, || {
+        Err(Error::VfsUnavailable {
+            reason: "candidate load refused by boot guard".into(),
+        })
+    })
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("candidate load refused by boot guard")
+    );
+}
+
+#[test]
+fn loader_success_is_rejected_when_the_new_provider_is_incompatible() {
+    let mut kernel = MockKernel::absent();
+    let version = kernel.version_handle();
+    let error = select_provider(&mut kernel, SUPPORTED_VERSIONS, false, || {
+        version.set(Some("future-hm"));
+        Ok(())
+    })
+    .unwrap_err();
+    assert!(matches!(error, Error::VfsUnsupportedVersion { .. }));
+}
+
+#[test]
 fn upstream_nomount_version_is_rejected() {
     let mut kernel = MockKernel::answering("20");
 

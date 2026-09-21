@@ -68,6 +68,10 @@ The WebUI and manager description hide VFS options and counters when the provide
 
 **Diagnosing.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` reports the presence state, the version the key type answered, the supported versions, and why a provider is unusable when it is.
 
+**Runtime CLI.** `hybrid-mount vfs help` lists rule and UID management, whiteout/opaque rules,
+diagnostics and explicit `load`. It supports NoMount-style aliases, readable text and `--json`.
+Clearing requires `--yes`; manual changes are runtime-only. See the [VFS CLI reference](docs/VFS_CLI.md).
+
 ## Feedback
 
 Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.md). Include the KernelSU/APatch bugreport, module version, and reproduction steps. Contact us through [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) or the [Telegram group](https://t.me/hybridmountchat).

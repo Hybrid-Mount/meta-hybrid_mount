@@ -15,6 +15,7 @@ pub const RULE_HEADER_LEN: usize = 12;
 /// u32 uid followed by a u16 path length and the path bytes.
 pub const DEL_HEADER_LEN: usize = 6;
 
+pub const FLAG_VIRTUAL_DIR: u32 = 1 << 1;
 pub const FLAG_WHITEOUT: u32 = 1 << 2;
 /// Combined with a directory rule: the directory stays visible, real entries are
 /// hidden and only injected children show through.
@@ -53,9 +54,10 @@ impl EncodedRule {
         RULE_HEADER_LEN + self.virtual_path.len() + self.real_path.len()
     }
 
-    pub fn write_into(&self, out: &mut Vec<u8>) {
+    pub fn write_into(&self, out: &mut Vec<u8>, uid: u32) {
         out.extend_from_slice(&self.flags.to_le_bytes());
-        out.extend_from_slice(&0_u32.to_le_bytes());
+        // ADD_RULE reads each record's uid, not the payload's target_uid.
+        out.extend_from_slice(&uid.to_le_bytes());
         out.extend_from_slice(&(self.virtual_path.len() as u16).to_le_bytes());
         out.extend_from_slice(&(self.real_path.len() as u16).to_le_bytes());
         out.extend_from_slice(&self.virtual_path);
@@ -116,7 +118,7 @@ pub fn build_add_rule_payloads(rules: &[EncodedRule], uid: u32) -> Result<Vec<Ve
             payloads.push(build_payload(NmCommand::AddRule, uid, &buffer)?);
             buffer.clear();
         }
-        rule.write_into(&mut buffer);
+        rule.write_into(&mut buffer, uid);
     }
     if !buffer.is_empty() {
         payloads.push(build_payload(NmCommand::AddRule, uid, &buffer)?);

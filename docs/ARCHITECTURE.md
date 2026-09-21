@@ -83,6 +83,7 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 | `install-state` | 无 | 输出安装与内核兼容状态 JSON。 |
 | `clear-mount-errors` | 无 | 删除模块目录中的 `mount_error` 文件并刷新状态，输出 `{ "ok": true, "removed": <数量> }`。 |
 | `vfs-doctor` | 无 | 只读输出 VFS provider 诊断 JSON，不会 `insmod` 或卸载模块。 |
+| `vfs` | `help` / `rule` / `uid` / `clear` / `version` / `doctor` / `load` | VFS 运行态控制；默认文本，支持 `--json`、批量参数及 NoMount 风格别名。清空需要 `--yes`，仅显式 `load` 加载模块。见 [VFS CLI](VFS_CLI.md)。 |
 | `lkm-load` | `<module.ko> [parameters...]` | Linux/Android arm64 上以内置加载器插入指定 LKM；仅支持 aarch64。 |
 | `emulated-soft-reboot` | 无 | Linux/Android 上按有效 mount source 懒卸载现有挂载。 |
 | `version` | 无 | 输出版本 JSON。 |

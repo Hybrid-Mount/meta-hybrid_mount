@@ -85,7 +85,7 @@ impl KeyringKernel {
 
 /// Older built-in providers return ECANCELED even when they reject the magic.
 /// Preserve this distinction instead of reporting that the provider is absent.
-fn parse_version_response(response: &[u8]) -> Result<String> {
+pub(crate) fn parse_version_response(response: &[u8]) -> Result<String> {
     if response.get(16..20) == Some((-1_i32).to_le_bytes().as_slice()) {
         return Err(Error::VfsProtocol {
             detail: format!(

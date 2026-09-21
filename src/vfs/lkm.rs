@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::defs;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::sys::lkm::{
     LoadAttemptGuard, bundled_lkm_arch_supported, describe_attempts, kernel_release,
     load_with_candidates, unload,
@@ -35,6 +35,36 @@ pub fn load_hm_vfs() -> Result<()> {
         log::warn!("vfs kernel module was not loaded: {err}");
     }
     Ok(())
+}
+
+/// Explicit CLI loading retains errors and never inserts over an existing provider.
+pub fn load_explicit() -> Result<String> {
+    use super::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel, select_provider};
+    use super::sys::KeyringChannel;
+
+    let foreign = super::guard::detect_foreign_nomount();
+    if let Some(detail) = foreign.error {
+        return Err(Error::VfsUnavailable {
+            reason: format!("foreign-provider guard failed: {detail}"),
+        });
+    }
+    let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
+    let provider = select_provider(&mut kernel, SUPPORTED_VERSIONS, foreign.present, || {
+        load().map_err(|reason| Error::VfsUnavailable { reason })
+    })?;
+    if provider.is_none() {
+        return Err(Error::VfsUnavailable {
+            reason: "loaded candidate did not answer with a supported protocol".into(),
+        });
+    }
+    let found = kernel.version()?;
+    if !SUPPORTED_VERSIONS.contains(&found.as_str()) {
+        return Err(Error::VfsUnsupportedVersion {
+            found,
+            supported: SUPPORTED_VERSIONS.join(","),
+        });
+    }
+    Ok(found)
 }
 
 fn load() -> std::result::Result<(), String> {

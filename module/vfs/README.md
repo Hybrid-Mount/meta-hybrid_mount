@@ -9,6 +9,16 @@ and one prebuilt `hybridmount-android<NN>-<kernel>.ko` per supported Android/GKI
 target, so a device whose kernel does not already carry the module can still use the VFS
 backend.
 
+## Runtime control
+
+`hybrid-mount vfs help` describes the runtime CLI shared by built-in and loaded providers:
+`rule add/del/list/clear`, `uid add/del/list/clear`, `clear all`, `version`, `doctor`, and `load`.
+It follows NoMount's command vocabulary but uses Hybrid Mount's own key type and `hm1` protocol.
+Text is the default, `--json` selects structured output, and clear commands require `--yes`.
+Changes are verified by reading the kernel tables back and are not persisted.
+Only explicit `vfs load` invokes the bundled loader; normal queries and rule/UID operations do not.
+See [VFS CLI](../../docs/VFS_CLI.md) for arguments, aliases and batch failure semantics.
+
 ## Layout
 
 - `src/` — the forked kernel sources

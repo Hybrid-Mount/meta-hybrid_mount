@@ -19,6 +19,12 @@ This file records third-party components that Hybrid Mount is derived from or di
   - Hybrid Mount is not affiliated with, sponsored by, or endorsed by the NoMount project.
 - Distribution status: the kernel sources, build instructions and one prebuilt aarch64 module per supported Android/GKI target are committed to this repository and included in release packages. `module/vfs/binaries/list.txt` records the SHA-256 digest of every module.
 
+## NoMount nm — CLI command vocabulary
+
+- Reference: `userspace/src/nm.c` in NoMount at `016375cd4a9e7da07b0519dd7bc492101de2a834`, by maxsteeel.
+- Scope: `hybrid-mount vfs` follows its `rule` / `uid` command groups, batch arguments, `--uid`, whiteout and historical aliases. The parser, validation, HM JSON output and read-back verification are implemented in Rust in `src/vfs/cli.rs` and `src/vfs/control.rs`, under the core's GPL-3.0-only license. No upstream CLI executable or C userspace source is bundled.
+- Differences: HM-only transport, opaque rules, explicit loading, strict argument validation, explicit clear targets with `--yes`, runtime-only changes and HM-specific JSON fields. This is command-style compatibility, not wire or full script compatibility with NoMount.
+
 ## lkmloader — built-in userspace LKM loading strategy
 
 - Upstream project: lkmloader, https://github.com/maxsteeel/lkmloader

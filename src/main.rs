@@ -39,7 +39,7 @@ fn main() {
         Err(err) => {
             log::error!("{err}");
             eprintln!("hybrid-mount: {err}");
-            process::exit(1);
+            process::exit(err.exit_code());
         }
     }
 }
