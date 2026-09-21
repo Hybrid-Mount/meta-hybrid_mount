@@ -38,6 +38,8 @@ default_mode = "magic"
 
 规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端接受 `overlay`、`magic` 或 `vfs`。`vfs_strict = true` 时 VFS 不可用即启动失败，`vfs_isolate_uids` 列出应看到原生文件系统的 UID。同一文件路径不能同时进入多个后端；Overlay 与 Magic 两个真实挂载后端可以共享普通目录作为结构节点，VFS 是第三条注入路径、不是真实挂载。文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
 
+命令行工具的完整命令、参数和 JSON 输出说明见[CLI 参考](ARCHITECTURE.md#cli-契约)。
+
 这套分流不改变项目现有的 `CONFIG_TMPFS_XATTR` 能力判断。KernelSU 安装时会删除模块中的整个 `lkm/` 目录，运行时只使用官方 `NukeExt4Sysfs` ioctl；APatch 等非 KSU 安装保留 LKM，并在 ext4 staging 挂载后默认尝试。随附 `.ko` 仅支持 aarch64；自动选择要求内核线和 Android/GKI 标签精确匹配，未知组合直接拒绝，但预编译 LKM 仍必须在对应真机验证 ABI。若设备在 `insmod` 期间崩溃，持久熔断标记会阻止下次启动再次加载 LKM，同时保留 Hybrid Mount 的其余功能。支持矩阵、校验值、来源与许可见 [`module/lkm/README.md`](../module/lkm/README.md)。
 
 ## VFS 后端

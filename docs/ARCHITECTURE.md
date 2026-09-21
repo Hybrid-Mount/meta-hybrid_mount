@@ -70,19 +70,33 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 
 ## CLI 契约
 
-| 命令 | 用途 |
-| --- | --- |
-| 无参数 | 执行完整启动挂载流水线 |
-| `show-config` | 以 JSON 输出有效配置 |
-| `save-config --payload <hex>` | 合并十六进制 UTF-8 JSON patch |
-| `gen-config` | 写入默认配置 |
-| `modules` | 输出模块与规则快照 |
-| `status` | 输出上次启动状态 |
-| `install-state` | 输出安装与内核兼容状态 |
-| `clear-mount-errors` | 清理模块的 `mount_error` 标记 |
-| `vfs-doctor` | 诊断 VFS 后端：探测 key type `hybridmount`、报告模块版本与不兼容原因 |
-| `emulated-soft-reboot` | 按有效 mount source 懒卸载现有挂载，用于模拟软重启前的清理 |
-| `version` | 输出版本 JSON |
+设备上的可执行文件通常是 `/data/adb/modules/hybrid_mount/hybrid-mount`。无参数时直接运行启动挂载流水线；命令失败会写入 stderr 并以非零状态退出。
+
+| 命令 | 参数 | 输出与行为 |
+| --- | --- | --- |
+| *(无参数)* | 无 | 执行完整启动挂载流水线。 |
+| `show-config` | 无 | 输出当前有效配置 JSON。 |
+| `save-config` | `--payload <hex>` | 合并十六进制 UTF-8 JSON patch，成功输出 `{ "ok": true }`。 |
+| `gen-config` | 无 | 写入默认配置，成功输出 `{ "ok": true }`。 |
+| `modules` | 无 | 输出模块与规则快照 JSON；缺失或损坏时重建。 |
+| `status` | 无 | 输出启动状态 JSON；缺失时输出默认状态，只读且不触发加载。 |
+| `install-state` | 无 | 输出安装与内核兼容状态 JSON。 |
+| `clear-mount-errors` | 无 | 删除模块目录中的 `mount_error` 文件并刷新状态，输出 `{ "ok": true, "removed": <数量> }`。 |
+| `vfs-doctor` | 无 | 只读输出 VFS provider 诊断 JSON，不会 `insmod` 或卸载模块。 |
+| `lkm-load` | `<module.ko> [parameters...]` | Linux/Android arm64 上以内置加载器插入指定 LKM；仅支持 aarch64。 |
+| `emulated-soft-reboot` | 无 | Linux/Android 上按有效 mount source 懒卸载现有挂载。 |
+| `version` | 无 | 输出版本 JSON。 |
+
+示例：
+
+```sh
+BIN=/data/adb/modules/hybrid_mount/hybrid-mount
+$BIN version
+$BIN status
+$BIN vfs-doctor
+```
+
+`save-config` 的 payload 是 JSON patch 的十六进制 UTF-8 编码，不是 TOML；WebUI 使用同一接口。
 
 WebUI 不持有第二套业务协议：配置与状态请求都映射到以上命令。状态是启动快照，不是 daemon 提供的实时流。
 
