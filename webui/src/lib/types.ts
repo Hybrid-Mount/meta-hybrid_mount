@@ -95,6 +95,8 @@ export interface InstallState {
   nuke_supported: boolean | null;
   nuke_type: string;
   vfs_supported: boolean;
+  /** `lkm` while a loaded module provides it, `builtin` while it is in the kernel image. */
+  vfs_type: string;
   mount_source: string;
   compatible: boolean;
 }

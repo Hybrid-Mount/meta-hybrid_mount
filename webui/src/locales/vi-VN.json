@@ -140,6 +140,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "Hỗ trợ tmpfs",
     "vfsSupported": "Hỗ trợ VFS",
+    "vfsType": "Loại VFS",
     "nukeSupported": "Hỗ trợ Nuke",
     "unverified": "Chưa xác minh",
     "mountSource": "Detected mount source",

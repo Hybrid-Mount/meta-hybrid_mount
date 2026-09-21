@@ -159,6 +159,7 @@ export const MockAPI: AppAPI = {
       nuke_supported: null,
       nuke_type: "apatch",
       vfs_supported: true,
+      vfs_type: "lkm",
       mount_source: "KSU",
       compatible: true,
     };

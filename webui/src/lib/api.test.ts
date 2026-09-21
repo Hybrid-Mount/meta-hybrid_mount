@@ -218,4 +218,13 @@ describe("installation capability status", () => {
       expect(state.nuke_supported).toBe(value);
     }
   });
+
+  it("reads the VFS provider kind without inventing one", () => {
+    for (const value of [undefined, null, 1, "true"]) {
+      expect(normalizeInstallState({ vfs_type: value }).vfs_type).toBe("unknown");
+    }
+    for (const value of ["lkm", "builtin"]) {
+      expect(normalizeInstallState({ vfs_type: value }).vfs_type).toBe(value);
+    }
+  });
 });

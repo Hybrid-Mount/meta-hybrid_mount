@@ -149,6 +149,7 @@
     "overlaySupported": "Prise en charge d'OverlayFS par le noyau",
     "tmpfsSupported": "Prise en charge de tmpfs",
     "vfsSupported": "Prise en charge de VFS",
+    "vfsType": "Type de VFS",
     "nukeSupported": "Prise en charge de Nuke",
     "unverified": "Non vérifié",
     "mountSource": "Source de montage détectée",

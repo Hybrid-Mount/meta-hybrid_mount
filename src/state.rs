@@ -380,8 +380,24 @@ pub struct InstallState {
     pub nuke_type: String,
     /// Live protocol probe: includes built-in providers and excludes failed LKM loads.
     pub vfs_supported: bool,
+    /// How the provider is present on the device: `lkm` while `/proc/modules` lists
+    /// `hybridmount`, `builtin` while it lives in the kernel image, and `unknown` when neither
+    /// table entry exists. Independent of [`Self::vfs_supported`], which additionally requires
+    /// the key type to answer this boot.
+    pub vfs_type: String,
     pub mount_source: String,
     pub compatible: bool,
+}
+
+/// Label for the [`InstallState::vfs_type`] field, from the module tables alone.
+pub fn vfs_type_label(presence: crate::vfs::doctor::ModulePresence) -> &'static str {
+    use crate::vfs::doctor::ModulePresence;
+
+    match presence {
+        ModulePresence::Loadable => "lkm",
+        ModulePresence::BuiltIn => "builtin",
+        ModulePresence::NotPresent => "unknown",
+    }
 }
 
 pub fn build_install_state(
@@ -405,6 +421,7 @@ pub fn build_install_state(
         nuke_supported: None,
         nuke_type: "unknown".to_owned(),
         vfs_supported,
+        vfs_type: "unknown".to_owned(),
         mount_source: mount_source.to_owned(),
         compatible,
     }
@@ -656,6 +673,11 @@ pub fn handle_install_state() -> Result<()> {
         &mount_source,
     );
     state.tmpfs_supported = crate::sys::fs::is_overlay_xattr_supported().unwrap_or(false);
+    // Read-only module-table classification; never triggers an insmod.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        state.vfs_type = vfs_type_label(crate::vfs::doctor::presence_on_device()).to_owned();
+    }
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         state.nuke_type = if crate::utils::ksu::is_active() {
@@ -1505,6 +1527,22 @@ mod tests {
         assert!(state.vfs_supported);
     }
 
+    /// The UI offers "LKM" or "Built-in" from this label, so the mapping has to follow
+    /// `/proc/modules` (loadable) versus a `/sys/module` entry alone (built into the kernel).
+    #[test]
+    fn install_state_vfs_type_labels_follow_the_module_tables() {
+        use crate::vfs::doctor::ModulePresence;
+
+        assert_eq!(vfs_type_label(ModulePresence::Loadable), "lkm");
+        assert_eq!(vfs_type_label(ModulePresence::BuiltIn), "builtin");
+        assert_eq!(vfs_type_label(ModulePresence::NotPresent), "unknown");
+        assert_eq!(
+            build_install_state(true, true, true, true, false, "KSU").vfs_type,
+            "unknown",
+            "the builder has no module tables to read, so it must not claim a provider"
+        );
+    }
+
     #[test]
     fn install_state_wire_snapshot_is_stable() {
         let state = build_install_state(true, true, true, true, false, "KSU");
@@ -1521,6 +1559,7 @@ mod tests {
   "nuke_supported": null,
   "nuke_type": "unknown",
   "vfs_supported": false,
+  "vfs_type": "unknown",
   "mount_source": "KSU",
   "compatible": true
 }"#

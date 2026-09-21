@@ -140,6 +140,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "tmpfs 対応",
     "vfsSupported": "VFS 対応",
+    "vfsType": "VFS の種類",
     "nukeSupported": "Nuke 対応",
     "unverified": "未確認",
     "mountSource": "Detected mount source",

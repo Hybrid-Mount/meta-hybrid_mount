@@ -140,6 +140,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "Dukungan tmpfs",
     "vfsSupported": "Dukungan VFS",
+    "vfsType": "Jenis VFS",
     "nukeSupported": "Dukungan Nuke",
     "unverified": "Belum diverifikasi",
     "mountSource": "Detected mount source",

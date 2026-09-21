@@ -149,6 +149,7 @@
     "overlaySupported": "OverlayFS 内核支持",
     "tmpfsSupported": "tmpfs 支持",
     "vfsSupported": "VFS 支持",
+    "vfsType": "VFS 类型",
     "nukeSupported": "Nuke 支持",
     "unverified": "未验证",
     "mountSource": "检测到的挂载源",

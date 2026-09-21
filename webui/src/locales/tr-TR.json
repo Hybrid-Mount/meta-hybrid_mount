@@ -149,6 +149,7 @@
     "overlaySupported": "OverlayFS çekirdek desteği",
     "tmpfsSupported": "tmpfs desteği",
     "vfsSupported": "VFS desteği",
+    "vfsType": "VFS türü",
     "nukeSupported": "Nuke desteği",
     "unverified": "Doğrulanmadı",
     "mountSource": "Algılanan bağlama kaynağı",

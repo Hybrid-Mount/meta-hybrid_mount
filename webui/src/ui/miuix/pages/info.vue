@@ -24,6 +24,13 @@ function statusText(value: boolean | null | undefined): string {
   return value == null ? t("info.unverified") : value ? "✓" : "✗";
 }
 
+/** How the kernel provides VFS: a loaded module or the kernel image itself. */
+function vfsTypeText(value: string | undefined): string {
+  if (value === "lkm") return "LKM";
+  if (value === "builtin") return "Built-in";
+  return t("info.unverified");
+}
+
 const contributors = ref<GitHubContributor[]>([]);
 const loadingContributors = ref(false);
 const loadFailed = ref(false);
@@ -124,6 +131,10 @@ onMounted(async () => {
       <MiuixBasicComponent
         :title="t('info.vfsSupported')"
         :summary="statusText(sysStore.installState?.vfs_supported)"
+      />
+      <MiuixBasicComponent
+        :title="t('info.vfsType')"
+        :summary="vfsTypeText(sysStore.installState?.vfs_type)"
       />
       <MiuixBasicComponent
         :title="t('info.nukeSupported')"

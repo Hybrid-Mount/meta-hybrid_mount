@@ -140,6 +140,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "Підтримка tmpfs",
     "vfsSupported": "Підтримка VFS",
+    "vfsType": "Тип VFS",
     "nukeSupported": "Підтримка Nuke",
     "unverified": "Не перевірено",
     "mountSource": "Detected mount source",
