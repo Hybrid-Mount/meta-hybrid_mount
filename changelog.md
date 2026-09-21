@@ -1,4 +1,20 @@
 
+## v6.2.1-rc.3
+
+
+### <!-- 2 --> Fixes
+
+- `vfs` Probe on every boot and hide unavailable backend
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- `release` Temporarily disable KernelSU mirror publishing
+
+
+
+
 ## v6.2.0
 
 

@@ -13,7 +13,7 @@ unwrap_used = "deny"
 
 [package]
 name = "hybrid-mount"
-version = "6.2.0"
+version = "6.2.1-rc.3"
 edition = "2024"
 description = "Hybrid Mount: mixed OverlayFS, Magic Mount, and VFS for KernelSU and APatch"
 license = "GPL-3.0-only"
