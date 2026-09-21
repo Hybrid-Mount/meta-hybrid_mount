@@ -127,7 +127,11 @@ onMounted(async () => {
       />
       <MiuixBasicComponent
         :title="t('info.nukeSupported')"
-        :summary="sysStore.installState?.nuke_type === 'ksud' ? 'ksud' : statusText(sysStore.installState?.nuke_supported)"
+        :summary="
+          sysStore.installState?.nuke_type === 'ksud'
+            ? 'ksud'
+            : statusText(sysStore.installState?.nuke_supported)
+        "
       />
       <MiuixBasicComponent
         :title="t('status.compatible')"
