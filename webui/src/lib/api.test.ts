@@ -198,3 +198,24 @@ describe("VFS capability contract", () => {
     expect(normalizeInstallState({ vfs_supported: true }).vfs_supported).toBe(true);
   });
 });
+
+describe("installation capability status", () => {
+  it("keeps unverified Nuke distinct from an observed failure", () => {
+    for (const value of [undefined, null, "true", "false", 1]) {
+      const state = normalizeInstallState({
+        tmpfs_supported: value,
+        nuke_supported: value,
+      });
+      expect(state.tmpfs_supported).toBe(false);
+      expect(state.nuke_supported).toBeNull();
+    }
+    for (const value of [true, false]) {
+      const state = normalizeInstallState({
+        tmpfs_supported: value,
+        nuke_supported: value,
+      });
+      expect(state.tmpfs_supported).toBe(value);
+      expect(state.nuke_supported).toBe(value);
+    }
+  });
+});

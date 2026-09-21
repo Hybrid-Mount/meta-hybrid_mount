@@ -131,6 +131,25 @@ fn try_lkm_nuke_inner(path: &Path) -> Result<(), String> {
     }
 }
 
+/// Observe the current mounted ext4 result without loading an LKM or issuing a nuke ioctl.
+/// An unreadable/missing procfs root or an absent staging mount cannot prove support.
+pub fn concealment_status(path: &Path) -> Option<bool> {
+    let node = ext4_procfs_node(path).ok()?;
+    concealed_node_status(&node)
+}
+
+fn concealed_node_status(node: &Path) -> Option<bool> {
+    // Enumerating the parent distinguishes a removed node from unavailable procfs.
+    let name = node.file_name()?;
+    let entries = fs::read_dir(node.parent()?).ok()?;
+    for entry in entries {
+        if entry.ok()?.file_name() == name {
+            return Some(false);
+        }
+    }
+    Some(true)
+}
+
 fn ext4_procfs_node(path: &Path) -> Result<PathBuf, String> {
     let entry = crate::sys::mountinfo::mount_entry_at(path)
         .map_err(|err| format!("read /proc/self/mountinfo: {err}"))?
@@ -224,6 +243,20 @@ fn select_lkm_filename(release: &str, android_major: Option<u32>) -> Option<&'st
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn concealment_observation_distinguishes_hidden_visible_and_unavailable_procfs() {
+        let root = crate::test_support::Fixture::new("nuke-status");
+        let procfs = root.join("ext4");
+        let node = procfs.join("loop7");
+        assert_eq!(concealed_node_status(&node), None);
+        fs::create_dir(&procfs).unwrap();
+        fs::create_dir(procfs.join("loop8")).unwrap();
+        assert_eq!(concealed_node_status(&node), Some(true));
+        fs::create_dir(&node).unwrap();
+        assert_eq!(concealed_node_status(&node), Some(false));
+        assert!(node.is_dir(), "querying support must not hide anything");
+    }
 
     #[test]
     fn selects_bundled_kernel_android_matrix() {

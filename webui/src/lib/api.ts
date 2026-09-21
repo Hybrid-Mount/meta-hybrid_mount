@@ -263,6 +263,9 @@ export function normalizeInstallState(payload: Record<string, unknown>): Install
     binary: Boolean(payload.binary),
     config_exists: Boolean(payload.config_exists),
     overlay_supported: Boolean(payload.overlay_supported),
+    tmpfs_supported: payload.tmpfs_supported === true,
+    nuke_supported:
+      typeof payload.nuke_supported === "boolean" ? payload.nuke_supported : null,
     vfs_supported: payload.vfs_supported === true,
     mount_source: String(payload.mount_source ?? "unknown"),
     compatible: Boolean(payload.compatible),

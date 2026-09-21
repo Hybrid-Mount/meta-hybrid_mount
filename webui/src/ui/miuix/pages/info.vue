@@ -20,6 +20,10 @@ const socialIcons = {
     "M11.94 0A12 12 0 1 0 12 24a12 12 0 0 0-.06-24Zm4.97 7.22c.1 0 .32.03.46.14.12.1.16.23.17.33.02.09.04.3.02.47-.18 1.9-.96 6.5-1.36 8.63-.17.9-.5 1.2-.82 1.23-.7.06-1.23-.46-1.9-.9-1.06-.7-1.65-1.13-2.68-1.8-1.18-.78-.42-1.21.26-1.91.17-.18 3.25-2.98 3.3-3.23.01-.03.02-.15-.05-.21-.07-.06-.18-.04-.25-.02-.11.02-1.8 1.14-5.06 3.34-.48.33-.91.49-1.3.48-.43-.01-1.25-.24-1.87-.44-.75-.24-1.35-.37-1.3-.79.03-.22.33-.44.9-.66 3.5-1.53 5.83-2.53 7-3.02 3.33-1.38 4.02-1.62 4.48-1.63Z",
 };
 
+function statusText(value: boolean | null | undefined): string {
+  return value == null ? t("info.unverified") : value ? "✓" : "✗";
+}
+
 const contributors = ref<GitHubContributor[]>([]);
 const loadingContributors = ref(false);
 const loadFailed = ref(false);
@@ -106,20 +110,24 @@ onMounted(async () => {
     <MiuixSmallTitle :text="t('info.installTitle')" />
     <MiuixCard class="card">
       <MiuixBasicComponent
-        :title="t('info.selfModule')"
-        :summary="sysStore.installState?.self_module ? '✓' : '✗'"
-      />
-      <MiuixBasicComponent
         :title="t('info.binary')"
-        :summary="sysStore.installState?.binary ? '✓' : '✗'"
-      />
-      <MiuixBasicComponent
-        :title="t('info.configExists')"
-        :summary="sysStore.installState?.config_exists ? '✓' : '✗'"
+        :summary="statusText(sysStore.installState?.binary)"
       />
       <MiuixBasicComponent
         :title="t('info.overlaySupported')"
-        :summary="sysStore.installState?.overlay_supported ? '✓' : '✗'"
+        :summary="statusText(sysStore.installState?.overlay_supported)"
+      />
+      <MiuixBasicComponent
+        :title="t('info.tmpfsSupported')"
+        :summary="statusText(sysStore.installState?.tmpfs_supported)"
+      />
+      <MiuixBasicComponent
+        :title="t('info.vfsSupported')"
+        :summary="statusText(sysStore.installState?.vfs_supported)"
+      />
+      <MiuixBasicComponent
+        :title="t('info.nukeSupported')"
+        :summary="statusText(sysStore.installState?.nuke_supported)"
       />
       <MiuixBasicComponent
         :title="t('status.compatible')"

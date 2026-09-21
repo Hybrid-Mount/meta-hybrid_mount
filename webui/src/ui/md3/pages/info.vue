@@ -31,8 +31,8 @@ async function loadContributors(): Promise<void> {
   }
 }
 
-function statusText(value: boolean | undefined): string {
-  return value ? "✓" : "—";
+function statusText(value: boolean | null | undefined): string {
+  return value == null ? t("info.unverified") : value ? "✓" : "✗";
 }
 
 onMounted(async () => {
@@ -68,13 +68,6 @@ onMounted(async () => {
       <div class="setting-list">
         <div class="list-item">
           <span class="list-text"
-            ><span class="list-title">{{ t("info.selfModule") }}</span></span
-          >
-          <strong>{{ statusText(sysStore.installState?.self_module) }}</strong>
-        </div>
-        <div class="item-separator" />
-        <div class="list-item">
-          <span class="list-text"
             ><span class="list-title">{{ t("info.binary") }}</span></span
           >
           <strong>{{ statusText(sysStore.installState?.binary) }}</strong>
@@ -82,16 +75,30 @@ onMounted(async () => {
         <div class="item-separator" />
         <div class="list-item">
           <span class="list-text"
-            ><span class="list-title">{{ t("info.configExists") }}</span></span
+            ><span class="list-title">{{ t("info.overlaySupported") }}</span></span
           >
-          <strong>{{ statusText(sysStore.installState?.config_exists) }}</strong>
+          <strong>{{ statusText(sysStore.installState?.overlay_supported) }}</strong>
         </div>
         <div class="item-separator" />
         <div class="list-item">
           <span class="list-text"
-            ><span class="list-title">{{ t("info.overlaySupported") }}</span></span
+            ><span class="list-title">{{ t("info.tmpfsSupported") }}</span></span
           >
-          <strong>{{ statusText(sysStore.installState?.overlay_supported) }}</strong>
+          <strong>{{ statusText(sysStore.installState?.tmpfs_supported) }}</strong>
+        </div>
+        <div class="item-separator" />
+        <div class="list-item">
+          <span class="list-text"
+            ><span class="list-title">{{ t("info.vfsSupported") }}</span></span
+          >
+          <strong>{{ statusText(sysStore.installState?.vfs_supported) }}</strong>
+        </div>
+        <div class="item-separator" />
+        <div class="list-item">
+          <span class="list-text"
+            ><span class="list-title">{{ t("info.nukeSupported") }}</span></span
+          >
+          <strong>{{ statusText(sysStore.installState?.nuke_supported) }}</strong>
         </div>
       </div>
     </section>

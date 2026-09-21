@@ -91,6 +91,8 @@ export interface InstallState {
   binary: boolean;
   config_exists: boolean;
   overlay_supported: boolean;
+  tmpfs_supported: boolean;
+  nuke_supported: boolean | null;
   vfs_supported: boolean;
   mount_source: string;
   compatible: boolean;

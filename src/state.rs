@@ -373,6 +373,9 @@ pub struct InstallState {
     pub binary: bool,
     pub config_exists: bool,
     pub overlay_supported: bool,
+    pub tmpfs_supported: bool,
+    /// Current ext4 staging concealment result; None means it has not been verified.
+    pub nuke_supported: Option<bool>,
     /// Live protocol probe: includes built-in providers and excludes failed LKM loads.
     pub vfs_supported: bool,
     pub mount_source: String,
@@ -396,6 +399,8 @@ pub fn build_install_state(
         binary,
         config_exists,
         overlay_supported,
+        tmpfs_supported: false,
+        nuke_supported: None,
         vfs_supported,
         mount_source: mount_source.to_owned(),
         compatible,
@@ -639,7 +644,7 @@ pub fn handle_install_state() -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let (overlay_supported, mount_source) = (false, "unknown".to_owned());
 
-    let state = build_install_state(
+    let mut state = build_install_state(
         self_module,
         binary,
         config_exists,
@@ -647,6 +652,14 @@ pub fn handle_install_state() -> Result<()> {
         crate::vfs::available(),
         &mount_source,
     );
+    state.tmpfs_supported = crate::sys::fs::is_overlay_xattr_supported().unwrap_or(false);
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let run = RunState::load_or_default();
+        if run.storage_mode == "ext4" && !run.mount_point.as_os_str().is_empty() {
+            state.nuke_supported = crate::sys::nuke::concealment_status(&run.mount_point);
+        }
+    }
     println!("{}", serde_json::to_string_pretty(&state)?);
     Ok(())
 }
@@ -1493,6 +1506,8 @@ mod tests {
   "binary": true,
   "config_exists": true,
   "overlay_supported": true,
+  "tmpfs_supported": false,
+  "nuke_supported": null,
   "vfs_supported": false,
   "mount_source": "KSU",
   "compatible": true
