@@ -192,31 +192,33 @@ jobs:
           files: ${{ steps.paths.outputs.zip }}
           body_path: /tmp/changelog.md
 
-      - name: Create remote release (KernelSU-Modules-Repo)
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        run: |
-          set -euo pipefail
-          repo="KernelSU-Modules-Repo/hybrid_mount"
-          tag="${{ github.ref_name }}"
-
-          prerelease_flag=""
-          if [[ "$PRERELEASE" == "true" ]]; then
-            prerelease_flag="--prerelease"
-          fi
-
-          gh release create "$tag" \
-            --repo "$repo" \
-            --draft \
-            $prerelease_flag \
-            --title "$tag" \
-            --notes-file /tmp/changelog.md \
-            "${{ steps.paths.outputs.zip }}"
-
-          gh release edit "$tag" \
-            --repo "$repo" \
-            --draft=false
+      # Temporarily disabled: the KernelSU module repository is unavailable.
+      # Restore this step when remote publishing is available again.
+      # - name: Create remote release (KernelSU-Modules-Repo)
+      #   if: startsWith(github.ref, 'refs/tags/')
+      #   env:
+      #     GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      #   run: |
+      #     set -euo pipefail
+      #     repo="KernelSU-Modules-Repo/hybrid_mount"
+      #     tag="${{ github.ref_name }}"
+      #
+      #     prerelease_flag=""
+      #     if [[ "$PRERELEASE" == "true" ]]; then
+      #       prerelease_flag="--prerelease"
+      #     fi
+      #
+      #     gh release create "$tag" \
+      #       --repo "$repo" \
+      #       --draft \
+      #       $prerelease_flag \
+      #       --title "$tag" \
+      #       --notes-file /tmp/changelog.md \
+      #       "${{ steps.paths.outputs.zip }}"
+      #
+      #     gh release edit "$tag" \
+      #       --repo "$repo" \
+      #       --draft=false
 
       - name: Sync version back to dev
         if: startsWith(github.ref, 'refs/tags/')
