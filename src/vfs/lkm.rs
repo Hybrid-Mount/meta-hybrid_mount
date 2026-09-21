@@ -4,24 +4,23 @@
 //!
 //! The DDK builds one hybridmount-<android>-<kernel>.ko per Android/GKI target (see
 //! .github/workflows/kernel-module.yml). Selection matches the kernel release and
-//! Android version exactly; a boot guard is written before insmod, and whether the key
-//! type answers is what decides success. Try KernelSU's symbol-aware loader first,
-//! then ordinary insmod.
+//! GKI label first, then other builds for the same kernel line. A boot guard is written
+//! before loading; a supported key-type response decides success. Try ksud first,
+//! then the built-in compatibility loader, then ordinary insmod.
 //!
 //! A failed load is not fatal: the caller probes again and degrades or reports
 //! according to vfs_strict, the same path taken when the module is absent entirely.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::defs;
 use crate::errors::Result;
 use crate::sys::lkm::{
-    LoadAttemptGuard, describe_attempts, load_with_candidates, select_bundled_lkm_path, unload,
+    LoadAttemptGuard, bundled_lkm_arch_supported, describe_attempts, kernel_release,
+    load_with_candidates, unload,
 };
-use crate::vfs::backend::{KeyringKernel, VfsKernel};
-use crate::vfs::lkm_target::select_lkm_filename;
-use crate::vfs::sys::KeyringChannel;
+use crate::vfs::lkm_target::lkm_candidates;
 
 const MODULE_NAME: &str = "hybridmount";
 /// Overrides the selection, for testing a target that is not packaged.
@@ -40,55 +39,83 @@ pub fn load_hm_vfs() -> Result<()> {
 
 fn load() -> std::result::Result<(), String> {
     crate::vfs::doctor::ensure_provider_absent(crate::vfs::doctor::presence_on_device())?;
-    let lkm_path = select_bundled_lkm_path(
-        defs::VFS_LKM_DIR,
-        LKM_OVERRIDE_ENV,
-        "VFS module",
-        select_lkm_filename,
-    )?;
-    if !lkm_path.is_file() {
-        return Err(format!(
-            "no bundled VFS module for this kernel (expected {})",
-            lkm_path.display()
-        ));
-    }
-
-    let _attempt = LoadAttemptGuard::arm(
-        Path::new(defs::VFS_LKM_BOOT_GUARD_PATH),
-        "VFS module load",
-        &format!("lkm={}", lkm_path.display()),
-    )?;
-
-    match load_with_candidates(
-        crate::sys::lkm::INSMOD_CANDIDATES.iter().copied(),
-        &lkm_path,
-        "load the Hybrid Mount VFS kernel module",
-        &[],
-        INSMOD_TIMEOUT,
-        module_responds,
-    ) {
-        Ok(()) => Ok(()),
-        Err(attempts) => {
-            // A failed probe can leave a half-initialised module behind.
-            unload(
-                MODULE_NAME,
-                "unload the Hybrid Mount VFS kernel module",
-                RMMOD_TIMEOUT,
-            );
-            Err(format!(
-                "{MODULE_NAME} did not become available; attempts: {}",
-                describe_attempts(&attempts)
-            ))
+    let candidates = bundled_candidates()?;
+    let mut failures = Vec::new();
+    for lkm_path in candidates {
+        log::info!("trying VFS module candidate: {}", lkm_path.display());
+        // A crash leaves the exact failing candidate in the persistent boot guard. Guard
+        // failures abort the whole search; they must never become a fallback to another .ko.
+        let _attempt = LoadAttemptGuard::arm(
+            Path::new(defs::VFS_LKM_BOOT_GUARD_PATH),
+            "VFS module load",
+            &format!("lkm={}", lkm_path.display()),
+        )?;
+        match load_with_candidates(
+            crate::sys::lkm::INSMOD_CANDIDATES.iter().copied(),
+            &lkm_path,
+            "load the Hybrid Mount VFS kernel module",
+            &[],
+            INSMOD_TIMEOUT,
+            module_responds,
+        ) {
+            Ok(()) => return Ok(()),
+            Err(attempts) => {
+                failures.push(format!(
+                    "{}: {}",
+                    lkm_path.display(),
+                    describe_attempts(&attempts)
+                ));
+                // Only unload our failed candidate, never a pre-existing or built-in provider.
+                if crate::vfs::doctor::presence_on_device()
+                    == crate::vfs::doctor::ModulePresence::Loadable
+                {
+                    unload(
+                        MODULE_NAME,
+                        "unload failed Hybrid Mount VFS candidate",
+                        RMMOD_TIMEOUT,
+                    );
+                }
+                crate::vfs::doctor::ensure_provider_absent(crate::vfs::doctor::presence_on_device())
+                    .map_err(|err| format!("stop VFS candidate fallback: {err}; {}", failures.join("; ")))?;
+            }
         }
     }
+    Err(format!(
+        "no VFS candidate became available: {}",
+        failures.join("; ")
+    ))
+}
+
+fn bundled_candidates() -> std::result::Result<Vec<PathBuf>, String> {
+    if !bundled_lkm_arch_supported(std::env::consts::ARCH) {
+        return Err(format!(
+            "bundled VFS modules are aarch64-only, running {}",
+            std::env::consts::ARCH
+        ));
+    }
+    if let Some(path) = std::env::var_os(LKM_OVERRIDE_ENV).filter(|path| !path.is_empty()) {
+        let path = PathBuf::from(path);
+        return if path.is_file() {
+            Ok(vec![path])
+        } else {
+            Err(format!("VFS override module missing: {}", path.display()))
+        };
+    }
+    let release = kernel_release()?;
+    let candidates: Vec<_> = lkm_candidates(&release)
+        .into_iter()
+        .map(|name| Path::new(defs::VFS_LKM_DIR).join(name))
+        .filter(|path| path.is_file())
+        .collect();
+    if candidates.is_empty() {
+        return Err(format!("no bundled VFS module for kernel={release}"));
+    }
+    Ok(candidates)
 }
 
 /// Whether the module answers, decided by the key type rather than the insmod exit code.
 fn module_responds() -> bool {
-    match KeyringKernel::new(KeyringChannel::Hybridmount) {
-        Ok(mut kernel) => kernel.version().is_ok(),
-        Err(_) => false,
-    }
+    crate::vfs::available()
 }
 
 #[cfg(test)]

@@ -58,25 +58,56 @@ pub fn kernel_major_minor(release: &str) -> Option<(u32, u32)> {
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
-/// Mirrors the DDK targets in .github/workflows/kernel-module.yml.
-/// Falls back to the version encoded in the release string when android_major is absent.
-pub fn select_lkm_filename(release: &str, android_major: Option<u32>) -> Option<&'static str> {
-    let android = android_major.or_else(|| android_major_from_kernel_release(release));
-    match (kernel_major_minor(release)?, android) {
-        ((5, 10), Some(12)) => Some("hybridmount-android12-5.10.ko"),
-        ((5, 10), Some(13)) => Some("hybridmount-android13-5.10.ko"),
-        ((5, 15), Some(13)) => Some("hybridmount-android13-5.15.ko"),
-        ((5, 15), Some(14)) => Some("hybridmount-android14-5.15.ko"),
-        ((6, 1), Some(14)) => Some("hybridmount-android14-6.1.ko"),
-        ((6, 6), Some(15)) => Some("hybridmount-android15-6.6.ko"),
-        ((6, 12), Some(16)) => Some("hybridmount-android16-6.12.ko"),
-        _ => None,
-    }
+/// Supported packages in deterministic fallback order, matching the DDK build matrix.
+const TARGETS: &[(u32, u32, u32, &str)] = &[
+    (5, 10, 12, "hybridmount-android12-5.10.ko"),
+    (5, 10, 13, "hybridmount-android13-5.10.ko"),
+    (5, 15, 13, "hybridmount-android13-5.15.ko"),
+    (5, 15, 14, "hybridmount-android14-5.15.ko"),
+    (6, 1, 14, "hybridmount-android14-6.1.ko"),
+    (6, 6, 15, "hybridmount-android15-6.6.ko"),
+    (6, 12, 16, "hybridmount-android16-6.12.ko"),
+];
+
+/// Prefer the kernel's GKI label; an optional hint never rules out same-line candidates.
+pub fn select_lkm_filename(release: &str, android_hint: Option<u32>) -> Option<&'static str> {
+    let kernel = kernel_major_minor(release)?;
+    let android = android_major_from_kernel_release(release).or(android_hint);
+    let matches_kernel = |entry: &&(u32, u32, u32, &str)| (entry.0, entry.1) == kernel;
+    TARGETS
+        .iter()
+        .filter(matches_kernel)
+        .find(|entry| Some(entry.2) == android)
+        .or_else(|| TARGETS.iter().find(matches_kernel))
+        .map(|entry| entry.3)
+}
+
+/// NoMount's exact-first, same-kernel-line fallback. Android userspace is not a GKI label.
+pub fn lkm_candidates(release: &str) -> Vec<&'static str> {
+    let Some(kernel) = kernel_major_minor(release) else {
+        return Vec::new();
+    };
+    let preferred = select_lkm_filename(release, None);
+    let mut candidates: Vec<_> = TARGETS
+        .iter()
+        .filter(|entry| (entry.0, entry.1) == kernel)
+        .map(|entry| entry.3)
+        .collect();
+    candidates.sort_by_key(|name| Some(*name) != preferred);
+    candidates
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_kernel_is_not_rejected_by_newer_android_userspace() {
+        assert_eq!(
+            select_lkm_filename("5.15.197-@Coolpak@Kugouzei_NB_LKM", Some(16)),
+            Some("hybridmount-android13-5.15.ko")
+        );
+    }
 
     #[test]
     fn selects_the_ddk_matrix() {
@@ -111,11 +142,34 @@ mod tests {
     }
 
     #[test]
-    fn uses_the_device_android_version_when_the_release_lacks_one() {
+    fn explicit_branch_hint_can_prioritize_a_same_line_candidate() {
         assert_eq!(
             select_lkm_filename("5.10.198", Some(13)),
             Some("hybridmount-android13-5.10.ko")
         );
+    }
+
+    #[test]
+    fn candidates_prefer_exact_branch_then_stay_on_the_same_kernel_line() {
+        assert_eq!(
+            lkm_candidates("5.15.197-android14-custom"),
+            vec![
+                "hybridmount-android14-5.15.ko",
+                "hybridmount-android13-5.15.ko"
+            ]
+        );
+        assert_eq!(
+            lkm_candidates("5.15.197-@Coolpak@Kugouzei_NB_LKM"),
+            vec![
+                "hybridmount-android13-5.15.ko",
+                "hybridmount-android14-5.15.ko"
+            ]
+        );
+        assert_eq!(
+            lkm_candidates("6.1.99-custom"),
+            vec!["hybridmount-android14-6.1.ko"]
+        );
+        assert!(lkm_candidates("4.19.999-custom").is_empty());
     }
 
     #[test]
@@ -132,7 +186,10 @@ mod tests {
 
     #[test]
     fn refuses_unknown_or_unsafe_matrix_entries() {
-        assert_eq!(select_lkm_filename("5.10.198", Some(14)), None);
+        assert_eq!(
+            select_lkm_filename("5.10.198", Some(14)),
+            Some("hybridmount-android12-5.10.ko")
+        );
         assert_eq!(select_lkm_filename("4.14.336-android12-9", None), None);
         assert_eq!(select_lkm_filename("6.18.0-android17-0", None), None);
         assert_eq!(select_lkm_filename("not-a-release", None), None);

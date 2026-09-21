@@ -197,7 +197,9 @@ cargo test -- --nocapture
   - 校验: `module/vfs/binaries/list.txt` 包含 SHA256（由 `.github/workflows/kernel-module.yml` 生成）
   - 防漂移: `module/vfs/binaries/sources.txt` 记录构建输入（`hybridmount.c`、`hybridmount.h`、`Kconfig`、`Makefile`）的摘要，由真正编译它们的 job 写入；`tests/shell/vfs_sources_digest.sh` 重算比对，`lints.yml` 与 `release.yml` 都会执行。`kernel-module.yml` 在推送到 `dev` 且改动 `module/vfs/**` 时自动重建并提交产物，因此源码变更与产物刷新是两个提交，中间的推送会在该门禁上失败属预期
 
-启动流程先探测内建的 key type `hybridmount`；每次启动在未响应时（不论配置是否选择 `vfs`），从 `module/vfs/binaries/` 选择与内核线精确匹配的模块加载后再探测。加载必须发生在规划之前：planner 会把无后端可用的 `vfs` 规则降级为 `ignore`，执行器随之提前返回而走不到加载分支，等到执行阶段才加载会永远加载不上。`vfs_strict` 的失败判定同样在规划前完成，且仅当确有规则选择 `vfs` 时生效。
+启动流程先探测内建的 key type `hybridmount`；每次启动在未响应时（不论配置是否选择 `vfs`），从 `module/vfs/binaries/` 优先选择内核 release 中 GKI 标签匹配的模块，再尝试同一内核主次版本的其他候选，加载后再探测；不使用 Android 用户空间版本作为 VFS 的 GKI 标签。加载必须发生在规划之前：planner 会把无后端可用的 `vfs` 规则降级为 `ignore`，执行器随之提前返回而走不到加载分支，等到执行阶段才加载会永远加载不上。`vfs_strict` 的失败判定同样在规划前完成，且仅当确有规则选择 `vfs` 时生效。
+
+加载顺序为 `ksud insmod` → Rust 二进制内置的 `lkm-load` → 普通 `insmod`。`src/sys/lkm_image.rs` 负责 ELF 校验、核心符号解析和内存中的 vermagic 适配，`src/sys/lkm_compat.rs` 负责系统调用；只有本次加载的内核日志明确报告 vermagic 不匹配时才重试一次，成功后不重复加载。nuke 共用加载器，但保留原有精确选型。
 
 ### 熔断机制
 

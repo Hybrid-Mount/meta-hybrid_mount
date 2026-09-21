@@ -80,10 +80,14 @@ fn select_for_release(
     Ok(Path::new(directory).join(file_name))
 }
 
-/// Shared VFS/nuke loading order: ksud, then ordinary insmod entry points.
+/// Shared VFS/nuke loading order: ksud, our built-in loader, then ordinary insmod.
 /// The optional subcommand precedes the module path and parameters.
 pub const INSMOD_CANDIDATES: &[(&str, Option<&str>)] = &[
     ("/data/adb/ksud", Some("insmod")),
+    (
+        "/data/adb/modules/hybrid_mount/hybrid-mount",
+        Some("lkm-load"),
+    ),
     ("/system/bin/insmod", None),
     ("/data/adb/ap/bin/busybox", Some("insmod")),
     ("/data/adb/ksu/bin/busybox", Some("insmod")),
@@ -205,7 +209,9 @@ pub fn unload(module_name: &str, operation: &'static str, timeout: std::time::Du
             .any_exit_status()
             .timeout(timeout);
 
-        if run_command(&spec).is_ok() {
+        if run_command(&spec)
+            .is_ok_and(|outcome| outcome.status == crate::sys::process::ExitStatus::Exited(0))
+        {
             return;
         }
     }

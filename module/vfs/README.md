@@ -84,24 +84,35 @@ Prebuilt modules are **aarch64-only**. The loader refuses other architectures, a
 | 15 / 6.6 | `hybridmount-android15-6.6.ko` |
 | 16 / 6.12 | `hybridmount-android16-6.12.ko` |
 
-Selection requires both the kernel line and its Android/GKI label to match; a merely
-similar version is refused. A matching version number still does not guarantee ABI
-compatibility, so a mismatched module can fail to load or crash the kernel. Before
-`insmod`, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` and removes it once
-the load returns; if the kernel crashes, the marker survives and the next boot skips
-the VFS backend while the rest of Hybrid Mount keeps working.
+Selection prefers the kernel release's Android/GKI label, then tries the other
+packaged builds for the same kernel major/minor line. Android userspace is not used
+as a GKI label: a custom `5.15` kernel running Android 16 still tries the Android 13
+and Android 14 builds for `5.15`. Other kernel lines are never substituted.
 
-The VFS loader first tries `/data/adb/ksud insmod`, then the ordinary
-system/BusyBox `insmod` entry points. Each attempt is followed by an `hm1` keyring
-probe; a zero exit code alone is not success. An already present provider is not
-loaded again. Startup attempts capability discovery even when no rule selects VFS;
-failed probes hide VFS controls and counts in the WebUI and manager description. The ext4 sysfs nuke LKM shares the same candidate list and execution
-code, but confirms success by checking that its target procfs node disappeared.
+The loading order for each candidate is `/data/adb/ksud insmod`, the built-in
+`hybrid-mount lkm-load` command, then ordinary system/BusyBox `insmod`. The built-in
+loader implements the strategy used by NoMount's `lkmloader` in Rust: resolve
+undefined ELF symbols from nonzero core-kernel addresses in `/proc/kallsyms`, then
+call `init_module` (or `finit_module` when needed). It temporarily permits root to
+read kernel addresses when necessary and restores `kptr_restrict` before insertion.
+If the kernel rejects the vermagic and supplies its expected value in a fresh log
+message for this module, it adapts `.modinfo` in memory and retries once. Packaged
+`.ko` files are never rewritten. See [THIRD_PARTY.md](../../THIRD_PARTY.md) for attribution.
 
-Symbol-aware loading depends on the installed ksud supporting it. If ksud is
-missing or cannot load the module, ordinary insmod is still attempted; it cannot
-resolve functions whose kernel exports have been trimmed. If every attempt fails,
-Hybrid Mount reports the attempts and follows the existing VFS degradation policy.
+Each attempt is followed by an `hm1` keyring probe; a zero exit code alone is not
+success. A failed candidate must be absent or successfully unloaded before trying
+another build. An already present provider is not loaded again. Startup attempts
+capability discovery even when no rule selects VFS; failed probes hide VFS controls
+and counts in the WebUI and manager description. The ext4 sysfs nuke LKM shares the
+same loader list and execution code, but retains its own exact file selection and
+confirms success by checking that its target procfs node disappeared.
+
+Symbol and vermagic adaptation does not guarantee ABI compatibility. Before loading
+each candidate, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` with its
+path and removes the marker when the attempt returns. If the kernel crashes, the
+marker survives and the next boot skips VFS while the rest of Hybrid Mount keeps
+working. If every candidate fails, the collected loader diagnostics are logged and
+the existing VFS degradation policy applies.
 
 ## Building
 

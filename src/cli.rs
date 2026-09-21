@@ -23,6 +23,8 @@ pub fn run(args: &[String]) -> Result<()> {
         Some("install-state") => state::handle_install_state(),
         Some("clear-mount-errors") => state::handle_clear_mount_errors(),
         Some("vfs-doctor") => crate::vfs::doctor::handle(),
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        Some("lkm-load") => crate::sys::lkm_compat::handle(&args[1..]),
         Some("emulated-soft-reboot") => emulated_soft_reboot(),
         Some(command) => Err(Error::msg(format!("unknown command: {command}"))),
     }

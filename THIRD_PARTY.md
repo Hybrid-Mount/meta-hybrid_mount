@@ -19,6 +19,15 @@ This file records third-party components that Hybrid Mount is derived from or di
   - Hybrid Mount is not affiliated with, sponsored by, or endorsed by the NoMount project.
 - Distribution status: the kernel sources, build instructions and one prebuilt aarch64 module per supported Android/GKI target are committed to this repository and included in release packages. `module/vfs/binaries/list.txt` records the SHA-256 digest of every module.
 
+## lkmloader — built-in userspace LKM loading strategy
+
+- Upstream project: lkmloader, https://github.com/maxsteeel/lkmloader
+- Upstream author: maxsteeel
+- Studied revision: af7fb29222377181220d9814f46b6a8b12cb770c
+- License: GPL-3.0. The Rust implementation is distributed as part of the GPL-3.0-only Hybrid Mount core.
+- Scope: `src/sys/lkm_image.rs` and `src/sys/lkm_compat.rs` reimplement the undefined-symbol resolution and in-memory vermagic adaptation strategy in Rust. No upstream C executable is bundled. The implementation adds checked ELF parsing, excludes module-owned and ambiguous symbol addresses, scopes kernel diagnostics to the attempted module and vermagic, and permits only one vermagic retry after a failed insertion.
+- Selection strategy: exact Android/GKI target first, then candidates for the same kernel line, based on NoMount's `module/customize.sh` at revision 016375cd4a9e7da07b0519dd7bc492101de2a834. Hybrid Mount performs discovery at boot and retains its own protocol acceptance probe and persistent crash guard.
+
 ## Mountify — ext4 sysfs LKM
 
 - Upstream project: Mountify, https://github.com/backslashxx/mountify

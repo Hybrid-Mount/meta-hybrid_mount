@@ -5,6 +5,10 @@
 pub mod faults;
 pub mod fs;
 pub mod lkm;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod lkm_compat;
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub mod lkm_image;
 pub mod mountinfo;
 pub mod process;
 pub mod temp;
