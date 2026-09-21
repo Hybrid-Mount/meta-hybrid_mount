@@ -14,6 +14,8 @@
     "language": "Idioma",
     "enabled": "Activado",
     "disabled": "Desactivado",
+    "statusErrors": "Algo ha salido mal",
+    "statusErrorsHint": "Estos pasos no se completaron como se esperaba. Revisa los módulos y los registros de abajo y actualiza.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} destino | {count} destinos",
-    "mountDetails": "Ver {count} destino de montaje | Ver {count} destinos de montaje"
+    "mountDetails": "Ver {count} destino de montaje | Ver {count} destinos de montaje",
+    "errorLoad": "No se pudo leer el estado del sistema",
+    "errorBootFailure": "Falló la canalización de arranque",
+    "errorVfsForeign": "Se detectó un proveedor VFS ajeno",
+    "errorVfsProvider": "El proveedor VFS falló",
+    "errorMountError": "Un módulo no se pudo montar",
+    "errorStateLoad": "No se puede leer la instantánea de arranque",
+    "errorModuleScan": "Falló el escaneo de módulos",
+    "detailStage": "Etapa",
+    "detailRollback": "Reversión",
+    "detailVersion": "Versión del proveedor",
+    "errorItems": "Módulos afectados"
   },
   "config": {
     "moduledir": "Dir. Módulos",

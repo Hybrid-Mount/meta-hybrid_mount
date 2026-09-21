@@ -20,7 +20,9 @@
     "uiStyle": "UI 风格",
     "styleChanged": "UI 风格已切换",
     "enabled": "已启用",
-    "disabled": "已禁用"
+    "disabled": "已禁用",
+    "statusErrors": "出现问题",
+    "statusErrorsHint": "下列步骤没有按预期完成。请结合下方模块与日志排查，然后刷新。"
   },
   "tabs": {
     "status": "状态",
@@ -63,7 +65,18 @@
     "magicOperationCount": "{files} 个文件挂载 · {symlinks} 个链接",
     "noActiveMounts": "本次启动没有活动挂载点",
     "mountTargetCount": "{count} 个挂载点",
-    "mountDetails": "查看 {count} 个挂载点"
+    "mountDetails": "查看 {count} 个挂载点",
+    "errorLoad": "读取系统状态失败",
+    "errorBootFailure": "启动流水线失败",
+    "errorVfsForeign": "检测到外来 VFS 实现",
+    "errorVfsProvider": "VFS Provider 出错",
+    "errorMountError": "模块挂载失败",
+    "errorStateLoad": "启动快照无法读取",
+    "errorModuleScan": "模块扫描失败",
+    "detailStage": "阶段",
+    "detailRollback": "回滚",
+    "detailVersion": "Provider 版本",
+    "errorItems": "受影响模块"
   },
   "config": {
     "title": "配置",

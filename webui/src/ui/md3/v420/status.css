@@ -21,18 +21,105 @@
   padding-bottom: 24px;
 }
 
-.failure-card {
+.error-banner {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
   padding: 18px 20px;
   border-radius: var(--radius-xl);
+  border: 2px solid var(--md-sys-color-error);
   color: var(--md-sys-color-on-error-container);
   background: var(--md-sys-color-error-container);
 }
 
-.failure-card span,
-.failure-card code {
+.error-banner__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+}
+
+.error-banner__head md-icon {
+  flex-shrink: 0;
+  color: var(--md-sys-color-error);
+}
+
+.error-banner__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+.error-banner__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.error-banner__list li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent);
+}
+
+.error-banner__message {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.error-banner__detail {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--md-sys-color-error) 18%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error-banner__items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.error-banner__items-label {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.error-banner__items code {
+  padding: 2px 8px;
+  border-radius: var(--radius-round);
+  background: color-mix(in srgb, var(--md-sys-color-error) 22%, transparent);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.error-banner__rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.error-banner__rows dt {
+  opacity: 0.85;
+}
+
+.error-banner__rows dd {
+  margin: 0;
   overflow-wrap: anywhere;
 }
 

@@ -20,7 +20,9 @@
     "uiStyle": "Style de l'interface utilisateur",
     "styleChanged": "Style de l'interface utilisateur changé",
     "enabled": "Activé",
-    "disabled": "Désactivé"
+    "disabled": "Désactivé",
+    "statusErrors": "Un problème est survenu",
+    "statusErrorsHint": "Ces étapes ne se sont pas terminées comme prévu. Consultez les modules et les journaux ci-dessous, puis actualisez."
   },
   "tabs": {
     "status": "État",
@@ -63,7 +65,18 @@
     "magicOperationCount": "{files} montage(s) de fichier · {symlinks} lien(s)",
     "noActiveMounts": "Aucune cible de montage active dans cet instantané de démarrage",
     "mountTargetCount": "{count} cible | {count} cible | {count} cibles",
-    "mountDetails": "Afficher {count} cible de montage | Afficher {count} cible de montage | Afficher {count} cibles de montage"
+    "mountDetails": "Afficher {count} cible de montage | Afficher {count} cible de montage | Afficher {count} cibles de montage",
+    "errorLoad": "Échec de la lecture de l'état du système",
+    "errorBootFailure": "Échec du pipeline de démarrage",
+    "errorVfsForeign": "Un fournisseur VFS étranger est installé",
+    "errorVfsProvider": "Le fournisseur VFS a échoué",
+    "errorMountError": "Échec du montage d'un module",
+    "errorStateLoad": "L'instantané de démarrage est illisible",
+    "errorModuleScan": "Échec de l'analyse des modules",
+    "detailStage": "Étape",
+    "detailRollback": "Retour arrière",
+    "detailVersion": "Version du fournisseur",
+    "errorItems": "Modules concernés"
   },
   "config": {
     "title": "Configuration",

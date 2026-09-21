@@ -20,7 +20,9 @@
     "uiStyle": "Arayüz Stili",
     "styleChanged": "Arayüz stili değiştirildi",
     "enabled": "Etkin",
-    "disabled": "Devre Dışı"
+    "disabled": "Devre Dışı",
+    "statusErrors": "Bir şeyler ters gitti",
+    "statusErrorsHint": "Bu adımlar beklendiği gibi tamamlanmadı. Aşağıdaki modüllere ve günlüklere bakıp yenileyin."
   },
   "tabs": {
     "status": "Durum",
@@ -63,7 +65,18 @@
     "magicOperationCount": "{files} dosya bağlaması · {symlinks} sembolik bağlantı",
     "noActiveMounts": "Bu başlangıç anlık görüntüsünde etkin bağlama hedefi yok",
     "mountTargetCount": "{count} bağlama noktası",
-    "mountDetails": "{count} bağlama noktasını görüntüle"
+    "mountDetails": "{count} bağlama noktasını görüntüle",
+    "errorLoad": "Sistem durumu okunamadı",
+    "errorBootFailure": "Başlangıç işlem hattı başarısız",
+    "errorVfsForeign": "Yabancı bir VFS sağlayıcısı algılandı",
+    "errorVfsProvider": "VFS sağlayıcısı başarısız oldu",
+    "errorMountError": "Bir modül bağlanamadı",
+    "errorStateLoad": "Başlangıç anlık görüntüsü okunamıyor",
+    "errorModuleScan": "Modül taraması başarısız",
+    "detailStage": "Aşama",
+    "detailRollback": "Geri alma",
+    "detailVersion": "Sağlayıcı sürümü",
+    "errorItems": "Etkilenen modüller"
   },
   "config": {
     "title": "Yapılandırma",

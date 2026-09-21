@@ -6,6 +6,14 @@ import { DEFAULT_CONFIG } from "./constants";
 const MOCK_DELAY = 300;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * `VITE_MOCK_STATUS_ERROR=1 pnpm dev` renders the status error banner.
+ *
+ * The mock is the only place a simulated failure may live: production builds never load this
+ * module, so a shipped WebUI can only show problems the device really reported.
+ */
+const MOCK_STATUS_ERROR = import.meta.env.VITE_MOCK_STATUS_ERROR === "1";
+
 export const MockAPI: AppAPI = {
   loadConfig: async () => {
     await delay(MOCK_DELAY);
@@ -117,18 +125,25 @@ export const MockAPI: AppAPI = {
       vfs_modules: [],
       vfs_active_mounts: [],
       vfs_provider: null,
-      vfs_error: null,
-      vfs_error_modules: [],
+      vfs_error: MOCK_STATUS_ERROR
+        ? "VFS read-back mismatch: rule not reported by the provider"
+        : null,
+      vfs_error_modules: MOCK_STATUS_ERROR ? ["hosts-redirect"] : [],
       vfs_foreign_nomount: false,
       confirmed_active_mounts: [
         "/system/etc/hosts",
         "/system/framework/services.jar",
         "/vendor/etc/audio_effects.xml",
       ],
-      mount_error_modules: ["sound-enhancer"],
+      mount_error_modules: MOCK_STATUS_ERROR
+        ? ["sound-enhancer", "youtube-revanced"]
+        : ["sound-enhancer"],
       mount_error_reasons: {
         "sound-enhancer": "mount_error marker present",
-      },
+        ...(MOCK_STATUS_ERROR
+          ? { "youtube-revanced": "overlay staging failed: ENOSPC" }
+          : {}),
+      } as Record<string, string>,
       mount_stats: {
         total_mounts: 4,
         successful_mounts: 4,
@@ -140,10 +155,12 @@ export const MockAPI: AppAPI = {
       },
       mode_stats: { overlayfs: 0, magicmount: 2, vfs: 0 },
       state_load: { kind: "loaded", detail: null },
-      failed_stage: null,
-      failure_reason: null,
-      rollback_status: "committed",
-      leftover_mount_targets: [],
+      failed_stage: MOCK_STATUS_ERROR ? "magic_mount" : null,
+      failure_reason: MOCK_STATUS_ERROR
+        ? "bind mount /system/framework/services.jar failed: EPERM"
+        : null,
+      rollback_status: MOCK_STATUS_ERROR ? "incomplete" : "committed",
+      leftover_mount_targets: MOCK_STATUS_ERROR ? ["/system/framework/services.jar"] : [],
     };
   },
 

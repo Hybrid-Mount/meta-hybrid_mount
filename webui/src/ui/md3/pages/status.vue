@@ -8,11 +8,14 @@ import { configStore } from "../../../lib/stores/configStore";
 import {
   activeMountState,
   backendDisplayKeys,
+  collectStatusErrors,
   groupActiveMounts,
-  statusFailureSummary,
+  statusErrorDetails,
+  statusErrorRows,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
+import StatusErrorBanner from "../components/StatusErrorBanner.vue";
 import { ICONS } from "../icons";
 
 const { t } = useI18n();
@@ -60,17 +63,21 @@ const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
 const activeMountStatus = computed(() =>
   activeMountState(sysStore.state, activeMounts.value),
 );
-const failureSummary = computed(() => {
-  return statusFailureSummary(
-    sysStore.state,
-    {
-      abnormal: t("status.abnormal"),
-      loadError: t("status.loadError"),
-      mountFailures: (count) => t("status.mountFailures", { count }),
-    },
-    sysStore.vfsSupported,
-  );
-});
+// Every problem this boot reported, not just the first one. An empty list keeps the banner off
+// screen, so a healthy device never sees it.
+const statusErrors = computed(() =>
+  collectStatusErrors(sysStore.state, {
+    loadError: sysStore.loadError,
+    moduleScanError: moduleStore.loadError,
+  }),
+);
+const errorRows = computed(() =>
+  statusErrorRows(statusErrorDetails(sysStore.state, sysStore.vfsSupported), {
+    stage: t("status.detailStage"),
+    rollback: t("status.detailRollback"),
+    version: t("status.detailVersion"),
+  }),
+);
 
 async function refresh(): Promise<void> {
   await Promise.all([
@@ -91,16 +98,13 @@ onMounted(refresh);
 <template>
   <div class="page">
     <div class="dashboard-grid">
-      <section v-if="failureSummary" class="failure-card" role="alert">
-        <strong>{{ t("status.abnormal") }}</strong>
-        <span>{{ failureSummary }}</span>
-        <code v-if="sysStore.state?.leftover_mount_targets.length">
-          {{ sysStore.state.leftover_mount_targets.join(", ") }}
-        </code>
-        <code v-if="sysStore.vfsSupported && sysStore.state?.vfs_error_modules.length">
-          VFS: {{ sysStore.state.vfs_error_modules.join(", ") }}
-        </code>
-      </section>
+      <StatusErrorBanner
+        :title="t('common.statusErrors')"
+        :hint="t('common.statusErrorsHint')"
+        :errors="statusErrors"
+        :details="errorRows"
+        :items-label="t('status.errorItems')"
+      />
       <section class="hero-card">
         <div v-if="sysStore.loading" class="skeleton-col">
           <md-circular-progress indeterminate />

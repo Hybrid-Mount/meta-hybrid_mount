@@ -14,6 +14,8 @@
     "language": "言語",
     "enabled": "有効",
     "disabled": "無効",
+    "statusErrors": "問題が発生しました",
+    "statusErrorsHint": "次の処理が期待どおりに完了しませんでした。下のモジュールとログを確認して再読み込みしてください。",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "マウント先 {count} 件",
-    "mountDetails": "{count} 件のマウント先を表示"
+    "mountDetails": "{count} 件のマウント先を表示",
+    "errorLoad": "システム状態を読み取れません",
+    "errorBootFailure": "起動パイプラインが失敗しました",
+    "errorVfsForeign": "外部の VFS 実装を検出しました",
+    "errorVfsProvider": "VFS Provider が失敗しました",
+    "errorMountError": "モジュールのマウントに失敗しました",
+    "errorStateLoad": "起動スナップショットを読み取れません",
+    "errorModuleScan": "モジュールのスキャンに失敗しました",
+    "detailStage": "ステージ",
+    "detailRollback": "ロールバック",
+    "detailVersion": "Provider バージョン",
+    "errorItems": "影響を受けるモジュール"
   },
   "config": {
     "moduledir": "モジュールのディレクトリ",

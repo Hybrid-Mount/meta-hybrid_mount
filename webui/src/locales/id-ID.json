@@ -14,6 +14,8 @@
     "language": "Bahasa",
     "enabled": "Aktif",
     "disabled": "Nonaktif",
+    "statusErrors": "Terjadi kesalahan",
+    "statusErrorsHint": "Langkah berikut tidak selesai seperti yang diharapkan. Periksa modul dan log di bawah, lalu muat ulang.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} titik mount",
-    "mountDetails": "Lihat {count} titik mount"
+    "mountDetails": "Lihat {count} titik mount",
+    "errorLoad": "Gagal membaca status sistem",
+    "errorBootFailure": "Pipeline boot gagal",
+    "errorVfsForeign": "Penyedia VFS asing terdeteksi",
+    "errorVfsProvider": "Penyedia VFS gagal",
+    "errorMountError": "Modul gagal dipasang",
+    "errorStateLoad": "Snapshot boot tidak dapat dibaca",
+    "errorModuleScan": "Pemindaian modul gagal",
+    "detailStage": "Tahap",
+    "detailRollback": "Rollback",
+    "detailVersion": "Versi penyedia",
+    "errorItems": "Modul terdampak"
   },
   "config": {
     "moduledir": "Direktori Modul",

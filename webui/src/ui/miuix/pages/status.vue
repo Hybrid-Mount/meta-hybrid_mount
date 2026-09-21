@@ -6,6 +6,7 @@ import { MiuixCard, MiuixSmallTitle, MiuixBasicComponent, MiuixText } from "miui
 import { Motion, AnimatePresence } from "motion-v";
 
 import StatusCard from "../components/StatusCard.vue";
+import StatusErrorBanner from "../components/StatusErrorBanner.vue";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
@@ -13,7 +14,10 @@ import { configStore } from "../../../lib/stores/configStore";
 import {
   activeMountState,
   backendDisplayKeys,
+  collectStatusErrors,
   groupActiveMounts,
+  statusErrorDetails,
+  statusErrorRows,
   statusFailureSummary,
   storageModeKey,
   uniqueActiveMounts,
@@ -109,10 +113,24 @@ const statusSummary = computed(() => {
     ) ?? t("status.workingVersion", { version: sysStore.version })
   );
 });
+// Every problem this boot reported, not just the first one. An empty list keeps the banner off
+// screen, so a healthy device never sees it.
+const statusErrors = computed(() =>
+  collectStatusErrors(state.value, {
+    loadError: sysStore.loadError,
+    moduleScanError: moduleStore.loadError,
+  }),
+);
+const errorRows = computed(() =>
+  statusErrorRows(statusErrorDetails(state.value, sysStore.vfsSupported), {
+    stage: t("status.detailStage"),
+    rollback: t("status.detailRollback"),
+    version: t("status.detailVersion"),
+  }),
+);
 function handleSetNav(index: number): void {
   if (!sysStore.loading) uiStore.setNavindex(index);
 }
-
 onMounted(async () => {
   await Promise.all([
     sysStore.loadStatus(),
@@ -132,6 +150,14 @@ onMounted(async () => {
       :summary="statusSummary"
       :description="backendSummary"
     ></StatusCard>
+
+    <StatusErrorBanner
+      :title="t('common.statusErrors')"
+      :hint="t('common.statusErrorsHint')"
+      :errors="statusErrors"
+      :details="errorRows"
+      :items-label="t('status.errorItems')"
+    />
 
     <div class="card-row">
       <MiuixCard show-indication press-feedback="sink" class="grow">

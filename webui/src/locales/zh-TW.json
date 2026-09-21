@@ -14,6 +14,8 @@
     "language": "語言",
     "enabled": "已啟用",
     "disabled": "已關閉",
+    "statusErrors": "出現問題",
+    "statusErrorsHint": "下列步驟沒有照預期完成。請搭配下方模組與日誌排查，然後重新整理。",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -63,7 +65,18 @@
     "magicOperationCount": "{files} 個檔案掛載 · {symlinks} 個連結",
     "noActiveMounts": "本次啟動沒有活動掛載點",
     "mountTargetCount": "{count} 個掛載點",
-    "mountDetails": "檢視 {count} 個掛載點"
+    "mountDetails": "檢視 {count} 個掛載點",
+    "errorLoad": "讀取系統狀態失敗",
+    "errorBootFailure": "啟動流程失敗",
+    "errorVfsForeign": "偵測到外來 VFS 實作",
+    "errorVfsProvider": "VFS Provider 發生錯誤",
+    "errorMountError": "模組掛載失敗",
+    "errorStateLoad": "啟動快照無法讀取",
+    "errorModuleScan": "模組掃描失敗",
+    "detailStage": "階段",
+    "detailRollback": "回滾",
+    "detailVersion": "Provider 版本",
+    "errorItems": "受影響模組"
   },
   "config": {
     "moduledir": "模組路徑",

@@ -14,6 +14,8 @@
     "language": "Мова",
     "enabled": "Увімкнено",
     "disabled": "Вимкнено",
+    "statusErrors": "Щось пішло не так",
+    "statusErrorsHint": "Наведені кроки завершилися не так, як очікувалося. Перевірте модулі та журнали нижче, потім оновіть.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} точок монтування | {count} точка монтування | {count} точки монтування | {count} точок монтування",
-    "mountDetails": "Переглянути {count} точок монтування | Переглянути {count} точку монтування | Переглянути {count} точки монтування | Переглянути {count} точок монтування"
+    "mountDetails": "Переглянути {count} точок монтування | Переглянути {count} точку монтування | Переглянути {count} точки монтування | Переглянути {count} точок монтування",
+    "errorLoad": "Не вдалося прочитати стан системи",
+    "errorBootFailure": "Збій завантажувального конвеєра",
+    "errorVfsForeign": "Виявлено сторонній постачальник VFS",
+    "errorVfsProvider": "Збій постачальника VFS",
+    "errorMountError": "Модуль не змонтовано",
+    "errorStateLoad": "Знімок завантаження не читається",
+    "errorModuleScan": "Не вдалося просканувати модулі",
+    "detailStage": "Етап",
+    "detailRollback": "Відкат",
+    "detailVersion": "Версія постачальника",
+    "errorItems": "Уражені модулі"
   },
   "config": {
     "moduledir": "Каталог модулів",

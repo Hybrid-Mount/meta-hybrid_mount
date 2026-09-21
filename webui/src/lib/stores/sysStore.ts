@@ -18,6 +18,13 @@ const version = ref("...");
 const systemInfo = ref<SystemInfo>({ kernel: "-", selinux: "-" });
 const state = ref<RunState | null>(null);
 const installState = ref<InstallState | null>(null);
+/**
+ * Why the last status load failed, or null after a successful one.
+ *
+ * The toast disappears on its own; the status banner reads this so a failed load stays visible
+ * instead of leaving stale numbers on screen with no explanation.
+ */
+const loadError = ref<string | null>(null);
 const loading = ref(false);
 let pendingLoad: Promise<void> | null = null;
 let hasLoaded = false;
@@ -41,8 +48,10 @@ async function loadStatus(): Promise<void> {
       systemInfo.value = info;
       state.value = nextState;
       installState.value = nextInstall;
+      loadError.value = null;
       hasLoaded = true;
-    } catch {
+    } catch (error) {
+      loadError.value = error instanceof Error ? error.message : String(error);
       uiStore.showToast("Failed to load system status");
     } finally {
       loading.value = false;
@@ -96,6 +105,9 @@ export const sysStore = {
   },
   get installState() {
     return installState.value;
+  },
+  get loadError() {
+    return loadError.value;
   },
   get vfsSupported() {
     return installState.value?.vfs_supported === true;

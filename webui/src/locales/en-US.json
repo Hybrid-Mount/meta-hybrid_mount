@@ -20,7 +20,9 @@
     "uiStyle": "UI Style",
     "styleChanged": "UI style changed",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "statusErrors": "Something went wrong",
+    "statusErrorsHint": "These did not run as expected. Pull the details from the modules and logs below, then refresh."
   },
   "tabs": {
     "status": "Status",
@@ -63,7 +65,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} target | {count} targets",
-    "mountDetails": "View {count} mount target | View {count} mount targets"
+    "mountDetails": "View {count} mount target | View {count} mount targets",
+    "errorLoad": "Failed to read the system status",
+    "errorBootFailure": "Startup pipeline failed",
+    "errorVfsForeign": "A foreign VFS provider is installed",
+    "errorVfsProvider": "The VFS provider failed",
+    "errorMountError": "A module failed to mount",
+    "errorStateLoad": "The startup snapshot cannot be read",
+    "errorModuleScan": "Module scanning failed",
+    "detailStage": "Stage",
+    "detailRollback": "Rollback",
+    "detailVersion": "Provider version",
+    "errorItems": "Affected modules"
   },
   "config": {
     "title": "Configuration",

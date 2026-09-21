@@ -7,6 +7,8 @@ import { uiStore } from "./uiStore";
 import { MODULE_ID } from "../constants";
 
 const modules = ref<Module[]>([]);
+/** Why the last scan failed, or null after a successful one. */
+const loadError = ref<string | null>(null);
 const loading = ref(false);
 let pendingLoad: Promise<void> | null = null;
 let hasLoaded = false;
@@ -21,8 +23,10 @@ async function loadModules(): Promise<void> {
     try {
       const data = await API.scanModules();
       modules.value = [...data];
+      loadError.value = null;
       hasLoaded = true;
-    } catch {
+    } catch (error) {
+      loadError.value = error instanceof Error ? error.message : String(error);
       uiStore.showToast("Failed to scan modules");
     } finally {
       loading.value = false;
@@ -69,6 +73,9 @@ export const moduleStore = {
   },
   get loading() {
     return loading.value;
+  },
+  get loadError() {
+    return loadError.value;
   },
   get hasLoaded() {
     return hasLoaded;

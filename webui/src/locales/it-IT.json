@@ -14,6 +14,8 @@
     "language": "Lingua",
     "enabled": "Abilitato",
     "disabled": "Disabilitato",
+    "statusErrors": "Qualcosa è andato storto",
+    "statusErrorsHint": "Questi passaggi non sono terminati come previsto. Controlla i moduli e i log qui sotto, poi aggiorna.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} destinazione | {count} destinazioni",
-    "mountDetails": "Visualizza {count} destinazione di montaggio | Visualizza {count} destinazioni di montaggio"
+    "mountDetails": "Visualizza {count} destinazione di montaggio | Visualizza {count} destinazioni di montaggio",
+    "errorLoad": "Impossibile leggere lo stato del sistema",
+    "errorBootFailure": "Pipeline di avvio non riuscita",
+    "errorVfsForeign": "Rilevato un provider VFS esterno",
+    "errorVfsProvider": "Il provider VFS ha fallito",
+    "errorMountError": "Montaggio di un modulo non riuscito",
+    "errorStateLoad": "Impossibile leggere l'istantanea di avvio",
+    "errorModuleScan": "Scansione dei moduli non riuscita",
+    "detailStage": "Fase",
+    "detailRollback": "Rollback",
+    "detailVersion": "Versione del provider",
+    "errorItems": "Moduli interessati"
   },
   "config": {
     "moduledir": "Directory moduli",

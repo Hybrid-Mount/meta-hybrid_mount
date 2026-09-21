@@ -14,6 +14,8 @@
     "language": "Язык",
     "enabled": "Включено",
     "disabled": "Выключено",
+    "statusErrors": "Что-то пошло не так",
+    "statusErrorsHint": "Следующие шаги завершились не так, как ожидалось. Проверьте модули и журналы ниже, затем обновите.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} точек монтирования | {count} точка монтирования | {count} точки монтирования | {count} точек монтирования",
-    "mountDetails": "Просмотреть {count} точек монтирования | Просмотреть {count} точку монтирования | Просмотреть {count} точки монтирования | Просмотреть {count} точек монтирования"
+    "mountDetails": "Просмотреть {count} точек монтирования | Просмотреть {count} точку монтирования | Просмотреть {count} точки монтирования | Просмотреть {count} точек монтирования",
+    "errorLoad": "Не удалось прочитать состояние системы",
+    "errorBootFailure": "Сбой загрузочного конвейера",
+    "errorVfsForeign": "Обнаружен сторонний поставщик VFS",
+    "errorVfsProvider": "Сбой поставщика VFS",
+    "errorMountError": "Модуль не смонтирован",
+    "errorStateLoad": "Снимок загрузки не читается",
+    "errorModuleScan": "Не удалось просканировать модули",
+    "detailStage": "Этап",
+    "detailRollback": "Откат",
+    "detailVersion": "Версия поставщика",
+    "errorItems": "Затронутые модули"
   },
   "config": {
     "moduledir": "Путь модулей",

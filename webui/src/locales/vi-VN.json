@@ -14,6 +14,8 @@
     "language": "Ngôn ngữ",
     "enabled": "Đã bật",
     "disabled": "Đã tắt",
+    "statusErrors": "Đã xảy ra lỗi",
+    "statusErrorsHint": "Các bước sau không hoàn tất như mong đợi. Hãy xem mô-đun và nhật ký bên dưới rồi làm mới.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -56,7 +58,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} điểm gắn kết",
-    "mountDetails": "Xem {count} điểm gắn kết"
+    "mountDetails": "Xem {count} điểm gắn kết",
+    "errorLoad": "Không đọc được trạng thái hệ thống",
+    "errorBootFailure": "Pipeline khởi động thất bại",
+    "errorVfsForeign": "Phát hiện nhà cung cấp VFS lạ",
+    "errorVfsProvider": "Nhà cung cấp VFS gặp lỗi",
+    "errorMountError": "Mô-đun gắn kết thất bại",
+    "errorStateLoad": "Không đọc được ảnh chụp khởi động",
+    "errorModuleScan": "Quét mô-đun thất bại",
+    "detailStage": "Giai đoạn",
+    "detailRollback": "Khôi phục",
+    "detailVersion": "Phiên bản nhà cung cấp",
+    "errorItems": "Mô-đun bị ảnh hưởng"
   },
   "config": {
     "moduledir": "Thư mục Mô-đun",
