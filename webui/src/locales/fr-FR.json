@@ -68,7 +68,7 @@
   "config": {
     "title": "Configuration",
     "moduledir": "Répertoire des modules",
-    "moduledirDesc": "Répertoire dans lequel détecter les modules installés",
+    "moduledirDesc": "Répertoire dans lequel sont détectés les modules installés",
     "overlayMode": "Mode de stockage d'OverlayFS",
     "overlayModeDesc": "Backend du tampon utilisé par OverlayFS",
     "overlayTmpfs": "Tmpfs",
