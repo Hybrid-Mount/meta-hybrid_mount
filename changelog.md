@@ -1,4 +1,38 @@
 
+## v6.2.1
+
+
+### <!-- 1 --> Features
+
+- `lkm` Embed symbol-aware loader and VFS candidate fallback
+
+- `webui` Show tmpfs VFS and Nuke installation capabilities
+
+- `vfs` Add the hybrid-mount vfs CLI Expose the hybridmount provider to userspace through a new `hybrid-mount vfs` subcommand that manages rules and isolated uids over the existing keyring channel: rule add/del/list/clear (including whiteout and opaque), uid add/del/list, plus version/doctor/load. The entry point parses arguments and prints help without touching the kernel; `hybrid-mount` with no arguments still runs the mount pipeline, and `lkm-load`/`vfs-doctor` keep their contracts. Usage errors exit 2 (new VfsCliUsage error), while every pre-existing command keeps exit 1. Move the foreign NoMount probe out of pipeline.rs into vfs/guard.rs, where it sits next to the provider classification it shares with the doctor, and reuse the read-only presence check instead of a second copy of it. Document the command contract in docs/VFS_CLI.md together with the confirmed implementation proposal.
+
+- `webui` Show the VFS provider kind in the installation state Add a "VFS type" row to the About page's installation state in both UI styles, showing LKM for a provider registered by a loaded module and Built-in for one compiled into the kernel image, and "Not verified" when neither module table lists it. install-state gains vfs_type, classified read-only from /proc/modules and /sys/module/hybridmount by the existing ModulePresence logic, so a status query never turns into an insmod. It stays independent of vfs_supported, which still requires the key type to answer this boot, so "LKM" next to an unsupported VFS remains explainable rather than contradictory. The WebUI normalizer accepts only the two known kinds and downgrades everything else to unknown, so an older backend or corrupt payload cannot leak an unnamed string into the UI.
+
+- `webui` Surface every startup problem as a status banner The status tab only rendered the first problem it could find, and several of them never reached the screen at all: per-module mount_error markers stayed on the modules tab, a foreign VFS provider was hidden behind vfs_supported, and a failed status load only produced a toast that disappears on its own. collectStatusErrors() now gathers all of them into one ordered list, and an empty list is what keeps the banner off screen, so a healthy device never sees it. Each entry carries an i18n code plus the raw value that belongs to that sentence, so both skins say the same thing in every locale. The covered cases are a failed status load, a failed module scan, the startup stage and reason with its roll-back state and left-over targets, a foreign or failing VFS provider, per-module mount failures with their reasons, and an unreadable startup snapshot. Both skins render it above the rest of the page with role="alert": md3 gets a new StatusErrorBanner component that replaces the narrower failure card, miuix keeps its status card and adds the same banner underneath. sysStore and moduleStore now record why a load failed instead of only firing a toast. VITE_MOCK_STATUS_ERROR=1 pnpm dev renders the banner for manual checks. The simulated failure lives in the dev-only mock module, which production builds never load, so a shipped WebUI can only report what the device actually said.
+
+
+
+### <!-- 2 --> Fixes
+
+- Show nuke backend accurately
+
+- `vfs` Propagate spawn failures in the vfs CLI tests rust-lints failed on `cargo clippy --workspace --all-targets -- -D warnings`: the `run` helper in tests/vfs_cli.rs called `expect`, which the workspace denies. The helper is a free function in an integration test, so clippy's `allow-expect-in-tests` never covered it, even though the unit tests in src/** that do use `expect` pass. Return `io::Result<Output>` and let each test propagate with `?` instead of relying on a lint allowance that does not apply here.
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- French translation enhancement (#478) Co-authored-by: PifGadget92 <tiktok.ds@outlook.com>
+
+- `webui` Fix prettier formatting in info.vue The nuke summary line exceeded the print width, so the webui-lints job failed on `prettier --check`.
+
+
+
+
 ## v6.2.1-rc.3
 
 
