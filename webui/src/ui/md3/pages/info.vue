@@ -98,7 +98,8 @@ onMounted(async () => {
           <span class="list-text"
             ><span class="list-title">{{ t("info.nukeSupported") }}</span></span
           >
-          <strong>{{ statusText(sysStore.installState?.nuke_supported) }}</strong>
+          <strong v-if="sysStore.installState?.nuke_type === 'ksud'">ksud</strong>
+          <strong v-else>{{ statusText(sysStore.installState?.nuke_supported) }}</strong>
         </div>
       </div>
     </section>

@@ -266,6 +266,7 @@ export function normalizeInstallState(payload: Record<string, unknown>): Install
     tmpfs_supported: payload.tmpfs_supported === true,
     nuke_supported:
       typeof payload.nuke_supported === "boolean" ? payload.nuke_supported : null,
+    nuke_type: typeof payload.nuke_type === "string" ? payload.nuke_type : "unknown",
     vfs_supported: payload.vfs_supported === true,
     mount_source: String(payload.mount_source ?? "unknown"),
     compatible: Boolean(payload.compatible),

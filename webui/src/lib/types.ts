@@ -93,6 +93,7 @@ export interface InstallState {
   overlay_supported: boolean;
   tmpfs_supported: boolean;
   nuke_supported: boolean | null;
+  nuke_type: string;
   vfs_supported: boolean;
   mount_source: string;
   compatible: boolean;
