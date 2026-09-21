@@ -373,6 +373,8 @@ pub struct InstallState {
     pub binary: bool,
     pub config_exists: bool,
     pub overlay_supported: bool,
+    /// Live protocol probe: includes built-in providers and excludes failed LKM loads.
+    pub vfs_supported: bool,
     pub mount_source: String,
     pub compatible: bool,
 }
@@ -382,6 +384,7 @@ pub fn build_install_state(
     binary: bool,
     config_exists: bool,
     overlay_supported: bool,
+    vfs_supported: bool,
     mount_source: &str,
 ) -> InstallState {
     let compatible = self_module && binary && overlay_supported;
@@ -393,6 +396,7 @@ pub fn build_install_state(
         binary,
         config_exists,
         overlay_supported,
+        vfs_supported,
         mount_source: mount_source.to_owned(),
         compatible,
     }
@@ -640,6 +644,7 @@ pub fn handle_install_state() -> Result<()> {
         binary,
         config_exists,
         overlay_supported,
+        crate::vfs::available(),
         &mount_source,
     );
     println!("{}", serde_json::to_string_pretty(&state)?);
@@ -1028,13 +1033,13 @@ mod tests {
 
     #[test]
     fn install_state_compatibility_rules() {
-        let ok = build_install_state(true, true, true, true, "KSU");
+        let ok = build_install_state(true, true, true, true, false, "KSU");
         assert!(ok.compatible && ok.installed);
 
-        let missing_overlay = build_install_state(true, true, true, false, "KSU");
+        let missing_overlay = build_install_state(true, true, true, false, false, "KSU");
         assert!(!missing_overlay.compatible);
 
-        let not_installed = build_install_state(true, true, false, true, "APatch");
+        let not_installed = build_install_state(true, true, false, true, false, "APatch");
         assert!(!not_installed.installed);
         assert_eq!(not_installed.mount_source, "APatch");
     }
@@ -1463,8 +1468,22 @@ mod tests {
     }
 
     #[test]
+    fn install_state_reports_unavailable_vfs_without_hiding_other_backends() {
+        let state = build_install_state(true, true, true, true, false, "KSU");
+        let payload = serde_json::to_value(state).unwrap();
+        assert_eq!(payload["vfs_supported"], false);
+        assert_eq!(payload["compatible"], true);
+    }
+
+    #[test]
+    fn install_state_reports_a_responding_vfs_provider() {
+        let state = build_install_state(true, true, true, true, true, "KSU");
+        assert!(state.vfs_supported);
+    }
+
+    #[test]
     fn install_state_wire_snapshot_is_stable() {
-        let state = build_install_state(true, true, true, true, "KSU");
+        let state = build_install_state(true, true, true, true, false, "KSU");
 
         assert_eq!(
             serde_json::to_string_pretty(&state).unwrap(),
@@ -1474,6 +1493,7 @@ mod tests {
   "binary": true,
   "config_exists": true,
   "overlay_supported": true,
+  "vfs_supported": false,
   "mount_source": "KSU",
   "compatible": true
 }"#

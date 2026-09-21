@@ -155,6 +155,7 @@ export const MockAPI: AppAPI = {
       binary: true,
       config_exists: true,
       overlay_supported: true,
+      vfs_supported: true,
       mount_source: "KSU",
       compatible: true,
     };

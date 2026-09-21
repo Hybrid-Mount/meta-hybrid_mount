@@ -256,13 +256,14 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
   };
 }
 
-function normalizeInstallState(payload: Record<string, unknown>): InstallState {
+export function normalizeInstallState(payload: Record<string, unknown>): InstallState {
   return {
     installed: Boolean(payload.installed),
     self_module: Boolean(payload.self_module),
     binary: Boolean(payload.binary),
     config_exists: Boolean(payload.config_exists),
     overlay_supported: Boolean(payload.overlay_supported),
+    vfs_supported: payload.vfs_supported === true,
     mount_source: String(payload.mount_source ?? "unknown"),
     compatible: Boolean(payload.compatible),
   };

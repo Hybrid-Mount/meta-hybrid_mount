@@ -6,6 +6,7 @@ import {
   createConfigPayload,
   normalizeConfigPayload,
   normalizeModule,
+  normalizeInstallState,
   normalizeStatus,
 } from "./api";
 import type { AppConfig } from "./types";
@@ -186,5 +187,14 @@ describe("WebUI configuration contract", () => {
       confirmed_active_mounts: ["/vendor"],
       vfs_foreign_nomount: true,
     });
+  });
+});
+
+describe("VFS capability contract", () => {
+  it("requires an affirmative runtime probe, including for older backends", () => {
+    for (const value of [undefined, null, false, "true", "false"]) {
+      expect(normalizeInstallState({ vfs_supported: value }).vfs_supported).toBe(false);
+    }
+    expect(normalizeInstallState({ vfs_supported: true }).vfs_supported).toBe(true);
   });
 });

@@ -23,7 +23,9 @@ const mountedCount = computed(
 );
 const overlayCount = computed(() => sysStore.state?.mode_stats.overlayfs ?? 0);
 const magicCount = computed(() => sysStore.state?.mode_stats.magicmount ?? 0);
-const vfsCount = computed(() => sysStore.state?.mode_stats.vfs ?? 0);
+const vfsCount = computed(() =>
+  sysStore.vfsSupported ? (sysStore.state?.mode_stats.vfs ?? 0) : 0,
+);
 const overlayMountCount = computed(
   () => sysStore.state?.mount_stats.overlayfs_mounts ?? 0,
 );
@@ -49,7 +51,9 @@ const activeMounts = computed(() =>
 // Name the backends that actually ran. A VFS-only boot created no Tmpfs/Ext4 staging,
 // so it must read "VFS" instead of a storage mode that never started.
 const backendSummary = computed(() => {
-  const labels = backendDisplayKeys(sysStore.state).map((key) => t(key));
+  const labels = backendDisplayKeys(sysStore.state, sysStore.vfsSupported).map((key) =>
+    t(key),
+  );
   return labels.length > 0 ? labels.join(" · ") : "-";
 });
 const activeMountGroups = computed(() => groupActiveMounts(activeMounts.value));
@@ -57,11 +61,15 @@ const activeMountStatus = computed(() =>
   activeMountState(sysStore.state, activeMounts.value),
 );
 const failureSummary = computed(() => {
-  return statusFailureSummary(sysStore.state, {
-    abnormal: t("status.abnormal"),
-    loadError: t("status.loadError"),
-    mountFailures: (count) => t("status.mountFailures", { count }),
-  });
+  return statusFailureSummary(
+    sysStore.state,
+    {
+      abnormal: t("status.abnormal"),
+      loadError: t("status.loadError"),
+      mountFailures: (count) => t("status.mountFailures", { count }),
+    },
+    sysStore.vfsSupported,
+  );
 });
 
 async function refresh(): Promise<void> {
@@ -89,7 +97,7 @@ onMounted(refresh);
         <code v-if="sysStore.state?.leftover_mount_targets.length">
           {{ sysStore.state.leftover_mount_targets.join(", ") }}
         </code>
-        <code v-if="sysStore.state?.vfs_error_modules.length">
+        <code v-if="sysStore.vfsSupported && sysStore.state?.vfs_error_modules.length">
           VFS: {{ sysStore.state.vfs_error_modules.join(", ") }}
         </code>
       </section>
@@ -131,7 +139,11 @@ onMounted(refresh);
         <div class="stats-bar-container" :aria-label="t('status.modeStats')">
           <div class="bar-segment bar-overlay" :style="{ width: overlayWidth }" />
           <div class="bar-segment bar-magic" :style="{ width: magicWidth }" />
-          <div class="bar-segment bar-vfs" :style="{ width: vfsWidth }" />
+          <div
+            v-if="sysStore.vfsSupported"
+            class="bar-segment bar-vfs"
+            :style="{ width: vfsWidth }"
+          />
         </div>
         <div class="stats-legend">
           <div class="legend-item">
@@ -155,7 +167,7 @@ onMounted(refresh);
               }}
             </span>
           </div>
-          <div class="legend-item">
+          <div v-if="sysStore.vfsSupported" class="legend-item">
             <span class="legend-dot dot-vfs" />
             <span>
               {{ t("config.modeVfs") }}:

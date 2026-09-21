@@ -28,7 +28,7 @@ pub fn available() -> bool {
 /// device whose kernel does not carry the module would otherwise never load the bundled one.
 ///
 /// `available` is the read-only probe and `load` performs the `insmod`; both are injected so the
-/// ordering and the no-load-when-unwanted rule are testable without a device. A load failure is
+/// ordering and startup capability discovery are testable without a device. A load failure is
 /// not an error here — the plan then degrades exactly as it does when no module is bundled.
 #[allow(dead_code)]
 pub fn ensure_loaded_for_plan(
@@ -49,10 +49,6 @@ pub fn ensure_loaded_for_plan_with_guard(
     available: impl Fn() -> bool,
     load: impl FnOnce() -> crate::errors::Result<()>,
 ) -> bool {
-    if !wants_vfs {
-        return available();
-    }
-
     if foreign_provider {
         log::warn!("foreign vfs provider is present; refusing to load hybridmount");
         return false;
@@ -62,9 +58,7 @@ pub fn ensure_loaded_for_plan_with_guard(
         return true;
     }
 
-    log::info!(
-        "vfs is configured but the key type does not answer; checking whether the bundled module can be loaded"
-    );
+    log::info!("vfs key type does not answer; checking the bundled module (wants_vfs={wants_vfs})");
     if let Err(err) = load() {
         log::warn!("bundled vfs module load failed: {err}");
     }
@@ -134,9 +128,9 @@ mod tests {
         assert_eq!(loads.get(), 0, "an answering key type needs no insmod");
     }
 
-    /// Overlay or magic configurations must not turn into an `insmod` on every boot.
+    /// Probe the bundled backend even before the user has selected VFS.
     #[test]
-    fn vfs_is_not_loaded_when_no_rule_asks_for_it() {
+    fn vfs_is_attempted_even_when_no_rule_asks_for_it() {
         let loads = Cell::new(0);
 
         let ready = ensure_loaded_for_plan_with_guard(
@@ -150,7 +144,11 @@ mod tests {
         );
 
         assert!(!ready);
-        assert_eq!(loads.get(), 0, "an unused backend must not be loaded");
+        assert_eq!(
+            loads.get(),
+            1,
+            "boot must discover VFS support before offering it in the UI"
+        );
     }
 
     /// A failed load degrades instead of aborting the boot, which is what `vfs_strict` is for.

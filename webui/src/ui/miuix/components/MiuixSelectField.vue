@@ -31,9 +31,8 @@ const emit = defineEmits<{
 }>();
 
 const open = ref(false);
-const selectedOption = computed(
-  () =>
-    props.options.find((option) => option.value === props.modelValue) ?? props.options[0],
+const selectedOption = computed(() =>
+  props.options.find((option) => option.value === props.modelValue),
 );
 
 function select(option: MiuixSelectOption): void {

@@ -23,9 +23,8 @@ const emit = defineEmits<{
 }>();
 
 const dialog = ref<(HTMLElement & { show: () => void; close: () => void }) | null>(null);
-const selectedOption = computed(
-  () =>
-    props.options.find((option) => option.value === props.modelValue) ?? props.options[0],
+const selectedOption = computed(() =>
+  props.options.find((option) => option.value === props.modelValue),
 );
 
 function open(): void {
@@ -55,7 +54,7 @@ function select(option: SelectOption): void {
     >
       <span class="select-copy">
         <span v-if="!compact" class="select-label">{{ label }}</span>
-        <span class="select-value">{{ selectedOption?.label }}</span>
+        <span class="select-value">{{ selectedOption?.label ?? "-" }}</span>
       </span>
       <md-icon class="select-chevron" aria-hidden="true">
         <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z" /></svg>

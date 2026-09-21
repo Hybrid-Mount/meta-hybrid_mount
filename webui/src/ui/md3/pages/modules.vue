@@ -12,7 +12,7 @@ import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.
 import { ICONS } from "../icons";
 
 const { t } = useI18n();
-const modeOptions: MountMode[] = ["overlay", "magic", "vfs", "ignore"];
+const modeOptions = computed(() => sysStore.mountModes);
 const modeLabels = computed<Record<MountMode, string>>(() => ({
   overlay: t("config.modeOverlay"),
   magic: t("config.modeMagic"),
@@ -20,7 +20,7 @@ const modeLabels = computed<Record<MountMode, string>>(() => ({
   ignore: t("config.modeIgnore"),
 }));
 const modeSelectOptions = computed<SelectOption[]>(() =>
-  modeOptions.map((mode) => ({ value: mode, label: modeLabels.value[mode] })),
+  modeOptions.value.map((mode) => ({ value: mode, label: modeLabels.value[mode] })),
 );
 const filterOptions = computed<SelectOption[]>(() => [
   { value: "active", label: t("modules.filterActive") },
@@ -84,7 +84,9 @@ function disableModuleDetails(element: Element): void {
   element.setAttribute("inert", "");
 }
 
-onMounted(() => moduleStore.ensureModulesLoaded());
+onMounted(() =>
+  Promise.all([sysStore.ensureStatusLoaded(), moduleStore.ensureModulesLoaded()]),
+);
 </script>
 
 <template>
@@ -160,7 +162,10 @@ onMounted(() => moduleStore.ensureModulesLoaded());
               <span>{{ module.author || t("modules.unknownLabel") }}</span>
             </span>
           </span>
-          <span class="mode-pill">
+          <span
+            v-if="module.blacklisted || module.mode !== 'vfs' || sysStore.vfsSupported"
+            class="mode-pill"
+          >
             {{ module.blacklisted ? t("modules.blacklisted") : modeLabels[module.mode] }}
           </span>
         </button>

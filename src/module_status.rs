@@ -28,7 +28,13 @@ pub fn update_description(mode: &str, overlay_count: usize, magic_count: usize, 
         return;
     }
 
-    let description = running_description(mode, overlay_count, magic_count, vfs_count);
+    let description = running_description(
+        mode,
+        overlay_count,
+        magic_count,
+        vfs_count,
+        crate::vfs::available(),
+    );
     if set_temporary_override(&description) {
         log::debug!("temporary module description override updated");
         return;
@@ -47,6 +53,7 @@ fn running_description(
     overlay_count: usize,
     magic_count: usize,
     vfs_count: usize,
+    vfs_supported: bool,
 ) -> String {
     // Only the two real overlay staging backends may claim a tag. A VFS-only or
     // Magic-only boot starts neither, so it must report no storage backend instead of
@@ -63,8 +70,13 @@ fn running_description(
         format!(" ({mode_name}) {mode_icon}")
     };
 
+    let vfs_tag = if vfs_supported {
+        format!(" | VFS: {vfs_count}")
+    } else {
+        String::new()
+    };
     format!(
-        "😋 运行中喵～{mode_tag} | OverlayFS: {overlay_count} | Magic Mount: {magic_count} | VFS: {vfs_count}"
+        "😋 运行中喵～{mode_tag} | OverlayFS: {overlay_count} | Magic Mount: {magic_count}{vfs_tag}"
     )
 }
 
@@ -138,8 +150,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unavailable_vfs_is_hidden_from_manager_description() {
+        let description = running_description("ext4", 2, 3, 0, false);
+        assert!(!description.contains("VFS"));
+        assert!(description.contains("OverlayFS: 2"));
+        assert!(description.contains("Magic Mount: 3"));
+    }
+
+    #[test]
     fn running_description_reports_all_backend_counts() {
-        let description = running_description("ext4", 2, 3, 4);
+        let description = running_description("ext4", 2, 3, 4, true);
 
         assert!(description.contains("(Ext4)"));
         assert!(description.contains("OverlayFS: 2"));
@@ -149,7 +169,7 @@ mod tests {
 
     #[test]
     fn running_description_reports_tmpfs_mode() {
-        let description = running_description("tmpfs", 0, 1, 2);
+        let description = running_description("tmpfs", 0, 1, 2, true);
 
         assert!(description.contains("(Tmpfs)"));
         assert!(description.contains("OverlayFS: 0"));
@@ -160,7 +180,7 @@ mod tests {
     /// HM-RUST-014：Magic-only 运行时 storage_mode="none"，不能假装在跑 Ext4。
     #[test]
     fn running_description_with_none_reports_no_storage_backend() {
-        let description = running_description("none", 0, 1, 0);
+        let description = running_description("none", 0, 1, 0, true);
 
         assert!(description.contains("OverlayFS: 0"));
         assert!(description.contains("Magic Mount: 1"));
@@ -174,7 +194,7 @@ mod tests {
     /// VFS-only 启动既不建 tmpfs 也不建 ext4，描述必须只报 VFS 计数。
     #[test]
     fn running_description_without_overlay_storage_reports_vfs_only() {
-        let description = running_description("none", 0, 0, 3);
+        let description = running_description("none", 0, 0, 3, true);
 
         assert!(description.contains("OverlayFS: 0"));
         assert!(description.contains("Magic Mount: 0"));
@@ -192,7 +212,7 @@ mod tests {
     /// 空字符串是旧快照的遗留值，同样不能回落到 Ext4。
     #[test]
     fn running_description_with_empty_mode_reports_no_storage_backend() {
-        let description = running_description("", 0, 0, 2);
+        let description = running_description("", 0, 0, 2, true);
 
         assert!(description.contains("VFS: 2"));
         assert!(!description.contains("Ext4"));

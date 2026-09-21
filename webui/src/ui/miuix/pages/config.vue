@@ -16,6 +16,7 @@ import {
 import { Reset } from "miuix-vue/icons";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
+import { sysStore } from "../../../lib/stores/sysStore";
 import type { DefaultMountMode } from "../../../lib/types";
 import MiuixSelectField, {
   type MiuixSelectOption,
@@ -27,16 +28,16 @@ const styleOptions: MiuixSelectOption[] = [
   { value: "miuix", label: "MiuiX" },
   { value: "md3", label: "Material Design 3" },
 ];
-const modeOptions: DefaultMountMode[] = ["overlay", "magic", "vfs"];
-const modeLabels = computed(() => [
-  t("config.modeOverlay"),
-  t("config.modeMagic"),
-  t("config.modeVfs"),
-]);
+const modeOptions = computed(() => sysStore.defaultMountModes);
+const modeLabels = computed<Record<DefaultMountMode, string>>(() => ({
+  overlay: t("config.modeOverlay"),
+  magic: t("config.modeMagic"),
+  vfs: t("config.modeVfs"),
+}));
 const modeSelectOptions = computed<MiuixSelectOption[]>(() =>
-  modeOptions.map((mode, index) => ({
+  modeOptions.value.map((mode) => ({
     value: mode,
-    label: modeLabels.value[index],
+    label: modeLabels.value[mode],
   })),
 );
 const overlayOptions = computed<MiuixSelectOption[]>(() => {
@@ -112,7 +113,9 @@ async function reset(): Promise<void> {
   uiStore.showToast(ok ? t("config.resetSuccess") : t("config.resetFailed"));
 }
 
-onMounted(() => configStore.ensureConfigLoaded());
+onMounted(() =>
+  Promise.all([sysStore.ensureStatusLoaded(), configStore.ensureConfigLoaded()]),
+);
 </script>
 
 <template>

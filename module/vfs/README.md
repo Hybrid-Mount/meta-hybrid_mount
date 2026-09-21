@@ -94,7 +94,8 @@ the VFS backend while the rest of Hybrid Mount keeps working.
 The VFS loader first tries `/data/adb/ksud insmod`, then the ordinary
 system/BusyBox `insmod` entry points. Each attempt is followed by an `hm1` keyring
 probe; a zero exit code alone is not success. An already present provider is not
-loaded again. The ext4 sysfs nuke LKM shares the same candidate list and execution
+loaded again. Startup attempts capability discovery even when no rule selects VFS;
+failed probes hide VFS controls and counts in the WebUI and manager description. The ext4 sysfs nuke LKM shares the same candidate list and execution
 code, but confirms success by checking that its target procfs node disappeared.
 
 Symbol-aware loading depends on the installed ksud supporting it. If ksud is

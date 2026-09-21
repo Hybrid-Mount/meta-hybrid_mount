@@ -46,7 +46,7 @@ VFS 是 Hybrid Mount 自有的内核侧注入路径，由 `hybridmount` 模块�
 
 **如何识别 Provider。** 启动决策只看对内核 key type `hybridmount` 的一次只读探测：只要它返回受支持的版本，Provider 即可用。`vfs-doctor` 另外负责判断它以何种方式存在——出现在 `/proc/modules` 中，说明由可加载模块注册；有 `/sys/module/hybridmount` 目录但没有上述条目，说明已编译进内核镜像；两者都没有，说明本机没有 Provider。探测是只读的，因此 `status` 与 `vfs-doctor` 都不会触发 `insmod`。
 
-**启动逻辑。** 如果 key type 返回受支持的版本，Provider 即被绑定，不加载任何东西。如果没有规则选择 VFS，随附模块同样不会加载。如果确有规则选择 VFS 而探测无响应，流水线会挑选与内核线及 Android/GKI 标签精确匹配的随附模块，加载后重新探测；仍不可用时，所有 `vfs` 规则降级为 `ignore`，`vfs_strict = true` 时则启动失败。加载发生在挂载计划构建之前，因为规划阶段会在 Provider 无响应时把 `vfs` 规则改写为 `ignore`，执行器随后就会提前返回。熔断标记在 `insmod` 前写入，尝试返回时清除，因此只有内核崩溃才会把它留下；下次启动将拒绝自动重试，直到手动删除该标记。
+**启动逻辑。** 如果 key type 返回受支持的版本，Provider 即被绑定，不加载任何东西。每次启动都会探测 VFS 能力；即使没有规则选择 VFS，只要探测无响应，流水线会挑选与内核线及 Android/GKI 标签精确匹配的随附模块，加载后重新探测；仍不可用时，所有 `vfs` 规则降级为 `ignore`，确有规则选择 VFS 且 `vfs_strict = true` 时则启动失败。加载发生在挂载计划构建之前，因为规划阶段会在 Provider 无响应时把 `vfs` 规则改写为 `ignore`，执行器随后就会提前返回。熔断标记在 `insmod` 前写入，尝试返回时清除，因此只有内核崩溃才会把它留下；下次启动将拒绝自动重试，直到手动删除该标记。
 
 **把 VFS 集成进内核。** 发布包为每个受支持的 Android/GKI 目标都提供 aarch64 预编译模块并自动加载，因此这些内核无需任何集成步骤。当你希望避免 `insmod`，或你的内核线没有对应预编译模块时，可以把它内建进内核。在内核源码树根目录执行：
 
@@ -61,6 +61,8 @@ curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/
 ```
 
 这会把源码复制到 `fs/hybridmount/`，并加入 `fs/Makefile` 与 `fs/Kconfig`；启用 `CONFIG_HYBRIDMOUNT=y` 表示内建，`=m` 表示编译为模块。`bash -s -- --cleanup` 会撤销全部改动。已集成 NoMount 的内核树会被拒绝：两种实现都会劫持 inode 操作，而由于它们注册的 key type 不同，内核不会阻止二者并存。
+
+Provider 不可用时，WebUI 隐藏 VFS 选项和统计，管理器描述也不显示 VFS 计数；已有规则保持不变。内建 Provider 只要探测正常，即使没有 `/proc/modules` 条目也仍然支持。
 
 **诊断。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` 会报告存在状态、key type 返回的版本、受支持的版本，以及 Provider 不可用时的原因。
 

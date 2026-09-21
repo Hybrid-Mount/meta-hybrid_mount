@@ -46,7 +46,7 @@ VFS is Hybrid Mount's own kernel-side injection path, driven over the keyring by
 
 **How the provider is identified.** The boot decision keys on a read-only probe of the kernel key type `hybridmount`: if it answers with a supported version, the provider is usable. Separately, `vfs-doctor` classifies how it is present — an entry in `/proc/modules` means a loadable module registered it, a `/sys/module/hybridmount` directory without that entry means it is compiled into the kernel image, and if neither exists then no provider is present. Probing is read-only, so `status` and `vfs-doctor` never trigger an `insmod`.
 
-**Boot logic.** If the key type answers with a supported version, the provider is bound and nothing is loaded. If no rule selects VFS, the bundled module is not loaded either. If a rule does select VFS while the probe is silent, the pipeline picks the bundled module matching the kernel line and Android/GKI tag exactly, loads it, and probes again; still unavailable, every `vfs` rule degrades to `ignore`, or fails the boot when `vfs_strict = true`. The load runs before the mount plan is built, because planning rewrites `vfs` rules to `ignore` while the provider is silent and the executor would then return early. A circuit-breaker marker is written before `insmod` and cleared when the attempt returns, so only a kernel crash leaves it behind; the next boot then refuses an automatic retry until the marker is removed by hand.
+**Boot logic.** If the key type answers with a supported version, the provider is bound and nothing is loaded. On every boot, even when no rule selects VFS, if the probe is silent, the pipeline picks the bundled module matching the kernel line and Android/GKI tag exactly, loads it, and probes again; still unavailable, every `vfs` rule degrades to `ignore`, or fails the boot when VFS is requested and `vfs_strict = true`. The load runs before the mount plan is built, because planning rewrites `vfs` rules to `ignore` while the provider is silent and the executor would then return early. A circuit-breaker marker is written before `insmod` and cleared when the attempt returns, so only a kernel crash leaves it behind; the next boot then refuses an automatic retry until the marker is removed by hand.
 
 **Integrating VFS into a kernel.** Releases ship a prebuilt aarch64 module for every supported Android/GKI target and load it automatically, so those kernels need no integration step. Build it in when you want to avoid the `insmod`, or when your kernel line has no prebuilt. From the root of a kernel tree:
 
@@ -61,6 +61,8 @@ curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/
 ```
 
 This copies the sources into `fs/hybridmount/` and adds them to `fs/Makefile` and `fs/Kconfig`; enable `CONFIG_HYBRIDMOUNT=y` to build it in or `=m` to build it as a module. `bash -s -- --cleanup` reverts every change. A tree that already integrates NoMount is refused: both implementations hijack inode operations and the kernel will not stop them coexisting, since they register different key types.
+
+The WebUI and manager description hide VFS options and counters when the provider does not respond. Saved VFS rules remain intact. A responding built-in provider is supported even without a `/proc/modules` entry.
 
 **Diagnosing.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` reports the presence state, the version the key type answered, the supported versions, and why a provider is unusable when it is.
 

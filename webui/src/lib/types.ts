@@ -91,6 +91,7 @@ export interface InstallState {
   binary: boolean;
   config_exists: boolean;
   overlay_supported: boolean;
+  vfs_supported: boolean;
   mount_source: string;
   compatible: boolean;
 }

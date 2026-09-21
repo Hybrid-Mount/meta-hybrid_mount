@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
+import { sysStore } from "../../../lib/stores/sysStore";
 import type { DefaultMountMode, OverlayMode, UiStyle } from "../../../lib/types";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.vue";
@@ -11,7 +12,7 @@ import { ICONS } from "../icons";
 
 const { t } = useI18n();
 const resetOpen = ref(false);
-const modeOptions: DefaultMountMode[] = ["overlay", "magic", "vfs"];
+const modeOptions = computed(() => sysStore.defaultMountModes);
 const modeLabels = computed<Record<DefaultMountMode, string>>(() => ({
   overlay: t("config.modeOverlay"),
   magic: t("config.modeMagic"),
@@ -63,7 +64,9 @@ async function reset(): Promise<void> {
   uiStore.showToast(ok ? t("config.resetSuccess") : t("config.resetFailed"));
 }
 
-onMounted(() => configStore.ensureConfigLoaded());
+onMounted(() =>
+  Promise.all([sysStore.ensureStatusLoaded(), configStore.ensureConfigLoaded()]),
+);
 </script>
 
 <template>

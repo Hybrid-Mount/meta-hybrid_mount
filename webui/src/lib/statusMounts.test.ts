@@ -83,6 +83,18 @@ describe("status failure presentation", () => {
     mountFailures: (count: number) => `Detected ${count} failed mounts`,
   };
 
+  it("hides unavailable VFS diagnostics but retains other mount failures", () => {
+    const snapshot = state(1);
+    snapshot.vfs_error = "VFS provider unavailable";
+    expect(statusFailureSummary(snapshot, labels, false)).toBeNull();
+    snapshot.mount_stats.failed_mounts = 2;
+    expect(statusFailureSummary(snapshot, labels, false)).toBe(
+      "Detected 2 failed mounts",
+    );
+    snapshot.failure_reason = "startup failed";
+    expect(statusFailureSummary(snapshot, labels, false)).toBe("startup failed");
+  });
+
   it("prioritizes explicit VFS failures and names affected modules", () => {
     const snapshot = state(1);
     snapshot.vfs_error = "VFS read-back failed";

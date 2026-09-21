@@ -1,7 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ref } from "vue";
-import type { DeviceInfo, InstallState, RunState, SystemInfo } from "../types";
+import type {
+  DefaultMountMode,
+  DeviceInfo,
+  InstallState,
+  MountMode,
+  RunState,
+  SystemInfo,
+} from "../types";
 import { API } from "../api";
 import { uiStore } from "./uiStore";
 import { moduleStore } from "./moduleStore";
@@ -89,6 +96,17 @@ export const sysStore = {
   },
   get installState() {
     return installState.value;
+  },
+  get vfsSupported() {
+    return installState.value?.vfs_supported === true;
+  },
+  get mountModes(): MountMode[] {
+    return this.vfsSupported
+      ? ["overlay", "magic", "vfs", "ignore"]
+      : ["overlay", "magic", "ignore"];
+  },
+  get defaultMountModes(): DefaultMountMode[] {
+    return this.vfsSupported ? ["overlay", "magic", "vfs"] : ["overlay", "magic"];
   },
   get loading() {
     return loading.value;

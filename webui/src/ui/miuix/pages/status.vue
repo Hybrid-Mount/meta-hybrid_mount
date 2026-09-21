@@ -33,13 +33,17 @@ const magicFileMountCount = computed(() => state.value?.mount_stats.files_mounte
 const magicSymlinkCount = computed(() => state.value?.mount_stats.symlinks_created ?? 0);
 const showmagicmodule = ref(false);
 const showvfsmodule = ref(false);
-const vfsCount = computed(() => state.value?.mode_stats.vfs ?? 0);
+const vfsCount = computed(() =>
+  sysStore.vfsSupported ? (state.value?.mode_stats.vfs ?? 0) : 0,
+);
 const expandMountPath = ref(false);
 const activeMounts = computed(() => uniqueActiveMounts(state.value?.active_mounts ?? []));
 // Name the backends that actually ran. A VFS-only boot created no Tmpfs/Ext4 staging,
 // so it must read "VFS" instead of a storage mode that never started.
 const backendSummary = computed(() => {
-  const labels = backendDisplayKeys(state.value).map((key) => t(key));
+  const labels = backendDisplayKeys(state.value, sysStore.vfsSupported).map((key) =>
+    t(key),
+  );
   return labels.length > 0 ? labels.join(" · ") : "-";
 });
 const storageModeLabel = computed(() => {
@@ -70,7 +74,7 @@ const statusKind = computed<"checking" | "normal" | "abnormal">(() => {
     !installState.compatible ||
     state.value.timestamp <= 0 ||
     state.value.mount_stats.failed_mounts > 0 ||
-    state.value.vfs_error !== null ||
+    (sysStore.vfsSupported && state.value.vfs_error !== null) ||
     state.value.failed_stage !== null ||
     state.value.rollback_status === "incomplete" ||
     state.value.rollback_status === "unverified" ||
@@ -94,11 +98,15 @@ const statusSummary = computed(() => {
   }
   if (!state.value || state.value.timestamp <= 0) return t("status.notReady");
   return (
-    statusFailureSummary(state.value, {
-      abnormal: t("status.abnormal"),
-      loadError: t("status.loadError"),
-      mountFailures: (count) => t("status.mountFailures", { count }),
-    }) ?? t("status.workingVersion", { version: sysStore.version })
+    statusFailureSummary(
+      state.value,
+      {
+        abnormal: t("status.abnormal"),
+        loadError: t("status.loadError"),
+        mountFailures: (count) => t("status.mountFailures", { count }),
+      },
+      sysStore.vfsSupported,
+    ) ?? t("status.workingVersion", { version: sysStore.version })
   );
 });
 function handleSetNav(index: number): void {
@@ -181,6 +189,7 @@ onMounted(async () => {
         @click="showmagicmodule = !showmagicmodule"
       />
       <MiuixBasicComponent
+        v-if="sysStore.vfsSupported"
         class="backend-row"
         :title="t('status.vfsModules')"
         :summary="

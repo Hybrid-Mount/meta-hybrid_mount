@@ -26,25 +26,25 @@ const { t } = useI18n();
 
 const searchQuery = ref("");
 const filter = ref<ModuleFilter>("active");
-const modeOptions: MountMode[] = ["overlay", "magic", "vfs", "ignore"];
-const modeLabels = computed(() => [
-  t("config.modeOverlay"),
-  t("config.modeMagic"),
-  t("config.modeVfs"),
-  t("config.modeIgnore"),
-]);
+const modeOptions = computed(() => sysStore.mountModes);
+const modeLabels = computed<Record<MountMode, string>>(() => ({
+  overlay: t("config.modeOverlay"),
+  magic: t("config.modeMagic"),
+  vfs: t("config.modeVfs"),
+  ignore: t("config.modeIgnore"),
+}));
 const filterOptions = computed<MiuixSelectOption[]>(() => [
   { value: "active", label: t("modules.filterActive") },
   { value: "all", label: t("modules.filterAll") },
-  ...modeOptions.map((mode, index) => ({
+  ...modeOptions.value.map((mode) => ({
     value: mode,
-    label: modeLabels.value[index],
+    label: modeLabels.value[mode],
   })),
 ]);
 const ruleModeOptions = computed<MiuixSelectOption[]>(() =>
-  modeOptions.map((mode, index) => ({
+  modeOptions.value.map((mode) => ({
     value: mode,
-    label: modeLabels.value[index],
+    label: modeLabels.value[mode],
   })),
 );
 const defaultModeOptions = computed<MiuixSelectOption[]>(() => [
@@ -101,7 +101,7 @@ async function clearErrors(): Promise<void> {
 }
 
 function modeLabel(mode: MountMode): string {
-  return modeLabels.value[modeOptions.indexOf(mode)];
+  return modeLabels.value[mode];
 }
 
 function toggleModule(moduleId: string): void {
@@ -118,7 +118,9 @@ function disableModuleDetails(element: Element): void {
   element.setAttribute("inert", "");
 }
 
-onMounted(() => moduleStore.ensureModulesLoaded());
+onMounted(() =>
+  Promise.all([sysStore.ensureStatusLoaded(), moduleStore.ensureModulesLoaded()]),
+);
 </script>
 
 <template>
@@ -175,6 +177,9 @@ onMounted(() => moduleStore.ensureModulesLoaded());
           <template #end>
             <span class="module-header-end">
               <MiuixText
+                v-if="
+                  module.blacklisted || module.mode !== 'vfs' || sysStore.vfsSupported
+                "
                 :color="
                   module.blacklisted || module.mode === 'ignore' ? 'error' : 'success'
                 "

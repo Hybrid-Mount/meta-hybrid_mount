@@ -732,11 +732,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // Detect a foreign provider before considering insmod. This has to finish before planning:
     // a plan built while the module is unloaded carries no VFS work, while loading next to a
     // foreign provider would let two inode-hooking implementations coexist.
-    let nomount_probe = if config.wants_vfs() {
-        detect_foreign_nomount()
-    } else {
-        ForeignNomountProbe::default()
-    };
+    let nomount_probe = detect_foreign_nomount();
     let vfs_available = if nomount_probe.blocked() {
         crate::vfs::ensure_loaded_for_plan_with_guard(
             config.wants_vfs(),

@@ -19,10 +19,11 @@ export interface StatusFailureLabels {
 export function statusFailureSummary(
   state: RunState | null | undefined,
   labels: StatusFailureLabels,
+  vfsSupported = true,
 ): string | null {
   if (!state) return null;
   if (state.failure_reason) return state.failure_reason;
-  if (state.vfs_error) {
+  if (vfsSupported && state.vfs_error) {
     const modules = state.vfs_error_modules.filter(Boolean);
     return modules.length > 0
       ? `${state.vfs_error} (${modules.join(", ")})`
@@ -71,15 +72,20 @@ export function activeBackends(state: RunState | null | undefined): BackendId[] 
  * A VFS-only boot maps to `config.modeVfs` instead of the storage mode, which never
  * started on that device.
  */
-export function backendDisplayKeys(state: RunState | null | undefined): string[] {
-  return activeBackends(state).map((backend) => {
-    if (backend === "overlay") {
-      return state?.storage_mode === "tmpfs"
-        ? "config.overlayTmpfs"
-        : "config.overlayExt4";
-    }
-    return backend === "magic" ? "config.modeMagic" : "config.modeVfs";
-  });
+export function backendDisplayKeys(
+  state: RunState | null | undefined,
+  vfsSupported = true,
+): string[] {
+  return activeBackends(state)
+    .filter((backend) => backend !== "vfs" || vfsSupported)
+    .map((backend) => {
+      if (backend === "overlay") {
+        return state?.storage_mode === "tmpfs"
+          ? "config.overlayTmpfs"
+          : "config.overlayExt4";
+      }
+      return backend === "magic" ? "config.modeMagic" : "config.modeVfs";
+    });
 }
 
 /** i18n key for the overlay staging backend, or null when none was created. */
