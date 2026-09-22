@@ -140,7 +140,7 @@ defineProps<{
 
 .error-banner__items code {
   padding: 2px 8px;
-  border-radius: 9999px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--m-color-error) 22%, transparent);
   font-size: 12px;
   overflow-wrap: anywhere;
