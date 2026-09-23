@@ -20,12 +20,27 @@ fn runtime_temp_candidates() -> [&'static Path; 3] {
     [Path::new("/mnt"), Path::new("/mnt/rw"), Path::new("/tmp")]
 }
 
+/// What `Drop` should do with the directory.
+///
+/// "already removed" and "intentionally retained" must stay distinct: with a single
+/// boolean, `remove_now()` cleared the same flag `keep()` sets, so `Drop` reported a
+/// directory it had just deleted as "retained ... reason=disable_umount".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Cleanup {
+    /// Remove on drop.
+    Remove,
+    /// Keep the directory: a mount still lives beneath it.
+    Retain,
+    /// Already gone; `Drop` has nothing left to do.
+    Removed,
+}
+
 /// A private per-run directory. It is removed on drop unless explicitly kept
 /// because `disable_umount` intentionally retains a mount beneath it.
 #[derive(Debug)]
 pub struct RuntimeTempDir {
     root: PathBuf,
-    cleanup: bool,
+    cleanup: Cleanup,
 }
 
 impl RuntimeTempDir {
@@ -51,7 +66,7 @@ impl RuntimeTempDir {
                     );
                     return Ok(Self {
                         root,
-                        cleanup: true,
+                        cleanup: Cleanup::Remove,
                     });
                 }
                 Err(err) => {
@@ -80,23 +95,23 @@ impl RuntimeTempDir {
     }
 
     pub fn keep(&mut self) {
-        self.cleanup = false;
+        self.cleanup = Cleanup::Retain;
     }
 
     /// Remove regardless of the `keep` flag, for transaction rollback paths.
     pub fn cleanup_unconditional(mut self) -> Result<()> {
-        self.cleanup = true;
+        self.cleanup = Cleanup::Remove;
         self.remove_now()
     }
 
     fn remove_now(&mut self) -> Result<()> {
-        if !self.cleanup {
+        if self.cleanup != Cleanup::Remove {
             return Ok(());
         }
 
         match fs::remove_dir_all(&self.root) {
             Ok(()) => {
-                self.cleanup = false;
+                self.cleanup = Cleanup::Removed;
                 log::info!(
                     "runtime temporary directory removed: path={}",
                     self.root.display()
@@ -104,7 +119,7 @@ impl RuntimeTempDir {
                 Ok(())
             }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                self.cleanup = false;
+                self.cleanup = Cleanup::Removed;
                 Ok(())
             }
             Err(err) => Err(Error::msg(format!(
@@ -113,16 +128,27 @@ impl RuntimeTempDir {
             ))),
         }
     }
+
+    #[cfg(test)]
+    fn cleanup_state(&self) -> Cleanup {
+        self.cleanup
+    }
 }
 
 impl Drop for RuntimeTempDir {
     fn drop(&mut self) {
-        if !self.cleanup {
-            log::info!(
-                "runtime temporary directory retained: path={}, reason=disable_umount",
-                self.root.display()
-            );
-            return;
+        match self.cleanup {
+            Cleanup::Retain => {
+                log::info!(
+                    "runtime temporary directory retained: path={}, reason=disable_umount",
+                    self.root.display()
+                );
+                return;
+            }
+            // Nothing left to do, and never report this as a retention: an explicit
+            // removal already happened.
+            Cleanup::Removed => return,
+            Cleanup::Remove => {}
         }
 
         if let Err(err) = self.remove_now() {
@@ -234,6 +260,40 @@ mod tests {
         assert!(child.is_dir());
         drop(session);
         assert!(!root.exists());
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn an_explicitly_removed_session_is_not_reported_as_retained() {
+        let base = std::env::temp_dir().join(format!("temp-removed-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mut session = RuntimeTempDir::create_in_candidates(&[&base]).unwrap();
+        let root = session.path().to_path_buf();
+
+        assert_eq!(session.cleanup_state(), Cleanup::Remove);
+        session.remove_now().unwrap();
+        assert!(!root.exists());
+        // Drop used to report a directory it had just deleted as retained.
+        assert_eq!(session.cleanup_state(), Cleanup::Removed);
+        drop(session);
+
+        fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn a_kept_session_survives_drop_and_is_marked_retained() {
+        let base = std::env::temp_dir().join(format!("temp-kept-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let mut session = RuntimeTempDir::create_in_candidates(&[&base]).unwrap();
+        let root = session.path().to_path_buf();
+
+        session.keep();
+        assert_eq!(session.cleanup_state(), Cleanup::Retain);
+        drop(session);
+        assert!(root.exists(), "a kept session must survive the drop");
 
         fs::remove_dir_all(&base).ok();
     }
