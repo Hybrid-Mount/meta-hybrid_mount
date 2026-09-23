@@ -465,6 +465,13 @@ pub fn handle(args: &[String]) -> Result<()> {
     // Help and absolute-path commands still work if the caller's cwd was removed.
     let cwd = std::env::current_dir().unwrap_or_default();
     let command = parse(args, &cwd)?;
+    // All provider mutations share the lifecycle mutex, including low-level CLI users.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let _operation_lock = if matches!(command.operation, Operation::Load | Operation::Mutate(_)) {
+        Some(crate::runtime::ledger::OperationLock::acquire()?)
+    } else {
+        None
+    };
     match command.operation {
         Operation::Help => emit(HELP),
         Operation::Doctor => {

@@ -183,3 +183,7 @@ cargo check --locked -p hybrid-mount --target x86_64-linux-android
 用户态测试覆盖解析、别名、退出码、UID 字节布局、分页、幂等、部分失败、清空范围、
 JSON 转义及回读一致性。宿主机模拟传输测试和交叉编译不替代内置内核／LKM 的设备验证；
 设备验证应单独检查路径可见性、UID 隔离、加载后协议响应与重启行为。
+
+## 模块级热操作
+
+`vfs` 子命令保留低层调试语义；模块级 load/unload/reload 使用 `hybrid-mount runtime`，共享启动所有权、操作锁和软重启清理。请参阅 [RUNTIME.md](RUNTIME.md)。低层修改受管规则可能导致后续 runtime 操作因所有权漂移而拒绝执行。

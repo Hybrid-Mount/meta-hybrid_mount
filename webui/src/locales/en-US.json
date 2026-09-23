@@ -170,5 +170,18 @@
   },
   "content": {
     "welcome": "Hybrid Mount"
+  },
+  "runtime": {
+    "title": "Live mount",
+    "active": "Loaded",
+    "inactive": "Not loaded",
+    "description": "This session only. Boot settings stay unchanged.",
+    "load": "Load",
+    "unload": "Unload",
+    "reload": "Reload",
+    "busy": "Applying change…",
+    "unavailable": "Runtime operations are unavailable.",
+    "ineligible": "This module is not eligible for runtime VFS changes.",
+    "success": "Session mounts updated"
   }
 }

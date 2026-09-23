@@ -14,6 +14,9 @@ import type {
   DeviceInfo,
 } from "./types";
 import { DEFAULT_CONFIG, PATHS } from "./constants";
+import { createRuntimeApi } from "./runtimeApi";
+import { shellEscapeDoubleQuoted } from "./shell";
+import { parseLateLoad, parseRootManager } from "./reboot";
 
 interface KsuExecResult {
   errno: number;
@@ -278,10 +281,8 @@ export function normalizeInstallState(payload: Record<string, unknown>): Install
   };
 }
 
-const shellEscapeDoubleQuoted = (value: string): string =>
-  value.replace(/(["\\$`])/g, "\\$1");
-
 const RealAPI: AppAPI = {
+  ...createRuntimeApi((command) => ksuExec!(command)),
   loadConfig: async () => {
     const { errno, stdout, stderr } = await ksuExec!(`${PATHS.BINARY} show-config`);
     if (errno === 0 && stdout.trim()) {
@@ -400,10 +401,29 @@ const RealAPI: AppAPI = {
   },
 
   reboot: async () => {
-    const debug = await ksuExec!('ksud debug info | grep "late_load: "');
-    const lateLoad = debug.errno === 0 && debug.stdout.slice(11).trim() === "true";
+    const environment = await ksuExec!(
+      'printf \'KSU=%s\\nAPATCH=%s\\n\' "${KSU-}" "${APATCH-}"',
+    );
+    if (environment.errno !== 0) {
+      throw new Error("Cannot verify root environment; reboot cancelled");
+    }
+    const manager = parseRootManager(environment.stdout);
+    let lateLoad = false;
+    if (manager !== "apatch") {
+      const debug = await ksuExec!("/data/adb/ksud debug info");
+      if (debug.errno !== 0) {
+        throw new Error("Cannot verify KernelSU late-load mode; reboot cancelled");
+      }
+      lateLoad = parseLateLoad(debug.stdout);
+    }
+    if (lateLoad) {
+      const cleanup = await ksuExec!(`${PATHS.BINARY} runtime prepare-reboot`);
+      if (cleanup.errno !== 0) {
+        throw new Error(cleanup.stderr || "Runtime cleanup failed; reboot cancelled");
+      }
+    }
     const result = await ksuExec!(
-      lateLoad ? "ksud soft-reboot" : "svc power reboot || reboot",
+      lateLoad ? "/data/adb/ksud soft-reboot" : "svc power reboot || reboot",
     );
     if (result.errno !== 0) {
       throw new Error(result.stderr || "reboot command failed");
@@ -422,6 +442,8 @@ const UnavailableAPI: AppAPI = {
   saveModuleRules: unavailable,
   scanModules: unavailable,
   getStatus: unavailable,
+  getRuntimeStatus: unavailable,
+  runtimeAction: unavailable,
   getInstallState: unavailable,
   clearMountErrors: unavailable,
   getSystemInfo: unavailable,

@@ -12,7 +12,9 @@ import {
   MiuixIconButton,
   IconCheck,
 } from "miuix-vue";
-import { Delete, ExpandLess, ExpandMore } from "miuix-vue/icons";
+import { Delete, ExpandLess, ExpandMore, Refresh } from "miuix-vue/icons";
+import MiuixRuntimeControls from "../components/MiuixRuntimeControls.vue";
+import { runtimeStore } from "../../../lib/stores/runtimeStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
@@ -119,7 +121,11 @@ function disableModuleDetails(element: Element): void {
 }
 
 onMounted(() =>
-  Promise.all([sysStore.ensureStatusLoaded(), moduleStore.ensureModulesLoaded()]),
+  Promise.all([
+    sysStore.ensureStatusLoaded(),
+    moduleStore.ensureModulesLoaded(),
+    runtimeStore.loadRuntimeStatus(),
+  ]),
 );
 </script>
 
@@ -139,8 +145,16 @@ onMounted(() =>
         :options="filterOptions"
         @update:model-value="filter = $event as ModuleFilter"
       />
+      <MiuixIconButton
+        class="module-icon-action refresh-modules-button"
+        :title="t('modules.reload')"
+        :aria-label="t('modules.reload')"
+        :disabled="runtimeStore.busy || runtimeStore.loading"
+        @click="runtimeStore.refresh()"
+      >
+        <MiuixIcon :icon="Refresh" :size="22" />
+      </MiuixIconButton>
     </div>
-
     <MiuixProgressIndicator v-if="moduleStore.loading" indeterminate />
 
     <MiuixCard v-if="mountErrorCount" class="card module-error-card">
@@ -209,6 +223,7 @@ onMounted(() =>
           <div v-if="expanded[module.id]" class="module-details-wrapper">
             <div class="module-details-inner">
               <div class="module-details">
+                <MiuixRuntimeControls :module-id="module.id" />
                 <MiuixBasicComponent
                   v-if="module.mount_error"
                   :title="t('modules.mountError')"
@@ -288,8 +303,8 @@ onMounted(() =>
   width: auto;
   margin-inline: 12px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 190px);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 190px) 44px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -324,7 +339,7 @@ onMounted(() =>
 }
 
 .module-error-copy span {
-  color: var(--m-color-on-surface-variant, rgba(0, 0, 0, 0.6));
+  color: var(--m-color-on-surface-variant-summary);
   font-size: 13px;
 }
 
@@ -402,10 +417,19 @@ onMounted(() =>
   --m-icon-button-radius: 15px;
 }
 
-.save-module-button,
-.reload-modules-button {
+.save-module-button {
   --m-icon-button-bg: var(--m-color-primary, #6750a4);
   color: var(--m-color-on-primary, #fff);
+}
+
+.refresh-modules-button {
+  --m-icon-button-bg: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
+  --m-icon-button-radius: 13px;
+  color: var(--m-color-on-surface-variant-summary);
+}
+
+.refresh-modules-button:disabled {
+  opacity: 0.45;
 }
 
 .clear-errors-button {
@@ -454,7 +478,7 @@ onMounted(() =>
 
 @media (max-width: 560px) {
   .modules-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(120px, 38vw);
+    grid-template-columns: minmax(0, 1fr) minmax(104px, 30vw) 44px;
     gap: 8px;
   }
 }

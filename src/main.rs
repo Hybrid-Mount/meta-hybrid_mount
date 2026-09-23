@@ -15,6 +15,7 @@ mod mount_tree;
 mod overlayfs;
 mod pipeline;
 mod plan;
+mod runtime;
 mod scanner;
 mod state;
 mod storage;

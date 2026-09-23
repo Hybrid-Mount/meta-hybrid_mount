@@ -52,8 +52,17 @@ use std::rc::Rc;
 
 /// The single entry point for the argument-free boot pipeline.
 pub fn run_mount_pipeline() -> Result<()> {
+    run_pipeline(false)
+}
+
+pub fn run_boot_pipeline() -> Result<()> {
+    run_pipeline(true)
+}
+
+fn run_pipeline(boot_hook: bool) -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
+        let _ = boot_hook;
         Err(Error::msg(
             "mount pipeline is only supported on linux/android",
         ))
@@ -61,8 +70,40 @@ pub fn run_mount_pipeline() -> Result<()> {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        run_mount_pipeline_impl()
+        crate::runtime::enter_init_namespace()?;
+        let _operation = crate::runtime::ledger::OperationLock::acquire()?;
+        if boot_hook && crate::runtime::boot::already_applied()? {
+            log::info!("boot generation already applied; skipping duplicate mount hook");
+            return Ok(());
+        }
+        let session = crate::runtime::boot::start()?;
+        let mut mounted = MountedTargets::default();
+        let outcome = run_mount_pipeline_impl(&mut mounted);
+        let recorded = crate::runtime::boot::finish(session, outcome.is_ok(), &mounted.paths);
+        match (outcome, recorded) {
+            (Err(error), _) => Err(error),
+            (Ok(()), result) => result,
+        }
     }
+}
+
+/// Exact mount effects are distinct from the UI's summarized active roots.
+pub(crate) fn runtime_mount_targets(
+    state: &crate::state::RunState,
+    effects: &[String],
+) -> Vec<String> {
+    let mut targets = state
+        .overlay_active_mounts
+        .iter()
+        .chain(&state.magic_active_mounts)
+        .chain(&state.leftover_mount_targets)
+        .chain(effects)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if !state.mount_point.as_os_str().is_empty() {
+        targets.insert(state.mount_point.display().to_string());
+    }
+    targets.into_iter().collect()
 }
 
 /// Summarises the execution counters into state statistics (pure, so it tests across platforms).
@@ -667,7 +708,7 @@ fn startup_phase<T>(stage: &'static str, result: Result<T>) -> Result<T> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn run_mount_pipeline_impl() -> Result<()> {
+fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
 
@@ -823,6 +864,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         }
     }
     plan_phase.finish();
+    crate::runtime::boot::stage_plan(&plan, &config.vfs_isolate_uids)?;
 
     // `modules` is a boot-time snapshot, not a proof that every mount already
     // succeeded.  Persist it before entering the fallible mount phases so the
@@ -872,7 +914,6 @@ fn run_mount_pipeline_impl() -> Result<()> {
     transaction.register_rollback_only("ksu_try_umount_list", || {
         crate::utils::ksu::clear_unmount_list()
     });
-    let mut mounted = MountedTargets::default();
     let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats, vfs_stats) =
         match execute_mount_phases(
             &config,
@@ -881,7 +922,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             mount_source,
             &mut state,
             &mut transaction,
-            &mut mounted,
+            mounted,
         ) {
             Ok(result) => result,
             Err(err) => {
@@ -890,7 +931,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
                     plan.overlay_module_ids.join(","),
                     plan.magic_module_ids.join(",")
                 );
-                let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+                let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
                 persist_mount_failure_state(
                     &mut state,
                     "mount_execution",
@@ -909,7 +950,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         Ok(snapshot) => snapshot,
         Err(err) => {
             log::error!("phase=mountinfo_confirm failed: {err}");
-            let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+            let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
             persist_mount_failure_state(
                 &mut state,
                 "mountinfo_confirm",
@@ -965,7 +1006,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     );
     if let Err(err) = write_scan_ret(&app_modules) {
         log::error!("phase=module_snapshot_save failed, rolling back mounts: {err}");
-        let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+        let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
         persist_mount_failure_state(
             &mut state,
             "module_snapshot_save",
@@ -1014,7 +1055,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     }
     if let Err(err) = state.save() {
         log::error!("phase=state_save failed, rolling back mounts: {err}");
-        let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
+        let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
         persist_mount_failure_state(&mut state, "state_save", &err.to_string(), &rollback);
         persist_unmounted_module_snapshot(&modules, &config, &plan);
         return Err(err);
@@ -1025,7 +1066,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     if let Err(err) = transaction.commit(config.disable_umount) {
         cleanup_phase.abort();
         log::error!("phase=mount_transaction_commit failed: {err}");
-        let rollback = match mountinfo_mismatches(&baseline, &mounted) {
+        let rollback = match mountinfo_mismatches(&baseline, mounted) {
             Ok((leftover, missing)) => {
                 for target in &leftover {
                     log::error!("post-commit leftover mount target: {target}");
@@ -1147,7 +1188,7 @@ fn cleanup_tmp_root_best_effort(tmp_root: &Path) -> Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn detect_promoted_partitions() -> BTreeSet<String> {
+pub(crate) fn detect_promoted_partitions() -> BTreeSet<String> {
     use crate::mount_tree::BUILTIN_PARTITIONS;
 
     let builtin_requirements = BUILTIN_PARTITIONS
@@ -1169,7 +1210,7 @@ fn detect_promoted_partitions() -> BTreeSet<String> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn managed_partition_names() -> Vec<String> {
+pub(crate) fn managed_partition_names() -> Vec<String> {
     crate::defs::MANAGED_PARTITIONS
         .iter()
         .filter(|partition| Path::new("/").join(partition).is_dir())
@@ -1693,16 +1734,30 @@ fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
 
 /// RAII guard for the VFS boot guard file: once armed, any handled return (Ok or Err)
 /// clears it on Drop. Only a hard crash leaves it behind and trips the next boot.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-struct VfsBootGuard {
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub(crate) struct VfsBootGuard {
     path: PathBuf,
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", test))]
 impl VfsBootGuard {
-    fn arm() -> Result<Self> {
-        let path = PathBuf::from(defs::VFS_BOOT_GUARD_PATH);
-        crate::sys::fs::atomic_write(&path, b"1").map_err(|err| {
+    pub(crate) fn arm() -> Result<Self> {
+        Self::arm_at(PathBuf::from(defs::VFS_BOOT_GUARD_PATH))
+    }
+
+    fn arm_at(path: PathBuf) -> Result<Self> {
+        (|| -> Result<()> {
+            use std::io::Write;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)?;
+            file.write_all(b"1")?;
+            file.sync_all()?;
+            crate::sys::fs::sync_parent_directory(&path)?;
+            Ok(())
+        })()
+        .map_err(|err| {
             let cause = match err {
                 Error::Io(source) => crate::errors::CausalError::Io(source),
                 other => crate::errors::CausalError::Message(other.to_string()),
@@ -1717,11 +1772,13 @@ impl VfsBootGuard {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(target_os = "linux", target_os = "android", test))]
 impl Drop for VfsBootGuard {
     fn drop(&mut self) {
-        if let Err(err) = fs::remove_file(&self.path) {
+        if let Err(err) = std::fs::remove_file(&self.path) {
             log::warn!("clear vfs boot guard failed: {err}");
+        } else if let Err(err) = crate::sys::fs::sync_parent_directory(&self.path) {
+            log::warn!("persist vfs boot guard removal failed: {err}");
         }
     }
 }
@@ -2046,6 +2103,7 @@ fn mount_magic_phase(
         !config.disable_umount,
         &mut on_mount,
     )?;
+    mounted.paths.extend(stats.owned_mounts.iter().cloned());
     log::info!(
         "magic mount phase complete: files={}, symlinks={}, dirs={}, ignored={}",
         stats.mounted_files,
@@ -2083,6 +2141,25 @@ mod tests {
     }
 
     #[test]
+    fn vfs_guard_refuses_existing_crash_marker_without_clearing_it() {
+        let fixture = crate::test_support::Fixture::new("vfs-runtime-guard");
+        let path = fixture.join("guard");
+        std::fs::write(&path, b"previous crash").unwrap();
+        assert!(VfsBootGuard::arm_at(path.clone()).is_err());
+        assert_eq!(std::fs::read(path).unwrap(), b"previous crash");
+    }
+
+    #[test]
+    fn vfs_guard_clears_only_the_marker_armed_by_this_operation() {
+        let fixture = crate::test_support::Fixture::new("vfs-runtime-guard-drop");
+        let path = fixture.join("guard");
+        let guard = VfsBootGuard::arm_at(path.clone()).unwrap();
+        assert!(path.exists());
+        drop(guard);
+        assert!(!path.exists());
+    }
+
+    #[test]
     fn pipeline_stats_aggregates_all_sources() {
         let stats = pipeline_stats(2, 3, 10, 4, 5, 6);
 
@@ -2092,6 +2169,36 @@ mod tests {
         assert_eq!(stats.ignored_entries, 5);
         assert_eq!(stats.total_mounts, 25);
         assert_eq!(stats.successful_mounts, 25);
+    }
+
+    #[test]
+    fn runtime_mount_targets_preserves_child_effects_omitted_from_ui_roots() {
+        let state = RunState {
+            overlay_active_mounts: vec!["/system".into()],
+            mount_point: "/mnt/private/storage".into(),
+            ..RunState::default()
+        };
+        let targets = runtime_mount_targets(&state, &["/system".into(), "/system/apex".into()]);
+        assert_eq!(
+            targets,
+            vec!["/mnt/private/storage", "/system", "/system/apex"]
+        );
+    }
+
+    #[test]
+    fn runtime_mount_targets_preserves_effects_after_failure_clears_active_snapshot() {
+        let state = RunState {
+            leftover_mount_targets: vec!["/vendor".into()],
+            ..RunState::default()
+        };
+        let targets = runtime_mount_targets(
+            &state,
+            &["/mnt/private/staging".into(), "/system/etc".into()],
+        );
+        assert_eq!(
+            targets,
+            vec!["/mnt/private/staging", "/system/etc", "/vendor"]
+        );
     }
 
     /// HM-RUST-013: Magic Mount 目录挂载（Move/Replace）必须进入 total_mounts。

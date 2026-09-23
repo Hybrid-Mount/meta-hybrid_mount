@@ -552,8 +552,6 @@ fn sync_app_module_rules(modules: &mut [AppModule], config: &Config) {
     for module in modules {
         module.blacklisted = config.is_module_blacklisted(module.id.as_str());
         if module.blacklisted {
-            module.mode = Mode::Ignore.as_str().to_owned();
-            module.is_mounted = false;
             module.enabled = false;
         }
         module.rules = app_module_rules(config, &module.id);
@@ -572,54 +570,73 @@ pub(crate) fn write_scan_ret_to(modules: &[AppModule], path: &Path) -> Result<()
     crate::sys::fs::atomic_write(path, json.as_bytes())
 }
 
-/// `modules`: outputs the `scan.ret` cached at boot.
-pub fn handle_modules() -> Result<()> {
-    match fs::read_to_string(defs::SCAN_RET_PATH) {
+/// Merge live installation metadata into the committed runtime snapshot. A
+/// disable/blacklist edit changes the next boot, never already active resources.
+fn merge_module_snapshot(
+    cached: Vec<AppModule>,
+    installed: &[ModuleRecord],
+    config: &Config,
+) -> Vec<AppModule> {
+    let mut cached: BTreeMap<_, _> = cached
+        .into_iter()
+        .map(|module| (module.id.clone(), module))
+        .collect();
+    let mut merged = fallback_app_modules(installed, config);
+    for module in &mut merged {
+        if let Some(previous) = cached.remove(&module.id) {
+            module.mode = previous.mode;
+            module.is_mounted = previous.is_mounted;
+        }
+    }
+    // Removed sources can still have pinned VFS rules or mounts. Keep their
+    // ownership visible until an explicit unload or cleanup removes it.
+    for mut removed in cached.into_values().filter(|module| module.is_mounted) {
+        removed.enabled = false;
+        merged.push(removed);
+    }
+    sync_app_module_rules(&mut merged, config);
+    merged
+}
+
+fn query_module_snapshot(
+    path: &Path,
+    installed: &[ModuleRecord],
+    config: &Config,
+) -> Vec<AppModule> {
+    let cached = match fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
-            Ok(mut modules) => {
-                let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
-                sync_app_module_rules(&mut modules, &config);
-                if let Err(write_err) = write_scan_ret(&modules) {
-                    log::warn!(
-                        "failed to refresh rules in {}: {write_err}",
-                        defs::SCAN_RET_PATH
-                    );
-                }
-                println!("{}", serde_json::to_string_pretty(&modules)?);
-                return Ok(());
+            Ok(modules) => modules,
+            Err(err) => {
+                log::warn!(
+                    "failed to parse {}, rebuilding module view: {err}",
+                    path.display()
+                );
+                Vec::new()
             }
-            Err(err) => log::warn!(
-                "failed to parse {}, rebuilding module snapshot: {err}",
-                defs::SCAN_RET_PATH
-            ),
         },
         Err(err) => {
             log::warn!(
-                "failed to read {}, rebuilding module snapshot: {err}",
-                defs::SCAN_RET_PATH
+                "failed to read {}, rebuilding module view: {err}",
+                path.display()
             );
+            Vec::new()
         }
-    }
-
-    let modules = rebuild_module_snapshot()?;
-    if let Err(write_err) = write_scan_ret(&modules) {
-        log::warn!(
-            "failed to cache rebuilt module snapshot at {}: {write_err}",
-            defs::SCAN_RET_PATH
-        );
-    }
-    println!("{}", serde_json::to_string_pretty(&modules)?);
-    Ok(())
+    };
+    merge_module_snapshot(cached, installed, config)
 }
 
-fn rebuild_module_snapshot() -> Result<Vec<AppModule>> {
+/// `modules`: combine committed runtime ownership with current installed metadata.
+/// A query never rewrites the cache: a concurrent hot operation owns that snapshot.
+pub fn handle_modules() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let managed_partitions = defs::MANAGED_PARTITIONS
         .iter()
         .map(|partition| (*partition).to_owned())
         .collect::<Vec<_>>();
-    let modules = list_modules(&config.moduledir, &managed_partitions)?;
-    Ok(fallback_app_modules(&modules, &config))
+    let installed = list_modules(&config.moduledir, &managed_partitions)?;
+    let modules = query_module_snapshot(Path::new(defs::SCAN_RET_PATH), &installed, &config);
+    println!("{}", serde_json::to_string_pretty(&modules)?);
+    Ok(())
 }
 
 fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
@@ -784,6 +801,8 @@ pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
 
 /// `clear-mount-errors`: clears the markers and refreshes the state snapshot.
 pub fn handle_clear_mount_errors() -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let _operation = crate::runtime::ledger::OperationLock::acquire()?;
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let removed = clear_mount_error_markers(&config.moduledir);
 
@@ -931,6 +950,111 @@ mod tests {
         assert_eq!(snapshot[0].mode, "overlay");
         assert!(snapshot[0].is_mounted);
         assert_eq!(snapshot[0].rules.default_mode.as_deref(), Some("magic"));
+    }
+
+    #[test]
+    fn query_merge_refreshes_metadata_and_enablement_without_changing_runtime_ownership() {
+        let original = record("existing");
+        let config = Config::default();
+        let plan = MountPlan {
+            vfs_module_ids: vec![original.id.clone()],
+            ..MountPlan::default()
+        };
+        let cached = app_modules(
+            std::slice::from_ref(&original),
+            &config,
+            &plan,
+            &[],
+            &BTreeSet::from(["existing".into()]),
+        );
+        let mut installed = original;
+        installed.name = "updated name".into();
+        installed.version = "2".into();
+        installed.disabled = true;
+        let mut edited = config;
+        edited.rules.insert(
+            installed.id.clone(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+        edited.module_blacklist.insert(installed.id.clone());
+        let merged = merge_module_snapshot(cached, &[installed], &edited);
+        assert_eq!(merged[0].name, "updated name");
+        assert_eq!(merged[0].version, "2");
+        assert!(!merged[0].enabled);
+        assert!(merged[0].blacklisted);
+        assert_eq!(merged[0].rules.default_mode.as_deref(), Some("magic"));
+        assert!(merged[0].is_mounted);
+        assert_eq!(merged[0].mode, "vfs");
+    }
+
+    #[test]
+    fn query_merge_exposes_new_modules_without_claiming_they_are_mounted() {
+        let mut installed = record("new_module");
+        installed.entries.push(crate::scanner::ModuleEntry {
+            relative: "system/etc/new".into(),
+            file_type: crate::mount_tree::NodeFileType::RegularFile,
+            replace: false,
+        });
+        let merged = merge_module_snapshot(Vec::new(), &[installed], &Config::default());
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].id, "new_module");
+        assert!(merged[0].enabled);
+        assert!(!merged[0].is_mounted);
+    }
+
+    #[test]
+    fn query_merge_keeps_removed_active_modules_for_unload_and_drops_inactive_ones() {
+        let records = [record("active"), record("inactive")];
+        let plan = MountPlan {
+            vfs_module_ids: vec![records[0].id.clone()],
+            ..MountPlan::default()
+        };
+        let cached = app_modules(
+            &records,
+            &Config::default(),
+            &plan,
+            &[],
+            &BTreeSet::from(["active".into()]),
+        );
+        let merged = merge_module_snapshot(cached, &[], &Config::default());
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].id, "active");
+        assert!(merged[0].is_mounted);
+        assert!(!merged[0].enabled);
+        assert_eq!(merged[0].mode, "vfs");
+    }
+
+    #[test]
+    fn module_query_keeps_committed_cache_bytes_unchanged() {
+        let fixture = crate::test_support::Fixture::new("module-query-readonly");
+        let path = fixture.join("scan.ret");
+        let original = record("module");
+        let cached = app_modules(
+            std::slice::from_ref(&original),
+            &Config::default(),
+            &MountPlan::default(),
+            &[],
+            &BTreeSet::new(),
+        );
+        write_scan_ret_to(&cached, &path).unwrap();
+        let committed = fs::read(&path).unwrap();
+        let mut updated = original;
+        updated.name = "live metadata".into();
+        let view = query_module_snapshot(&path, &[updated], &Config::default());
+        assert_eq!(view[0].name, "live metadata");
+        assert_eq!(fs::read(path).unwrap(), committed);
+    }
+
+    #[test]
+    fn module_query_does_not_create_missing_cache() {
+        let fixture = crate::test_support::Fixture::new("module-query-missing");
+        let path = fixture.join("scan.ret");
+        let view = query_module_snapshot(&path, &[record("installed")], &Config::default());
+        assert_eq!(view.len(), 1);
+        assert!(!path.exists());
     }
 
     #[test]

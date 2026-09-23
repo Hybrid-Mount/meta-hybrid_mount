@@ -25,7 +25,9 @@
 }
 .main-content {
   flex: 1;
-  overflow-x: hidden;
+  min-height: 0;
+  /* Focus must not scroll the translated track horizontally. */
+  overflow: clip;
   position: relative;
   display: flex;
   flex-direction: column;

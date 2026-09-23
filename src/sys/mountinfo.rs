@@ -72,12 +72,6 @@ pub fn mount_entry_at(path: &Path) -> Result<Option<MountEntry>> {
         .find(|entry| entry.mount_point == path))
 }
 
-/// Deepest-first, then reverse-lexicographic. Unmounting children before their parents is
-/// what makes a detach cascade safe, so this lives here rather than being respelled.
-pub fn deepest_first(paths: &mut [PathBuf]) {
-    paths.sort_by(|left, right| deepest_first_order(left, right));
-}
-
 /// The ordering relation behind [`deepest_first`], for callers holding borrowed paths.
 fn deepest_first_order(left: &Path, right: &Path) -> Ordering {
     right

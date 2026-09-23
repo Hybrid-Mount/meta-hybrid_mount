@@ -14,7 +14,7 @@
 
 ```text
 module/metamount.sh
-  → hybrid-mount（无参数）
+  → hybrid-mount boot（运行锁与本轮去重）
   → 读取 config.toml
   → 只读扫描模块与受管分区，识别文件/目录/符号链接/.replace/whiteout
   → 生成一棵带 overlay / magic / vfs / ignore 标注的共享节点树
@@ -44,6 +44,7 @@ module/metamount.sh
   `exec.rs` 应用规则并统计。
 - `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。
+- `src/runtime/`：启动与热操作共享的所有权账本、规则事务、挂载身份校验和软重启清理；详见 [RUNTIME.md](RUNTIME.md)。
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
 - `src/sys/`、`src/utils/`：挂载、文件系统、随机临时目录、SELinux xattr 与 KernelSU 接口。
 - `webui/`：Vue 3 双界面，通过 `kernelsu.exec` 调用同一个 Rust 二进制。
@@ -55,7 +56,8 @@ module/metamount.sh
 - 二进制：`/data/adb/modules/hybrid_mount/hybrid-mount`
 - 配置：`/data/adb/hybrid-mount/config.toml`
 - 模块快照：`/data/adb/hybrid-mount/scan.ret`
-- 启动状态：`/data/adb/hybrid-mount/run/state.json`
+- 运行所有权：`/data/adb/hybrid-mount/run/runtime.json`（boot ID 与 PID 1 mount namespace 作用域）
+- 启动及最近热操作状态：`/data/adb/hybrid-mount/run/state.json`
 - ext4 staging 镜像：`/data/adb/hybrid-mount/modules.img`
 - 可选 LKM：`/data/adb/modules/hybrid_mount/lkm/binaries/*.ko`
 - LKM 启动熔断标记：`/data/adb/hybrid-mount/lkm_boot_guard`
@@ -85,7 +87,7 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 | `vfs-doctor` | 无 | 只读输出 VFS provider 诊断 JSON，不会 `insmod` 或卸载模块。 |
 | `vfs` | `help` / `rule` / `uid` / `clear` / `version` / `doctor` / `load` | VFS 运行态控制；默认文本，支持 `--json`、批量参数及 NoMount 风格别名。清空需要 `--yes`，仅显式 `load` 加载模块。见 [VFS CLI](VFS_CLI.md)。 |
 | `lkm-load` | `<module.ko> [parameters...]` | Linux/Android arm64 上以内置加载器插入指定 LKM；仅支持 aarch64。 |
-| `emulated-soft-reboot` | 无 | Linux/Android 上按有效 mount source 懒卸载现有挂载。 |
+| `emulated-soft-reboot` | 无 | 兼容别名，执行 `runtime prepare-reboot`，仅清理身份验证通过的本轮资源。 |
 | `version` | 无 | 输出版本 JSON。 |
 
 示例：
@@ -145,3 +147,5 @@ Provider、版本不兼容或检测到外来 NoMount，则按 `vfs_strict` 选�
 ## 验证边界
 
 主机侧可运行 Rust 单元测试、Clippy、WebUI 测试/类型检查和生产构建。Android 三架构编译由 `cargo xtask build` 或 CI 完成。真实 mount、loop、SELinux 与 KernelSU/APatch 交互必须在受支持设备上验证。
+
+运行期新增 `boot` 和 `runtime status|load ID|unload ID|reload ID|prepare-reboot`，命令、升级与恢复限制见 [RUNTIME.md](RUNTIME.md)。`scan.ret` 和 `run/state.json` 在成功热操作后同步更新，不再仅代表启动瞬间。

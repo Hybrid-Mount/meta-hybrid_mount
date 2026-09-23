@@ -70,8 +70,8 @@ function ensureStatusLoaded(): Promise<void> {
 async function rebootDevice(): Promise<void> {
   try {
     await API.reboot();
-  } catch {
-    uiStore.showToast("Reboot failed");
+  } catch (error) {
+    uiStore.showToast(error instanceof Error ? error.message : "Reboot failed");
   }
 }
 

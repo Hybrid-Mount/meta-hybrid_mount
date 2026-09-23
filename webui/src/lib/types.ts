@@ -112,6 +112,27 @@ export interface DeviceInfo {
   sdk: string;
 }
 
+export type RuntimeAction = "load" | "unload" | "reload";
+
+export interface RuntimeModule {
+  id: string;
+  active: boolean;
+  eligible: boolean;
+  reason: string | null;
+}
+
+export interface RuntimeStatus {
+  supported: boolean;
+  reason: string | null;
+  generation: number;
+  modules: RuntimeModule[];
+}
+
+export interface RuntimeActionResult {
+  ok: true;
+  generation: number;
+}
+
 export interface AppAPI {
   loadConfig: () => Promise<AppConfig>;
   saveConfig: (config: AppConfig) => Promise<void>;
@@ -119,6 +140,11 @@ export interface AppAPI {
   saveModuleRules: (moduleId: string, rules: ModuleRule) => Promise<void>;
   scanModules: () => Promise<Module[]>;
   getStatus: () => Promise<RunState>;
+  getRuntimeStatus: () => Promise<RuntimeStatus>;
+  runtimeAction: (
+    moduleId: string,
+    action: RuntimeAction,
+  ) => Promise<RuntimeActionResult>;
   getInstallState: () => Promise<InstallState>;
   clearMountErrors: () => Promise<number>;
   getSystemInfo: () => Promise<SystemInfo>;

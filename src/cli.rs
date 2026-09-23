@@ -11,6 +11,7 @@ use crate::{pipeline, state};
 pub fn run(args: &[String]) -> Result<()> {
     match args.first().map(String::as_str) {
         None => pipeline::run_mount_pipeline(),
+        Some("boot") => pipeline::run_boot_pipeline(),
         Some("show-config") => handle_show_config(),
         Some("save-config") => handle_save_config(args),
         Some("gen-config") => handle_gen_config(),
@@ -23,6 +24,7 @@ pub fn run(args: &[String]) -> Result<()> {
         Some("install-state") => state::handle_install_state(),
         Some("clear-mount-errors") => state::handle_clear_mount_errors(),
         Some("vfs-doctor") => crate::vfs::doctor::handle(),
+        Some("runtime") => crate::runtime::handle(&args[1..]),
         Some("vfs") => crate::vfs::cli::handle(&args[1..]),
         #[cfg(any(target_os = "linux", target_os = "android"))]
         Some("lkm-load") => crate::sys::lkm_compat::handle(&args[1..]),
@@ -38,9 +40,7 @@ fn version_payload() -> String {
 fn emulated_soft_reboot() -> Result<()> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        crate::utils::ksu::init();
-        let source = pipeline::effective_mount_source(crate::utils::ksu::is_active());
-        crate::sys::mount::emulated_soft_reboot(source)
+        crate::runtime::boot::cleanup()
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]

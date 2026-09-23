@@ -170,5 +170,18 @@
   },
   "content": {
     "welcome": "Hybrid Mount"
+  },
+  "runtime": {
+    "title": "热挂载",
+    "active": "已加载",
+    "inactive": "未加载",
+    "description": "仅本次生效，不更改开机设置。",
+    "load": "加载",
+    "unload": "卸载",
+    "reload": "重新加载",
+    "busy": "正在应用更改…",
+    "unavailable": "运行时操作不可用。",
+    "ineligible": "此模块不符合运行时 VFS 操作条件。",
+    "success": "本次挂载已更新"
   }
 }

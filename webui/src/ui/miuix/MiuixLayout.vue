@@ -176,7 +176,8 @@ onBeforeUnmount(() => {
 .app__body {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  /* Focus must not scroll the translated track horizontally. */
+  overflow: clip;
   touch-action: pan-y;
 }
 

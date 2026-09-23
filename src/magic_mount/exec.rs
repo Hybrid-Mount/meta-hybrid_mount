@@ -378,7 +378,13 @@ impl MagicMount<'_, '_, '_> {
                 .do_mount()
                 .map(|_| ())
             } else if has_tmpfs {
-                mount_mirror(&self.path, &self.work_dir_path, &entry)
+                mount_mirror(
+                    &self.path,
+                    &self.work_dir_path,
+                    &entry,
+                    self.stats,
+                    &mut *self.on_mount,
+                )
             } else {
                 Ok(())
             };
@@ -408,6 +414,9 @@ fn record_mount_target(
     stats
         .active_mounts
         .push(result.target.to_string_lossy().into_owned());
+    stats
+        .owned_mounts
+        .push(result.target.to_string_lossy().into_owned());
     on_mount(&rollback_target.to_string_lossy());
 }
 
@@ -420,6 +429,8 @@ pub struct MagicMountStats {
     pub ignored_files: u32,
     /// Successful module-controlled bind and directory mount targets.
     pub active_mounts: Vec<String>,
+    /// Exact final mount paths, including stock-file mirrors carried by directory moves.
+    pub owned_mounts: Vec<String>,
     /// Modules with at least one successfully executed magic operation
     /// (bind/move/replace/symlink/whiteout), used for `scan.ret.is_mounted`.
     pub mounted_module_ids: BTreeSet<String>,
@@ -525,7 +536,13 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
 }
 
 /// Recursively mirrors entries of the real directory that the collected tree does not cover into the tmpfs staging.
-fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<()> {
+fn mount_mirror(
+    path: &Path,
+    work_dir_path: &Path,
+    entry: &DirEntry,
+    stats: &mut MagicMountStats,
+    on_mount: &mut dyn FnMut(&str),
+) -> Result<()> {
     let path = path.join(entry.file_name());
     let work_dir_path = work_dir_path.join(entry.file_name());
     let file_type = entry.file_type()?;
@@ -538,6 +555,8 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
         );
         fs::File::create(&work_dir_path)?;
         magic_mount_bind(&path, &work_dir_path)?;
+        stats.owned_mounts.push(path.to_string_lossy().into_owned());
+        on_mount(&work_dir_path.to_string_lossy());
     } else if file_type.is_dir() {
         log::debug!(
             "mount mirror dir {} -> {}",
@@ -557,7 +576,7 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
         }
 
         for child in path.read_dir()? {
-            mount_mirror(&path, &work_dir_path, &child?)?;
+            mount_mirror(&path, &work_dir_path, &child?, stats, on_mount)?;
         }
     } else if file_type.is_symlink() {
         log::debug!(
@@ -646,3 +665,36 @@ fn rollback_magic_mount(target: &Path, error: Error) -> Error {
 #[cfg(all(test, target_os = "linux"))]
 #[path = "exec_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "linux"))]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn mirrored_stock_file_records_final_identity_and_staging_rollback_without_module_counts() {
+        let fixture = crate::test_support::Fixture::new("magic-mirror-ownership");
+        let source = fixture.join("source");
+        let staging = fixture.join("staging");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(source.join("nested/stock"), b"stock").unwrap();
+        let entry = source.read_dir().unwrap().next().unwrap().unwrap();
+        let mut stats = MagicMountStats::default();
+        let mut rollback = Vec::new();
+        let _fake_ops = crate::sys::faults::fake_magic_mount_ops();
+        mount_mirror(&source, &staging, &entry, &mut stats, &mut |target| {
+            rollback.push(target.to_owned())
+        })
+        .unwrap();
+        assert_eq!(
+            stats.owned_mounts,
+            vec![source.join("nested/stock").display().to_string()]
+        );
+        assert_eq!(
+            rollback,
+            vec![staging.join("nested/stock").display().to_string()]
+        );
+        assert!(stats.active_mounts.is_empty());
+        assert_eq!(stats.mounted_files, 0);
+    }
+}

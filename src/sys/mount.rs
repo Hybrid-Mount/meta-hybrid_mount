@@ -130,35 +130,6 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `emulated-soft-reboot`: immediately unmounts every mountpoint whose source matches,
-/// simulating the mount cleanup before a soft reboot.
-pub fn emulated_soft_reboot(source: &str) -> Result<()> {
-    let entries = crate::sys::mountinfo::mount_entries()?;
-
-    let mut mount_points = entries
-        .into_iter()
-        .filter(|entry| entry.mount_source.as_deref() == Some(source))
-        .filter(|entry| entry.fs_type != "overlay")
-        .map(|entry| entry.mount_point)
-        .collect::<Vec<_>>();
-    crate::sys::mountinfo::deepest_first(&mut mount_points);
-
-    for mount_point in mount_points {
-        log::debug!(
-            "unmounting {} from {source} in emulated-soft-reboot",
-            mount_point.display()
-        );
-        unmount(&mount_point, UnmountFlags::DETACH).map_err(|source| {
-            Error::Mount(Box::new(ContextError::new(
-                "unmount in emulated soft reboot",
-                Some(mount_point.to_path_buf()),
-                source,
-            )))
-        })?;
-    }
-    Ok(())
-}
-
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
