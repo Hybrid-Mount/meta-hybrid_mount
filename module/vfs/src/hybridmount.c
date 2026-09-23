@@ -737,23 +737,41 @@ static int hm_xattr_set(const struct xattr_handler *handler, IDMAP_ARG struct de
     return proxy->orig->set(proxy->orig, IDMAP_CALL dentry, inode, name, buffer, size, flags);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
-static int hm_d_revalidate(struct inode *parent_inode, const struct qstr *name, struct dentry *dentry, unsigned int flags)
-#else
-static int hm_d_revalidate(struct dentry *dentry, unsigned int flags)
-#endif
+/*
+ * Dentry operations for dentries hybridmount created itself.  Such a dentry
+ * lives on the superblock of the filesystem whose operations were hijacked
+ * (the vendor overlayfs on /product/media here), but it never went through
+ * that filesystem's ->lookup(), so the filesystem's private dentry data
+ * (overlayfs' d_fsdata) was never initialized for it.  It must therefore never
+ * expose that filesystem's callbacks, nor the DCACHE_OP_* flags which make the
+ * VFS call them: ovl_dentry_revalidate()/ovl_dentry_weak_revalidate() read
+ * dentry->d_fsdata, and d_real() reaches ovl_d_real() the same way.
+ *
+ * Ownership is also recorded here, in the table pointer itself: a negative
+ * injected dentry (a whiteout or an entry under a synthetic directory) has no
+ * inode to identify it, so the pointer is the only marker it can carry.
+ */
+static const struct dentry_operations hm_owned_dops;
+
+/*
+ * Same callbacks, but for dentries hybridmount did not create: they came out
+ * of a real ->lookup() on a filesystem which installs no dentry_operations at
+ * all, so no foreign callback can be inherited.  This table must stay distinct
+ * from hm_owned_dops because such a dentry has to keep following the "not
+ * injected" paths of hm_d_revalidate_common().
+ */
+static const struct dentry_operations hm_dops;
+
+static int hm_d_revalidate_common(struct inode *parent_inode, const struct qstr *name,
+                                  struct dentry *dentry, unsigned int flags)
 {
     struct hybridmount_dir_node *parent_dir = NULL;
     const struct dentry_operations *orig_dops;
     struct hm_rule_info rule_info;
     struct inode *inode;
     struct hm_iop *iop = NULL;
-    bool injected, has_rule = false;
+    bool owned, has_rule = false;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 13, 0)
-    struct inode *parent_inode = d_inode(READ_ONCE(dentry->d_parent));
-    const struct qstr *name = &dentry->d_name;
-#endif
     if (unlikely(!parent_inode)) return 1;
 
     if (parent_inode->i_op == &hm_dir_iops) {
@@ -764,7 +782,15 @@ static int hm_d_revalidate(struct dentry *dentry, unsigned int flags)
     }
 
     inode = READ_ONCE(dentry->d_inode);
-    injected = inode && (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops);
+    /*
+     * "Owned" means hybridmount produced this dentry itself.  The d_op pointer
+     * is checked as well because a negative dentry (a whiteout or an entry
+     * under a synthetic directory) has no inode to identify it, and such a
+     * dentry must never be handed to the hijacked filesystem's callbacks: they
+     * were never initialized for it.
+     */
+    owned = READ_ONCE(dentry->d_op) == &hm_owned_dops ||
+            (inode && (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops));
 
     if (parent_dir) {
         u32 hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, name->name, name->len);
@@ -772,22 +798,27 @@ static int hm_d_revalidate(struct dentry *dentry, unsigned int flags)
     }
 
     if (hybridmount_is_uid_blocked(current_fsuid().val)) {
-        if (injected) goto drop_it;
+        if (owned) goto drop_it;
         goto orig_dops;
     }
 
     if (has_rule) {
         if (rule_info.flags & HM_FLAG_WHITEOUT) return !inode;
-        if (injected) return 1;
+        /* A positive entry of ours already is the rule's result; anything
+         * else has to be looked up again so that this rule is applied. */
+        if (inode && owned) return 1;
         goto drop_it;
     }
 
-    if (injected || (!inode && has_rule))
+    if (owned)
         goto drop_it;
 
 orig_dops:
+    /* Only dentries which went through the filesystem's real ->lookup() may be
+     * handed to its callbacks; ours have no valid private data for it. */
+    if (unlikely(owned)) return 1;
     if ((orig_dops = hm_get_orig_dops(iop)) && orig_dops->d_revalidate) {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 13, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
         return orig_dops->d_revalidate(parent_inode, name, dentry, flags);
 #else
         return orig_dops->d_revalidate(dentry, flags);
@@ -800,6 +831,35 @@ drop_it:
     d_drop(dentry);
     return 0;
 }
+
+static int hm_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
+{
+    return hm_d_revalidate_common(d_inode(READ_ONCE(dentry->d_parent)),
+                                  &dentry->d_name, dentry, flags);
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
+static int hm_d_revalidate(struct inode *parent_inode, const struct qstr *name, struct dentry *dentry, unsigned int flags)
+{
+    return hm_d_revalidate_common(parent_inode, name, dentry, flags);
+}
+#else
+static int hm_d_revalidate(struct dentry *dentry, unsigned int flags)
+{
+    return hm_d_revalidate_common(d_inode(READ_ONCE(dentry->d_parent)),
+                                  &dentry->d_name, dentry, flags);
+}
+#endif
+
+static const struct dentry_operations hm_owned_dops = {
+    .d_revalidate = hm_d_revalidate,
+    .d_weak_revalidate = hm_d_weak_revalidate,
+};
+
+static const struct dentry_operations hm_dops = {
+    .d_revalidate = hm_d_revalidate,
+    .d_weak_revalidate = hm_d_weak_revalidate,
+};
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
 static const struct file_operations hm_file_fops_mmap_prepare = {
@@ -948,17 +1008,31 @@ static inline void hybridmount_hijack_dir_ops(struct hybridmount_dir_node *dir_n
 
 static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dentry, bool injected)
 {
-    static const struct dentry_operations hm_dops = { .d_revalidate = hm_d_revalidate };
     const struct dentry_operations *orig, *current_orig;
     struct hm_iop *iop;
 
     if (!dentry || !dir) return;
     iop = hm_get_hm_iop(smp_load_acquire(&dir->i_op));
-    if ((orig = READ_ONCE(dentry->d_op)) == &hm_dops || (iop && orig == &iop->fake_dops)) return;
+    if ((orig = READ_ONCE(dentry->d_op)) == &hm_owned_dops || orig == &hm_dops ||
+        (iop && orig == &iop->fake_dops)) return;
 
     spin_lock(&dentry->d_lock);
-    if ((orig = dentry->d_op) == &hm_dops || (iop && orig == &iop->fake_dops)) { spin_unlock(&dentry->d_lock); return; }
-    if (orig && iop) {
+    if ((orig = dentry->d_op) == &hm_owned_dops || orig == &hm_dops ||
+        (iop && orig == &iop->fake_dops)) { spin_unlock(&dentry->d_lock); return; }
+
+    if (injected) {
+        /*
+         * This dentry is ours.  The filesystem it was injected into never ran
+         * its ->lookup() for it, so its private dentry data (overlayfs'
+         * d_fsdata) is not valid and none of its callbacks may stay reachable.
+         * Clear every DCACHE_OP_* flag this table cannot serve, and keep the
+         * revalidation flags in sync with the callbacks it does provide.
+         */
+        dentry->d_op = &hm_owned_dops;
+        dentry->d_flags &= ~(DCACHE_OP_HASH | DCACHE_OP_COMPARE | DCACHE_OP_DELETE |
+                             DCACHE_OP_PRUNE | DCACHE_OP_REAL);
+        dentry->d_flags |= (DCACHE_OP_REVALIDATE | DCACHE_OP_WEAK_REVALIDATE | DCACHE_DONTCACHE);
+    } else if (orig && iop) {
         if (unlikely((current_orig = smp_load_acquire(&iop->orig_dops)) != orig)) {
             if (current_orig == NULL) {
                 if (cmpxchg(&iop->orig_dops, NULL, HM_DOP_INITIALIZING) == NULL) {
@@ -973,12 +1047,23 @@ static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dent
             }
         }
         dentry->d_op = &iop->fake_dops;
-    } else {
+    } else if (!orig) {
+        /*
+         * Adopted from a real ->lookup() on a filesystem which installs no
+         * dentry_operations, so there is nothing of its own to preserve.
+         */
         dentry->d_op = &hm_dops;
+        dentry->d_flags &= ~(DCACHE_OP_HASH | DCACHE_OP_COMPARE | DCACHE_OP_DELETE |
+                             DCACHE_OP_PRUNE | DCACHE_OP_REAL);
+        dentry->d_flags |= (DCACHE_OP_REVALIDATE | DCACHE_OP_WEAK_REVALIDATE);
     }
-
-    if (injected)
-        dentry->d_flags |= (DCACHE_OP_REVALIDATE | DCACHE_DONTCACHE);
+    /*
+     * Otherwise the dentry was adopted from a real ->lookup() of a filesystem
+     * which has its own dentry_operations, and there is no hm_iop to cache a
+     * copy in.  Leave its table and flags untouched: replacing the table would
+     * drop the d_release/d_real/d_hash callbacks that its DCACHE_OP_* flags
+     * still select.
+     */
 
     spin_unlock(&dentry->d_lock);
 }
