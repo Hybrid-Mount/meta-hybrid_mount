@@ -20,3 +20,11 @@ export function parseRootManager(output: string): "kernelsu" | "apatch" | null {
   // Manager shells do not always export the installer environment markers.
   return null;
 }
+
+/** KernelPatch's live `truncate su version` API returns kernel,kp versions in hex. */
+export function isKernelPatchVersionResponse(output: string): boolean {
+  const match = output.match(/^([0-9a-f]{1,8}),([0-9a-f]{1,8})\r?\n?$/i);
+  return Boolean(
+    match && Number.parseInt(match[1]!, 16) > 0 && Number.parseInt(match[2]!, 16) > 0,
+  );
+}

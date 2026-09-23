@@ -6,6 +6,7 @@ mod lifecycle;
 pub mod mounts;
 mod policy;
 pub mod rules;
+mod transaction;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod boot;

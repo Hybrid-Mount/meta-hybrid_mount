@@ -138,3 +138,17 @@ impl RuleKernel for Kernel {
         Ok(())
     }
 }
+
+impl super::transaction::UidKernel for Kernel {
+    fn uids(&mut self) -> Result<Vec<u32>> {
+        Kernel::uids(self)
+    }
+
+    fn add_uids(&mut self, uids: &[u32]) -> Result<()> {
+        self.0.add_uids(uids)
+    }
+
+    fn remove_uids(&mut self, uids: &[u32]) -> Result<()> {
+        Kernel::remove_uids(self, uids)
+    }
+}

@@ -3,8 +3,7 @@
 use super::{
     boot, device,
     ledger::{self, Ledger, OperationLock},
-    policy,
-    rules::{self, RuleKernel},
+    policy, rules, transaction,
 };
 use crate::{
     config::Config,
@@ -153,6 +152,7 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
         return Err(Error::msg("module has no owned active VFS rules"));
     }
     let mut updated_module = None;
+    let mut requested_uids = Vec::new();
     let after = if action == "unload" {
         Vec::new()
     } else {
@@ -174,6 +174,7 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
             vfs_available: true,
         })?;
         let plan = policy::plan_hot_module(module, &config, &promoted, &saved)?;
+        requested_uids = config.vfs_isolate_uids.clone();
         updated_module = state::app_modules(
             std::slice::from_ref(module),
             &config,
@@ -188,44 +189,15 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
     // Validation errors must leave the ready ledger untouched. In particular a
     // foreign new target is not an introduced rule requiring rollback.
     rules::preflight(&mut kernel, &before, &after)?;
-    let mut desired = saved
-        .rules
-        .iter()
-        .filter(|r| r.module_id != module_id)
-        .cloned()
-        .collect::<Vec<_>>();
-    desired.extend(after.clone());
     let _guard = crate::pipeline::VfsBootGuard::arm()?;
-    saved.phase = "applying".into();
-    saved.pending_rules = desired.clone();
-    saved.error = None;
-    ledger::save(&saved)?;
-    if let Err(err) = rules::reconcile(&mut kernel, &before, &after) {
-        let recovered = rules::verify_owned(&mut kernel, &saved.rules).is_ok()
-            && kernel.list().is_ok_and(|actual| {
-                after
-                    .iter()
-                    .filter(|r| {
-                        !before
-                            .iter()
-                            .any(|old| old.virtual_path == r.virtual_path && old.uid == r.uid)
-                    })
-                    .all(|r| {
-                        !actual
-                            .iter()
-                            .any(|a| a.virtual_path == r.virtual_path && a.uid == r.uid)
-                    })
-            });
-        saved.phase = if recovered { "ready" } else { "error" }.into();
-        saved.error = Some(err.to_string());
-        if recovered {
-            saved.pending_rules.clear();
-        }
-        ledger::save(&saved)?;
-        return Err(err);
-    }
-    saved.rules = desired;
-    saved.pending_rules.clear();
+    transaction::reconcile(
+        &mut kernel,
+        &mut saved,
+        &before,
+        &after,
+        &requested_uids,
+        ledger::save,
+    )?;
     saved.generation += 1;
     if let Some(module) = updated_module {
         saved.modules.retain(|m| m.id.as_str() != module_id);

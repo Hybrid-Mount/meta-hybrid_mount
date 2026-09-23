@@ -15,5 +15,5 @@
 
 ## 设备验证边界
 
-以上两项与所有挂载、loop、SELinux、KernelSU/APatch 交互一样，主机测试与三架构交叉编译都不能
+此项与所有挂载、loop、SELinux、KernelSU/APatch 交互一样，主机测试与三架构交叉编译都不能
 替代真机验证。相关审查清单见 `.dsh/skills/hm-mount-safety-review/`。

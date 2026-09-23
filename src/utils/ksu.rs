@@ -6,26 +6,74 @@
 //! Note the boundary: this only **registers** mountpoints with the kernel list and never
 //! unmounts immediately, which requires the rustix `unmount` syscall.
 
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::path::Path;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use ::ksu::{TryUmount, TryUmountFlags};
-
+use super::ksu_umount::{self, Registrations, UmountCommand};
 use crate::errors::{ContextError, Error, Result};
 use crate::utils::is_ignored_unmount_partition;
 
 static KSU_ACTIVE: AtomicBool = AtomicBool::new(false);
 static UMOUNT_BROKEN: AtomicBool = AtomicBool::new(false);
-/// Paths registered with [`send_unmountable`] and not yet withdrawn. This is the single
-/// source of truth: the kernel list is built from it at commit time, so an entry can be
-/// withdrawn before that commit just as well as after it.
-static REGISTERED_PATHS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+static REGISTERED_PATHS: OnceLock<Mutex<Registrations>> = OnceLock::new();
 
-fn registered_paths() -> &'static Mutex<HashSet<String>> {
-    REGISTERED_PATHS.get_or_init(|| Mutex::new(HashSet::new()))
+fn registered_paths() -> &'static Mutex<Registrations> {
+    REGISTERED_PATHS.get_or_init(|| Mutex::new(Registrations::default()))
+}
+
+/// Use the documented ioctl directly: ksu 0.2.0's del() mistakenly sends WIPE.
+/// Keep the descriptor owned and never treat a failed installation as a valid fd.
+fn open_driver() -> std::io::Result<OwnedFd> {
+    let mut fd: libc::c_int = -1;
+    // SAFETY: KernelSU intercepts these magic reboot arguments and writes a new fd
+    // into the valid output pointer. Other kernels reject the invalid magic values.
+    unsafe {
+        libc::syscall(libc::SYS_reboot, 0xDEADBEEFu32, 0xCAFEBABEu32, 0, &mut fd);
+    }
+    if fd < 0 {
+        return Err(std::io::Error::other(
+            "KernelSU driver descriptor unavailable",
+        ));
+    }
+    // SAFETY: KernelSU returned a newly installed descriptor owned by this process.
+    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
+}
+
+fn kernel_command(command: &UmountCommand) -> std::io::Result<()> {
+    let fd = open_driver()?;
+    // The ioctl has an empty encoded size despite carrying the UAPI struct.
+    let request = libc::_IOW::<()>(u32::from(b'K'), 18);
+    // SAFETY: fd is live; command's path pointer stays valid through this call.
+    let ret = unsafe { libc::ioctl(fd.as_raw_fd(), request as _, command) };
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+pub fn committed_unmounts() -> Vec<String> {
+    registered_paths()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .committed()
+}
+
+/// Release persisted registrations in a new runtime process, without touching foreign paths.
+pub fn release_unmounts(paths: &[String]) -> Result<()> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    ksu_umount::release(paths, &mut kernel_command).map_err(|err| {
+        Error::Mount(Box::new(ContextError::new(
+            "release owned KernelSU try-umount entries",
+            None,
+            err,
+        )))
+    })
 }
 
 /// Detects whether KernelSU is available at boot; major version 4 disables the umount list.
@@ -67,7 +115,7 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
     registered_paths()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .insert(path_str.to_owned());
+        .queue(path_str);
 }
 
 /// Removes a mountpoint again, for a transient mount that was torn down before the rest of
@@ -86,17 +134,12 @@ pub fn withdraw_unmountable(target: impl AsRef<Path>) {
         return;
     };
 
-    let withdrawn = registered_paths()
+    if let Err(err) = registered_paths()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .remove(path_str);
-    if !withdrawn {
-        return;
-    }
-
-    if let Err(err) = TryUmount::new().add(path).del() {
-        // Best effort: a stale entry only costs a log line, and failing here would abort
-        // the teardown of a mount that is already gone.
+        .withdraw(path_str, &mut kernel_command)
+    {
+        // Keep failed deletions in the ownership snapshot so cleanup can retry them.
         log::warn!("withdraw KernelSU try-umount entry failed: path={path_str}, error={err}");
     }
 }
@@ -111,53 +154,38 @@ pub fn commit_unmount_list() -> Result<()> {
             "injected KernelSU try-umount commit failure".to_owned(),
         ))));
     }
-    if !is_active() {
+    if !is_active() || UMOUNT_BROKEN.load(Ordering::Relaxed) {
         return Ok(());
     }
-
-    let mut paths: Vec<PathBuf> = registered_paths()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .iter()
-        .map(PathBuf::from)
-        .collect();
-    paths.sort();
-    if paths.is_empty() {
-        return Ok(());
-    }
-
-    let mut control = TryUmount::new();
-    control.adds(paths);
-    control.flags(TryUmountFlags::MNT_DETACH);
-    control.format_msg(|paths| format!("umount {paths:?} successful"));
-    control.umount().map_err(|err| {
-        Error::Mount(Box::new(ContextError::new(
-            "commit KernelSU try-umount list",
-            None,
-            err.to_string(),
-        )))
-    })?;
-    Ok(())
-}
-
-/// Clears the kernel try-umount list and this process's registration history, for failure rollback only.
-pub fn clear_unmount_list() -> Result<()> {
-    if !is_active() {
-        return Ok(());
-    }
-
-    TryUmount::new().wipe().map_err(|err| {
-        Error::Mount(Box::new(ContextError::new(
-            "wipe KernelSU try-umount list",
-            None,
-            err.to_string(),
-        )))
-    })?;
 
     registered_paths()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clear();
+        .commit(&mut kernel_command)
+        .map_err(|err| {
+            Error::Mount(Box::new(ContextError::new(
+                "commit KernelSU try-umount list",
+                None,
+                err.to_string(),
+            )))
+        })?;
+    Ok(())
+}
+
+/// Roll back only registrations this process successfully installed.
+pub fn clear_unmount_list() -> Result<()> {
+    registered_paths()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .rollback(&mut kernel_command)
+        .map_err(|err| {
+            Error::Mount(Box::new(ContextError::new(
+                "rollback owned KernelSU try-umount entries",
+                None,
+                err.to_string(),
+            )))
+        })?;
+
     Ok(())
 }
 

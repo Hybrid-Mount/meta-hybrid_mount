@@ -121,6 +121,9 @@ pub fn is_ignored_unmount_partition(path: &str) -> bool {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod ksu;
 
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub(crate) mod ksu_umount;
+
 #[cfg(test)]
 mod tests {
     use super::*;

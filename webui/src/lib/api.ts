@@ -16,7 +16,7 @@ import type {
 import { DEFAULT_CONFIG, PATHS } from "./constants";
 import { createRuntimeApi } from "./runtimeApi";
 import { shellEscapeDoubleQuoted } from "./shell";
-import { parseLateLoad, parseRootManager } from "./reboot";
+import { isKernelPatchVersionResponse, parseLateLoad, parseRootManager } from "./reboot";
 
 interface KsuExecResult {
   errno: number;
@@ -411,10 +411,21 @@ const RealAPI: AppAPI = {
     let lateLoad = false;
     if (manager !== "apatch") {
       const debug = await ksuExec!("/data/adb/ksud debug info");
-      if (debug.errno !== 0) {
+      if (manager === null && debug.errno === 127) {
+        // APatch WebUI shells omit installer markers. Probe the live KernelPatch
+        // API only when ksud is absent; a broken KernelSU probe must stay fatal.
+        const kernelPatch = await ksuExec!("/system/bin/truncate su version");
+        if (
+          kernelPatch.errno !== 0 ||
+          !isKernelPatchVersionResponse(kernelPatch.stdout)
+        ) {
+          throw new Error("Cannot verify root environment; reboot cancelled");
+        }
+      } else if (debug.errno !== 0) {
         throw new Error("Cannot verify KernelSU late-load mode; reboot cancelled");
+      } else {
+        lateLoad = parseLateLoad(debug.stdout);
       }
-      lateLoad = parseLateLoad(debug.stdout);
     }
     if (lateLoad) {
       const cleanup = await ksuExec!(`${PATHS.BINARY} runtime prepare-reboot`);

@@ -145,13 +145,15 @@ fn validate_snapshot(
         .collect();
     for actual in &foreign {
         for owned in before.iter().chain(after) {
-            if actual.uid != owned.uid {
+            // Directory topology is indexed by child name, not UID. Even
+            // different-UID rules can replace a child or detach its parent.
+            if actual.uid == 0
+                && derived_parent(actual)
+                && ancestor(&actual.virtual_path, &owned.virtual_path)
+            {
                 continue;
             }
-            if derived_parent(actual) && ancestor(&actual.virtual_path, &owned.virtual_path) {
-                continue;
-            }
-            if same_key(actual, owned)
+            if actual.virtual_path == owned.virtual_path
                 || ancestor(&actual.virtual_path, &owned.virtual_path)
                 || ancestor(&owned.virtual_path, &actual.virtual_path)
             {
@@ -544,17 +546,59 @@ mod tests {
     }
 
     #[test]
-    fn differing_uids_and_path_components_do_not_conflict() {
-        let mut foreign = rule("/system/a", "/foreign");
-        foreign.uid = 1000;
+    fn differing_path_components_do_not_conflict() {
         let sibling = rule("/system/ab", "/sibling");
         let mut kernel = Kernel {
-            rules: vec![foreign.clone(), sibling.clone()],
+            rules: vec![sibling.clone()],
             ..Default::default()
         };
         assert!(reconcile(&mut kernel, &[], &[rule("/system/a", "/a")]).is_ok());
-        assert!(kernel.rules.contains(&foreign));
         assert!(kernel.rules.contains(&sibling));
+    }
+
+    #[test]
+    fn rejects_cross_uid_equal_ancestor_and_descendant_paths_before_mutation() {
+        for path in ["/system/a", "/system", "/system/a/child"] {
+            let mut foreign = rule(path, "/foreign");
+            foreign.uid = 1000;
+            let mut kernel = Kernel {
+                rules: vec![foreign.clone()],
+                ..Default::default()
+            };
+            assert!(
+                reconcile(&mut kernel, &[], &[rule("/system/a", "/a")]).is_err(),
+                "{path}"
+            );
+            assert_eq!(kernel.rules, vec![foreign]);
+            assert!(kernel.mutations.is_empty());
+        }
+    }
+
+    #[test]
+    fn refuses_unload_of_parent_with_foreign_cross_uid_child() {
+        let mut parent = rule("/system/a", "");
+        parent.flags = FLAG_OPAQUE;
+        let mut child = rule("/system/a/child", "/foreign");
+        child.uid = 1000;
+        let mut kernel = Kernel {
+            rules: vec![parent.clone(), child],
+            ..Default::default()
+        };
+        assert!(reconcile(&mut kernel, &[parent], &[]).is_err());
+        assert!(kernel.mutations.is_empty());
+    }
+
+    #[test]
+    fn allows_global_generated_parent_for_uid_scoped_child() {
+        let mut parent = rule("/system/new", "");
+        parent.flags = 1 | FLAG_VIRTUAL_DIR;
+        let mut child = rule("/system/new/child", "/source");
+        child.uid = 1000;
+        let mut kernel = Kernel {
+            rules: vec![parent],
+            ..Default::default()
+        };
+        assert!(reconcile(&mut kernel, &[], &[child]).is_ok());
     }
 
     #[test]

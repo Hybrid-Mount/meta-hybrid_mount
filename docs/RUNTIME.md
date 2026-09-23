@@ -57,10 +57,18 @@ marker and is no longer the synchronization mechanism.
 - VFS transactions validate owned records, reject foreign overlaps, record intent,
   apply changes, read back, and attempt scoped rollback. They never clear all rules.
   Reload re-registers unchanged path strings because the kernel pins source inodes.
+  Conflicting paths are rejected across UIDs too: the kernel's directory lookup
+  topology does not isolate same-name entries by UID. Hot load/reload installs and
+  verifies newly requested isolation UIDs before publishing file rules; existing
+  external isolation stays unowned. Failed operations undo only their added UIDs,
+  and retain isolation if rule rollback cannot be verified.
 - Real mounts are recorded by exact execution targets and new mount IDs relative
   to the pre-operation snapshot. Cleanup verifies namespace, ID, device, type,
   source, baseline stack and the visible mount ID; it includes Overlay child mounts
   and Magic mirror bindings and detaches deepest first.
+  KernelSU try-umount registrations are recorded separately from real mounts.
+  Cleanup deletes exactly the recorded registrations after detaching mounts, and
+  retains both records on failure so a retry can finish before rebuilding.
 - Changes to owned rules/mounts or foreign descendants block cleanup. Baseline
   descendants hidden under an overmount may also force a physical reboot; cleanup
   deliberately does not guess which hidden resources can be detached safely.
@@ -71,7 +79,8 @@ marker and is no longer the synchronization mechanism.
 - VFS mutation arms the persistent crash guard. A handled return clears it; process
   termination or a kernel crash leaves it to prevent automatic reinjection. Runtime
   commands never clear a pre-existing guard to force a retry.
-- Upgrading during a live session from a version without the ownership ledger may
+- Upgrading during a live session from a version without complete ownership
+  (including KernelSU registration records for real mounts) may
   require one physical reboot. Recorded legacy mount targets and untracked explicit
   VFS rules are rejected; old snapshots must not be erased by a no-op cleanup.
 - External raw kernel writers do not honor the userspace lock. A check/mutation race

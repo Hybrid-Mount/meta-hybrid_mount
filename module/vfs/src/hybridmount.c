@@ -763,7 +763,7 @@ static const struct dentry_operations hm_owned_dops;
 static const struct dentry_operations hm_dops;
 
 static int hm_d_revalidate_common(struct inode *parent_inode, const struct qstr *name,
-                                  struct dentry *dentry, unsigned int flags)
+                                  struct dentry *dentry, unsigned int flags, bool weak)
 {
     struct hybridmount_dir_node *parent_dir = NULL;
     const struct dentry_operations *orig_dops;
@@ -817,6 +817,11 @@ orig_dops:
     /* Only dentries which went through the filesystem's real ->lookup() may be
      * handed to its callbacks; ours have no valid private data for it. */
     if (unlikely(owned)) return 1;
+    /* Our weak callback is installed only on owned dentries or dentries whose
+     * filesystem supplied no operations.  In particular, a rename can move the
+     * latter under a parent with orig_dops; those are not this dentry's ops,
+     * and a weak check must not invoke that parent's strong revalidation. */
+    if (weak) return 1;
     if ((orig_dops = hm_get_orig_dops(iop)) && orig_dops->d_revalidate) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
         return orig_dops->d_revalidate(parent_inode, name, dentry, flags);
@@ -832,22 +837,52 @@ drop_it:
     return 0;
 }
 
+static int hm_d_revalidate_ref(struct dentry *dentry, unsigned int flags, bool weak)
+{
+    struct name_snapshot name;
+    struct dentry *parent;
+    unsigned int seq;
+    int ret;
+
+    /* Ref-walk pins the dentry, not a former parent after a concurrent rename.
+     * Pin the parent and the name together: the helpers each take d_lock, and
+     * d_seq makes us retry if a rename separated their snapshots.  No dentry
+     * lock may remain held when common validation drops a dentry or calls the
+     * filesystem, whose revalidation is allowed to sleep. */
+    for (;;) {
+        seq = read_seqcount_begin(&dentry->d_seq);
+        parent = dget_parent(dentry);
+        take_dentry_name_snapshot(&name, dentry);
+        if (!read_seqcount_retry(&dentry->d_seq, seq))
+            break;
+        release_dentry_name_snapshot(&name);
+        dput(parent);
+        cond_resched();
+    }
+
+    ret = hm_d_revalidate_common(d_inode(parent), &name.name, dentry, flags, weak);
+    release_dentry_name_snapshot(&name);
+    dput(parent);
+    return ret;
+}
+
 static int hm_d_weak_revalidate(struct dentry *dentry, unsigned int flags)
 {
-    return hm_d_revalidate_common(d_inode(READ_ONCE(dentry->d_parent)),
-                                  &dentry->d_name, dentry, flags);
+    return hm_d_revalidate_ref(dentry, flags, true);
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
 static int hm_d_revalidate(struct inode *parent_inode, const struct qstr *name, struct dentry *dentry, unsigned int flags)
 {
-    return hm_d_revalidate_common(parent_inode, name, dentry, flags);
+    return hm_d_revalidate_common(parent_inode, name, dentry, flags, false);
 }
 #else
 static int hm_d_revalidate(struct dentry *dentry, unsigned int flags)
 {
+    if (!(flags & LOOKUP_RCU))
+        return hm_d_revalidate_ref(dentry, flags, false);
     return hm_d_revalidate_common(d_inode(READ_ONCE(dentry->d_parent)),
-                                  &dentry->d_name, dentry, flags);
+                                  &dentry->d_name, dentry, flags, false);
 }
 #endif
 

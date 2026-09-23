@@ -65,6 +65,64 @@ describe("WebUI reboot safety", () => {
       .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
       .mockResolvedValue({ errno: 127, stdout: "", stderr: "not found" });
 
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/root environment/i);
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ["/system/bin/truncate su version"],
+    ]);
+  });
+
+  it("reboots APatch without installer markers after confirming the live kernel API", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
+      .mockResolvedValueOnce({ errno: 127, stdout: "", stderr: "not found" })
+      .mockResolvedValueOnce(success("60c00,b00\n"))
+      .mockResolvedValueOnce(success());
+
+    await expect(createApi(false, true).reboot()).resolves.toBeUndefined();
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ["/system/bin/truncate su version"],
+      ["svc power reboot || reboot"],
+    ]);
+  });
+
+  it.each([
+    { errno: 1, stdout: "60c00,b00", stderr: "denied" },
+    success(""),
+    success("apd 11107"),
+    success("truncate: missing -s"),
+    success("60c00,b00\n60c00,b00"),
+    success("60c00,b00 trailing"),
+    success("0,b00"),
+    success("60c00,0"),
+  ])("does not reboot on an unverified APatch probe: %j", async (probe) => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
+      .mockResolvedValueOnce({ errno: 127, stdout: "", stderr: "not found" })
+      .mockResolvedValueOnce(probe);
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/root environment/i);
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ["/system/bin/truncate su version"],
+    ]);
+  });
+
+  it.each([
+    { errno: 1, stdout: "", stderr: "denied" },
+    { errno: 126, stdout: "", stderr: "permission denied" },
+    success("late_load: invalid"),
+    success("version: 123"),
+  ])("does not bypass a present but unverified KernelSU daemon: %j", async (debug) => {
+    exec.mockResolvedValueOnce(success("KSU=\nAPATCH=\n")).mockResolvedValueOnce(debug);
+
     await expect(createApi(false, true).reboot()).rejects.toThrow(/late.load/i);
 
     expect(exec.mock.calls).toEqual([
@@ -106,6 +164,7 @@ describe("WebUI reboot safety", () => {
   });
 
   it.each([
+    { errno: 127, stdout: "", stderr: "not found" },
     { errno: 1, stdout: "late_load: false", stderr: "denied" },
     success("version: 123"),
     success("late_load: invalid"),

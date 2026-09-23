@@ -74,6 +74,7 @@ pub fn finish(session: BootSession, successful: bool, effect_targets: &[String])
     let state = RunState::load_or_default();
     let targets = crate::pipeline::runtime_mount_targets(&state, effect_targets);
     saved.mounts = mounts::capture(&targets, &session.baseline)?;
+    saved.ksu_unmounts = Some(crate::utils::ksu::committed_unmounts());
     let mut verification = Ok(());
     if !saved.pending_rules.is_empty() || crate::vfs::available() {
         let mut kernel = device::Kernel::inspect()?;
@@ -124,6 +125,7 @@ pub fn cleanup() -> Result<()> {
     let _lock = ledger::OperationLock::acquire()?;
     let mut saved = device::load()?;
     if saved.phase == "clean" {
+        saved.require_clean()?;
         if saved.generation == 0 {
             reject_legacy(&mountinfo::mount_entries()?)?;
         }
@@ -136,6 +138,7 @@ pub fn cleanup() -> Result<()> {
             "incomplete runtime operation; full reboot required, refusing to guess ownership",
         ));
     }
+    saved.owned_unmounts()?;
     mounts::validate(&saved.mounts)?;
     saved.phase = "cleaning".into();
     ledger::save(&saved)?;
@@ -182,8 +185,7 @@ fn cleanup_owned(saved: &mut Ledger) -> Result<()> {
         saved.isolated_uids.clear();
         ledger::save(saved)?;
     }
-    mounts::cleanup(&saved.mounts)?;
-    saved.mounts.clear();
+    saved.release_mount_resources(mounts::cleanup, crate::utils::ksu::release_unmounts)?;
     ledger::save(saved)?;
     // The boot semaphore is only a deduplication marker, not the operation mutex.
     match fs::remove_dir("/dev/hybrid_mount_single_instance") {

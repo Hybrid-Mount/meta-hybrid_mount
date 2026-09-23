@@ -26,6 +26,9 @@ pub struct Ledger {
     pub rules: Vec<SavedRule>,
     pub pending_rules: Vec<SavedRule>,
     pub mounts: Vec<OwnedMount>,
+    /// None identifies a pre-registration-ledger session; never infer its KSU ownership.
+    #[serde(default)]
+    pub ksu_unmounts: Option<Vec<String>>,
     pub non_vfs_modules: BTreeSet<String>,
     pub modules: Vec<crate::state::AppModule>,
     pub isolated_uids: Vec<u32>,
@@ -39,6 +42,10 @@ impl Ledger {
             || !self.rules.is_empty()
             || !self.mounts.is_empty()
             || !self.isolated_uids.is_empty()
+            || self
+                .ksu_unmounts
+                .as_ref()
+                .is_some_and(|paths| !paths.is_empty())
         {
             return Err(Error::msg(
                 "runtime resources already exist or need recovery; run soft-reboot cleanup before rebuilding",
@@ -54,6 +61,30 @@ impl Ledger {
                 self.phase
             )));
         }
+        Ok(())
+    }
+
+    pub fn owned_unmounts(&self) -> Result<&[String]> {
+        match &self.ksu_unmounts {
+            Some(paths) => Ok(paths),
+            None if self.mounts.is_empty() => Ok(&[]),
+            None => Err(Error::msg(
+                "legacy runtime has no KernelSU registration ownership; full reboot required",
+            )),
+        }
+    }
+
+    pub fn release_mount_resources(
+        &mut self,
+        detach: impl FnOnce(&[OwnedMount]) -> Result<()>,
+        release: impl FnOnce(&[String]) -> Result<()>,
+    ) -> Result<()> {
+        let registrations = self.owned_unmounts()?;
+        detach(&self.mounts)?;
+        release(registrations)?;
+        // Keep both identities on any failure so a later cleanup can retry safely.
+        self.mounts.clear();
+        self.ksu_unmounts = Some(Vec::new());
         Ok(())
     }
 }
@@ -83,6 +114,7 @@ pub fn ledger_for_boot(saved: Option<Ledger>, boot_id: &str, namespace: &str) ->
         boot_id: boot_id.into(),
         namespace: namespace.into(),
         phase: "clean".into(),
+        ksu_unmounts: Some(Vec::new()),
         ..Ledger::default()
     })
 }
@@ -136,6 +168,70 @@ mod tests {
             ..Ledger::default()
         };
         assert!(ledger_for_boot(Some(old), "boot", "ns2").is_err());
+    }
+
+    #[test]
+    fn cleanup_keeps_mount_ownership_when_ksu_release_fails() {
+        let mut saved = Ledger {
+            mounts: vec![OwnedMount {
+                target: "/system/etc/hosts".into(),
+                id: 17,
+                ..OwnedMount::default()
+            }],
+            ksu_unmounts: Some(vec!["/system/etc/hosts".into()]),
+            ..Ledger::default()
+        };
+        let mut detached = false;
+        let result = saved.release_mount_resources(
+            |_| {
+                detached = true;
+                Ok(())
+            },
+            |_| Err(Error::msg("ioctl failed")),
+        );
+        assert!(result.is_err());
+        assert!(detached);
+        assert_eq!(saved.mounts.len(), 1);
+        assert_eq!(saved.owned_unmounts().unwrap(), ["/system/etc/hosts"]);
+        saved
+            .release_mount_resources(|_| Ok(()), |_| Ok(()))
+            .unwrap();
+        assert!(saved.mounts.is_empty());
+        assert!(saved.owned_unmounts().unwrap().is_empty());
+    }
+
+    #[test]
+    fn cleanup_does_not_release_registrations_before_mounts_are_detached() {
+        let mut saved = Ledger {
+            ksu_unmounts: Some(vec!["/system/etc/hosts".into()]),
+            ..Ledger::default()
+        };
+        let result = saved.release_mount_resources(
+            |_| Err(Error::msg("detach failed")),
+            |_| panic!("must not remove hiding registrations while mount cleanup failed"),
+        );
+        assert!(result.is_err());
+        assert_eq!(saved.owned_unmounts().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn legacy_real_mounts_require_reboot_instead_of_guessing_ksu_ownership() {
+        let old = Ledger {
+            mounts: vec![OwnedMount::default()],
+            ..Ledger::default()
+        };
+        assert!(old.owned_unmounts().is_err());
+        assert!(Ledger::default().owned_unmounts().unwrap().is_empty());
+    }
+
+    #[test]
+    fn clean_phase_with_pending_ksu_registration_cannot_rebuild() {
+        let saved = Ledger {
+            phase: "clean".into(),
+            ksu_unmounts: Some(vec!["/system/etc/hosts".into()]),
+            ..Ledger::default()
+        };
+        assert!(saved.require_clean().is_err());
     }
 }
 
