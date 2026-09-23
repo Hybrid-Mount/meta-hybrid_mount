@@ -21,7 +21,7 @@ use crate::errors::Result;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::sys;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::utils::ksu::send_unmountable;
+use crate::utils::ksu::{send_unmountable, withdraw_unmountable};
 
 /// Staging backend mode, matching `overlay_mode` in `config.toml`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,6 +242,12 @@ pub fn teardown(handle: &StorageHandle) -> Result<()> {
             ),
         )));
     }
+
+    // The transient mount is gone, so the kernel must stop replaying it: only the overlay
+    // layered above it is meant to outlive this function. KernelSU logs every registered
+    // path on each later umount, so a stale entry here is a boot-long log nuisance.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    withdraw_unmountable(handle.mount_point());
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if let Some(loop_mount) = &handle.loop_mount {

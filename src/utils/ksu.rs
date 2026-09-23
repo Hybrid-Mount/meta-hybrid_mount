@@ -7,7 +7,7 @@
 //! unmounts immediately, which requires the rustix `unmount` syscall.
 
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -19,8 +19,14 @@ use crate::utils::is_ignored_unmount_partition;
 
 static KSU_ACTIVE: AtomicBool = AtomicBool::new(false);
 static UMOUNT_BROKEN: AtomicBool = AtomicBool::new(false);
-static TRY_UMOUNT_LIST: OnceLock<Mutex<TryUmount>> = OnceLock::new();
+/// Paths registered with [`send_unmountable`] and not yet withdrawn. This is the single
+/// source of truth: the kernel list is built from it at commit time, so an entry can be
+/// withdrawn before that commit just as well as after it.
 static REGISTERED_PATHS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+
+fn registered_paths() -> &'static Mutex<HashSet<String>> {
+    REGISTERED_PATHS.get_or_init(|| Mutex::new(HashSet::new()))
+}
 
 /// Detects whether KernelSU is available at boot; major version 4 disables the umount list.
 pub fn init() {
@@ -58,24 +64,45 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
         return;
     }
 
-    let mut history = REGISTERED_PATHS
-        .get_or_init(|| Mutex::new(HashSet::new()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-    if !history.insert(path_str.to_owned()) {
-        return;
-    }
-    drop(history);
-
-    TRY_UMOUNT_LIST
-        .get_or_init(|| Mutex::new(TryUmount::new()))
+    registered_paths()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .add(path);
+        .insert(path_str.to_owned());
+}
+
+/// Removes a mountpoint again, for a transient mount that was torn down before the rest of
+/// the list is replayed for the remainder of the boot.
+///
+/// The kernel replays every registered path on each later `umount`, so an entry whose mount
+/// point no longer exists keeps logging `KernelSU: ksu_handle_umount: unmounting: <path>`
+/// for the whole boot.
+pub fn withdraw_unmountable(target: impl AsRef<Path>) {
+    if !is_active() || UMOUNT_BROKEN.load(Ordering::Relaxed) {
+        return;
+    }
+
+    let path = target.as_ref();
+    let Some(path_str) = path.to_str() else {
+        return;
+    };
+
+    let withdrawn = registered_paths()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .remove(path_str);
+    if !withdrawn {
+        return;
+    }
+
+    if let Err(err) = TryUmount::new().add(path).del() {
+        // Best effort: a stale entry only costs a log line, and failing here would abort
+        // the teardown of a mount that is already gone.
+        log::warn!("withdraw KernelSU try-umount entry failed: path={path_str}, error={err}");
+    }
 }
 
 /// Commits the try-umount list (`MNT_DETACH`); called once the pipeline finishes.
+/// Paths withdrawn before this point are not registered.
 pub fn commit_unmount_list() -> Result<()> {
     if crate::sys::faults::should_fail_ksu_commit() {
         return Err(Error::Mount(Box::new(ContextError::new(
@@ -88,11 +115,19 @@ pub fn commit_unmount_list() -> Result<()> {
         return Ok(());
     }
 
-    let mut control = TRY_UMOUNT_LIST
-        .get_or_init(|| Mutex::new(TryUmount::new()))
+    let mut paths: Vec<PathBuf> = registered_paths()
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .iter()
+        .map(PathBuf::from)
+        .collect();
+    paths.sort();
+    if paths.is_empty() {
+        return Ok(());
+    }
 
+    let mut control = TryUmount::new();
+    control.adds(paths);
     control.flags(TryUmountFlags::MNT_DETACH);
     control.format_msg(|paths| format!("umount {paths:?} successful"));
     control.umount().map_err(|err| {
@@ -111,25 +146,18 @@ pub fn clear_unmount_list() -> Result<()> {
         return Ok(());
     }
 
-    TRY_UMOUNT_LIST
-        .get_or_init(|| Mutex::new(TryUmount::new()))
+    TryUmount::new().wipe().map_err(|err| {
+        Error::Mount(Box::new(ContextError::new(
+            "wipe KernelSU try-umount list",
+            None,
+            err.to_string(),
+        )))
+    })?;
+
+    registered_paths()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .wipe()
-        .map_err(|err| {
-            Error::Mount(Box::new(ContextError::new(
-                "wipe KernelSU try-umount list",
-                None,
-                err.to_string(),
-            )))
-        })?;
-
-    if let Some(history) = REGISTERED_PATHS.get() {
-        history
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .clear();
-    }
+        .clear();
     Ok(())
 }
 
