@@ -331,15 +331,9 @@ impl MagicMount<'_, '_, '_> {
             let result = MagicMountResult::new(operation, &self.path);
             record_mount_target(self.stats, &mut *self.on_mount, &result, &self.path);
 
-            // Drop to private to reduce the number of peer groups.
-            if !crate::sys::faults::use_fake_magic_mount_ops()
-                && let Err(err) = mount_change(
-                    &self.path,
-                    MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
-                )
-            {
-                log::warn!("make dir {} private: {err}", self.path.display());
-            }
+            // The staging tree, and every clone it carried, was bound from mounts that may be
+            // shared; unshare the whole subtree now that it sits on the real target.
+            normalize_propagation(&self.path, true);
 
             if self.umount {
                 crate::utils::ksu::send_unmountable(&self.path);
@@ -496,8 +490,47 @@ pub fn magic_mount(
         stats.mounted_symlinks,
         stats.active_mounts.len()
     );
+    report_shared_targets(&stats.active_mounts);
 
     Ok(stats)
+}
+
+/// Reads mountinfo back and reports any target that is still a member of a peer group.
+///
+/// Normalisation is best-effort, so this is what makes a target that kept its group visible
+/// instead of silent: the propagation table is exactly what environment-detecting apps read.
+fn report_shared_targets(targets: &[String]) {
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return;
+    }
+    let entries = match crate::sys::mountinfo::mount_entries() {
+        Ok(entries) => entries,
+        Err(err) => {
+            log::warn!("propagation readback unavailable: {err}");
+            return;
+        }
+    };
+
+    let shared = entries
+        .iter()
+        .filter(|entry| entry.shared.is_some())
+        .filter(|entry| {
+            targets
+                .iter()
+                .any(|target| entry.mount_point.starts_with(target))
+        })
+        .map(|entry| format!("{}={}", entry.mount_point.display(), entry.propagation()))
+        .collect::<Vec<_>>();
+
+    if shared.is_empty() {
+        log::info!("magic mount propagation readback: all targets private");
+    } else {
+        log::warn!(
+            "magic mount targets still in a peer group: count={}, targets={}",
+            shared.len(),
+            shared.join(",")
+        );
+    }
 }
 
 /// Copies mode, uid, gid and SELinux context into staging from the real path when it exists, else the module source.
@@ -622,7 +655,25 @@ fn magic_mount_bind(source: &Path, target: &Path) -> Result<()> {
     if crate::sys::faults::use_fake_magic_mount_ops() {
         return Ok(());
     }
-    mount_bind(source, target).map_err(Error::from)
+    mount_bind(source, target).map_err(Error::from)?;
+
+    // The clone inherits the propagation type of whatever it was cloned from, so unshare it here:
+    // otherwise a target bound from a shared source joins that peer group and shows up in
+    // mountinfo as `shared:N` while the OverlayFS targets stay private.
+    normalize_propagation(target, false);
+
+    Ok(())
+}
+
+/// Best-effort propagation normalisation: a target that keeps a peer group is still a working
+/// mount, so a failure is reported without failing the boot over it.
+fn normalize_propagation(target: &Path, recursive: bool) {
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return;
+    }
+    if let Err(err) = crate::sys::mount::normalize_propagation(target, recursive) {
+        log::warn!("make mount {} private: {err}", target.display());
+    }
 }
 
 fn magic_mount_remount(target: &Path, flags: MountFlags, data: &str) -> Result<()> {
