@@ -537,3 +537,69 @@ fn magic_stats_track_successful_modules_without_mount_syscalls() {
         BTreeSet::from(["hosts_mod".to_owned()])
     );
 }
+
+/// A shared source mount hands its peer group to anything cloned from it. The target must be
+/// unshared afterwards, while the source keeps its own group, or the module leaks `shared:N`
+/// entries into the propagation table that environment checks read.
+#[test]
+fn bind_from_shared_source_leaves_target_private() {
+    use rustix::mount::{MountPropagationFlags, UnmountFlags, mount_change, unmount};
+
+    struct Unmount(PathBuf);
+
+    impl Drop for Unmount {
+        fn drop(&mut self) {
+            let _ = unmount(&self.0, UnmountFlags::DETACH);
+        }
+    }
+
+    let _fault_guard = crate::sys::faults::test_lock();
+    crate::sys::faults::reset();
+    if !crate::test_support::require_mount_namespace() {
+        return;
+    }
+
+    let root = crate::test_support::Fixture::new("magic-propagation");
+    let source_root = root.join("shared");
+    let target_root = root.join("targets");
+    fs::create_dir_all(&source_root).unwrap();
+    fs::create_dir_all(&target_root).unwrap();
+    mount(
+        "hybrid-test",
+        &source_root,
+        "tmpfs",
+        MountFlags::empty(),
+        None,
+    )
+    .unwrap();
+    let _source_mount = Unmount(source_root.clone());
+    mount_change(
+        &source_root,
+        MountPropagationFlags::SHARED | MountPropagationFlags::REC,
+    )
+    .unwrap();
+
+    let source = source_root.join("hosts");
+    let target = target_root.join("hosts");
+    fs::write(&source, b"module").unwrap();
+    fs::write(&target, b"stock").unwrap();
+
+    magic_mount_bind(&source, &target).unwrap();
+    let _target_mount = Unmount(target.clone());
+
+    let entries = crate::sys::mountinfo::mount_entries().unwrap();
+    let bound = entries
+        .iter()
+        .find(|entry| entry.mount_point == target)
+        .expect("bind target is missing from mountinfo");
+    assert_eq!(bound.propagation(), "private", "{bound:?}");
+
+    let origin = entries
+        .iter()
+        .find(|entry| entry.mount_point == source_root)
+        .expect("shared source mount is missing from mountinfo");
+    assert!(
+        origin.shared.is_some(),
+        "normalisation must not unshare the source: {origin:?}"
+    );
+}

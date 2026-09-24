@@ -105,6 +105,8 @@ WebUI 不持有第二套业务协议：配置与状态请求都映射到以上�
 
 `status` 中的 `active_mounts` 是 OverlayFS、Magic Mount 与 VFS 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts`、`magic_active_mounts` 与 `vfs_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。OverlayFS 与 Magic Mount 的目标必须经 mountinfo 确认；VFS 注入点不是内核挂载，改由 `apply_vfs_phase` 的 Provider 读回确认，读回失败的批次会被整体丢弃，因此不会进入 `active_mounts`。
 
+两类的 mountinfo 字段都属于对外契约。OverlayFS 通过 `open_tree(OPEN_TREE_CLONE|AT_RECURSIVE)` + `move_mount` 创建目标，Magic Mount 通过 `MS_BIND` 克隆，克隆会继承源挂载的传播类型，因此 Magic 目标可能带着源挂载的 peer group 进入传播表，与不带 `shared:` 的 OverlayFS 目标在同一方案内混排，并从内核的全局组号分配器额外取号。为此 Magic Mount 在每个 bind 之后立即对该目标执行 `MS_PRIVATE`，目录 mount-move 之后再对整棵子树执行 `MS_PRIVATE|MS_REC`：`MS_PRIVATE` 只影响本挂载，源的 peer group 不受影响。归一化是尽力而为，失败只告警；挂载阶段结束时会读回 mountinfo 核对活动目标是否仍在 peer group 内，并在日志中给出 `propagation=private|shared:N|slave:N`，避免传播表变化无人察觉。`src/sys/mountinfo.rs` 因此除 `mnt_id` 外同时解析 `shared:` 与 `master:`。
+
 `status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（只有 `hm`，即 HM 自有的 `hybridmount` 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
 
 `storage_mode` 记录本次启动实际创建的 overlay staging 后端，取值为 `tmpfs`、`ext4` 或哨兵值 `none`。只使用 VFS 或 Magic Mount 的启动不会创建 staging，此时写入 `none`：动态模块描述与 WebUI 都据此显示实际运行的挂载后端（例如 VFS），不会假报 Tmpfs 或 Ext4。

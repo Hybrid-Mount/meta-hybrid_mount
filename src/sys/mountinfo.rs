@@ -21,6 +21,49 @@ pub struct MountEntry {
     pub mnt_id: i32,
     /// Device major:minor, as reported by the kernel.
     pub majmin: String,
+    /// Peer group id from the `shared:` field, present only while the mount is shared.
+    ///
+    /// Hybrid Mount reads it back to confirm that its own targets left every peer group they
+    /// could have inherited from the mount they were cloned from.
+    pub shared: Option<u32>,
+    /// Mount id from the `master:` field, present only while the mount is a slave.
+    pub master: Option<u32>,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl MountEntry {
+    /// Keeps the mountinfo fields Hybrid Mount reads, including the propagation state that decides
+    /// whether a target still belongs to a peer group.
+    fn from_mount_info(info: &procfs::process::MountInfo) -> Self {
+        let mut shared = None;
+        let mut master = None;
+        for field in &info.opt_fields {
+            match field {
+                procfs::process::MountOptFields::Shared(id) => shared = Some(*id),
+                procfs::process::MountOptFields::Master(id) => master = Some(*id),
+                _ => {}
+            }
+        }
+
+        Self {
+            mount_point: info.mount_point.clone(),
+            fs_type: info.fs_type.clone(),
+            mount_source: info.mount_source.clone(),
+            mnt_id: info.mnt_id,
+            majmin: info.majmin.clone(),
+            shared,
+            master,
+        }
+    }
+
+    /// Human-readable propagation state, used by boot diagnostics.
+    pub fn propagation(&self) -> String {
+        match (self.shared, self.master) {
+            (Some(group), _) => format!("shared:{group}"),
+            (None, Some(master)) => format!("slave:{master}"),
+            (None, None) => "private".to_owned(),
+        }
+    }
 }
 
 /// Reads every mount visible to this process.
@@ -34,14 +77,8 @@ pub fn mount_entries() -> Result<Vec<MountEntry>> {
         return Err(Error::msg("injected mountinfo read failure"));
     }
     Ok(read_mountinfo()?
-        .into_iter()
-        .map(|entry| MountEntry {
-            mount_point: entry.mount_point,
-            fs_type: entry.fs_type,
-            mount_source: entry.mount_source,
-            mnt_id: entry.mnt_id,
-            majmin: entry.majmin,
-        })
+        .iter()
+        .map(MountEntry::from_mount_info)
         .collect())
 }
 
@@ -144,6 +181,8 @@ impl MountSnapshot {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    use super::MountEntry;
     use super::MountSnapshot;
     use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
@@ -216,5 +255,42 @@ mod tests {
     fn read_snapshot_contains_root_mount() {
         let snapshot = MountSnapshot::read().unwrap();
         assert!(snapshot.contains(PathBuf::from("/").as_path()));
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn mount_entry_reads_propagation_fields() {
+        use procfs::process::MountInfo;
+
+        let shared = MountEntry::from_mount_info(
+            &MountInfo::from_line(
+                "36 1 0:32 / /system rw,relatime shared:7 - ext4 /dev/block/sda1 rw",
+            )
+            .unwrap(),
+        );
+        assert_eq!(shared.mount_point, PathBuf::from("/system"));
+        assert_eq!(shared.shared, Some(7));
+        assert_eq!(shared.master, None);
+        assert_eq!(shared.propagation(), "shared:7");
+
+        // A slave carries `master:` without a peer group of its own.
+        let slave = MountEntry::from_mount_info(
+            &MountInfo::from_line("37 36 0:32 / /system/etc rw master:7 - ext4 /dev/block/sda1 rw")
+                .unwrap(),
+        );
+        assert_eq!(slave.shared, None);
+        assert_eq!(slave.master, Some(7));
+        assert_eq!(slave.propagation(), "slave:7");
+
+        // Ordinary mounts and unbindable ones carry no propagation id at all.
+        for line in [
+            "38 1 0:33 / /data rw,relatime - ext4 /dev/block/sda2 rw",
+            "39 1 0:34 / /mnt rw,relatime unbindable - tmpfs tmpfs rw",
+        ] {
+            let entry = MountEntry::from_mount_info(&MountInfo::from_line(line).unwrap());
+            assert_eq!(entry.shared, None);
+            assert_eq!(entry.master, None);
+            assert_eq!(entry.propagation(), "private");
+        }
     }
 }

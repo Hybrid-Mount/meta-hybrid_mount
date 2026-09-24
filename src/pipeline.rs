@@ -280,11 +280,12 @@ fn describe_path_mount(path: &Path) -> String {
     };
 
     format!(
-        "fs={},mount={},source={},device={}",
+        "fs={},mount={},source={},device={},propagation={}",
         entry.fs_type,
         entry.mount_point.display(),
         entry.mount_source.as_deref().unwrap_or("none"),
-        entry.majmin
+        entry.majmin,
+        entry.propagation()
     )
 }
 

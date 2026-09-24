@@ -8,7 +8,9 @@
 use std::path::Path;
 use std::time::Duration;
 
-use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
+use rustix::mount::{
+    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_change, unmount,
+};
 
 use crate::errors::{CausalError, ContextError, Error, Result};
 use crate::sys::mountinfo::MountSnapshot;
@@ -97,6 +99,33 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
         Error::Mount(Box::new(ContextError::new(
             "mount tmpfs staging",
             Some(target.to_path_buf()),
+            source,
+        )))
+    })
+}
+
+/// Unshares a mount Hybrid Mount created from every peer group it inherited.
+///
+/// A cloned mount keeps the propagation type of its source, so a bind of a shared mount joins
+/// that source's peer group, and a mount attached below a shared parent can be handed a fresh
+/// group id. Either one makes our own targets stand out in `/proc/self/mountinfo` as `shared:N`
+/// next to the OverlayFS targets, which carry no propagation field at all, and both draw ids from
+/// the kernel's global group allocator.
+///
+/// `MS_PRIVATE` is local to our own mount: peers of the source keep their group, and only this
+/// mount leaves it. `recursive` covers the subtree a directory move carried along, while a single
+/// bind only needs the non-recursive form.
+pub fn normalize_propagation(path: &Path, recursive: bool) -> Result<()> {
+    let flags = if recursive {
+        MountPropagationFlags::PRIVATE | MountPropagationFlags::REC
+    } else {
+        MountPropagationFlags::PRIVATE
+    };
+
+    mount_change(path, flags).map_err(|source| {
+        Error::Mount(Box::new(ContextError::new(
+            "make mount target private",
+            Some(path.to_path_buf()),
             source,
         )))
     })
