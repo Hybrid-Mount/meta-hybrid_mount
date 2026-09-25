@@ -58,3 +58,4 @@ run_case() {
 run_case "KernelSU arm64" "true" "" "no"
 run_case "APatch arm64" "" "true" "yes"
 run_case "APatch armv7" "" "true" "yes" "arm" "no"
+run_case "APatch riscv64" "" "true" "yes" "riscv64" "no"

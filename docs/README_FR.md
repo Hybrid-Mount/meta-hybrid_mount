@@ -14,7 +14,7 @@ Les répertoires sources des modules sont toujours traités comme des entrées e
 - Magic Mount prend en charge les fichiers, les répertoires, les liens symboliques, `.replace` et la sémantique whiteout.
 - VFS envoie les règles d'injection au sous-système VFS propre à Hybrid Mount (module `hybridmount`) via le keyring. C'est une implémentation indépendante qui n'interopère ni avec le noyau de NoMount ni avec sa CLI nm. Les versions incluent les sources et un module arm64 précompilé par cible Android/GKI prise en charge, chargé au démarrage lorsque le noyau ne l'intègre pas ; en cas d'échec, le comportement suit `vfs_strict`. VFS n'est pas un montage réel.
 - La WebUI propose un thème d'affichage Material Design 3 (par défaut) ou Miuix.
-- Les architectures arm64, armv7 et x86_64 sont prises en charge ; le programme d'installation sélectionne automatiquement le binaire correspondant.
+- Les architectures arm64, armv7, x86_64 et riscv64 sont prises en charge ; le programme d'installation sélectionne automatiquement le binaire correspondant. La compilation riscv64 nécessite le NDK Android r27 ou une version ultérieure.
 
 ## Installation
 

@@ -13,7 +13,7 @@ Hybrid Mount 是面向 KernelSU 與 APatch 的混合掛載元模組。它會在�
 - Magic Mount 支援檔案、目錄、符號連結、`.replace` 和 whiteout 語意。
 - VFS 透過 keyring 將注入規則下發給 Hybrid Mount 自有的 VFS 子系統（`hybridmount` 模組）。這是獨立實作，不與 NoMount 核心或其 nm CLI 互通。發佈包同時提供原始碼與每個受支援 Android/GKI 目標的 arm64 預編譯模組，核心未內建時由啟動流程自動載入；仍不可用時依 `vfs_strict` 降級。VFS 不是真實掛載。
 - WebUI 提供 MD3（預設）與 Miuix 兩套介面。
-- 支援 arm64、armv7 與 x86_64，安裝程式會自動選擇對應的二進位檔案。
+- 支援 arm64、armv7、x86_64 與 riscv64，安裝程式會自動選擇對應的二進位檔案。riscv64 建置需要 Android NDK r27 或更新版本。
 
 ## 安裝
 

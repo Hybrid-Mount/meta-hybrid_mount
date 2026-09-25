@@ -18,8 +18,11 @@ arm)
 x64)
   BIN_FILE="hybrid-mount-x86_64"
   ;;
+riscv64)
+  BIN_FILE="hybrid-mount-riscv64"
+  ;;
 *)
-  abort "! Unsupported architecture: $ARCH (supported: arm64, armv7, x86_64)"
+  abort "! Unsupported architecture: $ARCH (supported: arm64, armv7, x86_64, riscv64)"
   ;;
 esac
 

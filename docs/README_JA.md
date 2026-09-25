@@ -13,7 +13,7 @@ Hybrid Mount は、KernelSU と APatch 向けのハイブリッドマウント�
 - Magic Mount は、ファイル、ディレクトリ、シンボリックリンク、`.replace`、whiteout セマンティクスに対応します。
 - VFS は keyring 経由で Hybrid Mount 独自の VFS サブシステム（`hybridmount` モジュール）に注入ルールを送ります。独立実装であり、NoMount のカーネルやその nm CLI とは相互運用しません。リリースにはソースと、対応する Android/GKI ターゲットごとの arm64 プリコンパイル済みモジュールが含まれ、カーネルに組み込まれていない場合は起動時に読み込まれます。失敗した場合は `vfs_strict` に従って縮退します。VFS は実際のマウントではありません。
 - WebUI には MD3（デフォルト）と Miuix の2種類のインターフェースがあります。
-- arm64、armv7、x86_64 に対応し、インストーラーが適切なバイナリを自動的に選択します。
+- arm64、armv7、x86_64、riscv64 に対応し、インストーラーが適切なバイナリを自動的に選択します。riscv64 のビルドには Android NDK r27 以降が必要です。
 
 ## インストール
 

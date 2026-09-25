@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它在启动阶段扫描其他模块，按全局、模块和路径规则为每一项选择 OverlayFS、Magic Mount 或忽略，并且始终把模块源目录当作只读输入。
 
 - **核心语言**: Rust (edition 2024)
-- **目标平台**: Android (aarch64, armv7, x86_64)
+- **目标平台**: Android (aarch64, armv7, x86_64, riscv64)
 - **WebUI**: Vue 3 + TypeScript + Vite
 - **构建系统**: cargo + xtask
 
@@ -33,6 +33,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 # 交叉编译检查（针对 Android 目标）
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+# riscv64 无预编译 std，使用 nightly rust-src + build-std 检查
+cargo +nightly check -p hybrid-mount --target riscv64-linux-android -Z build-std=std,panic_abort
 cargo check -p hybrid-mount --target aarch64-linux-android
 ```
 
@@ -177,7 +179,7 @@ cargo test -- --nocapture
 ### Android 目标
 
 - 使用 Android NDK 交叉编译
-- 目标架构: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`
+- 目标架构: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, `riscv64-linux-android`（Tier 3，无预编译 std，走 NDK r27+ 直连 + `-Z build-std`）
 - `xtask` 的 Android 构建指定最低 API level 26
 - 运行时需 root 权限（KernelSU 或 APatch）
 
@@ -221,7 +223,7 @@ cargo test -- --nocapture
 
 1. 安装 WebUI 依赖并构建（`pnpm build`），输出到 `module/webroot`
 2. 通过 Vite 将 `MODULE_ID` 注入 WebUI
-3. 交叉编译 Rust 二进制（aarch64、armv7、x86_64）
+3. 交叉编译 Rust 二进制（aarch64、armv7、x86_64、riscv64）
 4. 生成 `module.prop`
 5. 打包 zip（包含二进制、脚本、WebUI、LKM）
 

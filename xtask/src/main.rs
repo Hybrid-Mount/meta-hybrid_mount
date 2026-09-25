@@ -379,37 +379,78 @@ struct AndroidArch {
     ndk_abi: &'static str,
     rust_target: &'static str,
     suffix: &'static str,
+    /// The NDK's clang wrapper prefix, before the API level is appended.
+    clang_prefix: &'static str,
+    /// The API level the NDK ships this architecture's toolchain for.
+    api_level: &'static str,
+    /// Whether cargo-ndk knows this ABI. It rejects riscv64, which is built through
+    /// the NDK directly instead.
+    cargo_ndk: bool,
 }
 
-/// The three supported architectures: cargo-ndk ABI, Rust target and in-zip filename suffix.
+/// The supported architectures: cargo-ndk ABI, Rust target, in-zip filename suffix, NDK
+/// clang prefix, NDK API level, and whether cargo-ndk builds it.
+///
+/// riscv64 is a Tier 3 Rust target: rustup ships no prebuilt `std` for it and cargo-ndk
+/// does not list the ABI, so it is compiled straight through the NDK with `-Z build-std`.
+/// The NDK only carries a riscv64 sysroot from r27 onward, and only for API 35.
 const ANDROID_ARCHS: &[AndroidArch] = &[
     AndroidArch {
         ndk_abi: "arm64-v8a",
         rust_target: "aarch64-linux-android",
         suffix: "arm64",
+        clang_prefix: "aarch64-linux-android",
+        api_level: "26",
+        cargo_ndk: true,
     },
     AndroidArch {
         ndk_abi: "armeabi-v7a",
         rust_target: "armv7-linux-androideabi",
         suffix: "armv7",
+        clang_prefix: "armv7a-linux-androideabi",
+        api_level: "26",
+        cargo_ndk: true,
     },
     AndroidArch {
         ndk_abi: "x86_64",
         rust_target: "x86_64-linux-android",
         suffix: "x86_64",
+        clang_prefix: "x86_64-linux-android",
+        api_level: "26",
+        cargo_ndk: true,
+    },
+    AndroidArch {
+        ndk_abi: "riscv64",
+        rust_target: "riscv64-linux-android",
+        suffix: "riscv64",
+        clang_prefix: "riscv64-linux-android",
+        api_level: "35",
+        cargo_ndk: false,
     },
 ];
 
+/// The architectures cargo-ndk builds in one multitarget invocation.
+fn cargo_ndk_archs() -> impl Iterator<Item = &'static AndroidArch> {
+    ANDROID_ARCHS.iter().filter(|arch| arch.cargo_ndk)
+}
+
+/// The architectures the NDK is driven for directly, because cargo-ndk has no ABI for them.
+fn direct_ndk_archs() -> impl Iterator<Item = &'static AndroidArch> {
+    ANDROID_ARCHS.iter().filter(|arch| !arch.cargo_ndk)
+}
+
 fn rustup_target_args() -> Vec<&'static str> {
     let mut args = vec!["target", "add"];
-    args.extend(ANDROID_ARCHS.iter().map(|arch| arch.rust_target));
+    // riscv64 is Tier 3 with no downloadable `std`, so it is left out here; its
+    // standard library comes from `-Z build-std` against the rust-src component.
+    args.extend(cargo_ndk_archs().map(|arch| arch.rust_target));
     args.extend(["--toolchain", "nightly"]);
     args
 }
 
 fn cargo_ndk_args(release: bool) -> Vec<&'static str> {
     let mut args = vec!["+nightly", "ndk"];
-    for arch in ANDROID_ARCHS {
+    for arch in cargo_ndk_archs() {
         args.extend(["-t", arch.ndk_abi]);
     }
     args.extend(["--platform", "26", "build", "--bin", "hybrid-mount"]);
@@ -419,11 +460,69 @@ fn cargo_ndk_args(release: bool) -> Vec<&'static str> {
     args
 }
 
+/// Builds one architecture through the NDK toolchain without cargo-ndk.
+///
+/// riscv64 has no prebuilt `std`, so `-Z build-std` compiles the standard library from
+/// the nightly `rust-src` component. The NDK ships its riscv64 clang wrapper from r27
+/// onward, for API 35 only.
+fn compile_through_ndk(root: &Path, release: bool, arch: &AndroidArch) -> Result<()> {
+    let host_tag = match std::env::consts::OS {
+        "linux" => "linux-x86_64",
+        "macos" => "darwin-x86_64",
+        "windows" => "windows-x86_64",
+        other => bail!("no Android NDK host toolchain for {other}"),
+    };
+    let ndk_home =
+        env::var("ANDROID_NDK_HOME").context("ANDROID_NDK_HOME must be set to build riscv64")?;
+    let toolchain_bin = Path::new(&ndk_home)
+        .join("toolchains")
+        .join("llvm")
+        .join("prebuilt")
+        .join(host_tag)
+        .join("bin");
+    let clang = toolchain_bin.join(format!("{}{}-clang", arch.clang_prefix, arch.api_level));
+    if !clang.exists() {
+        bail!(
+            "{} not found; the Android NDK carries the riscv64 toolchain from r27 onward",
+            clang.display()
+        );
+    }
+
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let mut command = Command::new(&cargo);
+    command.current_dir(root);
+    command.args(["build", "--target", arch.rust_target]);
+    command.args(["-Z", "build-std=std,panic_abort"]);
+    if release {
+        command.arg("--release");
+    }
+    let path = env::var("PATH").unwrap_or_default();
+    command.env("PATH", format!("{}:{path}", toolchain_bin.display()));
+    let env_target = arch.rust_target.replace('-', "_");
+    command.env("CC", &clang);
+    command.env(format!("CC_{env_target}"), &clang);
+    command.env("AR", toolchain_bin.join("llvm-ar"));
+    command.env(
+        format!("CARGO_TARGET_{}_LINKER", env_target.to_uppercase()),
+        &clang,
+    );
+    let status = command
+        .status()
+        .with_context(|| format!("failed to run cargo for {}", arch.rust_target))?;
+    if !status.success() {
+        bail!("compilation failed for {}", arch.rust_target);
+    }
+    Ok(())
+}
+
 fn compile_binaries(release: bool) -> Result<Vec<(String, PathBuf)>> {
     let root = workspace_root()?;
     let profile = if release { "release" } else { "debug" };
     run_command("rustup", &rustup_target_args(), &root)?;
     run_command("cargo", &cargo_ndk_args(release), &root)?;
+    for arch in direct_ndk_archs() {
+        compile_through_ndk(&root, release, arch)?;
+    }
 
     let mut binaries = Vec::new();
     for arch in ANDROID_ARCHS {
@@ -743,6 +842,22 @@ mod tests {
                 "--release",
             ]
         );
+    }
+
+    /// riscv64 is built through the NDK directly, so it must stay out of the cargo-ndk
+    /// invocation and must carry the NDK's API 35 clang prefix.
+    #[test]
+    fn riscv64_is_built_through_the_ndk_not_cargo_ndk() {
+        let riscv = ANDROID_ARCHS
+            .iter()
+            .find(|arch| arch.rust_target == "riscv64-linux-android")
+            .expect("riscv64 must be a supported architecture");
+        assert!(!riscv.cargo_ndk);
+        assert_eq!(riscv.suffix, "riscv64");
+        assert_eq!(riscv.api_level, "35");
+        assert_eq!(riscv.clang_prefix, "riscv64-linux-android");
+        assert!(!rustup_target_args().contains(&"riscv64-linux-android"));
+        assert!(!cargo_ndk_args(false).contains(&"riscv64"));
     }
 
     #[test]

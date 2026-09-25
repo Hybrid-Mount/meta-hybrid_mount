@@ -13,7 +13,7 @@ Hybrid Mount là siêu mô-đun gắn kết kết hợp dành cho KernelSU và A
 - Magic Mount hỗ trợ tệp, thư mục, liên kết tượng trưng, `.replace` và ngữ nghĩa whiteout.
 - VFS gửi quy tắc chèn vào hệ thống con VFS riêng của Hybrid Mount (mô-đun `hybridmount`) qua keyring. Đây là bản triển khai độc lập, không tương tác với kernel NoMount hay CLI nm của nó. Bản phát hành kèm mã nguồn và mô-đun arm64 biên dịch sẵn cho từng mục tiêu Android/GKI được hỗ trợ, được nạp khi khởi động nếu kernel không tích hợp sẵn; nếu thất bại, hành vi tuân theo `vfs_strict`. VFS không phải là mount thật.
 - WebUI cung cấp hai giao diện MD3 (mặc định) và Miuix.
-- Hỗ trợ arm64, armv7 và x86_64; trình cài đặt tự động chọn tệp nhị phân phù hợp.
+- Hỗ trợ arm64, armv7, x86_64 và riscv64; trình cài đặt tự động chọn tệp nhị phân phù hợp. Bản dựng riscv64 cần Android NDK r27 trở lên.
 
 ## Cài đặt
 

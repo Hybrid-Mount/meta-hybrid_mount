@@ -13,7 +13,7 @@ Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot,
 - Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
 - VFS sends injection rules to Hybrid Mount's own VFS kernel subsystem, the `hybridmount` module, through the keyring. It is an independent implementation and does not interoperate with NoMount's kernel or its nm CLI. Releases ship the sources and a prebuilt aarch64 module per supported Android/GKI target, which the boot pipeline loads when the kernel does not already carry one; if that fails it falls back according to `vfs_strict`. VFS is not a real mount.
 - The WebUI provides MD3 (default) and Miuix interfaces.
-- arm64, armv7, and x86_64 are supported; the installer automatically selects the matching binary.
+- arm64, armv7, x86_64, and riscv64 are supported; the installer automatically selects the matching binary. The riscv64 build requires the Android NDK r27 or newer.
 
 ## Installation
 

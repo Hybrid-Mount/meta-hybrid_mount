@@ -13,7 +13,7 @@ Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Aç�
 - Magic Mount; dosya, dizin, sembolik bağlantı, `.replace` ve whiteout semantiğini destekler.
 - VFS, enjeksiyon kurallarını keyring üzerinden Hybrid Mount'un kendi VFS alt sistemine (`hybridmount` modülü) gönderir. Bağımsız bir uygulamadır; NoMount çekirdeği veya nm CLI'si ile birlikte çalışmaz. Sürümler kaynak kodu ve desteklenen her Android/GKI hedefi için önceden derlenmiş arm64 modülü içerir; çekirdek bunu barındırmıyorsa önyüklemede yüklenir. Başarısız olursa davranış `vfs_strict` ile belirlenir. VFS gerçek bir bağlama değildir.
 - WebUI, MD3 (varsayılan) ve Miuix arayüzlerini sunar.
-- arm64, armv7 ve x86_64 mimarileri desteklenir; yükleyici uygun ikili dosyayı otomatik olarak seçer.
+- arm64, armv7, x86_64 ve riscv64 mimarileri desteklenir; yükleyici uygun ikili dosyayı otomatik olarak seçer. riscv64 derlemesi Android NDK r27 veya üstünü gerektirir.
 
 ## Kurulum
 

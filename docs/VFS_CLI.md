@@ -178,6 +178,9 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo check --locked -p hybrid-mount --target aarch64-linux-android
 cargo check --locked -p hybrid-mount --target armv7-linux-androideabi
 cargo check --locked -p hybrid-mount --target x86_64-linux-android
+# riscv64 无预编译 std，需 nightly + rust-src 以 build-std 方式检查
+cargo +nightly check --locked -p hybrid-mount --target riscv64-linux-android \
+  -Z build-std=std,panic_abort
 ```
 
 用户态测试覆盖解析、别名、退出码、UID 字节布局、分页、幂等、部分失败、清空范围、

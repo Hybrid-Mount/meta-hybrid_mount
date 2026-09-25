@@ -143,6 +143,7 @@ jobs:
           - aarch64-linux-android
           - armv7-linux-androideabi
           - x86_64-linux-android
+          - riscv64-linux-android
     container:
       image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
       credentials:
@@ -167,8 +168,15 @@ jobs:
 
       - name: Check Android target
         run: |
-          rustup target add "${{ matrix.target }}" --toolchain nightly
-          cargo check -p hybrid-mount --target "${{ matrix.target }}"
+          # riscv64 is a Tier 3 Rust target with no downloadable std, so it is built
+          # from the rust-src component with -Z build-std instead of `rustup target add`.
+          if [ "${{ matrix.target }}" = "riscv64-linux-android" ]; then
+            cargo +nightly check -p hybrid-mount --target "${{ matrix.target }}" \
+              -Z build-std=std,panic_abort
+          else
+            rustup target add "${{ matrix.target }}" --toolchain nightly
+            cargo check -p hybrid-mount --target "${{ matrix.target }}"
+          fi
 
   webui-lints:
     runs-on: ubuntu-latest

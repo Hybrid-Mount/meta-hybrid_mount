@@ -66,7 +66,7 @@ module/metamount.sh
 
 LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍为 GPL-3.0-only，WebUI 仍为 Apache-2.0。预编译 LKM 只按受支持的内核线与 Android/GKI 版本做精确候选选择，不能替代实机 ABI 校验；KernelSU 安装不保留这些文件，非 KSU 环境默认尝试匹配项。
 
-发布 ZIP 在安装前包含 `binaries/hybrid-mount-arm64`、`binaries/hybrid-mount-armv7` 和 `binaries/hybrid-mount-x86_64`。`customize.sh` 只复制当前架构对应的文件到上述稳定二进制路径，随后删除安装目录中的 `binaries/`，设备上没有第二套常驻可执行文件。
+发布 ZIP 在安装前包含 `binaries/hybrid-mount-arm64`、`binaries/hybrid-mount-armv7`、`binaries/hybrid-mount-x86_64` 和 `binaries/hybrid-mount-riscv64`。`customize.sh` 只复制当前架构对应的文件到上述稳定二进制路径，随后删除安装目录中的 `binaries/`，设备上没有第二套常驻可执行文件。
 
 挂载所需的临时目录使用内核随机生成的 22–30 位字母数字名称和 `0700` 权限，依次尝试 `/mnt`、`/mnt/rw`、`/tmp`。名称不包含项目、PID 或时间戳特征；正常结束时递归清理，仅在 `disable_umount = true` 明确保留挂载时保留对应路径。
 
