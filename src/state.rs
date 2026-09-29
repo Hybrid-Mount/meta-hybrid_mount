@@ -572,10 +572,15 @@ pub(crate) fn write_scan_ret_to(modules: &[AppModule], path: &Path) -> Result<()
 
 /// Merge live installation metadata into the committed runtime snapshot. A
 /// disable/blacklist edit changes the next boot, never already active resources.
+///
+/// A removed source stays listed only while `boot_owned` proves that this kernel boot still owns a
+/// live mount or VFS rule for it: `scan.ret` outlives the boot that wrote it, so keeping every
+/// removed `is_mounted` entry listed a module the device had already lost on a physical reboot.
 fn merge_module_snapshot(
     cached: Vec<AppModule>,
     installed: &[ModuleRecord],
     config: &Config,
+    boot_owned: &BTreeSet<String>,
 ) -> Vec<AppModule> {
     let mut cached: BTreeMap<_, _> = cached
         .into_iter()
@@ -588,9 +593,12 @@ fn merge_module_snapshot(
             module.is_mounted = previous.is_mounted;
         }
     }
-    // Removed sources can still have pinned VFS rules or mounts. Keep their
-    // ownership visible until an explicit unload or cleanup removes it.
-    for mut removed in cached.into_values().filter(|module| module.is_mounted) {
+    // A removed source can still have pinned VFS rules or mounts. Keep its ownership visible
+    // until an explicit unload or cleanup removes it, but only with boot-scoped proof.
+    for mut removed in cached
+        .into_values()
+        .filter(|module| module.is_mounted && boot_owned.contains(module.id.as_str()))
+    {
         removed.enabled = false;
         merged.push(removed);
     }
@@ -602,6 +610,7 @@ fn query_module_snapshot(
     path: &Path,
     installed: &[ModuleRecord],
     config: &Config,
+    boot_owned: &BTreeSet<String>,
 ) -> Vec<AppModule> {
     let cached = match fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
@@ -622,7 +631,7 @@ fn query_module_snapshot(
             Vec::new()
         }
     };
-    merge_module_snapshot(cached, installed, config)
+    merge_module_snapshot(cached, installed, config, boot_owned)
 }
 
 /// `modules`: combine committed runtime ownership with current installed metadata.
@@ -634,7 +643,13 @@ pub fn handle_modules() -> Result<()> {
         .map(|partition| (*partition).to_owned())
         .collect::<Vec<_>>();
     let installed = list_modules(&config.moduledir, &managed_partitions)?;
-    let modules = query_module_snapshot(Path::new(defs::SCAN_RET_PATH), &installed, &config);
+    let boot_owned = crate::runtime::boot_owned_module_ids();
+    let modules = query_module_snapshot(
+        Path::new(defs::SCAN_RET_PATH),
+        &installed,
+        &config,
+        &boot_owned,
+    );
     println!("{}", serde_json::to_string_pretty(&modules)?);
     Ok(())
 }
@@ -980,7 +995,7 @@ mod tests {
             },
         );
         edited.module_blacklist.insert(installed.id.clone());
-        let merged = merge_module_snapshot(cached, &[installed], &edited);
+        let merged = merge_module_snapshot(cached, &[installed], &edited, &BTreeSet::new());
         assert_eq!(merged[0].name, "updated name");
         assert_eq!(merged[0].version, "2");
         assert!(!merged[0].enabled);
@@ -998,7 +1013,12 @@ mod tests {
             file_type: crate::mount_tree::NodeFileType::RegularFile,
             replace: false,
         });
-        let merged = merge_module_snapshot(Vec::new(), &[installed], &Config::default());
+        let merged = merge_module_snapshot(
+            Vec::new(),
+            &[installed],
+            &Config::default(),
+            &BTreeSet::new(),
+        );
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].id, "new_module");
         assert!(merged[0].enabled);
@@ -1006,7 +1026,7 @@ mod tests {
     }
 
     #[test]
-    fn query_merge_keeps_removed_active_modules_for_unload_and_drops_inactive_ones() {
+    fn query_merge_keeps_removed_modules_only_while_this_boot_owns_them() {
         let records = [record("active"), record("inactive")];
         let plan = MountPlan {
             vfs_module_ids: vec![records[0].id.clone()],
@@ -1019,12 +1039,44 @@ mod tests {
             &[],
             &BTreeSet::from(["active".into()]),
         );
-        let merged = merge_module_snapshot(cached, &[], &Config::default());
+
+        let owned = BTreeSet::from(["active".into()]);
+        let merged = merge_module_snapshot(cached.clone(), &[], &Config::default(), &owned);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].id, "active");
         assert!(merged[0].is_mounted);
         assert!(!merged[0].enabled);
         assert_eq!(merged[0].mode, "vfs");
+
+        // A physical boot drops mount ownership, so the same cached snapshot must stop listing a
+        // source the device no longer has installed.
+        let merged = merge_module_snapshot(cached, &[], &Config::default(), &BTreeSet::new());
+        assert!(merged.is_empty());
+    }
+
+    #[test]
+    fn module_query_drops_a_removed_source_the_boot_no_longer_owns() {
+        let fixture = crate::test_support::Fixture::new("module-query-removed-source");
+        let path = fixture.join("scan.ret");
+        let original = record("uninstalled");
+        let plan = MountPlan {
+            overlay_module_ids: vec![original.id.clone()],
+            ..MountPlan::default()
+        };
+        let cached = app_modules(
+            std::slice::from_ref(&original),
+            &Config::default(),
+            &plan,
+            &[],
+            &BTreeSet::from(["uninstalled".into()]),
+        );
+        assert!(cached[0].is_mounted);
+        write_scan_ret_to(&cached, &path).unwrap();
+        let committed = fs::read(&path).unwrap();
+
+        let view = query_module_snapshot(&path, &[], &Config::default(), &BTreeSet::new());
+        assert!(view.is_empty());
+        assert_eq!(fs::read(path).unwrap(), committed);
     }
 
     #[test]
@@ -1043,7 +1095,7 @@ mod tests {
         let committed = fs::read(&path).unwrap();
         let mut updated = original;
         updated.name = "live metadata".into();
-        let view = query_module_snapshot(&path, &[updated], &Config::default());
+        let view = query_module_snapshot(&path, &[updated], &Config::default(), &BTreeSet::new());
         assert_eq!(view[0].name, "live metadata");
         assert_eq!(fs::read(path).unwrap(), committed);
     }
@@ -1052,7 +1104,12 @@ mod tests {
     fn module_query_does_not_create_missing_cache() {
         let fixture = crate::test_support::Fixture::new("module-query-missing");
         let path = fixture.join("scan.ret");
-        let view = query_module_snapshot(&path, &[record("installed")], &Config::default());
+        let view = query_module_snapshot(
+            &path,
+            &[record("installed")],
+            &Config::default(),
+            &BTreeSet::new(),
+        );
         assert_eq!(view.len(), 1);
         assert!(!path.exists());
     }

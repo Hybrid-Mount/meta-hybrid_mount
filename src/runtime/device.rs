@@ -29,12 +29,19 @@ pub fn enter_init_namespace() -> Result<()> {
     Ok(())
 }
 
+/// Kernel boot identity. Mount ids and mount ownership never cross this boundary.
+pub fn boot_id() -> Result<String> {
+    Ok(fs::read_to_string("/proc/sys/kernel/random/boot_id")?
+        .trim()
+        .to_owned())
+}
+
 pub fn load() -> Result<Ledger> {
-    let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id")?;
+    let boot_id = boot_id()?;
     let ns = namespace_at("/proc/1/ns/mnt")?;
     ledger::ledger_for_boot(
         ledger::read_at(Path::new(ledger::LEDGER_PATH))?,
-        boot_id.trim(),
+        &boot_id,
         &ns,
     )
 }

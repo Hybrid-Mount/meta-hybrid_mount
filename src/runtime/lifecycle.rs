@@ -5,10 +5,27 @@ use crate::errors::{Error, Result};
 use crate::state::RunState;
 use std::collections::BTreeSet;
 
-pub fn reject_legacy_mounts(
+/// A live mount sitting on a target a pre-ledger snapshot recorded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LegacyConflict {
+    pub target: String,
+    pub fs_type: String,
+    pub source: Option<String>,
+}
+
+/// Reports live mounts on targets that `run/state.json` recorded before the ownership ledger
+/// existed.
+///
+/// The snapshot stores targets only, never mount ids or a boot identity, so it cannot prove that a
+/// live mount belongs to Hybrid Mount. Callers report these conflicts and keep going: deciding
+/// "mine" aborts the whole mount pipeline for the boot (APatch and KernelSU stop after a
+/// metamodule script exits non-zero), while deciding "foreign" only leaves a stale mount that the
+/// next physical boot removes. Boot-scoped ownership stays in the runtime ledger, and unattributable
+/// mounts are never detached.
+pub fn legacy_mount_conflicts(
     state: &RunState,
     current: &[(String, String, Option<String>)],
-) -> Result<()> {
+) -> Vec<LegacyConflict> {
     let mut targets: BTreeSet<&str> = state
         .overlay_active_mounts
         .iter()
@@ -19,28 +36,46 @@ pub fn reject_legacy_mounts(
     if let Some(path) = state.mount_point.to_str().filter(|p| !p.is_empty()) {
         targets.insert(path);
     }
+    let mut conflicts = Vec::new();
     for target in targets {
         let matches: Vec<_> = current.iter().filter(|m| m.0 == target).collect();
-        // A single ordinary partition mount can survive across physical boots.
-        // Nested targets and stacks are ambiguous without an ownership ledger.
+        // A single ordinary partition mount can survive across physical boots, so only mounts the
+        // pre-ledger snapshot could have created are reported. Nested targets and stacks are
+        // ambiguous without an ownership ledger.
         let partition = target == "/system"
             || crate::defs::MANAGED_PARTITIONS
                 .iter()
                 .any(|p| target.strip_prefix('/') == Some(*p));
-        let stock_partition = partition
-            && matches.len() == 1
-            && matches!(matches[0].1.as_str(), "ext4" | "erofs")
-            && matches[0]
-                .2
-                .as_deref()
-                .is_some_and(|s| s.starts_with("/dev/block/"));
-        if !matches.is_empty() && !stock_partition {
-            return Err(Error::msg(format!(
-                "untracked mount at {target}; a full reboot is required before runtime management"
-            )));
+        for mount in matches {
+            let stock_partition = partition
+                && matches!(mount.1.as_str(), "ext4" | "erofs")
+                && mount
+                    .2
+                    .as_deref()
+                    .is_some_and(|s| s.starts_with("/dev/block/"));
+            if !stock_partition {
+                conflicts.push(LegacyConflict {
+                    target: target.to_owned(),
+                    fs_type: mount.1.clone(),
+                    source: mount.2.clone(),
+                });
+            }
         }
     }
-    Ok(())
+    conflicts
+}
+
+/// Whether a pre-ledger snapshot can still describe live mounts.
+///
+/// Mounts never survive a physical boot, so a snapshot written before the ownership ledger cannot
+/// outlive the kernel boot that wrote it. The persisted ledger records the boot id of the last
+/// Hybrid Mount session, and a different id therefore proves that every target in the snapshot is
+/// unreachable. No ledger at all proves nothing, so the caller reports instead of deciding.
+pub fn legacy_snapshot_reachable(persisted_boot_id: Option<&str>, current_boot_id: &str) -> bool {
+    match persisted_boot_id {
+        Some(boot_id) => boot_id == current_boot_id,
+        None => true,
+    }
 }
 
 pub fn owned_uids(requested: &[u32], original: &[u32], observed: &[u32]) -> Vec<u32> {
@@ -108,37 +143,41 @@ mod tests {
     }
 
     #[test]
-    fn old_overlay_without_ledger_must_not_be_cleared_as_clean() {
+    fn pre_ledger_overlay_is_reported_without_failing_the_boot() {
         let state = RunState {
             overlay_active_mounts: vec!["/system".into()],
             ..RunState::default()
         };
-        assert!(
-            reject_legacy_mounts(
-                &state,
-                &[("/system".into(), "overlay".into(), Some("KSU".into()))]
-            )
-            .is_err()
+        let conflicts = legacy_mount_conflicts(
+            &state,
+            &[("/system".into(), "overlay".into(), Some("KSU".into()))],
+        );
+        assert_eq!(
+            conflicts,
+            vec![LegacyConflict {
+                target: "/system".into(),
+                fs_type: "overlay".into(),
+                source: Some("KSU".into()),
+            }]
         );
     }
 
     #[test]
-    fn old_magic_bind_with_block_source_is_still_untracked() {
+    fn pre_ledger_magic_bind_with_block_source_is_reported() {
         let state = RunState {
             magic_active_mounts: vec!["/system/etc/hosts".into()],
             ..RunState::default()
         };
-        assert!(
-            reject_legacy_mounts(
-                &state,
-                &[(
-                    "/system/etc/hosts".into(),
-                    "ext4".into(),
-                    Some("/dev/block/dm-1".into())
-                )]
-            )
-            .is_err()
+        let conflicts = legacy_mount_conflicts(
+            &state,
+            &[(
+                "/system/etc/hosts".into(),
+                "ext4".into(),
+                Some("/dev/block/dm-1".into()),
+            )],
         );
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].target, "/system/etc/hosts");
     }
 
     #[test]
@@ -148,7 +187,7 @@ mod tests {
             ..RunState::default()
         };
         assert!(
-            reject_legacy_mounts(
+            legacy_mount_conflicts(
                 &state,
                 &[(
                     "/system".into(),
@@ -156,8 +195,61 @@ mod tests {
                     Some("/dev/block/dm-0".into())
                 )]
             )
-            .is_ok()
+            .is_empty()
         );
+    }
+
+    #[test]
+    fn platform_overlay_on_a_recorded_target_is_reported_and_never_reaches_another_boot() {
+        // Regression: a snapshot that listed the platform's own `/product/overlay` made a cold
+        // boot fail with `untracked mount at /product/overlay`, which stops every module from
+        // mounting. The conflict is now informational, and a ledger from an earlier boot proves
+        // the recorded targets are unreachable.
+        let state = RunState {
+            overlay_active_mounts: vec!["/product/overlay".into()],
+            ..RunState::default()
+        };
+        let conflicts = legacy_mount_conflicts(
+            &state,
+            &[(
+                "/product/overlay".into(),
+                "overlay".into(),
+                Some("overlay-overlay".into()),
+            )],
+        );
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].source.as_deref(), Some("overlay-overlay"));
+
+        assert!(!legacy_snapshot_reachable(
+            Some("previous-boot"),
+            "current-boot"
+        ));
+        assert!(legacy_snapshot_reachable(
+            Some("current-boot"),
+            "current-boot"
+        ));
+        assert!(legacy_snapshot_reachable(None, "current-boot"));
+    }
+
+    #[test]
+    fn a_stack_over_a_stock_partition_reports_only_the_extra_mount() {
+        let state = RunState {
+            overlay_active_mounts: vec!["/system".into()],
+            ..RunState::default()
+        };
+        let conflicts = legacy_mount_conflicts(
+            &state,
+            &[
+                (
+                    "/system".into(),
+                    "erofs".into(),
+                    Some("/dev/block/dm-0".into()),
+                ),
+                ("/system".into(), "overlay".into(), Some("overlay".into())),
+            ],
+        );
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].fs_type, "overlay");
     }
 
     #[test]

@@ -89,6 +89,20 @@ impl Ledger {
     }
 }
 
+/// Module ids whose ownership this ledger still records.
+///
+/// Overlay and Magic ownership is tracked by target in `non_vfs_modules`; VFS ownership is the saved
+/// rules. Committed `modules` snapshot entries are deliberately excluded: they are a copy of
+/// `scan.ret`, which outlives the boot that wrote it and therefore proves nothing.
+pub fn owned_module_ids(ledger: &Ledger) -> BTreeSet<String> {
+    ledger
+        .non_vfs_modules
+        .iter()
+        .cloned()
+        .chain(ledger.rules.iter().map(|rule| rule.module_id.clone()))
+        .collect()
+}
+
 pub fn ledger_for_boot(saved: Option<Ledger>, boot_id: &str, namespace: &str) -> Result<Ledger> {
     if let Some(saved) = saved
         && saved.boot_id == boot_id
@@ -122,6 +136,44 @@ pub fn ledger_for_boot(saved: Option<Ledger>, boot_id: &str, namespace: &str) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn owned_module_ids_cover_overlay_magic_and_vfs_ownership_only() {
+        let ledger = Ledger {
+            non_vfs_modules: BTreeSet::from(["pinned".to_owned()]),
+            rules: vec![SavedRule {
+                module_id: "vfs_only".into(),
+                virtual_path: "/system/etc/hosts".into(),
+                real_path: "/data/adb/modules/vfs_only/system/etc/hosts".into(),
+                flags: 0,
+                uid: 0,
+            }],
+            modules: vec![crate::state::AppModule {
+                id: crate::module_id::ModuleId::try_from("snapshot_only").unwrap(),
+                name: "snapshot_only".into(),
+                version: "1".into(),
+                author: String::new(),
+                description: String::new(),
+                mode: "overlay".into(),
+                is_mounted: true,
+                enabled: true,
+                blacklisted: false,
+                source_path: "/data/adb/modules/snapshot_only".into(),
+                mount_error: None,
+                suggest_ignore: false,
+                rules: crate::state::AppModuleRules {
+                    default_mode: None,
+                    paths: std::collections::BTreeMap::new(),
+                },
+            }],
+            ..Ledger::default()
+        };
+        assert_eq!(
+            owned_module_ids(&ledger),
+            BTreeSet::from(["pinned".to_owned(), "vfs_only".to_owned()])
+        );
+        assert!(owned_module_ids(&Ledger::default()).is_empty());
+    }
 
     #[test]
     fn another_boot_never_reuses_owned_mounts() {

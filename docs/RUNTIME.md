@@ -81,13 +81,20 @@ marker and is no longer the synchronization mechanism.
   commands never clear a pre-existing guard to force a retry.
 - Upgrading during a live session from a version without complete ownership
   (including KernelSU registration records for real mounts) may
-  require one physical reboot. Recorded legacy mount targets and untracked explicit
-  VFS rules are rejected; old snapshots must not be erased by a no-op cleanup.
+  require one physical reboot. A pre-ledger snapshot (`run/state.json` predates the
+  boot-scoped ledger) records targets only, so a live mount on one of them is reported
+  and left untouched rather than failing the boot: a metamodule script that exits
+  non-zero stops every module from mounting. A persisted ledger from an earlier kernel
+  boot proves those targets are unreachable, and untracked explicit VFS rules are still
+  rejected; old snapshots must not be erased by a no-op cleanup.
 - External raw kernel writers do not honor the userspace lock. A check/mutation race
   remains possible; readback and conservative refusal reduce but cannot eliminate
   it. Rule rollback can restore path semantics, not a deleted old source inode.
 - No daemon watches module changes. Querying modules merges current installation
-  metadata with the runtime snapshot; loading/reloading is explicit. Processes with
+  metadata with the runtime snapshot; a removed source stays listed only while the
+  current kernel boot's ledger still records a mount or VFS rule for it, because
+  `scan.ret` outlives the boot that wrote it and its `is_mounted` flags alone prove
+  nothing. Loading/reloading is explicit. Processes with
   already open file descriptors may retain the old file until they reopen it.
 
 ## Validation

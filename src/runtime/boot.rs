@@ -12,6 +12,7 @@ use crate::plan::MountPlan;
 use crate::state::RunState;
 use crate::sys::mountinfo::{self, MountEntry};
 use std::fs;
+use std::path::Path;
 
 pub struct BootSession {
     baseline: Vec<MountEntry>,
@@ -26,7 +27,7 @@ pub fn start() -> Result<BootSession> {
     let mut saved = device::load()?;
     saved.require_clean()?;
     let baseline = mountinfo::mount_entries()?;
-    reject_legacy(&baseline)?;
+    report_legacy(&baseline);
     let original_uids = check_untracked_vfs()?;
     saved.generation += 1;
     saved.phase = "applying".into();
@@ -127,7 +128,7 @@ pub fn cleanup() -> Result<()> {
     if saved.phase == "clean" {
         saved.require_clean()?;
         if saved.generation == 0 {
-            reject_legacy(&mountinfo::mount_entries()?)?;
+            report_legacy(&mountinfo::mount_entries()?);
         }
         check_untracked_vfs()?;
         return super::hot::refresh_snapshots(&saved);
@@ -196,7 +197,34 @@ fn cleanup_owned(saved: &mut Ledger) -> Result<()> {
     Ok(())
 }
 
-fn reject_legacy(current: &[MountEntry]) -> Result<()> {
+/// Reports live mounts that a pre-ledger snapshot recorded, without deciding ownership.
+///
+/// `run/state.json` predates the boot-scoped ledger: it carries no mount ids and no boot identity,
+/// so a live mount at a recorded target cannot be attributed to Hybrid Mount. Aborting here would
+/// stop every module from mounting on the strength of that ambiguity, because APatch and KernelSU
+/// both drop a metamodule script that exits non-zero. The conflicts are logged and the pipeline
+/// continues, and an unattributable mount is never claimed, detached or reported as owned.
+fn report_legacy(current: &[MountEntry]) {
+    let persisted_boot = match ledger::read_at(Path::new(ledger::LEDGER_PATH)) {
+        Ok(persisted) => persisted.map(|ledger| ledger.boot_id),
+        Err(err) => {
+            log::warn!("cannot read the runtime ownership ledger: {err}");
+            None
+        }
+    };
+    let current_boot = match device::boot_id() {
+        Ok(boot_id) => boot_id,
+        Err(err) => {
+            log::warn!("cannot read the kernel boot id: {err}");
+            return;
+        }
+    };
+    if !lifecycle::legacy_snapshot_reachable(persisted_boot.as_deref(), &current_boot) {
+        log::debug!(
+            "pre-ledger mount snapshot was written in another kernel boot; none of its targets can still be mounted"
+        );
+        return;
+    }
     let entries = current
         .iter()
         .map(|m| {
@@ -207,7 +235,14 @@ fn reject_legacy(current: &[MountEntry]) -> Result<()> {
             )
         })
         .collect::<Vec<_>>();
-    lifecycle::reject_legacy_mounts(&RunState::load_or_default(), &entries)
+    for conflict in lifecycle::legacy_mount_conflicts(&RunState::load_or_default(), &entries) {
+        log::warn!(
+            "pre-ledger mount snapshot lists {}: the live {} mount from {} is not in this boot's ownership ledger; leaving it untouched",
+            conflict.target,
+            conflict.fs_type,
+            conflict.source.as_deref().unwrap_or("an unknown source")
+        );
+    }
 }
 
 fn check_untracked_vfs() -> Result<Vec<u32>> {

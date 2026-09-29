@@ -39,6 +39,12 @@ pub fn sync_parent_directory(path: &Path) -> io::Result<()> {
     fs::File::open(parent)?.sync_all()
 }
 
+#[cfg(not(unix))]
+pub fn sync_parent_directory(_path: &Path) -> std::io::Result<()> {
+    // Non-Unix hosts have no directory-entry sync; release targets always take the path above.
+    Ok(())
+}
+
 /// Replace a file without exposing a truncated intermediate state.
 #[cfg(unix)]
 pub fn atomic_write(path: &Path, content: &[u8]) -> Result<()> {
