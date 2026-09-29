@@ -1,4 +1,14 @@
 
+## v6.2.3-rc.1
+
+
+### <!-- 2 --> Fixes
+
+- `runtime` Report a pre-ledger mount snapshot instead of failing the boot A pre-ledger `run/state.json` records only the targets Hybrid Mount touched, never the mounts themselves, so a live mount on one of them cannot be attributed to Hybrid Mount. Rejecting that snapshot stopped the whole pipeline, and APatch/KernelSU drop every module of a boot when the metamodule script exits non-zero, so a device that upgraded from a pre-ledger version was left with nothing mounted: the platform's own `/product/overlay` sits on a target a 6.2.1 session had recorded, which was enough to fail every cold boot. The snapshot is now reported and left untouched, and a persisted ownership ledger from an earlier kernel boot proves the recorded targets are unreachable, so the check also stops firing after any physical reboot. The same age problem hid removed sources in the module list: `scan.ret` outlives the boot that wrote it, so a removed module stayed listed as mounted until something rewrote the cache. A removed source now stays listed only while this boot's ledger still records mounts or VFS rules for it, which keeps active ownership visible for an explicit unload and drops what a reboot already lost. - src/runtime/lifecycle.rs: reject_legacy_mounts -> legacy_mount_conflicts, plus legacy_snapshot_reachable for the boot-scope proof - src/runtime/boot.rs: report_legacy() warns instead of aborting, in start() and cleanup() - src/runtime/device.rs: expose boot_id() so the check can compare it - src/runtime/ledger.rs: owned_module_ids() reads overlay/magic/VFS ownership only, never the committed scan.ret copy - src/runtime/mod.rs: boot_owned_module_ids() backs the module query - src/state.rs: merge_module_snapshot() keeps a removed source only while the ledger still owns it - src/sys/fs.rs: stub sync_parent_directory on non-unix hosts - docs/RUNTIME.md: document both changes - tests: lifecycle conflicts/boot scope and the removed-source query Verified with cargo fmt --check, cargo clippy --workspace --all-targets -- -D warnings, a linux-target clippy run that also builds the boot/device/hot modules, and cargo test -p hybrid-mount (453 passed; the 10 failures are Windows-host path/mount differences that fail identically before this change).
+
+
+
+
 ## v6.2.2
 
 
