@@ -1,4 +1,38 @@
 
+## v6.2.2
+
+
+### <!-- 1 --> Features
+
+- `runtime` Add VFS hot mounting and safe late-load lifecycle Share boot-scoped ownership, operation locking, readback and recovery across boot mounting, pure-VFS module actions and KernelSU soft-reboot cleanup. Add module load, unload and reload controls designed for both WebUI themes, strict late-load reboot detection, live module snapshots and lifecycle docs.
+
+- `build` Add riscv64 architecture support Restore riscv64 alongside arm64, armv7 and x86_64, which was dropped in 06bcf525. riscv64 is a Tier 3 Rust target: rustup ships no prebuilt std and cargo-ndk has no ABI for it, so xtask builds it straight through the NDK with `-Z build-std=std,panic_abort` against the nightly rust-src component. The NDK only carries a riscv64 sysroot from r27 onward and only for API 35. - xtask: record per-arch clang prefix, API level and cargo-ndk capability; keep riscv64 out of the cargo-ndk invocation and add compile_through_ndk - src/vfs/sys.rs: SYS_ADD_KEY = 217 for riscv64 (same as aarch64) - module/customize.sh: select hybrid-mount-riscv64 - lints.yml: add riscv64 to the android matrix with a build-std check step - rust-toolchain.toml: add rust-src - tests: xtask argv assertions and the installer branch case - docs: mention riscv64 and the NDK r27 requirement
+
+
+
+### <!-- 2 --> Fixes
+
+- `webui` Use rounded rectangles for error banner labels
+
+- `vfs` Keep injected dentries off the hijacked filesystem's dentry ops Dentries created by hybridmount are added with d_add()/d_splice_alias() and never went through the hijacked filesystem's ->lookup(), so its private dentry data is not initialized for them: overlayfs' d_fsdata stays NULL. hybridmount_hijack_dentry_ops() still gave such a dentry the foreign dentry_operations table (a copy that only replaced d_revalidate, leaving ovl_dentry_weak_revalidate() reachable) and set DCACHE_OP_REVALIDATE / DCACHE_DONTCACHE without ever clearing the DCACHE_OP_WEAK_REVALIDATE and DCACHE_OP_REAL bits that d_set_d_op() had taken from the superblock. The VFS then called ovl_dentry_revalidate()/ovl_dentry_weak_revalidate() on it; both read dentry->d_fsdata and dereference oe->numlower at offset 0x10, which panics the kernel, and a negative injected dentry reached the same place through hm_d_revalidate()'s forwarding to orig_dops because ownership was decided from d_inode alone. Give the dentries hybridmount creates their own table, hm_owned_dops, with a d_weak_revalidate() of ours, clear every DCACHE_OP_* flag that table cannot serve (HASH, COMPARE, DELETE, PRUNE, REAL), and record ownership in the d_op pointer so negative injected dentries are recognized too and can never be forwarded to the filesystem they were injected into. Dentries adopted from a real ->lookup() still get a working table; when the filesystem has its own dentry_operations and there is no hm_iop to cache a copy in, both the table and the flags are left alone. Also correct the d_revalidate() calling-convention guards to 6.14, where the four-argument form replaced the two-argument one.
+
+- `runtime` Stop reporting a removed runtime temp dir as retained RuntimeTempDir kept a single `cleanup` boolean, so remove_now() cleared the same flag keep() sets. Drop then read the cleared flag and logged "runtime temporary directory retained: ..., reason=disable_umount" for a directory it had itself just deleted, which reads as if disable_umount were on when it was off and puts two contradicting lines in the same boot log. Track the lifecycle explicitly (Remove / Retain / Removed) so Drop only reports a retention when a mount is really being kept alive beneath the directory, and cover both outcomes with unit tests.
+
+- `storage` Withdraw the transient staging mount from the KSU umount list finalize_mount_setup() registers the ext4/tmpfs staging mount point with the KernelSU try-umount list, and teardown() then detaches that mount and removes its directory. The registration was never withdrawn, so the kernel kept replaying a path that no longer existed on every later umount for the rest of the boot: KernelSU: ksu_handle_umount: unmounting: /mnt/<session>/<staging> flags 0x2 withdraw_unmountable() removes the entry again (from REGISTERED_PATHS and from the kernel list through the crate's TryUmount::del), and teardown() calls it once the mount is confirmed detached. commit_unmount_list() now builds the kernel list from the still-registered paths, so withdrawing before that commit works just as well as withdrawing after it. A failed withdrawal stays a warning instead of failing the teardown: the mount is already gone.
+
+- `runtime` Harden hot mounting and reboot cleanup Track exact KernelSU registrations and delete only owned entries during staging teardown, rollback, and soft-reboot cleanup. Install and verify UID isolation before hot rule publication, and reject conflicting rules across UIDs. Pin dentry parents and names during ref-walk revalidation, refresh all seven kernel modules, and detect markerless APatch through its live kernel interface. Add regression coverage and remove superseded implementation documents.
+
+- `mount` Normalize magic mount target propagation Kernel clones inherit the propagation type of the mount they were cloned from, so a MS_BIND from a shared source leaves the target in that peer group. Magic Mount binds staging mirrors and module files this way, so every target added its own `shared:N` entry to the propagation table, while the OverlayFS targets created with OPEN_TREE_CLONE stay private. Apps that read mountinfo for environment checks saw a target set that was half grouped and half ungrouped, with freshly allocated group ids leaving gaps in the ids they had already collected. magic_mount_bind() now unsets the clone with MS_PRIVATE right after the bind, and the directory path repeats it recursively after the staging tree is moved onto the real target. MS_PRIVATE only affects that mount: the source keeps its own peer group, and the kernel releases the group id when its last member becomes private, so the ids stop being consumed. Normalization stays best-effort, but it is no longer silent: once the mount phase ends, the active targets are read back from mountinfo and reported when any of them still belongs to a peer group. mount_entries() and the boot log now carry the propagation type of each entry (`propagation=private|shared:N| slave:N`) so a change in the propagation table is visible from both sides.
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- `vfs` Refresh the prebuilt hybridmount modules
+
+
+
+
 ## v6.2.1
 
 
