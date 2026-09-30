@@ -138,6 +138,9 @@ jobs:
       - name: Test boot lock consistency
         run: sh tests/shell/boot_lock.sh
 
+      - name: Test the emulated soft-reboot hook delegates cleanup
+        run: sh tests/shell/runtime_hooks.sh
+
   android-target-checks:
     name: Android check (${{ matrix.target }})
     runs-on: ubuntu-latest
