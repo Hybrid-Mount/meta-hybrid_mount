@@ -31,6 +31,11 @@
     "info": "Bilgi"
   },
   "status": {
+    "guardAction": "VFS önyükleme korumalarını temizle",
+    "guardDialogTitle": "VFS önyükleme korumaları temizlensin mi?",
+    "guardDialogBody": "Yalnızca kesintiye uğrayan VFS enjeksiyonunun nedeni giderildikten sonra temizleyin. VFS sonraki önyüklemede kurallarını yeniden enjekte eder ve aynı çökme tekrarlanabilir.",
+    "guardCleared": "{count} koruma temizlendi; uygulamak için yeniden başlatın",
+    "guardClearFailed": "Önyükleme korumaları temizlenemedi",
     "backendTitle": "Arka Uç Stratejisi",
     "sysInfoTitle": "Sistem Bilgisi",
     "deviceTitle": "Cihaz Bilgisi",

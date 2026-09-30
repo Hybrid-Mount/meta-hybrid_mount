@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { configStore } from "../../../lib/stores/configStore";
+import { uiStore } from "../../../lib/stores/uiStore";
 import {
   activeMountState,
   backendDisplayKeys,
@@ -14,12 +15,15 @@ import {
   statusErrorRows,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
+import type { BannerAction } from "../../../lib/statusMounts";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import StatusErrorBanner from "../components/StatusErrorBanner.vue";
 import { ICONS } from "../icons";
 
 const { t } = useI18n();
 const rebootOpen = ref(false);
+const guardOpen = ref(false);
+const guardBusy = ref(false);
 
 const mountedCount = computed(
   () => moduleStore.modules.filter((module) => module.is_mounted).length,
@@ -82,9 +86,31 @@ const errorRows = computed(() =>
 async function refresh(): Promise<void> {
   await Promise.all([
     sysStore.loadStatus(),
+    sysStore.loadBootGuards(),
     moduleStore.loadModules(),
     configStore.ensureConfigLoaded(),
   ]);
+}
+
+// Clearing a guard lets the next boot inject VFS rules again, so the banner offers it only
+// while the device really reports a marker this build owns or cannot attribute.
+const guardAction = computed<BannerAction | null>(() =>
+  sysStore.clearableBootGuards.length > 0
+    ? { label: t("status.guardAction"), busy: guardBusy.value }
+    : null,
+);
+
+async function clearBootGuards(): Promise<void> {
+  guardOpen.value = false;
+  guardBusy.value = true;
+  try {
+    const cleared = await sysStore.clearBootGuards();
+    uiStore.showToast(t("status.guardCleared", { count: cleared }));
+  } catch {
+    uiStore.showToast(t("status.guardClearFailed"));
+  } finally {
+    guardBusy.value = false;
+  }
 }
 
 async function rebootSystem(): Promise<void> {
@@ -104,6 +130,8 @@ onMounted(refresh);
         :errors="statusErrors"
         :details="errorRows"
         :items-label="t('status.errorItems')"
+        :action="guardAction"
+        @action="guardOpen = true"
       />
       <section class="hero-card">
         <div v-if="sysStore.loading" class="skeleton-col">
@@ -261,6 +289,19 @@ onMounted(refresh);
           t("common.cancel")
         }}</md-text-button>
         <md-text-button @click="rebootSystem">{{ t("common.reboot") }}</md-text-button>
+      </div>
+    </md-dialog>
+
+    <md-dialog :open="guardOpen" @closed="guardOpen = false">
+      <div slot="headline">{{ t("status.guardDialogTitle") }}</div>
+      <div slot="content">{{ t("status.guardDialogBody") }}</div>
+      <div slot="actions">
+        <md-text-button @click="guardOpen = false">{{
+          t("common.cancel")
+        }}</md-text-button>
+        <md-text-button @click="clearBootGuards">{{
+          t("status.guardAction")
+        }}</md-text-button>
       </div>
     </md-dialog>
   </div>

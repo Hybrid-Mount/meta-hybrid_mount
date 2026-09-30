@@ -2,6 +2,7 @@
 
 import { ref } from "vue";
 import type {
+  BootGuardReport,
   DefaultMountMode,
   DeviceInfo,
   InstallState,
@@ -10,6 +11,7 @@ import type {
   SystemInfo,
 } from "../types";
 import { API } from "../api";
+import { clearableGuards } from "../bootGuard";
 import { uiStore } from "./uiStore";
 import { moduleStore } from "./moduleStore";
 
@@ -26,6 +28,13 @@ const installState = ref<InstallState | null>(null);
  */
 const loadError = ref<string | null>(null);
 const loading = ref(false);
+/**
+ * Boot guards the running binary reported, or null when they could not be read.
+ *
+ * A binary without the guard command is not a status failure: null keeps the status page
+ * exactly as it was and simply offers no clear action.
+ */
+const bootGuards = ref<BootGuardReport | null>(null);
 let pendingLoad: Promise<void> | null = null;
 let hasLoaded = false;
 
@@ -75,6 +84,27 @@ async function rebootDevice(): Promise<void> {
   }
 }
 
+/**
+ * Reads the boot guards for the status banner.
+ *
+ * The read is best effort: a binary that predates the guard command leaves the banner
+ * without a clear action instead of failing the whole status load.
+ */
+async function loadBootGuards(): Promise<void> {
+  try {
+    bootGuards.value = await API.getBootGuards();
+  } catch {
+    bootGuards.value = null;
+  }
+}
+
+/** Removes the guards the banner offered and re-reads what the device reports now. */
+async function clearBootGuards(): Promise<number> {
+  const cleared = await API.clearBootGuards();
+  await loadBootGuards();
+  return cleared.length;
+}
+
 async function clearMountErrors(): Promise<number> {
   try {
     const removed = await API.clearMountErrors();
@@ -109,6 +139,10 @@ export const sysStore = {
   get loadError() {
     return loadError.value;
   },
+  /** Guards the banner may offer to clear; empty when there is nothing to clear. */
+  get clearableBootGuards() {
+    return clearableGuards(bootGuards.value);
+  },
   get vfsSupported() {
     return installState.value?.vfs_supported === true;
   },
@@ -129,5 +163,7 @@ export const sysStore = {
   ensureStatusLoaded,
   loadStatus,
   rebootDevice,
+  loadBootGuards,
+  clearBootGuards,
   clearMountErrors,
 };

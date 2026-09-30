@@ -31,6 +31,11 @@
     "info": "Infos"
   },
   "status": {
+    "guardAction": "Effacer les gardes de démarrage VFS",
+    "guardDialogTitle": "Effacer les gardes de démarrage VFS ?",
+    "guardDialogBody": "Ne les effacez qu'après avoir résolu la cause de l'injection VFS interrompue. VFS réinjectera ses règles au prochain démarrage et le même plantage peut se reproduire.",
+    "guardCleared": "{count} gardes effacées ; redémarrez pour appliquer",
+    "guardClearFailed": "Échec de l'effacement des gardes",
     "backendTitle": "Stratégie du backend",
     "sysInfoTitle": "Détails du système",
     "deviceTitle": "Détails de l'appareil",

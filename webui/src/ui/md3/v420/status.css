@@ -107,6 +107,15 @@
   overflow-wrap: anywhere;
 }
 
+.error-banner__action {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.error-banner__action md-text-button {
+  --md-text-button-label-text-color: var(--md-sys-color-error);
+}
+
 .error-banner__rows {
   display: grid;
   grid-template-columns: max-content 1fr;

@@ -31,6 +31,11 @@
     "info": "Info"
   },
   "status": {
+    "guardAction": "Hapus penjaga boot VFS",
+    "guardDialogTitle": "Hapus penjaga boot VFS?",
+    "guardDialogBody": "Hapus hanya setelah penyebab injeksi VFS yang terputus sudah diatasi. VFS akan menyuntikkan aturannya lagi saat boot berikutnya dan crash yang sama bisa terulang.",
+    "guardCleared": "{count} penjaga dihapus; reboot untuk menerapkan",
+    "guardClearFailed": "Gagal menghapus penjaga boot",
     "backendTitle": "Penyimpanan",
     "sysInfoTitle": "Informasi Sistem",
     "moduleActive": "Modul Aktif",

@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import type { StatusError } from "../../../lib/statusMounts";
+import type { BannerAction, StatusError } from "../../../lib/statusMounts";
 
 defineProps<{
   title: string;
@@ -9,6 +9,12 @@ defineProps<{
   errors: StatusError[];
   details: { label: string; value: string }[];
   itemsLabel: string;
+  /** Recovery offered under the problems; null leaves the banner read-only. */
+  action?: BannerAction | null;
+}>();
+
+const emit = defineEmits<{
+  (event: "action"): void;
 }>();
 </script>
 
@@ -40,6 +46,11 @@ defineProps<{
         </div>
       </li>
     </ul>
+    <div v-if="action" class="error-banner__action">
+      <md-text-button :disabled="action.busy" @click="emit('action')">
+        {{ action.label }}
+      </md-text-button>
+    </div>
     <dl v-if="details.length" class="error-banner__rows">
       <template v-for="row in details" :key="row.label">
         <dt>{{ row.label }}</dt>

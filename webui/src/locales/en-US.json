@@ -31,6 +31,11 @@
     "info": "Info"
   },
   "status": {
+    "guardAction": "Clear VFS boot guards",
+    "guardDialogTitle": "Clear the VFS boot guards?",
+    "guardDialogBody": "Clear them only after the cause of the interrupted VFS injection is resolved. VFS injects its rules again on the next boot, and the same crash can repeat.",
+    "guardCleared": "Cleared {count} boot guards; reboot to apply",
+    "guardClearFailed": "Failed to clear the boot guards",
     "backendTitle": "Backend Strategy",
     "sysInfoTitle": "System Details",
     "deviceTitle": "Device Info",

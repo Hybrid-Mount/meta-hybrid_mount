@@ -31,6 +31,11 @@
     "info": "关于"
   },
   "status": {
+    "guardAction": "清除 VFS 熔断标记",
+    "guardDialogTitle": "清除 VFS 熔断标记？",
+    "guardDialogBody": "只有在确认上次 VFS 注入被中断的原因已解决后才清除。清除后 VFS 会在下次开机重新注入规则，同一崩溃可能再次发生。",
+    "guardCleared": "已清除 {count} 个熔断标记，重启后生效",
+    "guardClearFailed": "清除熔断标记失败",
     "backendTitle": "后端策略",
     "sysInfoTitle": "系统详情",
     "deviceTitle": "设备信息",

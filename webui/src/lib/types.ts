@@ -133,6 +133,28 @@ export interface RuntimeActionResult {
   generation: number;
 }
 
+/**
+ * One boot guard marker as `hybrid-mount vfs guard` reports it.
+ *
+ * The verdict comes from the binary, which alone knows whether a marker belongs to the
+ * running build; the WebUI never decides that from the marker contents.
+ */
+export interface BootGuardState {
+  /** `rules` for VFS rule injection, `lkm` for the kernel module load. */
+  name: string;
+  path: string;
+  /** `absent`, `own`, `foreign`, `stale` or `unattributed`. */
+  verdict: string;
+  /** Raw marker contents, or null when no marker exists. */
+  contents: string | null;
+}
+
+export interface BootGuardReport {
+  guards: BootGuardState[];
+  /** Paths removed by `vfs guard clear --yes`; empty when only inspecting. */
+  cleared: string[];
+}
+
 export interface AppAPI {
   loadConfig: () => Promise<AppConfig>;
   saveConfig: (config: AppConfig) => Promise<void>;
@@ -146,6 +168,8 @@ export interface AppAPI {
     action: RuntimeAction,
   ) => Promise<RuntimeActionResult>;
   getInstallState: () => Promise<InstallState>;
+  getBootGuards: () => Promise<BootGuardReport>;
+  clearBootGuards: () => Promise<string[]>;
   clearMountErrors: () => Promise<number>;
   getSystemInfo: () => Promise<SystemInfo>;
   getDeviceStatus: () => Promise<DeviceInfo>;

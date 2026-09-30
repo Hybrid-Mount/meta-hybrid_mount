@@ -15,6 +15,16 @@ export interface StatusFailureLabels {
   mountFailures: (count: number) => string;
 }
 
+/**
+ * Recovery the status error banner runs itself, e.g. clearing a VFS boot guard.
+ *
+ * The banner only renders the button; the page owns the confirmation and the command.
+ */
+export interface BannerAction {
+  label: string;
+  busy: boolean;
+}
+
 /** Returns the same failure priority for every status skin. */
 export function statusFailureSummary(
   state: RunState | null | undefined,

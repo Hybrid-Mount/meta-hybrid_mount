@@ -9,6 +9,9 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * `VITE_MOCK_STATUS_ERROR=1 pnpm dev` renders the status error banner.
  *
+ * The same flag makes the mock report a boot guard this build wrote, so the banner's
+ * clear action can be exercised without a real crash marker.
+ *
  * The mock is the only place a simulated failure may live: production builds never load this
  * module, so a shipped WebUI can only show problems the device really reported.
  */
@@ -213,6 +216,32 @@ export const MockAPI: AppAPI = {
       mount_source: "KSU",
       compatible: true,
     };
+  },
+
+  getBootGuards: async () => {
+    await delay(MOCK_DELAY);
+    return {
+      guards: [
+        {
+          name: "rules",
+          path: "/data/adb/hybrid-mount/vfs_boot_guard",
+          verdict: MOCK_STATUS_ERROR ? "own" : "absent",
+          contents: MOCK_STATUS_ERROR ? "version=6.2.3-rc.1\nsource=boot\n" : null,
+        },
+        {
+          name: "lkm",
+          path: "/data/adb/hybrid-mount/vfs_lkm_boot_guard",
+          verdict: "absent",
+          contents: null,
+        },
+      ],
+      cleared: [],
+    };
+  },
+
+  clearBootGuards: async () => {
+    await delay(MOCK_DELAY);
+    return MOCK_STATUS_ERROR ? ["/data/adb/hybrid-mount/vfs_boot_guard"] : [];
   },
 
   clearMountErrors: async () => {

@@ -31,6 +31,11 @@
     "info": "關於"
   },
   "status": {
+    "guardAction": "清除 VFS 熔斷標記",
+    "guardDialogTitle": "清除 VFS 熔斷標記？",
+    "guardDialogBody": "請先確認上次 VFS 注入中斷的原因已解決再清除。清除後 VFS 會在下次開機重新注入規則，同樣的崩潰可能再次發生。",
+    "guardCleared": "已清除 {count} 個熔斷標記，重新開機後生效",
+    "guardClearFailed": "清除熔斷標記失敗",
     "backendTitle": "儲存空間",
     "sysInfoTitle": "系統資訊",
     "moduleActive": "活躍模組",

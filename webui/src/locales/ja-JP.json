@@ -31,6 +31,11 @@
     "info": "情報"
   },
   "status": {
+    "guardAction": "VFS 起動ガードを解除",
+    "guardDialogTitle": "VFS 起動ガードを解除しますか？",
+    "guardDialogBody": "VFS 注入が中断した原因を解消してから解除してください。次回起動で VFS が再びルールを注入し、同じクラッシュが再発する可能性があります。",
+    "guardCleared": "{count} 件のガードを解除しました。再起動で反映されます",
+    "guardClearFailed": "ガードの解除に失敗しました",
     "backendTitle": "ストレージ",
     "sysInfoTitle": "システム情報",
     "moduleActive": "有効なモジュール",

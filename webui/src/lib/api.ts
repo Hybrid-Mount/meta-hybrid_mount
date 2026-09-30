@@ -15,6 +15,7 @@ import type {
 } from "./types";
 import { DEFAULT_CONFIG, PATHS } from "./constants";
 import { createRuntimeApi } from "./runtimeApi";
+import { normalizeGuardReport } from "./bootGuard";
 import { shellEscapeDoubleQuoted } from "./shell";
 import { isKernelPatchVersionResponse, parseLateLoad, parseRootManager } from "./reboot";
 
@@ -336,6 +337,24 @@ const RealAPI: AppAPI = {
     throw new Error(stderr || "install-state failed");
   },
 
+  getBootGuards: async () => {
+    const { errno, stdout, stderr } = await ksuExec!(`${PATHS.BINARY} vfs guard --json`);
+    if (errno === 0 && stdout.trim()) {
+      return normalizeGuardReport(JSON.parse(stdout));
+    }
+    throw new Error(stderr || "vfs guard failed");
+  },
+
+  clearBootGuards: async () => {
+    const { errno, stdout, stderr } = await ksuExec!(
+      `${PATHS.BINARY} vfs guard clear --yes --json`,
+    );
+    if (errno === 0 && stdout.trim()) {
+      return normalizeGuardReport(JSON.parse(stdout)).cleared;
+    }
+    throw new Error(stderr || "vfs guard clear failed");
+  },
+
   clearMountErrors: async () => {
     const { errno, stdout, stderr } = await ksuExec!(
       `${PATHS.BINARY} clear-mount-errors`,
@@ -456,6 +475,8 @@ const UnavailableAPI: AppAPI = {
   getRuntimeStatus: unavailable,
   runtimeAction: unavailable,
   getInstallState: unavailable,
+  getBootGuards: unavailable,
+  clearBootGuards: unavailable,
   clearMountErrors: unavailable,
   getSystemInfo: unavailable,
   getDeviceStatus: unavailable,

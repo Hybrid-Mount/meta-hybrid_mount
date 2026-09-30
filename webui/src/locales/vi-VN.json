@@ -31,6 +31,11 @@
     "info": "Thông tin"
   },
   "status": {
+    "guardAction": "Xóa chốt khởi động VFS",
+    "guardDialogTitle": "Xóa chốt khởi động VFS?",
+    "guardDialogBody": "Chỉ xóa sau khi đã khắc phục nguyên nhân khiến VFS chèn quy tắc bị gián đoạn. VFS sẽ chèn lại quy tắc ở lần khởi động sau và sự cố tương tự có thể lặp lại.",
+    "guardCleared": "Đã xóa {count} chốt; khởi động lại để áp dụng",
+    "guardClearFailed": "Không xóa được chốt khởi động",
     "backendTitle": "Bộ nhớ",
     "sysInfoTitle": "Thông tin Hệ thống",
     "moduleActive": "Mô-đun Đang h.động",

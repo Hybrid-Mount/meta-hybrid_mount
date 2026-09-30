@@ -31,6 +31,11 @@
     "info": "Información"
   },
   "status": {
+    "guardAction": "Borrar los protectores de arranque de VFS",
+    "guardDialogTitle": "¿Borrar los protectores de arranque de VFS?",
+    "guardDialogBody": "Bórralos solo después de resolver la causa de la inyección de VFS interrumpida. VFS volverá a inyectar sus reglas en el próximo arranque y el mismo fallo puede repetirse.",
+    "guardCleared": "Se borraron {count} protectores; reinicia para aplicarlo",
+    "guardClearFailed": "No se pudieron borrar los protectores",
     "backendTitle": "Almacenamiento",
     "sysInfoTitle": "Información del sistema",
     "moduleActive": "Activos",

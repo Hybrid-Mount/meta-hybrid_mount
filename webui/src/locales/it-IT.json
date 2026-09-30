@@ -31,6 +31,11 @@
     "info": "Informazioni"
   },
   "status": {
+    "guardAction": "Cancella le protezioni di avvio VFS",
+    "guardDialogTitle": "Cancellare le protezioni di avvio VFS?",
+    "guardDialogBody": "Cancellale solo dopo aver risolto la causa dell'iniezione VFS interrotta. VFS reinietterà le regole al prossimo avvio e lo stesso crash può ripetersi.",
+    "guardCleared": "Rimosse {count} protezioni; riavvia per applicare",
+    "guardClearFailed": "Impossibile cancellare le protezioni",
     "backendTitle": "Archiviazione",
     "sysInfoTitle": "Informazioni di sistema",
     "moduleActive": "Moduli attivi",
