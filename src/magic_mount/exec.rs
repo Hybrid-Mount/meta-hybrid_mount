@@ -61,6 +61,18 @@ impl MagicMountResult {
     }
 }
 
+/// The path one magic mount must contribute to the KernelSU try-umount list, if any.
+///
+/// `has_tmpfs` states where the bind actually landed: with a tmpfs skeleton the file is bound
+/// into the staging tree, otherwise it is bound onto the real system path. Only a real target is
+/// registered. A staging bind is transient — the directory owning it is later moved onto the real
+/// path and registered there — and an entry naming a staging path would outlive its mount, which
+/// the kernel replays on every later umount for the rest of the boot. Whether the staging root
+/// happens to live under `/mnt` says nothing about a real target, so it cannot decide this.
+fn unmountable_target(umount: bool, has_tmpfs: bool, target: &Path) -> Option<&Path> {
+    (umount && !has_tmpfs).then_some(target)
+}
+
 pub struct MagicMount<'tree, 'stats, 'mount> {
     node: &'tree MountNode,
     path: PathBuf,
@@ -172,8 +184,8 @@ impl MagicMount<'_, '_, '_> {
             ))
         })?;
 
-        if self.umount && !self.work_dir_path.starts_with("/mnt") {
-            crate::utils::ksu::send_unmountable(target);
+        if let Some(unmountable) = unmountable_target(self.umount, self.has_tmpfs, target) {
+            crate::utils::ksu::send_unmountable(unmountable);
         }
 
         // MS_REMOUNT | MS_BIND makes a single file read-only. When that fails, undo the bind
@@ -335,6 +347,8 @@ impl MagicMount<'_, '_, '_> {
             // shared; unshare the whole subtree now that it sits on the real target.
             normalize_propagation(&self.path, true);
 
+            // The staging tree was just moved onto the real target, so `self.path` is the mount
+            // point the kernel must unmount; there is no staging path to filter out here.
             if self.umount {
                 crate::utils::ksu::send_unmountable(&self.path);
             }
@@ -586,6 +600,9 @@ fn mount_mirror(
             path.display(),
             work_dir_path.display()
         );
+        // A mirror carries stock content into the staging tree, so it needs no try-umount entry of
+        // its own: the directory mount owning this tree is later moved onto the real path and
+        // registered there, and detaching that mount takes this bind with it.
         fs::File::create(&work_dir_path)?;
         magic_mount_bind(&path, &work_dir_path)?;
         stats.owned_mounts.push(path.to_string_lossy().into_owned());
