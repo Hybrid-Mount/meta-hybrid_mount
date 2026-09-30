@@ -72,7 +72,7 @@ topic：6 = release，37 = dev。构建命令不会自动发通知。
 2. 把版本写入包，`cargo xtask build --release`；
 3. `cargo xtask notify`；
 4. 生成 changelog（git-cliff，配置见 `cliff.toml`）与发布元数据；
-5. `gh release create/edit`（含 KernelSU-Modules-Repo，按预发布标志决定 `--prerelease`）；
+5. `softprops/action-gh-release@v3` 建 release，`prerelease` 取自 tag 解析结果；**KernelSU-Modules-Repo 的远程发布步骤已整段注释停用**（`release.yml` 标注 “Temporarily disabled”，`secrets.RELEASE_TOKEN` 只存在于注释里），不要照旧描述当成生效步骤；
 6. 把版本同步回 `dev`。
 
 分支模型：`main` 稳定，`dev` 开发，PR 目标为 `dev`。

@@ -68,6 +68,12 @@ jobs:
             exit 1
           fi
 
+      # .dsh/validate-skills.mjs is documented in .dsh/README.md; run it here so
+      # skill frontmatter and relative-link drift fails CI instead of being
+      # noticed only by hand.
+      - name: Validate DSH skills
+        run: node .dsh/validate-skills.mjs
+
       - name: Verify bundled LKM provenance assets
         run: |
           set -euo pipefail

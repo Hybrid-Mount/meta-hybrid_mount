@@ -1,6 +1,6 @@
 ---
 name: hm-verify
-description: 按 .github/workflows/lints.yml 的门禁在本地跑 Hybrid Mount 全量校验：fmt、clippy -D warnings、测试、禁用符号、LKM 校验、ShellCheck、安装器测试、Android 三架构与 WebUI。
+description: 按 .github/workflows/lints.yml 的门禁在本地跑 Hybrid Mount 全量校验：fmt、clippy -D warnings、测试、禁用符号、LKM 校验、技能目录校验、ShellCheck、安装器测试、Android 三架构与 WebUI。
 whenToUse: 提交代码、准备 PR、重构或改动挂载/规划逻辑后，需要确认不会挂 CI 时。
 ---
 
@@ -23,6 +23,14 @@ set -euo pipefail
 if grep -Rni "kasumi" src webui/src module xtask tools 2>/dev/null; then echo "banned symbol kasumi"; exit 1; fi
 if grep -REn "normalize_symlinked_partition_layout|normalize_module_layout" src module xtask 2>/dev/null; then echo "banned normalization logic"; exit 1; fi
 ```
+
+## 技能目录门禁
+
+```bash
+node .dsh/validate-skills.mjs
+```
+
+校验 `.dsh/skills/` 下每个技能的 frontmatter（`name` 与目录同名、`description` 非空）与相对 Markdown 链接能否解析，输出 `skills, N markdown files, 0 problems` 即通过；对应 CI 的 `lints.yml: Validate DSH skills`。
 
 ## LKM 来源与校验
 

@@ -1,38 +1,70 @@
 # 为 Hybrid Mount 安装的 DSH 插件
 
-安装在 **web profile**（`~/.dsh/profiles/web`）。插件是 profile 级、对本机所有项目生效，不是仓库级配置。
+插件是 **profile 级**配置，对本机所有项目生效，不是仓库级配置。本机当前使用的 profile 是
+`desktop`（`~/.dsh/profiles/desktop`），不是 `web`——下面的记录以实际 profile 为准。
+
+## 由本人在 GUI 安装（agent 不代劳）
+
+插件管理器会拒绝在 agent 会话运行期间安装（`dshmarket` 的
+`.dsh-market/log.ndjson` 里可见 `install-blocked: refused while agents are running`），
+因为并发写 `package.json` / `node_modules` 会互相覆盖。所以约定：**插件一律由人在 GUI 里装，
+agent 只负责给兼容性结论，不改 profile。**
 
 | 插件 | 版本 | 用途 | 为什么适合本仓库 |
 | --- | --- | --- | --- |
-| dsh-lsp-actions | 0.5.1 | 通过真实语言服务器提供 diagnostics / format / code actions / symbols / rename 等 `lsp_*` 工具 | 主体是 Rust，另有 Vue/TS 前端；本机已装 rust-analyzer |
-| @wenaixi/dsh-superpower | 6.3.1 | obra/superpowers 的 DSH 移植，14 个方法论 skill（规划、TDD、系统化调试、评审、完成前验证） | 与仓库严格的 lint / CI 门禁互补 |
+| `dshmarket` | 1.66.5 | 可视化插件市场 | 已装；后续插件的安装入口 |
+| `@linxin666/dsh-client-ui-skill-explorer` | 0.4.4 | 按来源（bundled/project/user/custom/runtime）浏览、启停、增删 skill | 本仓库有 15 个 `.dsh/skills/`，需要面板管理 |
+| `@linxin666/dsh-client-ui-git-graph` | 0.4.4 | 提交图谱 | 仓库 git 历史密集，`dev`/`main` 双分支频繁合并 |
 
-原来已有（保持不动）：`dshmarket`、`@furongjun1999/dsh-memory`、`@linxin666/dsh-client-ui-skill-explorer`。
+### 已核实不兼容，不要装
 
-## 管理命令
+判断依据是 npm 上的 `engines.dsh` / `peerDependencies`，与 app 内置的
+`@deepseek-ai/dsh-*@0.2.0-rc.2`（解包自 `app.asar`）逐个比对：
+
+| 插件 | 声明要求 | 结论 |
+| --- | --- | --- |
+| `dsh-lsp-actions` | `>=0.1.2-rc.1 <0.2.0`（含全部备选区间） | 排除 0.2.0-rc.2，**装不上** |
+| `@wenaixi/dsh-superpower` | `@deepseek-ai/dsh-skill >=0.0.1-rc.1 <0.2.0-0` | 排除 0.2.0-rc.2，**装不上** |
+
+> `dsh-lsp-actions` 装不上直接影响 `.dsh/skills/hm-rust-lsp/`：那个 skill 描述的 `lsp_*`
+> 工具在当前 profile 里并不存在。改 Rust 时不要依赖它，用 `cargo clippy` / `rust-analyzer`
+> 自身的方式验证。等上游放出支持 0.2.x 的版本后再装，并同步更新该 skill。
+
+安装前务必核对兼容性，命令：
 
 ```bash
-dsh plugin --profile web add <package>       # 安装（自动登记到 dsh.profile.bundles）
-dsh plugin --profile web remove <package>    # 卸载
-dsh --profile web --dump-config              # 查看组合后的配置树
+# 以桌面 app 内置版本为准（0.2.0-rc.2），而不是 npm 上 @deepseek-ai/dsh 的 latest
+npm view <package> engines peerDependencies
 ```
-
-## 生效方式
-
-新增 bundle 需要**重启 `dsh web`** 后才会被加载；当前运行的进程仍是安装前的组合。
-重启后：
-
-- `lsp_*` 工具可用（Rust 侧依赖本机 `rust-analyzer`，已确认存在）；
-- 14 个 `superpower-*` skill 进入 skill catalog。
 
 ## 回滚
 
-安装前已备份清单文件到 `~/.dsh/profiles/web/.hybrid-mount-backup-20260914/`
-（`package.json`、`pnpm-lock.yaml`、`cordis.yml`、`cordis.patch.yml`）。
-需要还原时覆盖回去，再执行 `dsh plugin --profile web install`。
+本机 profile 的 `package.json` / `cordis.yml` / `cordis.patch.yml` / `pnpm-workspace.yaml` /
+`pnpm-lock.yaml` 已备份到：
 
-## Rust 支持补充（2026-09-14）
+```
+~/.dsh/profiles/desktop/.hybrid-mount-backup-20260930/
+```
 
-核实上述两个插件均已安装。发现 lsp-actions 默认 servers 为空，现已在 web profile 的 cordis.patch.yml 配置 rust-analyzer（仅 .rs）；编辑器 stdio 模式保持关闭。配置修改前备份：`~/.dsh/profiles/web/.rust-support-backup-20260914-182012`。
+在 GUI 里装插件若导致 app 起不来，覆盖回去再重启即可。profile 目录内的
+`package.json.lock` 是插件管理器的互斥锁，正常情况下随操作结束释放。
 
-项目 skills 新增 rust-best-practices（来源 https://github.com/apollographql/skills/tree/main/skills/rust-best-practices，MIT；移除 Claude 工具限制并补充本仓库 lint 优先级）、hm-rust-android 和 hm-rust-lsp。保留上游 references 与 LICENSE。新会话重新发现 skills；如当前进程未加载插件，重启 dsh web。
+## 管理命令（需要 DSH 自带 CLI）
+
+app 目录里没有可直接调用的 `dsh`，用 npm 上的同版本 CLI：
+
+```bash
+pnpm add --dir /tmp/dsh-cli @deepseek-ai/dsh@0.2.0-rc.2
+node /tmp/dsh-cli/node_modules/@deepseek-ai/dsh/lib/bin.js plugin --profile desktop add <package>
+node /tmp/dsh-cli/node_modules/@deepseek-ai/dsh/lib/bin.js --profile desktop --dump-config
+```
+
+CLI 版本必须与 app 内置的 `@deepseek-ai/dsh-*` 版本一致（当前 **0.2.0-rc.2**），
+否则组合出来的 profile 树可能与 app 实际加载的不符。新装 bundle 需要**重启 DSH** 才生效。
+
+## 历史
+
+早期本文件记录的是 `web` profile 上的安装（`dshmarket`、`@wenaixi/dsh-superpower`、
+`dsh-lsp-actions`、`@furongjun1999/dsh-memory`、`@linxin666/dsh-client-ui-skill-explorer`）
+与 rust-analyzer 的 lsp-actions 配置。本机现在没有 `web` profile，且其中两个插件与
+0.2.0-rc.2 不兼容，因此该记录仅作历史参考，不再代表可用状态。
