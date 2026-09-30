@@ -55,7 +55,7 @@ impl ModuleRecord {
 /// - A single entry that cannot be read or checked is warned about and skipped.
 /// - Auxiliary directories, a missing/non-regular/unreadable `module.prop`, missing required
 ///   fields, an invalid id, or a directory name that disagrees with the declared id are warned about and skipped, keeping non-modules out.
-/// - Two directories declaring the same module id is fatal, so they cannot overwrite each other's staging paths.
+/// - Two accepted directories declaring the same module id is fatal, so they cannot overwrite each other's staging paths.
 pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Vec<ModuleRecord>> {
     let mut modules = Vec::new();
     let mut declared_ids: BTreeMap<ModuleId, PathBuf> = BTreeMap::new();
@@ -142,15 +142,9 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
         };
 
         let dir_name = entry.file_name().to_string_lossy().into_owned();
-        if let Some(first_path) = declared_ids.get(&module_id) {
-            return Err(Error::DuplicateModuleId {
-                module_id: id.clone(),
-                first: first_path.clone(),
-                second: path,
-            });
-        }
-        declared_ids.insert(module_id.clone(), path.clone());
-
+        // The name check comes before the duplicate check: a directory that is
+        // skipped for a name mismatch must not reserve its declared id, or a
+        // later, correctly named directory with that id would fail the boot.
         if dir_name != module_id.as_str() {
             log::warn!(
                 "module directory {} skipped: directory name={dir_name:?} does not match declared id={}",
@@ -159,6 +153,15 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
             );
             continue;
         }
+
+        if let Some(first_path) = declared_ids.get(&module_id) {
+            return Err(Error::DuplicateModuleId {
+                module_id: id.clone(),
+                first: first_path.clone(),
+                second: path,
+            });
+        }
+        declared_ids.insert(module_id.clone(), path.clone());
 
         let disabled = path.join(defs::DISABLE_FILE_NAME).exists()
             || path.join(defs::REMOVE_FILE_NAME).exists();
@@ -545,11 +548,14 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_declared_module_ids_are_rejected() {
+    fn directory_name_mismatch_does_not_reserve_the_declared_id() {
+        // `other_dir` declares `id=shared` but is skipped for the name
+        // mismatch.  It must not poison the id registry: the real `shared`
+        // directory still has to be accepted instead of failing the scan.
         let root = module_dir("duplicate");
-        let first = root.join("shared");
-        let second = root.join("other_dir");
-        for path in [&first, &second] {
+        let accepted = root.join("shared");
+        let mismatched = root.join("other_dir");
+        for path in [&accepted, &mismatched] {
             fs::create_dir_all(path.join("system")).unwrap();
             fs::write(
                 path.join("module.prop"),
@@ -558,21 +564,10 @@ mod tests {
             .unwrap();
         }
 
-        let err = list_modules(&root, &[]).unwrap_err();
-        match err {
-            Error::DuplicateModuleId {
-                module_id,
-                first: first_path,
-                second: second_path,
-            } => {
-                assert_eq!(module_id, "shared");
-                assert_eq!(
-                    BTreeSet::from([first_path, second_path]),
-                    BTreeSet::from([first, second])
-                );
-            }
-            other => panic!("expected duplicate module id error, got: {other}"),
-        }
+        let modules = list_modules(&root, &[]).unwrap();
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "shared");
+        assert_eq!(modules[0].source_path, accepted);
     }
 
     #[test]
