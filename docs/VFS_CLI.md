@@ -35,9 +35,20 @@ HM=/data/adb/modules/hybrid_mount/hybrid-mount
 | `clear rules --yes` | 等同 `rule clear --yes`。 |
 | `clear uid --yes` | 等同 `uid clear --yes`。 |
 | `clear all --yes` | 清空规则和隔离 UID。 |
+| `guard [--json]` | 读取 VFS 规则熔断标记与 VFS LKM 加载熔断标记的路径、判定和内容。 |
+| `guard clear --yes` | 删除两个熔断标记，使 VFS 在下一次尝试时重新注入规则。 |
 
 所有新增写入命令也接受 `--json`，默认输出可读文本。清空作用于共享 Provider
 中的对应表，包含启动流程创建的记录；裸 `clear`、未知目标、缺少 `--yes` 均为参数错误。
+
+熔断标记记录写入它的版本、可执行文件标识与启动 boot id。只有写入它的同一个构建
+会因此跳过 VFS；其他构建（或尚未带身份字段的旧版本留下的 1 字节标记）会被自动清除
+并在同一次启动重试。LKM 加载标记还记录它准备插入的内核对象（大小与修改时间），因此
+预编译 `.ko` 被刷新后留下的标记也会自动失效并重试，只有「本构建写入、且候选集中仍然
+存在同一个内核对象」的标记才会阻止自动重试。`guard clear --yes` 是显式恢复入口：清除后
+VFS 会再次注入规则，因此如果崩溃原因未查清，同样的内核崩溃也可能复现。WebUI 状态页在
+检测到任一标记时，会在错误卡片上给出同样的「清除 VFS 熔断标记」动作
+（等价于 `vfs guard clear --yes --json`），确认后仍需重启才会重新注入。
 
 `uid add 10234` 与 `rule add ... --uid 10234` 的含义不同：前者让 UID 绕开 VFS，
 后者限定该规则的适用 UID。规则默认 UID 为 0，表示全局，而不是仅 root。
@@ -74,6 +85,10 @@ HM=/data/adb/modules/hybrid_mount/hybrid-mount
 "$HM" vfs rule clear --yes
 "$HM" vfs uid clear --yes
 "$HM" vfs clear all --yes --json
+
+# 查看熔断标记；确认崩溃原因后显式恢复 VFS
+"$HM" vfs guard
+"$HM" vfs guard clear --yes --json
 ```
 
 ## 别名和参数
@@ -120,6 +135,9 @@ HM=/data/adb/modules/hybrid_mount/hybrid-mount
   已存在的不兼容 Provider 不被覆盖或卸载。
 - `vfs load` 需要 Linux／Android；随附 LKM 仅 aarch64。已有兼容内置 Provider 的
   控制命令不受随附 LKM 架构限制。本版不提供 `vfs unload`。
+- `vfs guard` 只读取两个熔断标记，不接触内核；`vfs guard clear --yes` 删除标记后
+  下一次 VFS 写入会重新注入规则。标记由写入它的构建持有，其他构建留下的标记在
+  下一次启动／热操作时自动清除，不需要手工干预。
 - 顶层 `status` 仍是启动／挂载流程快照，手工操作后查看实时状态使用 `vfs doctor`、
   `vfs rule list`、`vfs uid list`。旧 `vfs-doctor` JSON 契约保留。
 
@@ -168,6 +186,33 @@ UID 列表为整数数组，例如 `[10234, 10235]`。协议版本输出为 `{ "
 ```
 
 清空操作的 `target` 为 `rules`／`uids`，省略 `uid`。JSON 字符串通过 serde 转义。
+
+`guard --json` 输出两个标记，`contents` 为 `null` 表示标记不存在；
+`cleared` 仅在 `guard clear` 删除了文件时出现：
+
+```json
+{
+  "guards": [
+    {
+      "name": "rules",
+      "path": "/data/adb/hybrid-mount/vfs_boot_guard",
+      "verdict": "foreign",
+      "contents": "version=6.2.2\nbinary=12345678:1695221000\nsource=boot\n"
+    },
+    {
+      "name": "lkm",
+      "path": "/data/adb/hybrid-mount/vfs_lkm_boot_guard",
+      "verdict": "absent",
+      "contents": null
+    }
+  ],
+  "cleared": ["/data/adb/hybrid-mount/vfs_boot_guard"]
+}
+```
+
+`verdict` 取值：规则标记为 `absent`／`own`／`foreign`（`foreign` 含无身份字段的旧标记），
+LKM 标记为 `absent`／`own`／`stale`／`unattributed`（`own` 是写入它的同一构建留下的标记，
+`stale` 来自其他构建或已被替换的内核对象，`unattributed` 是无身份字段的旧标记）。
 
 ## 开发与验证
 

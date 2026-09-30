@@ -3,6 +3,7 @@
 //! Userspace backend for Hybrid Mount's own VFS kernel subsystem, the `hybridmount` module.
 
 pub mod backend;
+pub mod boot_guard;
 pub mod cli;
 mod control;
 pub mod doctor;

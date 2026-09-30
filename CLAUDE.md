@@ -213,6 +213,8 @@ cargo test -- --nocapture
 
 两个模块共用 `src/sys/lkm.rs` 的熔断逻辑：在调用 `insmod` 前持久化熔断标记，加载尝试正常返回时移除标记。若内核在加载期间崩溃，标记会保留，下次启动跳过对应模块但保留 Hybrid Mount 其他功能。
 
+VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模块加载）由 `src/vfs/boot_guard.rs` 记录写入它的构建（版本 + 可执行文件大小/mtime），LKM 标记再记录候选 `.ko` 的大小/mtime。只有「同一构建写入、且候选集中仍存在同一内核对象」的标记才会阻止下一次自动尝试；其他构建留下的标记、旧版 1 字节标记、以及被新包替换掉的 `.ko` 所留下的标记都会在尝试前自动清除（`prepare_lkm_guard` / `arm_for_mutation`）。`hybrid-mount vfs guard clear --yes`（以及状态页红卡按钮）是唯一的显式清除入口，`vfs guard [--json]` 报告两个标记的判定。
+
 ## Important Files
 
 - `Cargo.toml` - workspace 配置与版本

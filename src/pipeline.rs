@@ -1750,57 +1750,6 @@ fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
     }
 }
 
-/// RAII guard for the VFS boot guard file: once armed, any handled return (Ok or Err)
-/// clears it on Drop. Only a hard crash leaves it behind and trips the next boot.
-#[cfg(any(target_os = "linux", target_os = "android", test))]
-pub(crate) struct VfsBootGuard {
-    path: PathBuf,
-}
-
-#[cfg(any(target_os = "linux", target_os = "android", test))]
-impl VfsBootGuard {
-    pub(crate) fn arm() -> Result<Self> {
-        Self::arm_at(PathBuf::from(defs::VFS_BOOT_GUARD_PATH))
-    }
-
-    fn arm_at(path: PathBuf) -> Result<Self> {
-        (|| -> Result<()> {
-            use std::io::Write;
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&path)?;
-            file.write_all(b"1")?;
-            file.sync_all()?;
-            crate::sys::fs::sync_parent_directory(&path)?;
-            Ok(())
-        })()
-        .map_err(|err| {
-            let cause = match err {
-                Error::Io(source) => crate::errors::CausalError::Io(source),
-                other => crate::errors::CausalError::Message(other.to_string()),
-            };
-            Error::Vfs(Box::new(crate::errors::ContextError::new(
-                "write vfs boot guard",
-                Some(path.clone()),
-                cause,
-            )))
-        })?;
-        Ok(Self { path })
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android", test))]
-impl Drop for VfsBootGuard {
-    fn drop(&mut self) {
-        if let Err(err) = std::fs::remove_file(&self.path) {
-            log::warn!("clear vfs boot guard failed: {err}");
-        } else if let Err(err) = crate::sys::fs::sync_parent_directory(&self.path) {
-            log::warn!("persist vfs boot guard removal failed: {err}");
-        }
-    }
-}
-
 /// Rollback closure: deletes the full batch registered for this run.
 ///
 /// Registering before applying means an applied prefix is undone too; rules that never
@@ -1866,15 +1815,44 @@ fn apply_vfs_phase(
         config.vfs_isolate_uids.len(),
         config.vfs_strict
     );
-    let guard = Path::new(defs::VFS_BOOT_GUARD_PATH);
-    if guard.exists() {
-        let detail = "VFS boot guard present; VFS backend skipped this boot";
-        record_vfs_failure(state, plan, detail);
-        log::warn!("{detail}");
-        return Ok(vfs_failure_stats(detail));
+    match crate::vfs::boot_guard::inspect() {
+        Ok(crate::vfs::boot_guard::VfsGuardVerdict::Absent) => {}
+        // The marker speaks for this build, so the interrupted mutation is not retried.
+        Ok(crate::vfs::boot_guard::VfsGuardVerdict::Own(record)) => {
+            let detail = format!(
+                "VFS boot guard present; VFS backend skipped this boot ({}); run 'hybrid-mount vfs guard clear --yes' after resolving the crash to retry",
+                record.describe()
+            );
+            record_vfs_failure(state, plan, detail.clone());
+            log::warn!("{detail}");
+            return Ok(vfs_failure_stats(detail));
+        }
+        // A marker of another build, or the legacy marker without identity, cannot describe a
+        // crash this build would repeat: it is retired and the backend is tried again.
+        Ok(crate::vfs::boot_guard::VfsGuardVerdict::Foreign { record }) => {
+            log::warn!(
+                "retiring a VFS boot guard this build cannot attribute to itself: {}",
+                crate::vfs::boot_guard::describe(record.as_ref())
+            );
+            if let Err(err) = crate::vfs::boot_guard::clear_rule_guard() {
+                // A metamodule script that exits non-zero stops every module from mounting, so an
+                // unremovable stale marker degrades to skipping the backend instead of failing.
+                let detail = format!("VFS boot guard could not be retired: {err}");
+                record_vfs_failure(state, plan, detail.clone());
+                log::warn!("{detail}");
+                return Ok(vfs_failure_stats(detail));
+            }
+        }
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            log::warn!("vfs boot guard could not be read: {err}");
+            return Ok(vfs_failure_stats(err.to_string()));
+        }
     }
     // Any handled return past this point clears the guard on Drop.
-    let _guard = match VfsBootGuard::arm() {
+    let _guard = match crate::vfs::boot_guard::VfsBootGuard::arm(
+        crate::vfs::boot_guard::VfsMutationSource::Boot,
+    ) {
         Ok(guard) => guard,
         Err(err) => {
             record_vfs_failure(state, plan, err.to_string());
@@ -2152,25 +2130,6 @@ mod tests {
         assert_eq!(state.failed_stage.as_deref(), Some("scan"));
         assert!(state.active_mounts.is_empty());
         assert_eq!(std::fs::read_to_string(scan_ret_path).unwrap(), "[]");
-    }
-
-    #[test]
-    fn vfs_guard_refuses_existing_crash_marker_without_clearing_it() {
-        let fixture = crate::test_support::Fixture::new("vfs-runtime-guard");
-        let path = fixture.join("guard");
-        std::fs::write(&path, b"previous crash").unwrap();
-        assert!(VfsBootGuard::arm_at(path.clone()).is_err());
-        assert_eq!(std::fs::read(path).unwrap(), b"previous crash");
-    }
-
-    #[test]
-    fn vfs_guard_clears_only_the_marker_armed_by_this_operation() {
-        let fixture = crate::test_support::Fixture::new("vfs-runtime-guard-drop");
-        let path = fixture.join("guard");
-        let guard = VfsBootGuard::arm_at(path.clone()).unwrap();
-        assert!(path.exists());
-        drop(guard);
-        assert!(!path.exists());
     }
 
     #[test]

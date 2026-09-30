@@ -179,7 +179,9 @@ fn cleanup_owned(saved: &mut Ledger) -> Result<()> {
                 remaining.push(expected.clone());
             }
         }
-        let _guard = crate::pipeline::VfsBootGuard::arm()?;
+        let _guard = crate::vfs::boot_guard::arm_for_mutation(
+            crate::vfs::boot_guard::VfsMutationSource::Cleanup,
+        )?;
         rules::reconcile(&mut kernel, &remaining, &[])?;
         kernel.remove_uids(&saved.isolated_uids)?;
         saved.rules.clear();

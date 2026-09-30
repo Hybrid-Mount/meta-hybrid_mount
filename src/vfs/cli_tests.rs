@@ -269,6 +269,103 @@ fn rule_json_escapes_paths_and_exposes_hm_flags() {
 }
 
 #[test]
+fn guard_reports_without_arguments_and_requires_yes_to_clear() {
+    assert_eq!(
+        command(&["guard"]).unwrap(),
+        Command {
+            operation: Operation::Guard { clear: false },
+            json: false,
+        }
+    );
+    assert_eq!(
+        command(&["guard", "--json"]).unwrap(),
+        Command {
+            operation: Operation::Guard { clear: false },
+            json: true,
+        }
+    );
+    assert_eq!(
+        command(&["guard", "clear", "--yes"]).unwrap(),
+        Command {
+            operation: Operation::Guard { clear: true },
+            json: false,
+        }
+    );
+    assert_eq!(
+        command(&["guard", "clear", "--yes", "--json"]).unwrap(),
+        Command {
+            operation: Operation::Guard { clear: true },
+            json: true,
+        }
+    );
+    // Clearing re-injects VFS rules, so it must stay behind the same confirmation as clear.
+    assert_eq!(command(&["guard", "clear"]).unwrap_err().exit_code(), 2);
+    assert_eq!(
+        command(&["guard", "clear", "--yes", "extra"])
+            .unwrap_err()
+            .exit_code(),
+        2
+    );
+    assert_eq!(command(&["guard", "reset"]).unwrap_err().exit_code(), 2);
+    assert_eq!(command(&["guard", "--yes"]).unwrap_err().exit_code(), 2);
+}
+
+#[test]
+fn guard_usage_never_reaches_the_provider() {
+    // A misparsed guard request must not touch the kernel keyring: handle() only ever sees the
+    // Operation built here, and every rejected form returns before that.
+    for args in [
+        vec!["guard", "clear"],
+        vec!["guard", "clear", "--yes", "extra"],
+        vec!["guard", "reset"],
+        vec!["guard", "clear", "--yes", "--json", "extra"],
+    ] {
+        let err = handle(&args.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>())
+            .err()
+            .unwrap_or_else(|| panic!("{args:?} must be rejected"));
+        assert_eq!(err.exit_code(), 2, "{args:?}");
+    }
+}
+
+#[test]
+fn guard_output_shape_is_stable() {
+    let state = VfsGuardState {
+        name: "rules",
+        path: "/data/adb/hybrid-mount/vfs_boot_guard",
+        verdict: "foreign",
+        contents: Some("version=6.2.2\nsource=boot\n".into()),
+    };
+    let json: serde_json::Value =
+        serde_json::from_str(&guard_json(std::slice::from_ref(&state), &[]).unwrap()).unwrap();
+    assert_eq!(json["guards"][0]["name"], "rules");
+    assert_eq!(json["guards"][0]["verdict"], "foreign");
+    assert!(json.get("cleared").is_none());
+    let cleared = guard_json(
+        std::slice::from_ref(&state),
+        &["/data/adb/hybrid-mount/vfs_boot_guard"],
+    )
+    .unwrap();
+    let json: serde_json::Value = serde_json::from_str(&cleared).unwrap();
+    assert_eq!(json["cleared"][0], "/data/adb/hybrid-mount/vfs_boot_guard");
+    let text = guard_text(std::slice::from_ref(&state), &["/a", "/b"]);
+    assert!(text.starts_with("cleared /a\ncleared /b\n"));
+    assert!(text.contains("rules guard: /data/adb/hybrid-mount/vfs_boot_guard (foreign)"));
+    assert!(text.contains("  version=6.2.2\n"));
+    assert_eq!(
+        guard_text(
+            &[VfsGuardState {
+                name: "lkm",
+                path: "/data/adb/hybrid-mount/vfs_lkm_boot_guard",
+                verdict: "absent",
+                contents: None,
+            }],
+            &[]
+        ),
+        "lkm guard: /data/adb/hybrid-mount/vfs_lkm_boot_guard (absent)\n"
+    );
+}
+
+#[test]
 fn doctor_json_remains_compatible_and_text_contains_errors() {
     let mut report = doctor::summarize(
         None,

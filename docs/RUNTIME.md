@@ -77,8 +77,13 @@ marker and is no longer the synchronization mechanism.
   application (`applying`) or unverified rollback (`error`) requires a physical
   reboot because some effects may not have been durably identified.
 - VFS mutation arms the persistent crash guard. A handled return clears it; process
-  termination or a kernel crash leaves it to prevent automatic reinjection. Runtime
-  commands never clear a pre-existing guard to force a retry.
+  termination or a kernel crash leaves it to prevent automatic reinjection. The marker
+  records the version, the executable identity and the boot that armed it, so it only
+  gates the build that wrote it: a marker left by a different build (or by a version
+  that predates the identity fields) is retired automatically and the rules are retried.
+  Runtime commands never clear a marker of the current build to force a retry;
+  `hybrid-mount vfs guard clear --yes` removes it explicitly after the crash is
+  understood.
 - Upgrading during a live session from a version without complete ownership
   (including KernelSU registration records for real mounts) may
   require one physical reboot. A pre-ledger snapshot (`run/state.json` predates the

@@ -9,6 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use serde::Serialize;
 
 use super::backend::KeyringKernel;
+use super::boot_guard::{self, VfsGuardState};
 use super::control::{ClearScope, Controller, Mutation, MutationReport};
 use super::doctor::{self, VfsDoctorReport};
 use super::protocol::{self, EncodedRule, ListedRule};
@@ -33,6 +34,8 @@ Usage: hybrid-mount vfs <command> [options]
   uid list [--json]
   uid clear --yes [--json]
   clear {rules|uid|all} --yes [--json]
+  guard [--json]                           Boot guards that gate VFS rule injection
+  guard clear --yes [--json]               Remove them so VFS is tried again
 
 Aliases (inside vfs): add/a, del/d, whiteout/w, block/b, unblock/u,
   list/l, list uid/l uid, version/v/-v. Lists also accept bare 'json'.
@@ -42,6 +45,8 @@ Use -- to end option parsing. --uid 0 (default) means a global rule.
 'uid add' isolates a UID from VFS; it does not assign a rule to that UID.
 --whiteout hides a path; --opaque keeps a directory with injected children only.
 All clear commands affect the provider's shared tables, including boot rules.
+A marker left by this build refuses VFS until 'guard clear --yes' removes it;
+a marker a different build left is retired automatically on the next attempt.
 Changes are runtime-only. No --save, wrapper binary or unload command is installed.
 Queries and rule/UID commands never load a module; use 'vfs load' explicitly.
 Writes are verified by read-back. Batches are not atomic; failures may be partial.
@@ -57,6 +62,7 @@ enum Operation {
     Rules,
     Uids,
     Mutate(Mutation),
+    Guard { clear: bool },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -78,6 +84,7 @@ enum Action {
     AddUid,
     DeleteUid,
     Clear(ClearScope),
+    Guard,
 }
 
 fn usage(detail: impl Into<String>) -> Error {
@@ -145,6 +152,7 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
         "version" | "v" | "-v" => (Action::Version, 1),
         "doctor" => (Action::Doctor, 1),
         "load" => (Action::Load, 1),
+        "guard" => (Action::Guard, 1),
         "rule" | "uid" => {
             let second = args
                 .get(1)
@@ -227,7 +235,7 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
                     json = true;
                     continue;
                 }
-                "--yes" if matches!(action, Action::Clear(_)) => {
+                "--yes" if matches!(action, Action::Clear(_) | Action::Guard) => {
                     yes = true;
                     continue;
                 }
@@ -329,6 +337,22 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
                 Mutation::DeleteUids(uids)
             })
         }
+        Action::Guard => match values.as_slice() {
+            [] if !yes => Operation::Guard { clear: false },
+            [] => return Err(usage("--yes only applies to 'guard clear'")),
+            ["clear"] if yes => Operation::Guard { clear: true },
+            ["clear"] => {
+                return Err(usage(
+                    "clearing the VFS boot guards requires --yes: VFS injects its rules again, and a kernel crash can repeat",
+                ));
+            }
+            _ => {
+                return Err(usage(format!(
+                    "guard takes no argument other than clear: {:?}",
+                    values.join(" ")
+                )));
+            }
+        },
         _ => {
             if !values.is_empty() {
                 return Err(usage(format!("unexpected argument: {:?}", values[0])));
@@ -451,6 +475,56 @@ fn mutation_text(report: &MutationReport) -> String {
     text
 }
 
+#[derive(Serialize)]
+struct GuardEntry<'a> {
+    name: &'a str,
+    path: &'a str,
+    verdict: &'a str,
+    contents: &'a Option<String>,
+}
+
+#[derive(Serialize)]
+struct GuardOutput<'a> {
+    guards: Vec<GuardEntry<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    cleared: Vec<&'static str>,
+}
+
+fn guard_json(guards: &[VfsGuardState], cleared: &[&'static str]) -> Result<String> {
+    let rows: Vec<_> = guards
+        .iter()
+        .map(|guard| GuardEntry {
+            name: guard.name,
+            path: guard.path,
+            verdict: guard.verdict,
+            contents: &guard.contents,
+        })
+        .collect();
+    Ok(serde_json::to_string_pretty(&GuardOutput {
+        guards: rows,
+        cleared: cleared.to_vec(),
+    })?)
+}
+
+fn guard_text(guards: &[VfsGuardState], cleared: &[&'static str]) -> String {
+    let mut text = String::new();
+    for path in cleared {
+        text.push_str(&format!("cleared {path}\n"));
+    }
+    for guard in guards {
+        text.push_str(&format!(
+            "{} guard: {} ({})\n",
+            guard.name, guard.path, guard.verdict
+        ));
+        if let Some(contents) = &guard.contents {
+            for line in contents.lines() {
+                text.push_str(&format!("  {line}\n"));
+            }
+        }
+    }
+    text
+}
+
 fn emit(text: &str) -> Result<()> {
     let mut out = io::stdout().lock();
     out.write_all(text.as_bytes())?;
@@ -467,7 +541,10 @@ pub fn handle(args: &[String]) -> Result<()> {
     let command = parse(args, &cwd)?;
     // All provider mutations share the lifecycle mutex, including low-level CLI users.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let _operation_lock = if matches!(command.operation, Operation::Load | Operation::Mutate(_)) {
+    let _operation_lock = if matches!(
+        command.operation,
+        Operation::Load | Operation::Mutate(_) | Operation::Guard { clear: true }
+    ) {
         Some(crate::runtime::ledger::OperationLock::acquire()?)
     } else {
         None
@@ -493,6 +570,19 @@ pub fn handle(args: &[String]) -> Result<()> {
                     "hybridmount ready: {version} ({:?})",
                     doctor::presence_on_device()
                 )
+            })
+        }
+        Operation::Guard { clear } => {
+            let cleared = if clear {
+                boot_guard::clear_guards()?
+            } else {
+                Vec::new()
+            };
+            let guards = vec![boot_guard::rule_guard()?, boot_guard::lkm_guard()?];
+            emit(&if command.json {
+                guard_json(&guards, &cleared)?
+            } else {
+                guard_text(&guards, &cleared)
             })
         }
         operation => {

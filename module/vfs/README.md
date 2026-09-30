@@ -99,11 +99,16 @@ same loader list and execution code, but retains its own exact file selection an
 confirms success by checking that its target procfs node disappeared.
 
 Symbol and vermagic adaptation does not guarantee ABI compatibility. Before loading
-each candidate, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` with its
-path and removes the marker when the attempt returns. If the kernel crashes, the
-marker survives and the next boot skips VFS while the rest of Hybrid Mount keeps
-working. If every candidate fails, the collected loader diagnostics are logged and
-the existing VFS degradation policy applies.
+each candidate, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` with the
+build identity and the size and mtime of the candidate it is about to insert, and
+removes the marker when the attempt returns. If the kernel crashes, the marker survives
+and the next boot skips VFS while the rest of Hybrid Mount keeps working. A marker an
+older build left, or one whose recorded object is no longer among the packaged
+candidates, is retired automatically so a refreshed module is tried; only a marker this
+build wrote for an object it still ships keeps refusing, and `hybrid-mount vfs guard
+clear --yes` (or the WebUI status card) removes it deliberately. If every candidate
+fails, the collected loader diagnostics are logged and the existing VFS degradation
+policy applies.
 
 ## Building
 

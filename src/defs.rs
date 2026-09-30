@@ -15,8 +15,11 @@ pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
 pub const VFS_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/vfs/binaries";
 pub const VFS_LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_lkm_boot_guard";
 
-/// VFS boot guard: written before rules are applied and cleared on success, so a hard
-/// crash leaves it behind and the next boot skips the VFS backend.
+/// VFS boot guard: written before rules are applied and cleared on success. The marker
+/// records the build and the mutation that armed it, so a hard crash leaves it behind and
+/// only that same build skips the VFS backend; a marker another build (or a pre-identity
+/// version) left is retired automatically. `hybrid-mount vfs guard clear --yes` removes it
+/// on demand.
 pub const VFS_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_boot_guard";
 
 pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";

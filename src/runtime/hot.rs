@@ -32,12 +32,16 @@ struct Status {
 }
 
 fn guard() -> Result<()> {
-    if Path::new(defs::VFS_BOOT_GUARD_PATH).exists() {
-        return Err(Error::msg(
-            "VFS crash guard is present; hot operations will not bypass it",
-        ));
+    match crate::vfs::boot_guard::inspect()? {
+        // A marker of another build, or the legacy marker without identity, is retired by the
+        // mutation itself; only a marker this build wrote still refuses the operation.
+        crate::vfs::boot_guard::VfsGuardVerdict::Absent
+        | crate::vfs::boot_guard::VfsGuardVerdict::Foreign { .. } => Ok(()),
+        crate::vfs::boot_guard::VfsGuardVerdict::Own(record) => Err(Error::msg(format!(
+            "VFS crash guard is present; hot operations will not bypass it ({})",
+            record.describe()
+        ))),
     }
-    Ok(())
 }
 
 fn config_and_modules() -> Result<(Config, Vec<scanner::ModuleRecord>)> {
@@ -189,7 +193,9 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
     // Validation errors must leave the ready ledger untouched. In particular a
     // foreign new target is not an introduced rule requiring rollback.
     rules::preflight(&mut kernel, &before, &after)?;
-    let _guard = crate::pipeline::VfsBootGuard::arm()?;
+    let _guard = crate::vfs::boot_guard::arm_for_mutation(
+        crate::vfs::boot_guard::VfsMutationSource::Runtime,
+    )?;
     transaction::reconcile(
         &mut kernel,
         &mut saved,

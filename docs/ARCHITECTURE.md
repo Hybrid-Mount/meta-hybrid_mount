@@ -61,6 +61,8 @@ module/metamount.sh
 - ext4 staging 镜像：`/data/adb/hybrid-mount/modules.img`
 - 可选 LKM：`/data/adb/modules/hybrid_mount/lkm/binaries/*.ko`
 - LKM 启动熔断标记：`/data/adb/hybrid-mount/lkm_boot_guard`
+- VFS 加载熔断标记：`/data/adb/hybrid-mount/vfs_lkm_boot_guard`（记录写入它的构建与它准备插入的内核对象；其他构建、或被刷新替换的 `.ko` 留下的标记自动失效重试）
+- VFS 规则熔断标记：`/data/adb/hybrid-mount/vfs_boot_guard`（记录写入它的构建，只有同一构建会因此跳过 VFS；其他构建留下的标记自动失效，`vfs guard clear --yes` 可手工清除）
 
 这些路径属于安装、WebUI 和启动脚本之间的兼容接口，不应仅为品牌或目录整理而改名。
 
