@@ -28,7 +28,7 @@ pub fn start() -> Result<BootSession> {
     saved.require_clean()?;
     let baseline = mountinfo::mount_entries()?;
     report_legacy(&baseline);
-    let original_uids = check_untracked_vfs()?;
+    let original_uids = report_untracked_vfs()?;
     saved.generation += 1;
     saved.phase = "applying".into();
     saved.error = None;
@@ -130,7 +130,7 @@ pub fn cleanup() -> Result<()> {
         if saved.generation == 0 {
             report_legacy(&mountinfo::mount_entries()?);
         }
-        check_untracked_vfs()?;
+        report_untracked_vfs()?;
         return super::hot::refresh_snapshots(&saved);
     }
     // Interrupted application may have installed mounts before their IDs were committed.
@@ -245,15 +245,33 @@ fn report_legacy(current: &[MountEntry]) {
     }
 }
 
-fn check_untracked_vfs() -> Result<Vec<u32>> {
+/// Reports VFS rules that this boot's plan did not place, without adopting or removing them.
+///
+/// A rule can be a leftover whose ledger is gone, and it can belong to another tool. Aborting here
+/// would stop every module from mounting on the strength of that ambiguity, because APatch and
+/// KernelSU both drop a metamodule script that exits non-zero, so `report_legacy`'s policy applies
+/// to rules as well: log them and continue. Nothing later claims them — new rules are installed
+/// alongside them, a collision surfaces as a batch failure with its offset, and cleanup reconciles
+/// only the rules this ledger recorded.
+fn report_untracked_vfs() -> Result<Vec<u32>> {
     if !crate::vfs::available() {
         return Ok(Vec::new());
     }
     let mut kernel = device::Kernel::inspect()?;
-    if kernel.list()?.iter().any(|r| !rules::derived_parent(r)) {
-        return Err(Error::msg(
-            "untracked VFS rules remain; refuse a full pipeline rebuild",
-        ));
+    for rule in kernel.list()? {
+        if !rules::derived_parent(&rule) {
+            let source = if rule.real_path.is_empty() {
+                "none"
+            } else {
+                rule.real_path.as_str()
+            };
+            log::warn!(
+                "untracked VFS rule {} (uid {}, source {}) was not placed by this boot's plan; leaving it untouched",
+                rule.virtual_path,
+                rule.uid,
+                source
+            );
+        }
     }
     kernel.uids()
 }
