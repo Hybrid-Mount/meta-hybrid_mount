@@ -43,3 +43,8 @@ Desktop.ini
 # Local diagnostics
 *.tar.gz
 KernelSU_bugreport_*
+.tmp-size/
+
+# Python bytecode from skill helper scripts (.dsh/skills/*/scripts)
+__pycache__/
+*.pyc
