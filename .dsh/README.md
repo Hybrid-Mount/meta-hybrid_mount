@@ -19,7 +19,7 @@ DSH 会扫描项目根的 `.dsh/skills/`（rank 100，优先级最高）与 `.ag
 | hm-vfs | VFS 内核子系统 hybridmount：module/vfs 内核模块 + src/vfs 控制面、GKI 选型、plan 前加载约束、sources.txt 防漂移 |
 | hm-runtime | src/runtime 运行时层：账本阶段机、热挂载与 boot lock 竞态、事务回滚清理、状态快照契约 |
 | hm-module-scripts | module/*.sh 与 tests/shell/*.sh：触发时机、可用变量、退出码语义、平台裁剪 |
-| hm-ci | 8 个 workflow 的触发矩阵、权限、产物回写与发布链路 |
+| hm-ci | 7 个 workflow 的触发矩阵、权限、产物回写与发布链路 |
 | hm-rust-android | Android 三架构、cfg 与宿主机验证边界 |
 | hm-rust-lsp | DSH Rust 诊断、符号与重命名工具使用（**当前不可用**，见下） |
 | hm-webui | WebUI 开发与 kernelsu.exec JSON 命令协议 |
@@ -33,6 +33,8 @@ DSH 会扫描项目根的 `.dsh/skills/`（rank 100，优先级最高）与 `.ag
 | --- | --- | --- |
 | rust-skills | [leonardomso/rust-skills](https://github.com/leonardomso/rust-skills) | 265 条通用 Rust 规则库（26 类，按需展开）；加仓库优先级说明 |
 | rust-best-practices | [apollographql/skills](https://github.com/apollographql/skills) | Apollo Rust 编码、所有权、错误处理与性能指南；移除 Claude 工具限制、适配仓库 lint |
+| rust-guidelines | [microsoft/rust-guidelines](https://github.com/microsoft/rust-guidelines) | 上游 12 章 107 条，**只取** correctness/universal/ffi/checklist 四章共 21 条（约 50 KB）：panic 与错误的边界、unsafe/unsound 判据、FFI 分层、`#[expect]`、魔法值文档、结构化日志；其余章节与 rust-skills 的 api/doc/perf/macro/proj/test 类目重复故不取 |
+| rust-unsafe-review | [google/rust-skills](https://github.com/google/rust-skills) | Google 的 unsafe 文档/注释审查方法论：把 `# Safety` 与 safety 注释作为可机械检验的证明义务逐条核对；剔除 `EVAL.yml`、`testcases/` 与 `unsafe_rust_review_experimental/`，上游名 `unsafe-rust-review` 改为 `rust-unsafe-review` 以对齐本目录 `rust-*` 命名 |
 | vue-best-practices | [vuejs-ai/skills](https://github.com/vuejs-ai/skills) | WebUI 的 Vue 3 + TS 组件、响应式与组件边界；声明本仓库无 Router/Pinia/JSX/SSR |
 | vue-testing-best-practices | [vuejs-ai/skills](https://github.com/vuejs-ai/skills) | WebUI 的 Vitest + Vue Test Utils 测试；剔除 Playwright/E2E 与 Pinia 内容 |
 | kernel-development-skills | [UtsavBalar1231/kernel-development-skills](https://github.com/UtsavBalar1231/kernel-development-skills) | 内核侧 C（module/vfs/src、module/lkm/src）的驱动 API、调试与 patch 清单；剔除 RK3576/Lapis 板级文件与 Codex 配置 |
@@ -49,8 +51,10 @@ DSH **不会**读取该目录，两边各自维护。
 详见 `.dsh/plugins.md`；在该插件支持 0.2.x 之前，Rust 改动请用 `cargo clippy` 验证。
 
 `rust-skills` 与其他 Rust 相关 skill 的分工：它提供通用的逐条规则与反例，
-`rust-best-practices` 提供成体系的编码指南，`hm-*` 提供本仓库的门禁与不变量。
-三者冲突时以 `hm-*` 与仓库根 `CLAUDE.md` 为准。
+`rust-best-practices` 提供成体系的编码指南，`rust-guidelines` 提供 panic/错误边界与
+unsafe 判据，`rust-unsafe-review` 提供 unsafe 证明义务的审查流程，
+`hm-*` 提供本仓库的门禁与不变量。
+五者冲突时以 `hm-*` 与仓库根 `CLAUDE.md` 为准。
 
 ## 升级 vendored skill
 
@@ -69,6 +73,11 @@ git clone --depth 1 https://github.com/leonardomso/rust-skills /tmp/rust-skills
 diff /tmp/rust-skills/SKILL.md .dsh/skills/rust-skills/SKILL.md
 python3 .dsh/skills/rust-skills/checks/validate.py   # 索引/链接/孤儿规则完整性
 ```
+
+另外两个 Rust skill 的上游取用路径是 `unsafe_rust_review/`（google/rust-skills）与
+`src/guidelines/`（microsoft/rust-guidelines，注意上游是 mdbook，章节间用锚点互链）。
+`rust-guidelines` 的裁剪范围与理由写在它自己的 `SKILL.md` 里，升级时先读那一节再决定
+是否扩大收录面。
 
 合并时要保住本仓库加的三样东西：中文 `description`、`whenToUse`、
 “Hybrid Mount precedence”一节，以及被删掉的上游文件清单（`metadata.vendored.trimmed`）。

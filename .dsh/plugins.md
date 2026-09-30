@@ -13,7 +13,7 @@ agent 只负责给兼容性结论，不改 profile。**
 | 插件 | 版本 | 用途 | 为什么适合本仓库 |
 | --- | --- | --- | --- |
 | `dshmarket` | 1.66.5 | 可视化插件市场 | 已装；后续插件的安装入口 |
-| `@linxin666/dsh-client-ui-skill-explorer` | 0.4.4 | 按来源（bundled/project/user/custom/runtime）浏览、启停、增删 skill | 本仓库有 15 个 `.dsh/skills/`，需要面板管理 |
+| `@linxin666/dsh-client-ui-skill-explorer` | 0.4.4 | 按来源（bundled/project/user/custom/runtime）浏览、启停、增删 skill | 本仓库有 19 个 `.dsh/skills/`，需要面板管理 |
 | `@linxin666/dsh-client-ui-git-graph` | 0.4.4 | 提交图谱 | 仓库 git 历史密集，`dev`/`main` 双分支频繁合并 |
 
 ### 已核实不兼容，不要装
