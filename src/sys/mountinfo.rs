@@ -110,7 +110,7 @@ pub fn mount_entry_at(path: &Path) -> Result<Option<MountEntry>> {
 }
 
 /// The ordering relation behind [`deepest_first`], for callers holding borrowed paths.
-fn deepest_first_order(left: &Path, right: &Path) -> Ordering {
+pub(crate) fn deepest_first_order(left: &Path, right: &Path) -> Ordering {
     right
         .components()
         .count()
@@ -146,7 +146,7 @@ impl MountSnapshot {
     }
 
     pub fn contains(&self, path: &Path) -> bool {
-        self.points.iter().any(|point| point == path)
+        self.ids.contains_key(path)
     }
 
     pub fn descendants(&self, root: &Path) -> Vec<&Path> {

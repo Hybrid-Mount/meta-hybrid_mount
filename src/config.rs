@@ -248,27 +248,28 @@ impl Config {
     }
 
     fn load_or_missing_tolerant(path: &Path) -> Result<Self> {
-        match Self::load(path) {
-            Ok(config) => Ok(Self::finish_loaded(config)),
-            Err(Error::ConfigRead { source, .. }) if source.kind() == ErrorKind::NotFound => {
-                Self::defaults_for_missing(path)
-            }
-            Err(err) => Err(err),
-        }
+        Self::load_allowing_missing(path, false)
     }
 
     /// Boot-time loader: a genuinely absent main config uses defaults, while
     /// corrupt, unsupported, unreadable, dangling-symlink, and blacklist errors
     /// abort before module scanning or mount planning begins.
     pub fn load_for_boot(path: &Path) -> Result<Self> {
+        Self::load_allowing_missing(path, true)
+    }
+
+    /// Shared skeleton of the two missing-tolerant loaders.
+    ///
+    /// `require_genuinely_missing` is the whole difference between them: boot only accepts
+    /// defaults when the main config is absent *without* a dangling symlink in the way,
+    /// while the tolerant path treats any `NotFound` as "use defaults".
+    fn load_allowing_missing(path: &Path, require_genuinely_missing: bool) -> Result<Self> {
         match Self::load(path) {
-            Ok(config) => {
-                let config = Self::finish_loaded(config);
-                Ok(config)
-            }
+            Ok(config) => Ok(Self::finish_loaded(config)),
             Err(Error::ConfigRead { source, .. })
                 if source.kind() == ErrorKind::NotFound
-                    && Self::main_config_is_genuinely_missing(path) =>
+                    && (!require_genuinely_missing
+                        || Self::main_config_is_genuinely_missing(path)) =>
             {
                 Self::defaults_for_missing(path)
             }
@@ -395,14 +396,10 @@ impl Config {
     /// harmless next to missing one the user asked for.
     pub fn wants_vfs(&self) -> bool {
         self.default_mode == Mode::Vfs
-            || self
-                .rules
-                .values()
-                .any(|rule| rule.default_mode == Some(Mode::Vfs))
-            || self
-                .rules
-                .values()
-                .any(|rule| rule.paths.values().any(|mode| *mode == Mode::Vfs))
+            || self.rules.values().any(|rule| {
+                rule.default_mode == Some(Mode::Vfs)
+                    || rule.paths.values().any(|mode| *mode == Mode::Vfs)
+            })
     }
 
     /// Loads the bundled and user-persisted module blacklists.

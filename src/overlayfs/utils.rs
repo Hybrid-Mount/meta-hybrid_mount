@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 
 //! Low-level mount primitives for OverlayFS and ext4 (Linux/Android only).
 
@@ -23,45 +23,42 @@ use crate::sys::fs::check_kernel_config;
 const EBUSY_MAX_RETRIES: usize = 3;
 const EBUSY_BASE_BACKOFF: Duration = Duration::from_millis(50);
 
-fn io_error_is_busy(err: &io::Error) -> bool {
-    err.raw_os_error() == Some(rustix::io::Errno::BUSY.raw_os_error())
+/// The two error types retried here report `EBUSY` differently and need different
+/// exhausted-retry fallbacks.
+trait Busy: Sized {
+    fn is_busy(&self) -> bool;
+    fn exhausted() -> Self;
 }
 
-fn errno_is_busy(err: &rustix::io::Errno) -> bool {
-    err.raw_os_error() == rustix::io::Errno::BUSY.raw_os_error()
-}
-
-fn retry_ebusy_io<T>(operation: &str, mut action: impl FnMut() -> io::Result<T>) -> io::Result<T> {
-    let mut last_error = None;
-    for retry in 0..=EBUSY_MAX_RETRIES {
-        match action() {
-            Ok(value) => return Ok(value),
-            Err(err) if io_error_is_busy(&err) && retry < EBUSY_MAX_RETRIES => {
-                let backoff = EBUSY_BASE_BACKOFF.saturating_mul(1_u32 << retry);
-                log::warn!(
-                    "{operation} busy, retry={}/{} backoff_ms={}",
-                    retry + 1,
-                    EBUSY_MAX_RETRIES,
-                    backoff.as_millis()
-                );
-                thread::sleep(backoff);
-                last_error = Some(err);
-            }
-            Err(err) => return Err(err),
-        }
+impl Busy for io::Error {
+    fn is_busy(&self) -> bool {
+        self.raw_os_error() == Some(rustix::io::Errno::BUSY.raw_os_error())
     }
-    Err(last_error.unwrap_or_else(|| io::Error::other("busy retries exhausted")))
+
+    fn exhausted() -> Self {
+        io::Error::other("busy retries exhausted")
+    }
 }
 
-fn retry_ebusy_errno<T>(
+impl Busy for rustix::io::Errno {
+    fn is_busy(&self) -> bool {
+        self.raw_os_error() == rustix::io::Errno::BUSY.raw_os_error()
+    }
+
+    fn exhausted() -> Self {
+        rustix::io::Errno::BUSY
+    }
+}
+
+fn retry_ebusy<T, E: Busy>(
     operation: &str,
-    mut action: impl FnMut() -> rustix::io::Result<T>,
-) -> rustix::io::Result<T> {
+    mut action: impl FnMut() -> std::result::Result<T, E>,
+) -> std::result::Result<T, E> {
     let mut last_error = None;
     for retry in 0..=EBUSY_MAX_RETRIES {
         match action() {
             Ok(value) => return Ok(value),
-            Err(err) if errno_is_busy(&err) && retry < EBUSY_MAX_RETRIES => {
+            Err(err) if err.is_busy() && retry < EBUSY_MAX_RETRIES => {
                 let backoff = EBUSY_BASE_BACKOFF.saturating_mul(1_u32 << retry);
                 log::warn!(
                     "{operation} busy, retry={}/{} backoff_ms={}",
@@ -75,7 +72,7 @@ fn retry_ebusy_errno<T>(
             Err(err) => return Err(err),
         }
     }
-    Err(last_error.unwrap_or(rustix::io::Errno::BUSY))
+    Err(last_error.unwrap_or_else(E::exhausted))
 }
 
 /// Checks whether the kernel has overlayfs built in (`CONFIG_OVERLAY_FS=y`).
@@ -159,7 +156,7 @@ fn mount_ext4_loop(source: &Path, target: &Path) -> Result<Ext4LoopMount> {
         .next_free()
         .map_err(|err| Error::msg(format!("find free loop device: {err}")))?;
 
-    retry_ebusy_io("attach loop device", || {
+    retry_ebusy("attach loop device", || {
         loop_device
             .with()
             .read_only(false)
@@ -178,7 +175,7 @@ fn mount_ext4_loop(source: &Path, target: &Path) -> Result<Ext4LoopMount> {
         .ok_or_else(|| Error::msg("get loop device path: no path available"))?;
     log::debug!("loop device: path={}", device_path.display());
 
-    match retry_ebusy_errno("mount ext4 staging", || {
+    match retry_ebusy("mount ext4 staging", || {
         mount(&device_path, target, "ext4", MountFlags::NOATIME, Some(c""))
     }) {
         Ok(()) => Ok(Ext4LoopMount {
@@ -189,7 +186,7 @@ fn mount_ext4_loop(source: &Path, target: &Path) -> Result<Ext4LoopMount> {
                 "ext4 mount failed, detaching loop device: device={}, error={err}",
                 device_path.display()
             );
-            if let Err(detach_err) = retry_ebusy_io("detach loop device", || loop_device.detach()) {
+            if let Err(detach_err) = retry_ebusy("detach loop device", || loop_device.detach()) {
                 log::error!(
                     "detach loop device failed: device={}, error={detach_err}",
                     device_path.display()

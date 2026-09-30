@@ -648,6 +648,26 @@ fn persist_unmounted_module_snapshot(modules: &[ModuleRecord], config: &Config, 
     }
 }
 
+/// Records a boot failure after the mounts have been rolled back, then hands the error back to the
+/// caller.
+///
+/// Every failure site in the mount pipeline persists the same three things in the same order, so
+/// the summary the WebUI reads can never drift away from the state file or the module snapshot.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn record_mount_failure(
+    state: &mut RunState,
+    modules: &[ModuleRecord],
+    config: &Config,
+    plan: &MountPlan,
+    stage: &str,
+    err: Error,
+    rollback: &RollbackSummary,
+) -> Error {
+    persist_mount_failure_state(state, stage, &err.to_string(), rollback);
+    persist_unmounted_module_snapshot(modules, config, plan);
+    err
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn confirmed_mount_targets(
     targets: &[String],
@@ -896,11 +916,7 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
             || "VFS provider unavailable; configured VFS rules were skipped".to_owned(),
             |error| format!("VFS provider guard failed closed: {error}"),
         ));
-        state.vfs_error_modules = plan
-            .vfs_module_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        state.vfs_error_modules = plan.vfs_module_id_strings();
     }
     startup_phase("state", state.save())?;
     state_phase.finish();
@@ -933,14 +949,15 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
                     plan.magic_module_ids.join(",")
                 );
                 let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
-                persist_mount_failure_state(
+                return Err(record_mount_failure(
                     &mut state,
+                    &modules,
+                    &config,
+                    &plan,
                     "mount_execution",
-                    &err.to_string(),
+                    err,
                     &rollback,
-                );
-                persist_unmounted_module_snapshot(&modules, &config, &plan);
-                return Err(err);
+                ));
             }
         };
 
@@ -952,14 +969,15 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
         Err(err) => {
             log::error!("phase=mountinfo_confirm failed: {err}");
             let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
-            persist_mount_failure_state(
+            return Err(record_mount_failure(
                 &mut state,
+                &modules,
+                &config,
+                &plan,
                 "mountinfo_confirm",
-                &err.to_string(),
+                err,
                 &rollback,
-            );
-            persist_unmounted_module_snapshot(&modules, &config, &plan);
-            return Err(err);
+            ));
         }
     };
     let confirmed_overlay_targets = confirmed_mount_targets(&active_mounts, &final_mountinfo);
@@ -1008,19 +1026,20 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     if let Err(err) = write_scan_ret(&app_modules) {
         log::error!("phase=module_snapshot_save failed, rolling back mounts: {err}");
         let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
-        persist_mount_failure_state(
+        return Err(record_mount_failure(
             &mut state,
+            &modules,
+            &config,
+            &plan,
             "module_snapshot_save",
-            &err.to_string(),
+            err,
             &rollback,
-        );
-        persist_unmounted_module_snapshot(&modules, &config, &plan);
-        return Err(err);
+        ));
     }
 
     let mount_error_reasons = mount_error_modules
         .iter()
-        .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+        .map(|module| (module.clone(), crate::defs::MOUNT_ERROR_REASON.to_owned()))
         .collect();
 
     let state_phase = PhaseTimer::start("state");
@@ -1040,11 +1059,7 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     state.mode_stats.vfs = vfs_stats.mounted_module_ids.len();
     if let Some(failure) = &vfs_stats.failure {
         state.vfs_error = Some(failure.clone());
-        state.vfs_error_modules = plan
-            .vfs_module_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        state.vfs_error_modules = plan.vfs_module_id_strings();
     }
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;
@@ -1057,9 +1072,15 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     if let Err(err) = state.save() {
         log::error!("phase=state_save failed, rolling back mounts: {err}");
         let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
-        persist_mount_failure_state(&mut state, "state_save", &err.to_string(), &rollback);
-        persist_unmounted_module_snapshot(&modules, &config, &plan);
-        return Err(err);
+        return Err(record_mount_failure(
+            &mut state,
+            &modules,
+            &config,
+            &plan,
+            "state_save",
+            err,
+            &rollback,
+        ));
     }
     state_phase.finish();
 
@@ -1085,14 +1106,15 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
                 RollbackSummary::unverified()
             }
         };
-        persist_mount_failure_state(
+        return Err(record_mount_failure(
             &mut state,
+            &modules,
+            &config,
+            &plan,
             "mount_transaction_commit",
-            &err.to_string(),
+            err,
             &rollback,
-        );
-        persist_unmounted_module_snapshot(&modules, &config, &plan);
-        return Err(err);
+        ));
     }
     cleanup_phase.finish();
 
@@ -1632,7 +1654,7 @@ fn mount_overlay_files(
                 entry.destination_relative.display(),
                 dest.display()
             );
-            copy_entry(&entry.source, &dest)?;
+            crate::sys::fs::copy_prepared_entry(&entry.source, &dest)?;
 
             lowerdirs.push(layer_dir.to_string_lossy().into_owned());
         }
@@ -1728,11 +1750,6 @@ fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
-    crate::sys::fs::copy_prepared_entry(source, dest)
-}
-
 /// RAII guard for the VFS boot guard file: once armed, any handled return (Ok or Err)
 /// clears it on Drop. Only a hard crash leaves it behind and trips the next boot.
 #[cfg(any(target_os = "linux", target_os = "android", test))]
@@ -1823,11 +1840,7 @@ fn vfs_failure_stats(detail: impl Into<String>) -> VfsExecStats {
 fn record_vfs_failure(state: &mut RunState, plan: &MountPlan, detail: impl Into<String>) {
     state.vfs_provider = None;
     state.vfs_error = Some(detail.into());
-    state.vfs_error_modules = plan
-        .vfs_module_ids
-        .iter()
-        .map(ToString::to_string)
-        .collect();
+    state.vfs_error_modules = plan.vfs_module_id_strings();
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

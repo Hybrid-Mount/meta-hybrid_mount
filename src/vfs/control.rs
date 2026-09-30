@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 
 //! Runtime control and read-back verification, with an injectable keyring transport.
 
@@ -132,24 +132,26 @@ impl<T: Transport> Controller<T> {
         Ok(found)
     }
 
-    pub fn list_rules(&mut self) -> Result<Vec<ListedRule>> {
+    /// Reads every page of one listing command through the injected transport.
+    fn list<R, P>(&mut self, command: NmCommand, parse: P) -> Result<Vec<R>>
+    where
+        P: Fn(&[u8]) -> Result<(Vec<R>, u32)>,
+    {
         protocol::paginate(
             |cursor| {
                 self.transport
-                    .exchange(&protocol::build_list_payload(NmCommand::GetList, cursor)?)
+                    .exchange(&protocol::build_list_payload(command, cursor)?)
             },
-            protocol::parse_list,
+            parse,
         )
     }
 
+    pub fn list_rules(&mut self) -> Result<Vec<ListedRule>> {
+        self.list(NmCommand::GetList, protocol::parse_list)
+    }
+
     pub fn list_uids(&mut self) -> Result<Vec<u32>> {
-        protocol::paginate(
-            |cursor| {
-                self.transport
-                    .exchange(&protocol::build_list_payload(NmCommand::GetUids, cursor)?)
-            },
-            protocol::parse_uids,
-        )
+        self.list(NmCommand::GetUids, protocol::parse_uids)
     }
 
     pub fn mutate(&mut self, mutation: &Mutation) -> Result<MutationReport> {
@@ -181,10 +183,7 @@ impl<T: Transport> Controller<T> {
         let mut results = Vec::new();
         match mutation {
             Mutation::Add { rules, uid } => {
-                let listed = self
-                    .list_rules()
-                    .map_err(|err| readback_errors.push(err.to_string()))
-                    .ok();
+                let listed = note_readback(&mut readback_errors, self.list_rules());
                 // Repeated paths use the last requested value, matching kernel replacement.
                 let expected: BTreeMap<&[u8], &EncodedRule> = rules
                     .iter()
@@ -210,10 +209,7 @@ impl<T: Transport> Controller<T> {
                 }
             }
             Mutation::Delete { paths, uid } => {
-                let listed = self
-                    .list_rules()
-                    .map_err(|err| readback_errors.push(err.to_string()))
-                    .ok();
+                let listed = note_readback(&mut readback_errors, self.list_rules());
                 for path in paths {
                     let confirmed = listed.as_ref().is_some_and(|rows| {
                         !rows
@@ -228,10 +224,7 @@ impl<T: Transport> Controller<T> {
                 }
             }
             Mutation::AddUids(uids) | Mutation::DeleteUids(uids) => {
-                let listed = self
-                    .list_uids()
-                    .map_err(|err| readback_errors.push(err.to_string()))
-                    .ok();
+                let listed = note_readback(&mut readback_errors, self.list_uids());
                 let present = matches!(mutation, Mutation::AddUids(_));
                 for uid in uids {
                     results.push(VerifiedItem {
@@ -245,10 +238,7 @@ impl<T: Transport> Controller<T> {
             }
             Mutation::Clear(scope) => {
                 if matches!(scope, ClearScope::Rules | ClearScope::All) {
-                    let listed = self
-                        .list_rules()
-                        .map_err(|err| readback_errors.push(err.to_string()))
-                        .ok();
+                    let listed = note_readback(&mut readback_errors, self.list_rules());
                     results.push(VerifiedItem {
                         target: "rules".into(),
                         uid: None,
@@ -256,10 +246,7 @@ impl<T: Transport> Controller<T> {
                     });
                 }
                 if matches!(scope, ClearScope::Uids | ClearScope::All) {
-                    let listed = self
-                        .list_uids()
-                        .map_err(|err| readback_errors.push(err.to_string()))
-                        .ok();
+                    let listed = note_readback(&mut readback_errors, self.list_uids());
                     results.push(VerifiedItem {
                         target: "uids".into(),
                         uid: None,
@@ -280,6 +267,16 @@ impl<T: Transport> Controller<T> {
             readback_error,
         })
     }
+}
+
+/// Keeps a failed read-back as a report entry while still returning the successful listing.
+///
+/// A read-back failure must not hide records that did apply, so the error is collected and the
+/// caller carries on with `None`.
+fn note_readback<T>(readback_errors: &mut Vec<String>, listed: Result<T>) -> Option<T> {
+    listed
+        .map_err(|err| readback_errors.push(err.to_string()))
+        .ok()
 }
 
 #[cfg(test)]

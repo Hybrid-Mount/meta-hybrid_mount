@@ -281,6 +281,17 @@ pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
             | OpenTreeFlags::AT_RECURSIVE,
     );
 
+    // Both failure paths below need the same traditional bind, with the same error text.
+    let bind = || -> Result<()> {
+        mount(from, to, "", MountFlags::BIND | MountFlags::REC, None).map_err(|err| {
+            Error::msg(format!(
+                "bind mount {} -> {}: {err}",
+                from.display(),
+                to.display()
+            ))
+        })
+    };
+
     match tree {
         Ok(tree) => {
             if move_mount(
@@ -292,23 +303,11 @@ pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
             )
             .is_err()
             {
-                mount(from, to, "", MountFlags::BIND | MountFlags::REC, None).map_err(|err| {
-                    Error::msg(format!(
-                        "bind mount {} -> {}: {err}",
-                        from.display(),
-                        to.display()
-                    ))
-                })?;
+                bind()?;
             }
         }
         Err(_) => {
-            mount(from, to, "", MountFlags::BIND | MountFlags::REC, None).map_err(|err| {
-                Error::msg(format!(
-                    "bind mount {} -> {}: {err}",
-                    from.display(),
-                    to.display()
-                ))
-            })?;
+            bind()?;
         }
     }
 

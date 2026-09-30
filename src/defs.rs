@@ -76,6 +76,10 @@ pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
 pub const MOUNT_ERROR_FILE_NAME: &str = "mount_error";
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
 
+/// Reason reported for a module whose `mount_error` marker exists but carries no
+/// recorded reason. Shared with the WebUI contract.
+pub const MOUNT_ERROR_REASON: &str = "mount_error marker present";
+
 /// Extended attribute names: the directory replace marker and the SELinux context.
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";
 pub const SELINUX_XATTR: &str = "security.selinux";

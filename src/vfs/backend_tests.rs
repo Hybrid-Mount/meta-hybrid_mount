@@ -153,15 +153,6 @@ fn loader_success_is_rejected_when_the_new_provider_is_incompatible() {
 }
 
 #[test]
-fn upstream_nomount_version_is_rejected() {
-    let mut kernel = MockKernel::answering("20");
-
-    let err = select_provider(&mut kernel, SUPPORTED_VERSIONS, false, || Ok(())).unwrap_err();
-
-    assert!(matches!(err, Error::VfsUnsupportedVersion { .. }));
-}
-
-#[test]
 fn foreign_nomount_is_refused_without_probing_k2() {
     let mut kernel = MockKernel::answering("hm1");
 

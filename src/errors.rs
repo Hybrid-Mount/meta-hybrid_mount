@@ -341,10 +341,15 @@ impl Error {
         }
     }
 
+    /// Test-only view of `classify`; production decides with the `ErrorClass` itself and
+    /// persists it, so no runtime path needs this predicate.
+    #[cfg(test)]
     pub fn is_retryable(&self) -> bool {
         self.classify() == ErrorClass::Transient
     }
 
+    /// Test-only view of `classify`; see `is_retryable`.
+    #[cfg(test)]
     pub fn requires_manual_intervention(&self) -> bool {
         self.classify() == ErrorClass::ManualRecovery
     }

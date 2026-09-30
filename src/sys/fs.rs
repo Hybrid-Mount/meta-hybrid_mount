@@ -523,16 +523,31 @@ pub fn clone_directory_metadata(source: &Path, destination: &Path) -> Result<()>
     Ok(())
 }
 
-/// Reads `/proc/config.gz` and checks whether a `CONFIG_*` is built in as `y` (v4.2.0 behaviour).
+/// `/proc/config.gz` decompressed once per process; a failed read is not cached, so
+/// the original I/O error is reported again on the next caller.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn check_kernel_config(key: &str) -> Result<bool> {
+static KERNEL_CONFIG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn kernel_config() -> Result<&'static str> {
     use std::io::Read;
 
     use flate2::read::GzDecoder;
 
+    if let Some(config) = KERNEL_CONFIG.get() {
+        return Ok(config);
+    }
+
     let file = std::fs::File::open("/proc/config.gz")?;
     let mut config = String::new();
     GzDecoder::new(file).read_to_string(&mut config)?;
+    Ok(KERNEL_CONFIG.get_or_init(|| config))
+}
+
+/// Reads `/proc/config.gz` and checks whether a `CONFIG_*` is built in as `y` (v4.2.0 behaviour).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn check_kernel_config(key: &str) -> Result<bool> {
+    let config = kernel_config()?;
 
     let found = config.lines().any(|line| {
         if line.starts_with('#') {

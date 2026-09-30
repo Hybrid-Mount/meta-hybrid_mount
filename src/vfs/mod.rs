@@ -34,7 +34,6 @@ pub fn available() -> bool {
 /// `available` is the read-only probe and `load` performs the `insmod`; both are injected so the
 /// ordering and startup capability discovery are testable without a device. A load failure is
 /// not an error here — the plan then degrades exactly as it does when no module is bundled.
-#[allow(dead_code)]
 pub fn ensure_loaded_for_plan(
     wants_vfs: bool,
     available: impl Fn() -> bool,

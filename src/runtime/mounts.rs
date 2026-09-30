@@ -107,11 +107,10 @@ fn preflight<'a>(owned: &'a [OwnedMount], current: &[OwnedMount]) -> Result<Vec<
         active.push(expected);
     }
     active.sort_by(|left, right| {
-        Path::new(&right.target)
-            .components()
-            .count()
-            .cmp(&Path::new(&left.target).components().count())
-            .then_with(|| right.target.cmp(&left.target))
+        crate::sys::mountinfo::deepest_first_order(
+            Path::new(&left.target),
+            Path::new(&right.target),
+        )
     });
     Ok(active)
 }

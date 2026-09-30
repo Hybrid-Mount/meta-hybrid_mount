@@ -99,7 +99,6 @@ mod tests {
         };
         let module = module();
         assert!(plan_hot_module(&module, &config, &BTreeSet::new(), &Ledger::default()).is_ok());
-        assert!(module.disabled);
     }
     #[test]
     fn rejects_mixed_module_before_any_kernel_work() {

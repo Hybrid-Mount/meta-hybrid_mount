@@ -306,7 +306,7 @@ impl RunState {
             .collect();
         let mount_error_reasons = mount_error_modules
             .iter()
-            .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+            .map(|module| (module.clone(), crate::defs::MOUNT_ERROR_REASON.to_owned()))
             .collect();
 
         let mut state = Self::new(
@@ -333,11 +333,7 @@ impl RunState {
                 vfs: plan.vfs_module_ids.len(),
             },
         );
-        state.vfs_modules = plan
-            .vfs_module_ids
-            .iter()
-            .map(ModuleId::to_string)
-            .collect();
+        state.vfs_modules = plan.vfs_module_id_strings();
         state.mount_error_modules = mount_error_modules;
         state.mount_error_reasons = mount_error_reasons;
         state
@@ -457,7 +453,7 @@ pub fn app_modules(
             let mount_error = mount_errors
                 .iter()
                 .any(|id| id == module.id.as_str())
-                .then(|| "mount_error marker present".to_owned());
+                .then(|| crate::defs::MOUNT_ERROR_REASON.to_owned());
 
             AppModule {
                 id: module.id.clone(),
@@ -729,33 +725,42 @@ pub fn handle_install_state() -> Result<()> {
     Ok(())
 }
 
-/// Collects modules carrying a `mount_error` marker (case-insensitive, read-only).
-pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
-    let mut modules = Vec::new();
+/// Calls `visit(module_dir, marker_file)` for every `<moduledir>/<module>/mount_error` marker.
+///
+/// Unreadable directories and entries are skipped, matching the tolerant behaviour both callers need.
+fn for_each_mount_error_marker(
+    moduledir: &Path,
+    mut visit: impl FnMut(&fs::DirEntry, &fs::DirEntry),
+) {
     let Ok(entries) = fs::read_dir(moduledir) else {
-        return modules;
+        return;
     };
 
-    for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
+    for entry in entries.filter_map(std::result::Result::ok) {
         if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
             continue;
         }
         let Ok(children) = fs::read_dir(entry.path()) else {
             continue;
         };
-        let has_marker = children.filter_map(std::result::Result::ok).any(|child| {
-            child
+        for child in children.filter_map(std::result::Result::ok) {
+            if child
                 .file_name()
                 .to_string_lossy()
                 .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
-        });
-        if has_marker {
-            modules.push(entry.file_name().to_string_lossy().into_owned());
+            {
+                visit(&entry, &child);
+            }
         }
     }
+}
+
+/// Collects modules carrying a `mount_error` marker (case-insensitive, read-only).
+pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
+    let mut modules = Vec::new();
+    for_each_mount_error_marker(moduledir, |module, _marker| {
+        modules.push(module.file_name().to_string_lossy().into_owned());
+    });
 
     modules.sort();
     modules
@@ -764,52 +769,29 @@ pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
 /// Clears module `mount_error` markers and returns how many were deleted. Only marker files are removed, never directories.
 pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
     let mut removed = 0;
-    let Ok(entries) = fs::read_dir(moduledir) else {
-        return 0;
-    };
-
-    for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
-            continue;
-        }
-        let Ok(children) = fs::read_dir(entry.path()) else {
-            continue;
-        };
-        for child in children.filter_map(std::result::Result::ok) {
-            if !child
-                .file_name()
-                .to_string_lossy()
-                .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
-            {
-                continue;
-            }
-
-            let marker_path = child.path();
-            match child.file_type() {
-                Ok(file_type) if file_type.is_file() => match fs::remove_file(&marker_path) {
-                    Ok(()) => {
-                        removed += 1;
-                        log::info!("cleared mount_error marker: {}", marker_path.display());
-                    }
-                    Err(err) => log::warn!(
-                        "failed to remove mount_error marker {}: {err}",
-                        marker_path.display()
-                    ),
-                },
-                Ok(_) => log::warn!(
-                    "mount_error is not a regular file: {}",
-                    marker_path.display()
-                ),
+    for_each_mount_error_marker(moduledir, |_module, marker| {
+        let marker_path = marker.path();
+        match marker.file_type() {
+            Ok(file_type) if file_type.is_file() => match fs::remove_file(&marker_path) {
+                Ok(()) => {
+                    removed += 1;
+                    log::info!("cleared mount_error marker: {}", marker_path.display());
+                }
                 Err(err) => log::warn!(
-                    "failed to check mount_error marker {}: {err}",
+                    "failed to remove mount_error marker {}: {err}",
                     marker_path.display()
                 ),
-            }
+            },
+            Ok(_) => log::warn!(
+                "mount_error is not a regular file: {}",
+                marker_path.display()
+            ),
+            Err(err) => log::warn!(
+                "failed to check mount_error marker {}: {err}",
+                marker_path.display()
+            ),
         }
-    }
+    });
 
     removed
 }
@@ -827,7 +809,7 @@ pub fn handle_clear_mount_errors() -> Result<()> {
     state.mount_error_reasons = state
         .mount_error_modules
         .iter()
-        .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+        .map(|module| (module.clone(), crate::defs::MOUNT_ERROR_REASON.to_owned()))
         .collect();
     state.save()?;
 
@@ -855,7 +837,7 @@ fn clear_app_module_errors(modules: &mut [AppModule], remaining_errors: &[String
         module.mount_error = remaining_errors
             .iter()
             .any(|id| id == module.id.as_str())
-            .then(|| "mount_error marker present".to_owned());
+            .then(|| crate::defs::MOUNT_ERROR_REASON.to_owned());
         module.suggest_ignore = module.mount_error.is_some();
     }
 }
@@ -1130,7 +1112,7 @@ mod tests {
 
         assert_eq!(
             list[0].mount_error,
-            Some("mount_error marker present".to_owned())
+            Some(crate::defs::MOUNT_ERROR_REASON.to_owned())
         );
         assert!(list[0].suggest_ignore);
     }
@@ -1426,7 +1408,7 @@ mod tests {
         assert_eq!(state.mode_stats.magicmount, 1);
         assert_eq!(
             state.mount_error_reasons["overlay_mod"],
-            "mount_error marker present"
+            crate::defs::MOUNT_ERROR_REASON
         );
     }
 
