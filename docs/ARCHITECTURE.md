@@ -40,7 +40,7 @@ module/metamount.sh
 - `src/vfs/`：HM 自有的 VFS 后端（`hybridmount` 模块）。`rule.rs` 把共享树映射为规则，`protocol.rs`
   编解码 HM 专用 wire protocol，`sys.rs` 通过 keyring `add_key` 发送并维护页对齐缓冲，
   `backend.rs` 只绑定 key type `hybridmount` 的 Provider，并在检测到外来 NoMount 时拒绝并存，
-  `lkm.rs` 在内核未内建时从 `vfs/binaries/` 加载精确匹配的预编译模块，
+  `lkm_target.rs` 在内核未内建时从 `vfs/binaries/` 选型（优先内核 release 中 Android/GKI 标签精确匹配的构建，其次同一内核主次版本的其他候选），`lkm.rs` 负责加载，
   `exec.rs` 应用规则并统计。
 - `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。

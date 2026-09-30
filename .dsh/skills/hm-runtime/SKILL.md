@@ -18,7 +18,7 @@ whenToUse: 改动启动/热挂载/软重启生命周期、`runtime` 子命令、
 | `hot.rs` | `status/load/reload/unload`、前置门禁、快照刷新 | `handle` `refresh_snapshots` |
 | `device.rs` | boot_id + PID 1 mount namespace 作用域、keyring 访问 | `enter_init_namespace` `load` `Kernel::{open,inspect}` |
 | `ledger.rs` | 账本 schema、阶段门禁、进程锁 | `Ledger` `ledger_for_boot` `save` `OperationLock::acquire` |
-| `lifecycle.rs` | 纯判断，可在宿主机测试 | `reject_legacy_mounts` `owned_uids` `confirm_boot_rules` |
+| `lifecycle.rs` | 纯判断，可在宿主机测试 | `legacy_mount_conflicts` `legacy_snapshot_reachable` `owned_uids` `confirm_boot_rules` |
 | `mounts.rs` | 真实挂载身份校验与最深优先卸载 | `capture` `validate` `cleanup` |
 | `policy.rs` | 判断单个模块能否热挂载 | `plan_hot_module` `paths_overlap` |
 | `rules.rs` | VFS 规则事务、外部冲突判定 | `preflight` `reconcile` `verify_owned` |

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它在启动阶段扫描其他模块，按全局、模块和路径规则为每一项选择 OverlayFS、Magic Mount 或忽略，并且始终把模块源目录当作只读输入。
+Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它在启动阶段扫描其他模块，按全局、模块和路径规则为每一项选择 OverlayFS、Magic Mount、VFS 或忽略，并且始终把模块源目录当作只读输入。
 
 - **核心语言**: Rust (edition 2024)
 - **目标平台**: Android (aarch64, armv7, x86_64, riscv64)
@@ -77,13 +77,15 @@ shellcheck module/*.sh tests/shell/*.sh
 
 1. **config** - 读取 `/data/adb/hybrid-mount/config.toml`
 2. **scan** - 只读扫描 `/data/adb/modules`，构建 `ModuleRecord` 列表
-3. **plan** - 根据规则构建 `MountPlan`（统一节点树 + 分后端操作列表）
-4. **storage** - 准备 overlay staging（tmpfs 或 ext4）
-5. **overlay** - 执行 OverlayFS 挂载（直接目录层 + shallow 文件层）
-6. **magic** - 执行 Magic Mount（bind mount + symlink + whiteout）
-7. **commit** - 提交 KSU unmount 列表，写状态快照
+3. **vfs probe** - 探测内建 key type `hybridmount`；无响应时加载随附的 VFS 内核模块（不论配置是否选择 `vfs`）
+4. **plan** - 根据规则构建 `MountPlan`（统一节点树 + 分后端操作列表）；无后端可用的 `vfs` 规则在此降级为 `ignore`
+5. **storage** - 准备 overlay staging（tmpfs 或 ext4）
+6. **overlay** - 执行 OverlayFS 挂载（直接目录层 + shallow 文件层）
+7. **magic** - 执行 Magic Mount（bind mount + symlink + whiteout）
+8. **vfs** - 应用 VFS 规则（key type `hybridmount`）
+9. **commit** - 提交 KSU unmount 列表，写状态快照
 
-挂载阶段失败时触发事务式回滚，并保留失败状态快照供 WebUI 查询。
+挂载阶段失败时触发事务式回滚，并保留失败状态快照供 WebUI 查询。第 3 步必须在第 4 步之前，原因见「LKM（可选）」一节。
 
 ### 规则优先级
 
@@ -92,6 +94,8 @@ shellcheck module/*.sh tests/shell/*.sh
 ```
 
 同一文件路径只能进入一个后端；普通目录可由两个后端共享作为结构节点；文件、类型与 `.replace` 冲突在启动规划阶段显式报错。
+
+后端 mode 取值为 `overlay | magic | vfs | ignore`。`vfs` 只有在探测或加载成功时才生效，否则规划阶段降级为 `ignore`。
 
 ### 模块结构
 
@@ -102,8 +106,10 @@ shellcheck module/*.sh tests/shell/*.sh
 - `src/pipeline.rs` - 启动流水线与回滚事务
 - `src/overlayfs/` - OverlayFS 挂载逻辑
 - `src/magic_mount/` - Magic Mount 执行逻辑
+- `src/vfs/` - VFS 后端控制面（规则映射、wire protocol、keyring 通信、LKM 选型与加载）
+- `src/runtime/` - 启动与热操作共享的所有权账本、规则事务、挂载身份校验，详见 `docs/RUNTIME.md`
 - `src/storage/` - overlay staging 存储（tmpfs / ext4）
-- `src/sys/` - 系统辅助层（文件系统、挂载、nuke）
+- `src/sys/` - 系统辅助层（文件系统、挂载、nuke、LKM 加载器）
 - `src/state.rs` - 运行状态快照（供 WebUI 读取）
 
 ### WebUI 通信
