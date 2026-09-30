@@ -30,7 +30,7 @@ pub fn handle(args: &[String]) -> crate::errors::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub use device::enter_init_namespace;
+pub use device::{boot_id, enter_init_namespace};
 
 /// Module ids whose mounts this kernel boot still owns, from the boot-scoped runtime ledger.
 ///

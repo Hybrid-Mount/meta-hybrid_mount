@@ -107,7 +107,7 @@ fn stat_identity(metadata: &fs::Metadata) -> Option<String> {
 /// Kernel boot identity when the platform exposes one; only the diagnostic uses it.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn current_boot_id() -> Option<String> {
-    crate::runtime::device::boot_id().ok()
+    crate::runtime::boot_id().ok()
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
