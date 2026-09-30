@@ -3,8 +3,9 @@
 //! OverlayFS mount orchestration (behaviour aligned with v4.2.0 `e20f9c19`):
 //! - fsopen("overlay") is the primary path, with an escaped traditional `mount(2)` fallback;
 //! - past 64 lowerdirs, the trailing layers are stacked into staging first and used as a new layer;
-//! - after the root mount, sub-mounts are rebuilt as overlays one by one from `/proc/self/mountinfo`,
-//!   leaving a failure to the pipeline transaction to roll back the registered targets.
+//! - after the root mount, sub-mounts are rebuilt as overlays one by one from `/proc/self/mountinfo`;
+//!   a sub-mount the kernel refuses is skipped and reported, while the root mount's failure is
+//!   returned so the pipeline transaction rolls back the registered targets.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;
@@ -357,6 +358,12 @@ fn mount_overlay_child(
         return Ok(());
     }
 
+    if crate::sys::faults::should_fail_next_child_overlay_mount() {
+        return Err(Error::msg(format!(
+            "injected child overlay mount failure: mount_point={mount_point}"
+        )));
+    }
+
     mount_overlayfs(
         &lower_dirs,
         stock_root,
@@ -379,7 +386,9 @@ fn mount_overlay_child(
     Ok(())
 }
 
-/// Mounts the root overlay and rebuilds its sub-mounts; on failure the pipeline transaction rolls back the registered targets.
+/// Mounts the root overlay and rebuilds its sub-mounts. A root mount failure is returned so the
+/// pipeline transaction rolls back the registered targets; a sub-mount that cannot be rebuilt is
+/// skipped with a warning, because exiting non-zero would stop every module from mounting.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
 pub fn mount_overlay(
@@ -417,6 +426,7 @@ pub fn mount_overlay(
     }
     on_effect(MountEffect::Target(root.to_owned()));
 
+    let mut skipped_children = 0usize;
     for mount_point in &mount_seq {
         let Some(relative) = child_relative_path(root, mount_point) else {
             continue;
@@ -426,6 +436,12 @@ pub fn mount_overlay(
             continue;
         }
 
+        // A sub-mount stays best-effort even though the root mount is not: a non-zero
+        // metamodule exit stops every module from mounting (docs/RUNTIME.md), and the
+        // root overlay already serves this subtree's module content. Kernels seen in
+        // the field reject a pre-existing child mount as a lower layer (an f2fs
+        // `filesystem on './x' not supported`, EINVAL through both mount paths), which
+        // must not take the whole boot down.
         if let Err(err) = mount_overlay_child(
             mount_point,
             &relative,
@@ -436,11 +452,16 @@ pub fn mount_overlay(
             register_unmountable,
             on_effect,
         ) {
-            log::warn!(
-                "child mount failed, deferring rollback: mount_point={mount_point}, error={err}"
-            );
-            return Err(err);
+            log::warn!("child mount skipped: mount_point={mount_point}, error={err}");
+            skipped_children += 1;
         }
+    }
+
+    if skipped_children > 0 {
+        log::warn!(
+            "overlay sub-mounts skipped: root={root}, skipped={skipped_children}, discovered={}",
+            mount_seq.len()
+        );
     }
 
     Ok(())
@@ -605,5 +626,87 @@ mod tests {
 
         assert!(err.to_string().contains("mountinfo"), "{err}");
         std::fs::remove_dir_all(&path).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn failing_child_overlay_is_skipped_instead_of_aborting_the_root() {
+        let _fault_guard = crate::sys::faults::test_lock();
+
+        if !crate::test_support::require_mount_namespace() {
+            return;
+        }
+
+        struct ChildMount(PathBuf);
+
+        impl ChildMount {
+            fn new(path: &Path) -> std::io::Result<Self> {
+                std::fs::create_dir_all(path)?;
+                mount("hybrid-test", path, c"tmpfs", MountFlags::empty(), None)?;
+                Ok(Self(path.to_path_buf()))
+            }
+        }
+
+        impl Drop for ChildMount {
+            fn drop(&mut self) {
+                let _ = unmount(&self.0, UnmountFlags::DETACH);
+            }
+        }
+
+        let fixture = crate::test_support::Fixture::new("overlay-child-skip");
+        let root = std::fs::canonicalize(&*fixture).unwrap();
+        let target = root.join("target");
+        let layer = root.join("layer");
+        let staging = root.join("staging");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::create_dir_all(&layer).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+
+        // Mounted before the root overlay, so the kernel reports it as a sub-mount of it.
+        let child = target.join("child");
+        let child_mount = ChildMount::new(&child).unwrap();
+        // The layer contributes the same relative path, which routes the sub-mount through the
+        // overlay path instead of the bind fallback.
+        std::fs::create_dir_all(layer.join("child")).unwrap();
+
+        assert!(
+            collect_child_mount_points(&target)
+                .unwrap()
+                .contains(&child.to_string_lossy().into_owned()),
+            "the sub-mount was not discovered"
+        );
+
+        crate::sys::faults::enable_next_child_overlay_mount_failure();
+        let mut effects = Vec::new();
+        let result = mount_overlay(
+            &target.to_string_lossy(),
+            &[layer.to_string_lossy().into_owned()],
+            None,
+            None,
+            &staging,
+            "overlay",
+            false,
+            &mut |effect| effects.push(effect),
+        );
+        crate::sys::faults::reset();
+
+        assert!(result.is_ok(), "{result:?}");
+        let root_effect = target.to_string_lossy().into_owned();
+        assert!(
+            effects
+                .iter()
+                .any(|effect| matches!(effect, MountEffect::Target(path) if path == &root_effect)),
+            "the root overlay was not registered"
+        );
+        let child_effect = child.to_string_lossy().into_owned();
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, MountEffect::Target(path) if path == &child_effect)),
+            "a skipped sub-mount must not be reported as a mounted target"
+        );
+
+        let _ = unmount(&target, UnmountFlags::DETACH);
+        drop(child_mount);
     }
 }
