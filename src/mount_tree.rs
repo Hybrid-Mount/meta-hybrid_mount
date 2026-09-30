@@ -242,22 +242,9 @@ impl MountTree {
 
     /// Every contributing module under a directory-level target, used by parent targets such as shallow overlay.
     pub fn module_ids_for_subtree(&self, backend: Mode, target: &str) -> BTreeSet<&ModuleId> {
-        let mut ids = BTreeSet::new();
-        if let Some(node) = self.find(target) {
-            fn collect<'a>(node: &'a MountNode, backend: Mode, ids: &mut BTreeSet<&'a ModuleId>) {
-                ids.extend(
-                    node.sources
-                        .iter()
-                        .filter(|source| source.backend == backend)
-                        .map(|source| &source.module_id),
-                );
-                for child in node.children.values() {
-                    collect(child, backend, ids);
-                }
-            }
-            collect(node, backend, &mut ids);
-        }
-        ids
+        self.find(target)
+            .map(|node| collect_backend_ids(node, backend))
+            .unwrap_or_default()
     }
 
     pub fn has_backend(&self, backend: Mode) -> bool {
@@ -273,22 +260,22 @@ impl MountTree {
     }
 
     pub fn module_ids_for(&self, backend: Mode) -> BTreeSet<&ModuleId> {
-        fn collect<'a>(node: &'a MountNode, backend: Mode, ids: &mut BTreeSet<&'a ModuleId>) {
-            ids.extend(
-                node.sources
-                    .iter()
-                    .filter(|source| source.backend == backend)
-                    .map(|source| &source.module_id),
-            );
-            for child in node.children.values() {
-                collect(child, backend, ids);
-            }
-        }
-
-        let mut ids = BTreeSet::new();
-        collect(&self.root, backend, &mut ids);
-        ids
+        collect_backend_ids(&self.root, backend)
     }
+}
+
+/// Collects the ids of every module contributing `backend` at `node` or below it.
+fn collect_backend_ids(node: &MountNode, backend: Mode) -> BTreeSet<&ModuleId> {
+    let mut ids: BTreeSet<&ModuleId> = node
+        .sources
+        .iter()
+        .filter(|source| source.backend == backend)
+        .map(|source| &source.module_id)
+        .collect();
+    for child in node.children.values() {
+        ids.extend(collect_backend_ids(child, backend));
+    }
+    ids
 }
 
 #[cfg(test)]

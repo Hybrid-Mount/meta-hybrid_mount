@@ -19,6 +19,12 @@ This file records third-party components that Hybrid Mount is derived from or di
   - Hybrid Mount is not affiliated with, sponsored by, or endorsed by the NoMount project.
 - Distribution status: the kernel sources, build instructions and one prebuilt aarch64 module per supported Android/GKI target are committed to this repository and included in release packages. `module/vfs/binaries/list.txt` records the SHA-256 digest of every module.
 
+## NoMount nm — CLI command vocabulary
+
+- Reference: `userspace/src/nm.c` in NoMount at `016375cd4a9e7da07b0519dd7bc492101de2a834`, by maxsteeel.
+- Scope: `hybrid-mount vfs` follows its `rule` / `uid` command groups, batch arguments, `--uid`, whiteout and historical aliases. The parser, validation, HM JSON output and read-back verification are implemented in Rust in `src/vfs/cli.rs` and `src/vfs/control.rs`, under the core's GPL-3.0-only license. No upstream CLI executable or C userspace source is bundled.
+- Differences: HM-only transport, opaque rules, explicit loading, strict argument validation, explicit clear targets with `--yes`, runtime-only changes and HM-specific JSON fields. This is command-style compatibility, not wire or full script compatibility with NoMount.
+
 ## lkmloader — built-in userspace LKM loading strategy
 
 - Upstream project: lkmloader, https://github.com/maxsteeel/lkmloader
@@ -27,6 +33,14 @@ This file records third-party components that Hybrid Mount is derived from or di
 - License: GPL-3.0. The Rust implementation is distributed as part of the GPL-3.0-only Hybrid Mount core.
 - Scope: `src/sys/lkm_image.rs` and `src/sys/lkm_compat.rs` reimplement the undefined-symbol resolution and in-memory vermagic adaptation strategy in Rust. No upstream C executable is bundled. The implementation adds checked ELF parsing, excludes module-owned and ambiguous symbol addresses, scopes kernel diagnostics to the attempted module and vermagic, and permits only one vermagic retry after a failed insertion.
 - Selection strategy: exact Android/GKI target first, then candidates for the same kernel line, based on NoMount's `module/customize.sh` at revision 016375cd4a9e7da07b0519dd7bc492101de2a834. Hybrid Mount performs discovery at boot and retains its own protocol acceptance probe and persistent crash guard.
+
+## meta-magic_mount-rs — Magic Mount backend
+
+- Upstream project: meta-magic_mount-rs, https://github.com/Tools-cx-app/meta-magic_mount-rs — "An implementation of a metamodule using Magic Mount, Based on MKSU, Template is from meta-overlay."
+- Reference revision: `8b85c9e`
+- What is derived: the Magic Mount backend under [`src/magic_mount/`](src/magic_mount/) is this repository's Rust implementation of the same backend; its module documentation states that it is behaviour-compatible with meta-magic_mount-rs at the reference revision, and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) names that project as the upstream for the subsystem. Interoperability is the goal — the module identity and type layout, the magic-mount matching predicates, and the overlay/mount ordering follow upstream so existing module trees keep working. The Rust code is a reimplementation, not a copy. The one file copied verbatim is the WebUI component [`webui/src/ui/miuix/components/StatusCard.vue`](webui/src/ui/miuix/components/StatusCard.vue), which retains its upstream copyright notice.
+- License: **GPL-3.0** (upstream). Re-derived files keep the upstream copyright notice and carry an explicit `SPDX-License-Identifier`, using `GPL-3.0-only` to match the identifier this repository already uses for the GPL-3.0-only core; the Rust reimplementation is distributed under the core's GPL-3.0-only license.
+- Attribution Hybrid Mount commits to: preserve upstream copyright notices in derived files, record the reference revision, and credit the project in the README and its translations.
 
 ## Mountify — ext4 sysfs LKM
 
@@ -45,8 +59,29 @@ This file records third-party components that Hybrid Mount is derived from or di
 - Attribution Hybrid Mount commits to: preserve the upstream copyright notice and license text, record the vendored commit, and state the modifications above.
 - Distribution status: development-tooling only. This directory is not compiled, packaged into the module zip, or shipped in releases.
 
+## vuejs-ai/skills — vendored DSH skills (`vue-best-practices`, `vue-testing-best-practices`)
+
+- Upstream project: vuejs-ai/skills, https://github.com/vuejs-ai/skills
+- Upstream author: github.com/vuejs-ai (upstream `LICENSE` credits hyf0 and SerKo)
+- Vendored commit: c9d355ff23f654309dd02006be671859df0a134c, vendored 2026-09-30
+- What is derived: the agent-facing Vue 3 guidance under [`.dsh/skills/vue-best-practices/`](.dsh/skills/vue-best-practices/) (upstream path `skills/vue-best-practices`, upstream version 18.0.0) and [`.dsh/skills/vue-testing-best-practices/`](.dsh/skills/vue-testing-best-practices/) (upstream path `skills/vue-testing-best-practices`, upstream version 1.0.0).
+- Modifications: each `SKILL.md` frontmatter was adapted for DeepSeek Harness skill discovery and prefixed with a "Hybrid Mount precedence" section recording where this repository's contracts override the generic rules. The guidance files are otherwise unmodified.
+- License: **MIT**. The upstream `LICENSE` is retained verbatim in both directories.
+- Attribution Hybrid Mount commits to: preserve the upstream copyright notice and license text, record the vendored commit, and state the modifications above.
+- Distribution status: development-tooling only. These directories are not compiled, packaged into the module zip, or shipped in releases.
+
+## UtsavBalar1231/kernel-development-skills — vendored DSH skill
+
+- Upstream project: kernel-development-skills, https://github.com/UtsavBalar1231/kernel-development-skills
+- Vendored commit: cc513486979618140f2c9e6e31bd20530fb5e0e3, vendored 2026-09-30, upstream version 0.3.0
+- What is derived: the agent-facing kernel-side C guidance under [`.dsh/skills/kernel-development-skills/`](.dsh/skills/kernel-development-skills/) (upstream path `plugins/kernel-development-skills/skills/kernel-development-skills`), including `references/` and three `scripts/` helpers.
+- Modifications: `SKILL.md` frontmatter was adapted for DeepSeek Harness skill discovery and prefixed with a "Hybrid Mount precedence" section. The Codex-only `agents/openai.yaml` and the RK3576/Lapis board files (`references/lapis-rk3576.md`, `scripts/check_lapis_guardrails.py`) were dropped as irrelevant to this repository, as recorded in the frontmatter's `trimmed` list. The remaining guidance is unmodified.
+- License: **MIT**. The upstream `LICENSE` is retained verbatim.
+- Attribution Hybrid Mount commits to: preserve the upstream copyright notice and license text, record the vendored commit, and state the modifications above.
+- Distribution status: development-tooling only. Not compiled, packaged into the module zip, or shipped in releases.
+
 ## Distribution notes
 
-- Hybrid Mount core (Rust and module scripts) is GPL-3.0-only; the WebUI is Apache-2.0.
+- Hybrid Mount core (Rust and module scripts) is GPL-3.0-only; the WebUI is Apache-2.0, except [`webui/src/ui/miuix/components/StatusCard.vue`](webui/src/ui/miuix/components/StatusCard.vue), which is derived from meta-magic_mount-rs and therefore stays GPL-3.0-only.
 - The Mountify LKM and the `hybridmount` kernel module are both GPL-2.0-only independent works distributed alongside the core, not merged into a single work.
 - If an attribution is missing or incorrect, please open an issue or contact the maintainers.

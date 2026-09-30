@@ -13,7 +13,7 @@ Hybrid Mount adalah metamodul mount hibrida untuk KernelSU dan APatch. Saat boot
 - Magic Mount mendukung file, direktori, tautan simbolis, `.replace`, dan semantik whiteout.
 - VFS mengirim aturan injeksi ke subsistem VFS milik Hybrid Mount (modul `hybridmount`) melalui keyring. Ini implementasi independen dan tidak berinteroperasi dengan kernel NoMount maupun CLI nm-nya. Rilis menyertakan sumber dan modul arm64 prakompilasi untuk setiap target Android/GKI yang didukung, dimuat saat boot bila kernel tidak membawanya; jika gagal, perilakunya mengikuti `vfs_strict`. VFS bukan mount sungguhan.
 - WebUI menyediakan antarmuka MD3 (bawaan) dan Miuix.
-- arm64, armv7, dan x86_64 didukung; penginstal otomatis memilih biner yang sesuai.
+- arm64, armv7, x86_64, dan riscv64 didukung; penginstal otomatis memilih biner yang sesuai. Build riscv64 memerlukan Android NDK r27 atau lebih baru.
 
 ## Instalasi
 
@@ -46,7 +46,9 @@ VFS adalah jalur injeksi sisi kernel milik Hybrid Mount, yang dikendalikan melal
 
 **Cara penyedia diidentifikasi.** Keputusan boot bertumpu pada pemeriksaan hanya-baca terhadap jenis kunci kernel `hybridmount`: jika jenis kunci itu menjawab dengan versi yang didukung, penyedia dapat digunakan. Secara terpisah, `vfs-doctor` mengklasifikasikan bagaimana penyedia hadir — entri di `/proc/modules` berarti ada modul yang dapat dimuat yang mendaftarkannya, direktori `/sys/module/hybridmount` tanpa entri tersebut berarti jenis kunci dikompilasi ke dalam image kernel, dan tidak ada keduanya berarti tidak ada penyedia yang tersedia. Pemeriksaan bersifat hanya-baca, sehingga `status` dan `vfs-doctor` tidak pernah memicu `insmod`.
 
-**Logika boot.** Jika jenis kunci menjawab dengan versi yang didukung, penyedia diikat dan tidak ada yang dimuat. Jika tidak ada aturan yang memilih VFS, modul bawaan juga tidak dimuat. Jika ada aturan yang memilih VFS sementara pemeriksaan tidak memberi jawaban, pipeline memilih modul bawaan yang cocok persis dengan lini kernel dan tag Android/GKI, memuatnya, lalu memeriksa ulang; jika tetap tidak tersedia, setiap aturan `vfs` diturunkan menjadi `ignore`, atau menggagalkan boot saat `vfs_strict = true`. Pemuatan berjalan sebelum rencana mount dibangun, karena perencanaan menulis ulang aturan `vfs` menjadi `ignore` selagi penyedia tidak memberi jawaban dan eksekutor kemudian akan kembali lebih awal. Penanda pemutus sirkuit ditulis sebelum `insmod` dan dihapus saat upaya itu kembali, sehingga hanya crash kernel yang meninggalkannya; boot berikutnya kemudian menolak upaya otomatis ulang sampai penanda itu dihapus secara manual.
+**Logika boot.** Jika jenis kunci menjawab dengan versi yang didukung, penyedia diikat dan tidak ada yang dimuat. Pada setiap boot, bahkan saat tidak ada aturan yang memilih VFS, jika pemeriksaan tidak memberi jawaban, pipeline mencoba lebih dulu modul bawaan yang cocok dengan tag Android/GKI dari versi kernel, lalu build lain untuk lini mayor/minor kernel yang sama, dan memeriksa ulang setelah setiap upaya; jika tetap tidak tersedia, setiap aturan `vfs` diturunkan menjadi `ignore`, atau menggagalkan boot saat VFS diminta dan `vfs_strict = true`. Pemuatan berjalan sebelum rencana mount dibangun, karena perencanaan menulis ulang aturan `vfs` menjadi `ignore` selagi penyedia tidak memberi jawaban dan eksekutor kemudian akan kembali lebih awal. Penanda pemutus sirkuit ditulis sebelum `insmod` dan dihapus saat upaya itu kembali, sehingga hanya crash kernel yang meninggalkannya; boot berikutnya kemudian menolak upaya otomatis ulang sampai penanda itu dihapus secara manual.
+
+Loader mencoba `ksud insmod`, lalu fallback bawaan `hybrid-mount lkm-load`, lalu `insmod` biasa. Fallback bawaan menyelesaikan simbol kernel inti dan dapat menyesuaikan vermagic di memori setelah penolakan eksplisit dari kernel. Ruang pengguna Android tidak lagi menentukan target GKI VFS. Adaptasi ini tidak menjamin kompatibilitas ABI; lihat [`module/vfs/README.md`](../module/vfs/README.md) untuk detailnya.
 
 **Mengintegrasikan VFS ke dalam kernel.** Rilis menyertakan modul aarch64 prabangun untuk setiap target Android/GKI yang didukung dan memuatnya secara otomatis, sehingga kernel tersebut tidak memerlukan langkah integrasi. Bangun modul itu menyatu ke dalam kernel bila Anda ingin menghindari `insmod`, atau bila lini kernel Anda tidak memiliki versi prabangun. Dari akar pohon kernel:
 
@@ -63,6 +65,10 @@ curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/
 Perintah ini menyalin kode sumber ke `fs/hybridmount/` dan menambahkannya ke `fs/Makefile` dan `fs/Kconfig`; aktifkan `CONFIG_HYBRIDMOUNT=y` untuk membangunnya menyatu atau `=m` untuk membangunnya sebagai modul. `bash -s -- --cleanup` mengembalikan semua perubahan. Pohon yang sudah mengintegrasikan NoMount akan ditolak: kedua implementasi membajak operasi inode dan kernel tidak akan mencegah keduanya berdampingan, karena keduanya mendaftarkan jenis kunci yang berbeda.
 
 **Diagnosis.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` melaporkan status keberadaan, versi yang dijawab jenis kunci, versi yang didukung, dan alasan penyedia tidak dapat digunakan bila memang demikian.
+
+WebUI dan deskripsi manajer menyembunyikan opsi dan penghitung VFS saat penyedia tidak merespons. Aturan VFS yang tersimpan tetap utuh. Penyedia bawaan yang menjawab didukung bahkan tanpa entri di `/proc/modules`.
+
+**CLI runtime.** `hybrid-mount vfs help` mencantumkan pengelolaan aturan dan UID, aturan whiteout/opaque, diagnostik, dan `load` eksplisit. Perintah ini mendukung alias bergaya NoMount, teks yang mudah dibaca, dan `--json`. Penghapusan memerlukan `--yes`; perubahan manual hanya berlaku pada runtime. Lihat [referensi CLI VFS](VFS_CLI.md).
 
 ## Umpan balik
 

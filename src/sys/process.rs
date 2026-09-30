@@ -462,6 +462,37 @@ fn process_error(spec: &CommandSpec, kind: ProcessErrorKind) -> ProcessError {
     }
 }
 
+/// Starts the drain thread for one captured stream.
+///
+/// A missing pipe or a drain thread that cannot start kills and reaps the child before
+/// returning, so no child process outlives the early return.
+fn start_drain(
+    child: &mut Child,
+    spec: &CommandSpec,
+    stream: OutputStream,
+    pipe: Option<impl Read + Send + 'static>,
+) -> ProcessResult<Option<Receiver<io::Result<OutputCapture>>>> {
+    let Some(pipe) = pipe else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(process_error(
+            spec,
+            ProcessErrorKind::PipeMissing { stream },
+        ));
+    };
+    match spawn_drain(stream, pipe, spec.max_output_bytes) {
+        Ok(receiver) => Ok(Some(receiver)),
+        Err(source) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            Err(process_error(
+                spec,
+                ProcessErrorKind::Reader { stream, source },
+            ))
+        }
+    }
+}
+
 /// Runs one subprocess call. The call site picks the total timeout via [`CommandSpec::timeout`];
 /// the I/O drain timeout defaults to [`DEFAULT_DRAIN_TIMEOUT`] and can be overridden.
 pub fn run_command(spec: &CommandSpec) -> ProcessResult<CommandOutcome> {
@@ -481,70 +512,16 @@ pub fn run_command(spec: &CommandSpec) -> ProcessResult<CommandOutcome> {
         Err(source) => return Err(process_error(spec, ProcessErrorKind::Spawn { source })),
     };
 
+    let stdout_pipe = child.stdout.take();
     let stdout_rx = if spec.capture.captures_stdout() {
-        let stream = match child.stdout.take() {
-            Some(stream) => stream,
-            None => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(process_error(
-                    spec,
-                    ProcessErrorKind::PipeMissing {
-                        stream: OutputStream::Stdout,
-                    },
-                ));
-            }
-        };
-        Some(
-            match spawn_drain(OutputStream::Stdout, stream, spec.max_output_bytes) {
-                Ok(rx) => rx,
-                Err(source) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(process_error(
-                        spec,
-                        ProcessErrorKind::Reader {
-                            stream: OutputStream::Stdout,
-                            source,
-                        },
-                    ));
-                }
-            },
-        )
+        start_drain(&mut child, spec, OutputStream::Stdout, stdout_pipe)?
     } else {
         None
     };
 
+    let stderr_pipe = child.stderr.take();
     let stderr_rx = if spec.capture.captures_stderr() {
-        let stream = match child.stderr.take() {
-            Some(stream) => stream,
-            None => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(process_error(
-                    spec,
-                    ProcessErrorKind::PipeMissing {
-                        stream: OutputStream::Stderr,
-                    },
-                ));
-            }
-        };
-        Some(
-            match spawn_drain(OutputStream::Stderr, stream, spec.max_output_bytes) {
-                Ok(rx) => rx,
-                Err(source) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(process_error(
-                        spec,
-                        ProcessErrorKind::Reader {
-                            stream: OutputStream::Stderr,
-                            source,
-                        },
-                    ));
-                }
-            },
-        )
+        start_drain(&mut child, spec, OutputStream::Stderr, stderr_pipe)?
     } else {
         None
     };

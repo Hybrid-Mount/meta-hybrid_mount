@@ -95,6 +95,8 @@ export interface InstallState {
   nuke_supported: boolean | null;
   nuke_type: string;
   vfs_supported: boolean;
+  /** `lkm` while a loaded module provides it, `builtin` while it is in the kernel image. */
+  vfs_type: string;
   mount_source: string;
   compatible: boolean;
 }
@@ -110,6 +112,49 @@ export interface DeviceInfo {
   sdk: string;
 }
 
+export type RuntimeAction = "load" | "unload" | "reload";
+
+export interface RuntimeModule {
+  id: string;
+  active: boolean;
+  eligible: boolean;
+  reason: string | null;
+}
+
+export interface RuntimeStatus {
+  supported: boolean;
+  reason: string | null;
+  generation: number;
+  modules: RuntimeModule[];
+}
+
+export interface RuntimeActionResult {
+  ok: true;
+  generation: number;
+}
+
+/**
+ * One boot guard marker as `hybrid-mount vfs guard` reports it.
+ *
+ * The verdict comes from the binary, which alone knows whether a marker belongs to the
+ * running build; the WebUI never decides that from the marker contents.
+ */
+export interface BootGuardState {
+  /** `rules` for VFS rule injection, `lkm` for the kernel module load. */
+  name: string;
+  path: string;
+  /** `absent`, `own`, `foreign`, `stale` or `unattributed`. */
+  verdict: string;
+  /** Raw marker contents, or null when no marker exists. */
+  contents: string | null;
+}
+
+export interface BootGuardReport {
+  guards: BootGuardState[];
+  /** Paths removed by `vfs guard clear --yes`; empty when only inspecting. */
+  cleared: string[];
+}
+
 export interface AppAPI {
   loadConfig: () => Promise<AppConfig>;
   saveConfig: (config: AppConfig) => Promise<void>;
@@ -117,7 +162,14 @@ export interface AppAPI {
   saveModuleRules: (moduleId: string, rules: ModuleRule) => Promise<void>;
   scanModules: () => Promise<Module[]>;
   getStatus: () => Promise<RunState>;
+  getRuntimeStatus: () => Promise<RuntimeStatus>;
+  runtimeAction: (
+    moduleId: string,
+    action: RuntimeAction,
+  ) => Promise<RuntimeActionResult>;
   getInstallState: () => Promise<InstallState>;
+  getBootGuards: () => Promise<BootGuardReport>;
+  clearBootGuards: () => Promise<string[]>;
   clearMountErrors: () => Promise<number>;
   getSystemInfo: () => Promise<SystemInfo>;
   getDeviceStatus: () => Promise<DeviceInfo>;

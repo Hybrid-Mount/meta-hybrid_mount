@@ -20,7 +20,9 @@
     "uiStyle": "UI Style",
     "styleChanged": "UI style changed",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "statusErrors": "Something went wrong",
+    "statusErrorsHint": "These did not run as expected. Pull the details from the modules and logs below, then refresh."
   },
   "tabs": {
     "status": "Status",
@@ -29,6 +31,11 @@
     "info": "Info"
   },
   "status": {
+    "guardAction": "Clear VFS boot guards",
+    "guardDialogTitle": "Clear the VFS boot guards?",
+    "guardDialogBody": "Clear them only after the cause of the interrupted VFS injection is resolved. VFS injects its rules again on the next boot, and the same crash can repeat.",
+    "guardCleared": "Cleared {count} boot guards; reboot to apply",
+    "guardClearFailed": "Failed to clear the boot guards",
     "backendTitle": "Backend Strategy",
     "sysInfoTitle": "System Details",
     "deviceTitle": "Device Info",
@@ -63,7 +70,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} target | {count} targets",
-    "mountDetails": "View {count} mount target | View {count} mount targets"
+    "mountDetails": "View {count} mount target | View {count} mount targets",
+    "errorLoad": "Failed to read the system status",
+    "errorBootFailure": "Startup pipeline failed",
+    "errorVfsForeign": "A foreign VFS provider is installed",
+    "errorVfsProvider": "The VFS provider failed",
+    "errorMountError": "A module failed to mount",
+    "errorStateLoad": "The startup snapshot cannot be read",
+    "errorModuleScan": "Module scanning failed",
+    "detailStage": "Stage",
+    "detailRollback": "Rollback",
+    "detailVersion": "Provider version",
+    "errorItems": "Affected modules"
   },
   "config": {
     "title": "Configuration",
@@ -149,6 +167,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "tmpfs support",
     "vfsSupported": "VFS support",
+    "vfsType": "VFS type",
     "nukeSupported": "Nuke support",
     "unverified": "Not verified",
     "mountSource": "Detected mount source",
@@ -156,5 +175,18 @@
   },
   "content": {
     "welcome": "Hybrid Mount"
+  },
+  "runtime": {
+    "title": "Live mount",
+    "active": "Loaded",
+    "inactive": "Not loaded",
+    "description": "This session only. Boot settings stay unchanged.",
+    "load": "Load",
+    "unload": "Unload",
+    "reload": "Reload",
+    "busy": "Applying change…",
+    "unavailable": "Runtime operations are unavailable.",
+    "ineligible": "This module is not eligible for runtime VFS changes.",
+    "success": "Session mounts updated"
   }
 }

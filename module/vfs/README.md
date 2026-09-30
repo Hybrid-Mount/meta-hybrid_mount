@@ -9,6 +9,16 @@ and one prebuilt `hybridmount-android<NN>-<kernel>.ko` per supported Android/GKI
 target, so a device whose kernel does not already carry the module can still use the VFS
 backend.
 
+## Runtime control
+
+`hybrid-mount vfs help` describes the runtime CLI shared by built-in and loaded providers:
+`rule add/del/list/clear`, `uid add/del/list/clear`, `clear all`, `version`, `doctor`, and `load`.
+It follows NoMount's command vocabulary but uses Hybrid Mount's own key type and `hm1` protocol.
+Text is the default, `--json` selects structured output, and clear commands require `--yes`.
+Changes are verified by reading the kernel tables back and are not persisted.
+Only explicit `vfs load` invokes the bundled loader; normal queries and rule/UID operations do not.
+See [VFS CLI](../../docs/VFS_CLI.md) for arguments, aliases and batch failure semantics.
+
 ## Layout
 
 - `src/` — the forked kernel sources
@@ -42,32 +52,13 @@ backend.
 
 ## Divergence applied
 
-- Identity: hybridmount.c / hybridmount.h, key type "hybridmount", protocol version
-  "hm1", Kconfig symbol HYBRIDMOUNT, module object hybridmount.o.
-- Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*, and the
-  kernel log prefix is "hybridmount:".
-- Wire magic: HYBRIDMOUNT_MAGIC_SIG is the HM-exclusive value 0x4859425249444D4F
-  (ASCII "HYBRIDMO" read big-endian), replacing upstream's 0x4E4F4D4F554E54
-  ("NOMOUNT"). A stock nm CLI is now rejected at preparse with -EFAULT rather than
-  being kept out by the key type name alone. The constant is also the full_name_hash
-  seed and must stay byte-identical to src/vfs/protocol.rs::MAGIC.
-- Virtual offset signature: HM_SIG_16 is 'hm' (0x686D), replacing upstream's 'nm'
-  (0x6E6D). This is the high half of the packed virtual loff_t, so it is an in-kernel
-  ABI in its own right.
-- Batch ADD_RULE reports the first failure together with the offset of the failing
-  record, instead of letting the last record overwrite the status. DEL_RULE reports the
-  first error the same way and no longer leaves status 0 on a truncated batch.
-- A rule whose real path fails to resolve is rejected with -ENOENT instead of being
-  inserted as a rule that can never match; ADD_RULE and DEL_RULE reject a cursor past
-  data_size; directory rules fail with -ENOMEM when the directory node cannot be
-  allocated.
-- HM_FLAG_OPAQUE marks a directory that replaces its whole subtree: it stays visible,
-  hides every real child and shows only the injected ones. The userspace emits it for a
-  .replace directory and for every directory below it, matching Magisk semantics.
-- The isolated-uid table stays sorted, so the per-lookup isolation check bisects
-  instead of scanning every entry.
-- Builds for pre-5.18 kernels need -std=gnu11, which the Makefile sets.
-- Not changed: the wire payload layout (field order, sizes and command numbering).
+[`src/PROVENANCE`](src/PROVENANCE) is the normative ledger: it records the upstream
+snapshot, the import commit, the pristine baseline digests and every divergence applied
+since. In short, this fork renames the identity and the internal symbols, replaces the
+wire magic and the virtual-offset signature with HM-exclusive values, adds an
+opaque-directory flag, and makes batch rule changes report the first failure instead of
+the last. The wire payload layout — field order, sizes and command numbering — is
+deliberately unchanged, so upstream's protocol description still describes it.
 
 ## Compatibility
 
@@ -108,11 +99,16 @@ same loader list and execution code, but retains its own exact file selection an
 confirms success by checking that its target procfs node disappeared.
 
 Symbol and vermagic adaptation does not guarantee ABI compatibility. Before loading
-each candidate, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` with its
-path and removes the marker when the attempt returns. If the kernel crashes, the
-marker survives and the next boot skips VFS while the rest of Hybrid Mount keeps
-working. If every candidate fails, the collected loader diagnostics are logged and
-the existing VFS degradation policy applies.
+each candidate, the loader writes `/data/adb/hybrid-mount/vfs_lkm_boot_guard` with the
+build identity and the size and mtime of the candidate it is about to insert, and
+removes the marker when the attempt returns. If the kernel crashes, the marker survives
+and the next boot skips VFS while the rest of Hybrid Mount keeps working. A marker an
+older build left, or one whose recorded object is no longer among the packaged
+candidates, is retired automatically so a refreshed module is tried; only a marker this
+build wrote for an object it still ships keeps refusing, and `hybrid-mount vfs guard
+clear --yes` (or the WebUI status card) removes it deliberately. If every candidate
+fails, the collected loader diagnostics are logged and the existing VFS degradation
+policy applies.
 
 ## Building
 

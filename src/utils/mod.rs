@@ -27,33 +27,40 @@ pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
 
 /// Reads a path's extended attribute: query the length, then allocate and read it in
 /// one pass, which handles long SELinux contexts without a fixed stack buffer.
+///
+/// `follow` selects the syscall: `false` never follows a symlink in the final component,
+/// `true` resolves it first.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
+fn read_xattr_with(path: &Path, name: &str, follow: bool) -> io::Result<Vec<u8>> {
     let mut empty = [0_u8; 0];
-    let size = lgetxattr(path, name, &mut empty)?;
+    let size = if follow {
+        getxattr(path, name, &mut empty)?
+    } else {
+        lgetxattr(path, name, &mut empty)?
+    };
     if size == 0 {
         return Ok(Vec::new());
     }
 
     let mut value = Vec::with_capacity(size);
-    let filled = lgetxattr(path, name, spare_capacity(&mut value))?;
+    let filled = if follow {
+        getxattr(path, name, spare_capacity(&mut value))?
+    } else {
+        lgetxattr(path, name, spare_capacity(&mut value))?
+    };
     value.truncate(filled);
     Ok(value)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
+    read_xattr_with(path, name, false)
 }
 
 /// Reads an extended attribute from the final symlink target.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn read_xattr_following(path: &Path, name: &str) -> io::Result<Vec<u8>> {
-    let mut empty = [0_u8; 0];
-    let size = getxattr(path, name, &mut empty)?;
-    if size == 0 {
-        return Ok(Vec::new());
-    }
-
-    let mut value = Vec::with_capacity(size);
-    let filled = getxattr(path, name, spare_capacity(&mut value))?;
-    value.truncate(filled);
-    Ok(value)
+    read_xattr_with(path, name, true)
 }
 
 /// Sets a path's extended attribute without following a symlink in the final component.
@@ -120,6 +127,9 @@ pub fn is_ignored_unmount_partition(path: &str) -> bool {
 /// KernelSU try-umount list integration (Linux/Android only).
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod ksu;
+
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub(crate) mod ksu_umount;
 
 #[cfg(test)]
 mod tests {

@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它在启动阶段扫描其他模块，按全局、模块和路径规则为每一项选择 OverlayFS、Magic Mount 或忽略，并且始终把模块源目录当作只读输入。
+Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它在启动阶段扫描其他模块，按全局、模块和路径规则为每一项选择 OverlayFS、Magic Mount、VFS 或忽略，并且始终把模块源目录当作只读输入。
 
 - **核心语言**: Rust (edition 2024)
-- **目标平台**: Android (aarch64, armv7, x86_64)
+- **目标平台**: Android (aarch64, armv7, x86_64, riscv64)
 - **WebUI**: Vue 3 + TypeScript + Vite
 - **构建系统**: cargo + xtask
 
@@ -33,6 +33,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 # 交叉编译检查（针对 Android 目标）
 rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
+# riscv64 无预编译 std，使用 nightly rust-src + build-std 检查
+cargo +nightly check -p hybrid-mount --target riscv64-linux-android -Z build-std=std,panic_abort
 cargo check -p hybrid-mount --target aarch64-linux-android
 ```
 
@@ -75,13 +77,15 @@ shellcheck module/*.sh tests/shell/*.sh
 
 1. **config** - 读取 `/data/adb/hybrid-mount/config.toml`
 2. **scan** - 只读扫描 `/data/adb/modules`，构建 `ModuleRecord` 列表
-3. **plan** - 根据规则构建 `MountPlan`（统一节点树 + 分后端操作列表）
-4. **storage** - 准备 overlay staging（tmpfs 或 ext4）
-5. **overlay** - 执行 OverlayFS 挂载（直接目录层 + shallow 文件层）
-6. **magic** - 执行 Magic Mount（bind mount + symlink + whiteout）
-7. **commit** - 提交 KSU unmount 列表，写状态快照
+3. **vfs probe** - 探测内建 key type `hybridmount`；无响应时加载随附的 VFS 内核模块（不论配置是否选择 `vfs`）
+4. **plan** - 根据规则构建 `MountPlan`（统一节点树 + 分后端操作列表）；无后端可用的 `vfs` 规则在此降级为 `ignore`
+5. **storage** - 准备 overlay staging（tmpfs 或 ext4）
+6. **overlay** - 执行 OverlayFS 挂载（直接目录层 + shallow 文件层）
+7. **magic** - 执行 Magic Mount（bind mount + symlink + whiteout）
+8. **vfs** - 应用 VFS 规则（key type `hybridmount`）
+9. **commit** - 提交 KSU unmount 列表，写状态快照
 
-挂载阶段失败时触发事务式回滚，并保留失败状态快照供 WebUI 查询。
+挂载阶段失败时触发事务式回滚，并保留失败状态快照供 WebUI 查询。第 3 步必须在第 4 步之前，原因见「LKM（可选）」一节。
 
 ### 规则优先级
 
@@ -90,6 +94,8 @@ shellcheck module/*.sh tests/shell/*.sh
 ```
 
 同一文件路径只能进入一个后端；普通目录可由两个后端共享作为结构节点；文件、类型与 `.replace` 冲突在启动规划阶段显式报错。
+
+后端 mode 取值为 `overlay | magic | vfs | ignore`。`vfs` 只有在探测或加载成功时才生效，否则规划阶段降级为 `ignore`。
 
 ### 模块结构
 
@@ -100,8 +106,10 @@ shellcheck module/*.sh tests/shell/*.sh
 - `src/pipeline.rs` - 启动流水线与回滚事务
 - `src/overlayfs/` - OverlayFS 挂载逻辑
 - `src/magic_mount/` - Magic Mount 执行逻辑
+- `src/vfs/` - VFS 后端控制面（规则映射、wire protocol、keyring 通信、LKM 选型与加载）
+- `src/runtime/` - 启动与热操作共享的所有权账本、规则事务、挂载身份校验，详见 `docs/RUNTIME.md`
 - `src/storage/` - overlay staging 存储（tmpfs / ext4）
-- `src/sys/` - 系统辅助层（文件系统、挂载、nuke）
+- `src/sys/` - 系统辅助层（文件系统、挂载、nuke、LKM 加载器）
 - `src/state.rs` - 运行状态快照（供 WebUI 读取）
 
 ### WebUI 通信
@@ -177,7 +185,7 @@ cargo test -- --nocapture
 ### Android 目标
 
 - 使用 Android NDK 交叉编译
-- 目标架构: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`
+- 目标架构: `aarch64-linux-android`, `armv7-linux-androideabi`, `x86_64-linux-android`, `riscv64-linux-android`（Tier 3，无预编译 std，走 NDK r27+ 直连 + `-Z build-std`）
 - `xtask` 的 Android 构建指定最低 API level 26
 - 运行时需 root 权限（KernelSU 或 APatch）
 
@@ -205,6 +213,8 @@ cargo test -- --nocapture
 
 两个模块共用 `src/sys/lkm.rs` 的熔断逻辑：在调用 `insmod` 前持久化熔断标记，加载尝试正常返回时移除标记。若内核在加载期间崩溃，标记会保留，下次启动跳过对应模块但保留 Hybrid Mount 其他功能。
 
+VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模块加载）由 `src/vfs/boot_guard.rs` 记录写入它的构建（版本 + 可执行文件大小/mtime），LKM 标记再记录候选 `.ko` 的大小/mtime。只有「同一构建写入、且候选集中仍存在同一内核对象」的标记才会阻止下一次自动尝试；其他构建留下的标记、旧版 1 字节标记、以及被新包替换掉的 `.ko` 所留下的标记都会在尝试前自动清除（`prepare_lkm_guard` / `arm_for_mutation`）。`hybrid-mount vfs guard clear --yes`（以及状态页红卡按钮）是唯一的显式清除入口，`vfs guard [--json]` 报告两个标记的判定。
+
 ## Important Files
 
 - `Cargo.toml` - workspace 配置与版本
@@ -221,7 +231,7 @@ cargo test -- --nocapture
 
 1. 安装 WebUI 依赖并构建（`pnpm build`），输出到 `module/webroot`
 2. 通过 Vite 将 `MODULE_ID` 注入 WebUI
-3. 交叉编译 Rust 二进制（aarch64、armv7、x86_64）
+3. 交叉编译 Rust 二进制（aarch64、armv7、x86_64、riscv64）
 4. 生成 `module.prop`
 5. 打包 zip（包含二进制、脚本、WebUI、LKM）
 

@@ -54,15 +54,23 @@ impl KeyringKernel {
             .ok()
     }
 
-    /// Every isolated uid currently installed in the provider.
-    pub fn list_uids(&mut self) -> Result<Vec<u32>> {
+    /// Reads every page of one listing command through this channel.
+    fn list<T, P>(&mut self, command: NmCommand, parse: P) -> Result<Vec<T>>
+    where
+        P: Fn(&[u8]) -> Result<(Vec<T>, u32)>,
+    {
         protocol::paginate(
             |cursor| {
-                let page = protocol::build_list_payload(NmCommand::GetUids, cursor)?;
+                let page = protocol::build_list_payload(command, cursor)?;
                 self.exchange(&page)
             },
-            protocol::parse_uids,
+            parse,
         )
+    }
+
+    /// Every isolated uid currently installed in the provider.
+    pub fn list_uids(&mut self) -> Result<Vec<u32>> {
+        self.list(NmCommand::GetUids, protocol::parse_uids)
     }
 
     /// Sends one payload page and returns the page the kernel wrote back.
@@ -85,7 +93,7 @@ impl KeyringKernel {
 
 /// Older built-in providers return ECANCELED even when they reject the magic.
 /// Preserve this distinction instead of reporting that the provider is absent.
-fn parse_version_response(response: &[u8]) -> Result<String> {
+pub(crate) fn parse_version_response(response: &[u8]) -> Result<String> {
     if response.get(16..20) == Some((-1_i32).to_le_bytes().as_slice()) {
         return Err(Error::VfsProtocol {
             detail: format!(
@@ -141,13 +149,7 @@ impl VfsKernel for KeyringKernel {
     }
 
     fn list_rules(&mut self) -> Result<Vec<protocol::ListedRule>> {
-        protocol::paginate(
-            |cursor| {
-                let page = protocol::build_list_payload(NmCommand::GetList, cursor)?;
-                self.exchange(&page)
-            },
-            protocol::parse_list,
-        )
+        self.list(NmCommand::GetList, protocol::parse_list)
     }
 }
 
@@ -173,26 +175,30 @@ pub fn select_provider(
         });
     }
 
-    match kernel.version() {
-        Ok(found) if supported.contains(&found.as_str()) => return Ok(Some(VfsProvider::Hm)),
-        Ok(found) => {
-            return Err(Error::VfsUnsupportedVersion {
-                found,
-                supported: supported.join(","),
-            });
-        }
-        Err(_) => {}
+    if let Ok(found) = kernel.version() {
+        return classify_version(found, supported).map(Some);
     }
 
     load_lkm()?;
 
     match kernel.version() {
-        Ok(found) if supported.contains(&found.as_str()) => Ok(Some(VfsProvider::Hm)),
-        Ok(found) => Err(Error::VfsUnsupportedVersion {
+        Ok(found) => classify_version(found, supported).map(Some),
+        Err(_) => Ok(None),
+    }
+}
+
+/// Maps a probed version string onto the single supported provider.
+///
+/// Both callers in `select_provider` need this: an unsupported version stays fatal whether
+/// it is found before or after loading, while an unanswered probe is left to the caller.
+fn classify_version(found: String, supported: &[&str]) -> Result<VfsProvider> {
+    if supported.contains(&found.as_str()) {
+        Ok(VfsProvider::Hm)
+    } else {
+        Err(Error::VfsUnsupportedVersion {
             found,
             supported: supported.join(","),
-        }),
-        Err(_) => Ok(None),
+        })
     }
 }
 

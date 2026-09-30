@@ -8,7 +8,9 @@
 use std::path::Path;
 use std::time::Duration;
 
-use rustix::mount::{MountFlags, UnmountFlags, mount, unmount};
+use rustix::mount::{
+    MountFlags, MountPropagationFlags, UnmountFlags, mount, mount_change, unmount,
+};
 
 use crate::errors::{CausalError, ContextError, Error, Result};
 use crate::sys::mountinfo::MountSnapshot;
@@ -102,6 +104,33 @@ pub fn mount_tmpfs(target: &Path, source: &str) -> Result<()> {
     })
 }
 
+/// Unshares a mount Hybrid Mount created from every peer group it inherited.
+///
+/// A cloned mount keeps the propagation type of its source, so a bind of a shared mount joins
+/// that source's peer group, and a mount attached below a shared parent can be handed a fresh
+/// group id. Either one makes our own targets stand out in `/proc/self/mountinfo` as `shared:N`
+/// next to the OverlayFS targets, which carry no propagation field at all, and both draw ids from
+/// the kernel's global group allocator.
+///
+/// `MS_PRIVATE` is local to our own mount: peers of the source keep their group, and only this
+/// mount leaves it. `recursive` covers the subtree a directory move carried along, while a single
+/// bind only needs the non-recursive form.
+pub fn normalize_propagation(path: &Path, recursive: bool) -> Result<()> {
+    let flags = if recursive {
+        MountPropagationFlags::PRIVATE | MountPropagationFlags::REC
+    } else {
+        MountPropagationFlags::PRIVATE
+    };
+
+    mount_change(path, flags).map_err(|source| {
+        Error::Mount(Box::new(ContextError::new(
+            "make mount target private",
+            Some(path.to_path_buf()),
+            source,
+        )))
+    })
+}
+
 /// Repairs an image with `e2fsck -y -f`; exit codes 0..=3 succeed (v4.2.0 behaviour).
 pub fn repair_image(image_path: &Path) -> Result<()> {
     let spec = CommandSpec::new("e2fsck")
@@ -126,35 +155,6 @@ pub fn repair_image(image_path: &Path) -> Result<()> {
         .filter(|text| !text.is_empty())
     {
         log::debug!("e2fsck output: {stderr}");
-    }
-    Ok(())
-}
-
-/// `emulated-soft-reboot`: immediately unmounts every mountpoint whose source matches,
-/// simulating the mount cleanup before a soft reboot.
-pub fn emulated_soft_reboot(source: &str) -> Result<()> {
-    let entries = crate::sys::mountinfo::mount_entries()?;
-
-    let mut mount_points = entries
-        .into_iter()
-        .filter(|entry| entry.mount_source.as_deref() == Some(source))
-        .filter(|entry| entry.fs_type != "overlay")
-        .map(|entry| entry.mount_point)
-        .collect::<Vec<_>>();
-    crate::sys::mountinfo::deepest_first(&mut mount_points);
-
-    for mount_point in mount_points {
-        log::debug!(
-            "unmounting {} from {source} in emulated-soft-reboot",
-            mount_point.display()
-        );
-        unmount(&mount_point, UnmountFlags::DETACH).map_err(|source| {
-            Error::Mount(Box::new(ContextError::new(
-                "unmount in emulated soft reboot",
-                Some(mount_point.to_path_buf()),
-                source,
-            )))
-        })?;
     }
     Ok(())
 }

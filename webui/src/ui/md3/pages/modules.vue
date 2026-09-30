@@ -2,12 +2,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import Md3RuntimeControls from "../components/Md3RuntimeControls.vue";
+import { runtimeStore } from "../../../lib/stores/runtimeStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { matchesModuleFilter, type ModuleFilter } from "../../../lib/moduleFilter";
 import type { Module, ModuleRule, MountMode } from "../../../lib/types";
-import Md3BottomActions from "../components/Md3BottomActions.vue";
 import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.vue";
 import { ICONS } from "../icons";
 
@@ -85,7 +86,11 @@ function disableModuleDetails(element: Element): void {
 }
 
 onMounted(() =>
-  Promise.all([sysStore.ensureStatusLoaded(), moduleStore.ensureModulesLoaded()]),
+  Promise.all([
+    sysStore.ensureStatusLoaded(),
+    moduleStore.ensureModulesLoaded(),
+    runtimeStore.loadRuntimeStatus(),
+  ]),
 );
 </script>
 
@@ -110,6 +115,17 @@ onMounted(() =>
           />
         </div>
       </div>
+      <md-filled-tonal-icon-button
+        class="refresh-modules-action"
+        :title="t('modules.reload')"
+        :aria-label="t('modules.reload')"
+        :disabled="runtimeStore.busy || runtimeStore.loading"
+        @click="runtimeStore.refresh()"
+      >
+        <md-icon
+          ><svg viewBox="0 0 24 24"><path :d="ICONS.refresh" /></svg
+        ></md-icon>
+      </md-filled-tonal-icon-button>
     </section>
 
     <section v-if="mountErrorCount" class="error-banner">
@@ -182,6 +198,7 @@ onMounted(() =>
           <div v-if="expanded[module.id]" class="module-body-wrapper">
             <div class="module-body-inner">
               <div class="module-body-content">
+                <Md3RuntimeControls :module-id="module.id" />
                 <section
                   v-if="module.mount_error || module.suggest_ignore"
                   class="body-section"
@@ -296,17 +313,43 @@ onMounted(() =>
       <strong>{{ t("modules.empty") }}</strong>
       <span class="empty-state-hint">{{ t("modules.desc") }}</span>
     </div>
-
-    <Md3BottomActions>
-      <md-filled-tonal-icon-button
-        :title="t('modules.reload')"
-        :aria-label="t('modules.reload')"
-        @click="moduleStore.loadModules()"
-      >
-        <md-icon
-          ><svg viewBox="0 0 24 24"><path :d="ICONS.refresh" /></svg
-        ></md-icon>
-      </md-filled-tonal-icon-button>
-    </Md3BottomActions>
   </div>
 </template>
+
+<style scoped>
+.header-section {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-bar {
+  min-width: 0;
+  flex: 1;
+}
+
+.refresh-modules-action {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  --md-filled-tonal-icon-button-container-shape: var(--radius-md);
+  --md-filled-tonal-icon-button-container-color: var(
+    --md-sys-color-surface-container-high
+  );
+  --md-filled-tonal-icon-button-icon-color: var(--md-sys-color-on-surface-variant);
+}
+
+.modules-page > .error-banner {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius-lg);
+}
+
+.error-content {
+  gap: 2px;
+}
+</style>

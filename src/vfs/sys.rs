@@ -96,6 +96,8 @@ mod platform {
     const SYS_ADD_KEY: libc::c_long = 309;
     #[cfg(target_arch = "x86_64")]
     const SYS_ADD_KEY: libc::c_long = 248;
+    #[cfg(target_arch = "riscv64")]
+    const SYS_ADD_KEY: libc::c_long = 217;
 
     /// Sends one payload page. The kernel writes `status` back into the same page.
     pub fn add_key(page: &mut PageBuffer, channel: KeyringChannel) -> io::Result<()> {

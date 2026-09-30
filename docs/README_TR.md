@@ -13,7 +13,7 @@ Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Aç�
 - Magic Mount; dosya, dizin, sembolik bağlantı, `.replace` ve whiteout semantiğini destekler.
 - VFS, enjeksiyon kurallarını keyring üzerinden Hybrid Mount'un kendi VFS alt sistemine (`hybridmount` modülü) gönderir. Bağımsız bir uygulamadır; NoMount çekirdeği veya nm CLI'si ile birlikte çalışmaz. Sürümler kaynak kodu ve desteklenen her Android/GKI hedefi için önceden derlenmiş arm64 modülü içerir; çekirdek bunu barındırmıyorsa önyüklemede yüklenir. Başarısız olursa davranış `vfs_strict` ile belirlenir. VFS gerçek bir bağlama değildir.
 - WebUI, MD3 (varsayılan) ve Miuix arayüzlerini sunar.
-- arm64, armv7 ve x86_64 mimarileri desteklenir; yükleyici uygun ikili dosyayı otomatik olarak seçer.
+- arm64, armv7, x86_64 ve riscv64 mimarileri desteklenir; yükleyici uygun ikili dosyayı otomatik olarak seçer. riscv64 derlemesi Android NDK r27 veya üstünü gerektirir.
 
 ## Kurulum
 
@@ -46,7 +46,9 @@ VFS, Hybrid Mount'un çekirdek tarafındaki kendi enjeksiyon yoludur ve `hybridm
 
 **Sağlayıcı nasıl belirlenir.** Önyükleme kararı yalnızca `hybridmount` çekirdek anahtar türünün salt okunur yoklamasına dayanır: desteklenen bir sürümle yanıt verirse sağlayıcı kullanılabilir. Ayrıca `vfs-doctor`, sağlayıcının nasıl mevcut olduğunu sınıflandırır — `/proc/modules` içindeki bir girdi, onu yüklenebilir bir modülün kaydettiği anlamına gelir; bu girdi olmadan var olan bir `/sys/module/hybridmount` dizini, çekirdek imajına derlendiği anlamına gelir; ikisi de yoksa sağlayıcı yoktur. Yoklama salt okunurdur, bu nedenle `status` ve `vfs-doctor` hiçbir zaman bir `insmod` tetiklemez.
 
-**Önyükleme mantığı.** Anahtar türü desteklenen bir sürümle yanıt verirse sağlayıcı bağlanır ve hiçbir şey yüklenmez. Hiçbir kural VFS'yi seçmiyorsa birlikte gelen modül de yüklenmez. Bir kural VFS'yi seçtiği hâlde yoklama sessiz kalırsa ardışık düzen, çekirdek serisi ve Android/GKI etiketiyle tam olarak eşleşen birlikte gelen modülü seçer, yükler ve yeniden yoklar; hâlâ kullanılamıyorsa her `vfs` kuralı `ignore` durumuna düşer veya `vfs_strict = true` olduğunda önyükleme başarısız olur. Yükleme, bağlama planı oluşturulmadan önce çalışır; çünkü sağlayıcı sessizken planlama `vfs` kurallarını `ignore` olarak yeniden yazar ve yürütücü de bu durumda erken döner. Devre kesici işareti `insmod` öncesinde yazılır ve girişim döndüğünde temizlenir; dolayısıyla geride yalnızca bir çekirdek çökmesi bırakır ve bir sonraki önyükleme, işaret elle silinene kadar otomatik yeniden denemeyi reddeder.
+**Önyükleme mantığı.** Anahtar türü desteklenen bir sürümle yanıt verirse sağlayıcı bağlanır ve hiçbir şey yüklenmez. Her önyüklemede, hiçbir kural VFS'yi seçmese bile, yoklama sessiz kalırsa ardışık düzen önce çekirdek sürümünün Android/GKI etiketiyle eşleşen birlikte gelen modülü, ardından aynı çekirdek ana/alt serisine ait diğer derlemeleri dener ve her girişimden sonra yeniden yoklar; hâlâ kullanılamıyorsa her `vfs` kuralı `ignore` durumuna düşer veya VFS istendiğinde ve `vfs_strict = true` olduğunda önyükleme başarısız olur. Yükleme, bağlama planı oluşturulmadan önce çalışır; çünkü sağlayıcı sessizken planlama `vfs` kurallarını `ignore` olarak yeniden yazar ve yürütücü de bu durumda erken döner. Devre kesici işareti `insmod` öncesinde yazılır ve girişim döndüğünde temizlenir; dolayısıyla geride yalnızca bir çekirdek çökmesi bırakır ve bir sonraki önyükleme, işaret elle silinene kadar otomatik yeniden denemeyi reddeder.
+
+Yükleyici önce `ksud insmod`, ardından yerleşik `hybrid-mount lkm-load` yedeğini, sonra da normal `insmod` komutunu dener. Yerleşik yedek, çekirdeğin temel sembollerini çözer ve çekirdek açıkça reddettikten sonra vermagic'i bellekte uyarlayabilir. Android kullanıcı alanı artık VFS'nin GKI hedefini belirlemez. Bu uyarlamalar ABI uyumluluğunu garanti etmez; ayrıntılar için [`module/vfs/README.md`](../module/vfs/README.md) dosyasına bakın.
 
 **VFS'yi çekirdeğe entegre etme.** Sürümler, desteklenen her Android/GKI hedefi için önceden derlenmiş bir aarch64 modülü sunar ve bunu otomatik olarak yükler; dolayısıyla bu çekirdekler entegrasyon adımı gerektirmez. `insmod` kullanmak istemiyorsanız veya çekirdek seriniz için önceden derlenmiş modül yoksa modülü çekirdeğe dahil edin. Bir çekirdek ağacının kök dizininden:
 
@@ -63,6 +65,10 @@ curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/
 Bu, kaynakları `fs/hybridmount/` dizinine kopyalar ve `fs/Makefile` ile `fs/Kconfig` dosyalarına ekler; çekirdeğe dahil etmek için `CONFIG_HYBRIDMOUNT=y`, modül olarak derlemek için `=m` etkinleştirin. `bash -s -- --cleanup` tüm değişiklikleri geri alır. NoMount'un zaten entegre olduğu bir ağaç reddedilir: her iki uygulama da inode işlemlerini ele geçirir ve farklı anahtar türleri kaydettikleri için çekirdek bunların bir arada var olmasını engellemez.
 
 **Tanılama.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor`, varlık durumunu, anahtar türünün yanıtladığı sürümü, desteklenen sürümleri ve sağlayıcı kullanılamadığında bunun nedenini bildirir.
+
+Sağlayıcı yanıt vermediğinde WebUI ve yönetici açıklaması VFS seçeneklerini ve sayaçlarını gizler. Kaydedilmiş VFS kuralları olduğu gibi kalır. Yanıt veren yerleşik sağlayıcı, `/proc/modules` girdisi olmasa bile desteklenir.
+
+**Çalışma zamanı CLI'si.** `hybrid-mount vfs help` kural ve UID yönetimini, whiteout/opaque kurallarını, tanılamayı ve açık `load` komutunu listeler. NoMount tarzı takma adları, okunabilir metni ve `--json` çıktısını destekler. Temizleme için `--yes` gerekir; elle yapılan değişiklikler yalnızca çalışma zamanında geçerlidir. [VFS CLI başvurusuna](VFS_CLI.md) bakın.
 
 ## Geri bildirim
 

@@ -13,7 +13,7 @@ Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot,
 - Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
 - VFS sends injection rules to Hybrid Mount's own VFS kernel subsystem, the `hybridmount` module, through the keyring. It is an independent implementation and does not interoperate with NoMount's kernel or its nm CLI. Releases ship the sources and a prebuilt aarch64 module per supported Android/GKI target, which the boot pipeline loads when the kernel does not already carry one; if that fails it falls back according to `vfs_strict`. VFS is not a real mount.
 - The WebUI provides MD3 (default) and Miuix interfaces.
-- arm64, armv7, and x86_64 are supported; the installer automatically selects the matching binary.
+- arm64, armv7, x86_64, and riscv64 are supported; the installer automatically selects the matching binary. The riscv64 build requires the Android NDK r27 or newer.
 
 ## Installation
 
@@ -67,6 +67,10 @@ This copies the sources into `fs/hybridmount/` and adds them to `fs/Makefile` an
 The WebUI and manager description hide VFS options and counters when the provider does not respond. Saved VFS rules remain intact. A responding built-in provider is supported even without a `/proc/modules` entry.
 
 **Diagnosing.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` reports the presence state, the version the key type answered, the supported versions, and why a provider is unusable when it is.
+
+**Runtime CLI.** `hybrid-mount vfs help` lists rule and UID management, whiteout/opaque rules,
+diagnostics and explicit `load`. It supports NoMount-style aliases, readable text and `--json`.
+Clearing requires `--yes`; manual changes are runtime-only. See the [VFS CLI reference](docs/VFS_CLI.md).
 
 ## Feedback
 

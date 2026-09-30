@@ -14,7 +14,7 @@
 
 ```text
 module/metamount.sh
-  → hybrid-mount（无参数）
+  → hybrid-mount boot（运行锁与本轮去重）
   → 读取 config.toml
   → 只读扫描模块与受管分区，识别文件/目录/符号链接/.replace/whiteout
   → 生成一棵带 overlay / magic / vfs / ignore 标注的共享节点树
@@ -40,10 +40,11 @@ module/metamount.sh
 - `src/vfs/`：HM 自有的 VFS 后端（`hybridmount` 模块）。`rule.rs` 把共享树映射为规则，`protocol.rs`
   编解码 HM 专用 wire protocol，`sys.rs` 通过 keyring `add_key` 发送并维护页对齐缓冲，
   `backend.rs` 只绑定 key type `hybridmount` 的 Provider，并在检测到外来 NoMount 时拒绝并存，
-  `lkm.rs` 在内核未内建时从 `vfs/binaries/` 加载精确匹配的预编译模块，
+  `lkm_target.rs` 在内核未内建时从 `vfs/binaries/` 选型（优先内核 release 中 Android/GKI 标签精确匹配的构建，其次同一内核主次版本的其他候选），`lkm.rs` 负责加载，
   `exec.rs` 应用规则并统计。
 - `src/storage/`：tmpfs 或 ext4 loop staging；ext4 镜像位于 `/data/adb/hybrid-mount/modules.img`。KernelSU 安装会删除 `lkm/` 并只使用官方 sysfs nuke ioctl；APatch 等非 KSU 安装保留 LKM，ext4 挂载后由 `src/sys/nuke.rs` 默认选择精确匹配的预编译版本。
 - `src/pipeline.rs`：启动顺序、资源生命周期、卸载注册与失败状态持久化。
+- `src/runtime/`：启动与热操作共享的所有权账本、规则事务、挂载身份校验和软重启清理；详见 [RUNTIME.md](RUNTIME.md)。
 - `src/state.rs`：`scan.ret`、`run/state.json` 以及 WebUI 所需查询命令。
 - `src/sys/`、`src/utils/`：挂载、文件系统、随机临时目录、SELinux xattr 与 KernelSU 接口。
 - `webui/`：Vue 3 双界面，通过 `kernelsu.exec` 调用同一个 Rust 二进制。
@@ -55,16 +56,19 @@ module/metamount.sh
 - 二进制：`/data/adb/modules/hybrid_mount/hybrid-mount`
 - 配置：`/data/adb/hybrid-mount/config.toml`
 - 模块快照：`/data/adb/hybrid-mount/scan.ret`
-- 启动状态：`/data/adb/hybrid-mount/run/state.json`
+- 运行所有权：`/data/adb/hybrid-mount/run/runtime.json`（boot ID 与 PID 1 mount namespace 作用域）
+- 启动及最近热操作状态：`/data/adb/hybrid-mount/run/state.json`
 - ext4 staging 镜像：`/data/adb/hybrid-mount/modules.img`
 - 可选 LKM：`/data/adb/modules/hybrid_mount/lkm/binaries/*.ko`
 - LKM 启动熔断标记：`/data/adb/hybrid-mount/lkm_boot_guard`
+- VFS 加载熔断标记：`/data/adb/hybrid-mount/vfs_lkm_boot_guard`（记录写入它的构建与它准备插入的内核对象；其他构建、或被刷新替换的 `.ko` 留下的标记自动失效重试）
+- VFS 规则熔断标记：`/data/adb/hybrid-mount/vfs_boot_guard`（记录写入它的构建，只有同一构建会因此跳过 VFS；其他构建留下的标记自动失效，`vfs guard clear --yes` 可手工清除）
 
 这些路径属于安装、WebUI 和启动脚本之间的兼容接口，不应仅为品牌或目录整理而改名。
 
 LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍为 GPL-3.0-only，WebUI 仍为 Apache-2.0。预编译 LKM 只按受支持的内核线与 Android/GKI 版本做精确候选选择，不能替代实机 ABI 校验；KernelSU 安装不保留这些文件，非 KSU 环境默认尝试匹配项。
 
-发布 ZIP 在安装前包含 `binaries/hybrid-mount-arm64`、`binaries/hybrid-mount-armv7` 和 `binaries/hybrid-mount-x86_64`。`customize.sh` 只复制当前架构对应的文件到上述稳定二进制路径，随后删除安装目录中的 `binaries/`，设备上没有第二套常驻可执行文件。
+发布 ZIP 在安装前包含 `binaries/hybrid-mount-arm64`、`binaries/hybrid-mount-armv7`、`binaries/hybrid-mount-x86_64` 和 `binaries/hybrid-mount-riscv64`。`customize.sh` 只复制当前架构对应的文件到上述稳定二进制路径，随后删除安装目录中的 `binaries/`，设备上没有第二套常驻可执行文件。
 
 挂载所需的临时目录使用内核随机生成的 22–30 位字母数字名称和 `0700` 权限，依次尝试 `/mnt`、`/mnt/rw`、`/tmp`。名称不包含项目、PID 或时间戳特征；正常结束时递归清理，仅在 `disable_umount = true` 明确保留挂载时保留对应路径。
 
@@ -83,8 +87,9 @@ LKM 子树是独立标识的 GPL-2.0-only 组件，核心 userspace/module 仍�
 | `install-state` | 无 | 输出安装与内核兼容状态 JSON。 |
 | `clear-mount-errors` | 无 | 删除模块目录中的 `mount_error` 文件并刷新状态，输出 `{ "ok": true, "removed": <数量> }`。 |
 | `vfs-doctor` | 无 | 只读输出 VFS provider 诊断 JSON，不会 `insmod` 或卸载模块。 |
+| `vfs` | `help` / `rule` / `uid` / `clear` / `version` / `doctor` / `load` | VFS 运行态控制；默认文本，支持 `--json`、批量参数及 NoMount 风格别名。清空需要 `--yes`，仅显式 `load` 加载模块。见 [VFS CLI](VFS_CLI.md)。 |
 | `lkm-load` | `<module.ko> [parameters...]` | Linux/Android arm64 上以内置加载器插入指定 LKM；仅支持 aarch64。 |
-| `emulated-soft-reboot` | 无 | Linux/Android 上按有效 mount source 懒卸载现有挂载。 |
+| `emulated-soft-reboot` | 无 | 兼容别名，执行 `runtime prepare-reboot`，仅清理身份验证通过的本轮资源。 |
 | `version` | 无 | 输出版本 JSON。 |
 
 示例：
@@ -101,6 +106,8 @@ $BIN vfs-doctor
 WebUI 不持有第二套业务协议：配置与状态请求都映射到以上命令。状态是启动快照，不是 daemon 提供的实时流。
 
 `status` 中的 `active_mounts` 是 OverlayFS、Magic Mount 与 VFS 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts`、`magic_active_mounts` 与 `vfs_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。OverlayFS 与 Magic Mount 的目标必须经 mountinfo 确认；VFS 注入点不是内核挂载，改由 `apply_vfs_phase` 的 Provider 读回确认，读回失败的批次会被整体丢弃，因此不会进入 `active_mounts`。
+
+两类的 mountinfo 字段都属于对外契约。OverlayFS 通过 `open_tree(OPEN_TREE_CLONE|AT_RECURSIVE)` + `move_mount` 创建目标，Magic Mount 通过 `MS_BIND` 克隆，克隆会继承源挂载的传播类型，因此 Magic 目标可能带着源挂载的 peer group 进入传播表，与不带 `shared:` 的 OverlayFS 目标在同一方案内混排，并从内核的全局组号分配器额外取号。为此 Magic Mount 在每个 bind 之后立即对该目标执行 `MS_PRIVATE`，目录 mount-move 之后再对整棵子树执行 `MS_PRIVATE|MS_REC`：`MS_PRIVATE` 只影响本挂载，源的 peer group 不受影响。归一化是尽力而为，失败只告警；挂载阶段结束时会读回 mountinfo 核对活动目标是否仍在 peer group 内，并在日志中给出 `propagation=private|shared:N|slave:N`，避免传播表变化无人察觉。`src/sys/mountinfo.rs` 因此除 `mnt_id` 外同时解析 `shared:` 与 `master:`。
 
 `status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（只有 `hm`，即 HM 自有的 `hybridmount` 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
 
@@ -144,3 +151,5 @@ Provider、版本不兼容或检测到外来 NoMount，则按 `vfs_strict` 选�
 ## 验证边界
 
 主机侧可运行 Rust 单元测试、Clippy、WebUI 测试/类型检查和生产构建。Android 三架构编译由 `cargo xtask build` 或 CI 完成。真实 mount、loop、SELinux 与 KernelSU/APatch 交互必须在受支持设备上验证。
+
+运行期新增 `boot` 和 `runtime status|load ID|unload ID|reload ID|prepare-reboot`，命令、升级与恢复限制见 [RUNTIME.md](RUNTIME.md)。`scan.ret` 和 `run/state.json` 在成功热操作后同步更新，不再仅代表启动瞬间。

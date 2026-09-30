@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createApi,
   createConfigPayload,
@@ -9,7 +9,222 @@ import {
   normalizeInstallState,
   normalizeStatus,
 } from "./api";
+import { PATHS } from "./constants";
 import type { AppConfig } from "./types";
+
+const { exec } = vi.hoisted(() => ({ exec: vi.fn() }));
+vi.mock("kernelsu", () => ({ exec }));
+
+describe("WebUI reboot safety", () => {
+  const environmentCommand = 'printf \'KSU=%s\\nAPATCH=%s\\n\' "${KSU-}" "${APATCH-}"';
+  const success = (stdout = "") => ({ errno: 0, stdout, stderr: "" });
+
+  beforeEach(() => {
+    exec.mockReset();
+  });
+
+  it.each([
+    ["  late_load : true \r\n", "/data/adb/ksud soft-reboot"],
+    ["version: 123\nlate_load: false\n", "svc power reboot || reboot"],
+  ])("uses the explicitly reported KernelSU mode: %s", async (debug, command) => {
+    exec
+      .mockResolvedValueOnce(success("KSU=true\nAPATCH=\n"))
+      .mockResolvedValueOnce(success(debug))
+      .mockResolvedValue(success());
+
+    await createApi(false, true).reboot();
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ...(command.includes("soft-reboot")
+        ? [[`${PATHS.BINARY} runtime prepare-reboot`]]
+        : []),
+      [command],
+    ]);
+  });
+
+  it("detects KernelSU from debug info when the shell has no manager markers", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
+      .mockResolvedValueOnce(success("late_load: true"))
+      .mockResolvedValue(success());
+
+    await createApi(false, true).reboot();
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      [`${PATHS.BINARY} runtime prepare-reboot`],
+      ["/data/adb/ksud soft-reboot"],
+    ]);
+  });
+
+  it("refuses reboot when neither root identity nor KernelSU mode can be detected", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
+      .mockResolvedValue({ errno: 127, stdout: "", stderr: "not found" });
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/root environment/i);
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ["/system/bin/truncate su version"],
+    ]);
+  });
+
+  it("reboots APatch without installer markers after confirming the live kernel API", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
+      .mockResolvedValueOnce({ errno: 127, stdout: "", stderr: "not found" })
+      .mockResolvedValueOnce(success("60c00,b00\n"))
+      .mockResolvedValueOnce(success());
+
+    await expect(createApi(false, true).reboot()).resolves.toBeUndefined();
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ["/system/bin/truncate su version"],
+      ["svc power reboot || reboot"],
+    ]);
+  });
+
+  it.each([
+    { errno: 1, stdout: "60c00,b00", stderr: "denied" },
+    success(""),
+    success("apd 11107"),
+    success("truncate: missing -s"),
+    success("60c00,b00\n60c00,b00"),
+    success("60c00,b00 trailing"),
+    success("0,b00"),
+    success("60c00,0"),
+  ])("does not reboot on an unverified APatch probe: %j", async (probe) => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=\n"))
+      .mockResolvedValueOnce({ errno: 127, stdout: "", stderr: "not found" })
+      .mockResolvedValueOnce(probe);
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/root environment/i);
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      ["/system/bin/truncate su version"],
+    ]);
+  });
+
+  it.each([
+    { errno: 1, stdout: "", stderr: "denied" },
+    { errno: 126, stdout: "", stderr: "permission denied" },
+    success("late_load: invalid"),
+    success("version: 123"),
+  ])("does not bypass a present but unverified KernelSU daemon: %j", async (debug) => {
+    exec.mockResolvedValueOnce(success("KSU=\nAPATCH=\n")).mockResolvedValueOnce(debug);
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/late.load/i);
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+    ]);
+  });
+
+  it("retains normal reboot for explicitly detected APatch", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=\nAPATCH=true\n"))
+      .mockResolvedValueOnce(success());
+
+    await createApi(false, true).reboot();
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["svc power reboot || reboot"],
+    ]);
+  });
+
+  it.each(["KSU=true\nAPATCH=true\n", "KSU=unknown\nAPATCH=true\n"])(
+    "refuses reboot for an unknown root environment: %s",
+    async (environment) => {
+      exec.mockResolvedValue(success(environment));
+
+      await expect(createApi(false, true).reboot()).rejects.toThrow(/root environment/i);
+
+      expect(exec.mock.calls).toEqual([[environmentCommand]]);
+    },
+  );
+
+  it("refuses reboot when root detection fails", async () => {
+    exec.mockResolvedValue({ errno: 1, stdout: "KSU=\nAPATCH=true\n", stderr: "denied" });
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/root environment/i);
+
+    expect(exec.mock.calls).toEqual([[environmentCommand]]);
+  });
+
+  it.each([
+    { errno: 127, stdout: "", stderr: "not found" },
+    { errno: 1, stdout: "late_load: false", stderr: "denied" },
+    success("version: 123"),
+    success("late_load: invalid"),
+    success("late_load: false\nlate_load: true"),
+  ])("refuses reboot when KernelSU mode is unverified: %j", async (debug) => {
+    exec.mockResolvedValueOnce(success("KSU=true\nAPATCH=\n")).mockResolvedValue(debug);
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(/late.load/i);
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+    ]);
+  });
+
+  it("propagates bridge rejection without executing a reboot", async () => {
+    exec.mockRejectedValue(new Error("bridge unavailable"));
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow("bridge unavailable");
+
+    expect(exec.mock.calls).toEqual([[environmentCommand]]);
+  });
+
+  it("preserves cleanup failure and never attempts soft or hardware reboot", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=true\nAPATCH=\n"))
+      .mockResolvedValueOnce(success("late_load: true"))
+      .mockResolvedValueOnce({
+        errno: 1,
+        stdout: "",
+        stderr: "Owned VFS mappings could not be released",
+      });
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow(
+      "Owned VFS mappings could not be released",
+    );
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      [`${PATHS.BINARY} runtime prepare-reboot`],
+    ]);
+  });
+
+  it("reports reboot command failure without trying a different reboot mode", async () => {
+    exec
+      .mockResolvedValueOnce(success("KSU=true\nAPATCH=\n"))
+      .mockResolvedValueOnce(success("late_load: true"))
+      .mockResolvedValueOnce(success())
+      .mockResolvedValueOnce({ errno: 1, stdout: "", stderr: "soft reboot failed" });
+
+    await expect(createApi(false, true).reboot()).rejects.toThrow("soft reboot failed");
+
+    expect(exec.mock.calls).toEqual([
+      [environmentCommand],
+      ["/data/adb/ksud debug info"],
+      [`${PATHS.BINARY} runtime prepare-reboot`],
+      ["/data/adb/ksud soft-reboot"],
+    ]);
+  });
+});
 
 describe("WebUI configuration contract", () => {
   it("rejects production API calls when the manager bridge is unavailable", async () => {
@@ -216,6 +431,15 @@ describe("installation capability status", () => {
       });
       expect(state.tmpfs_supported).toBe(value);
       expect(state.nuke_supported).toBe(value);
+    }
+  });
+
+  it("reads the VFS provider kind without inventing one", () => {
+    for (const value of [undefined, null, 1, "true"]) {
+      expect(normalizeInstallState({ vfs_type: value }).vfs_type).toBe("unknown");
+    }
+    for (const value of ["lkm", "builtin"]) {
+      expect(normalizeInstallState({ vfs_type: value }).vfs_type).toBe(value);
     }
   });
 });

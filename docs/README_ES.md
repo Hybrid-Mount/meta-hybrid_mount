@@ -13,7 +13,7 @@ Hybrid Mount es un metamódulo de montaje híbrido para KernelSU y APatch. Duran
 - Magic Mount admite archivos, directorios, enlaces simbólicos, `.replace` y la semántica whiteout.
 - VFS envía reglas de inyección al subsistema VFS propio de Hybrid Mount (módulo `hybridmount`) mediante el keyring. Es una implementación independiente y no interopera con el kernel de NoMount ni con su CLI nm. Las versiones incluyen el código fuente y un módulo arm64 precompilado por cada objetivo Android/GKI compatible, que el arranque carga cuando el kernel no lo incorpora; si falla, se degrada según `vfs_strict`. VFS no es un montaje real.
 - La WebUI ofrece las interfaces MD3 (predeterminada) y Miuix.
-- Se admiten arm64, armv7 y x86_64; el instalador selecciona automáticamente el binario correspondiente.
+- Se admiten arm64, armv7, x86_64 y riscv64; el instalador selecciona automáticamente el binario correspondiente. La compilación para riscv64 requiere el Android NDK r27 o posterior.
 
 ## Instalación
 
@@ -46,7 +46,9 @@ VFS es la ruta de inyección del propio Hybrid Mount en el lado del kernel, cont
 
 **Cómo se identifica el proveedor.** La decisión de arranque se basa únicamente en una sonda de solo lectura del tipo de clave del kernel `hybridmount`: si responde con una versión compatible, el proveedor es utilizable. Por separado, `vfs-doctor` clasifica cómo está presente: una entrada en `/proc/modules` significa que lo registró un módulo cargable; un directorio `/sys/module/hybridmount` sin esa entrada significa que está compilado en la imagen del kernel; si no existe ninguna de las dos cosas, no hay ningún proveedor. La sonda es de solo lectura, por lo que `status` y `vfs-doctor` nunca desencadenan un `insmod`.
 
-**Lógica de arranque.** Si el tipo de clave responde con una versión compatible, el proveedor se vincula y no se carga nada. Si ninguna regla selecciona VFS, tampoco se carga el módulo incluido. Si alguna regla sí selecciona VFS mientras la sonda permanece muda, la secuencia de arranque elige el módulo incluido que coincide exactamente con la línea del kernel y la etiqueta Android/GKI, lo carga y vuelve a sondear; si sigue sin estar disponible, todas las reglas `vfs` se degradan a `ignore`, o el arranque falla cuando `vfs_strict = true`. La carga se ejecuta antes de construir el plan de montaje, porque la planificación reescribe las reglas `vfs` a `ignore` mientras el proveedor está mudo y el ejecutor saldría antes de tiempo. Antes de `insmod` se escribe un marcador de protección y se elimina cuando el intento retorna, de modo que solo un fallo del kernel lo deja atrás; el siguiente arranque entonces rechaza un reintento automático hasta que el marcador se elimine manualmente.
+**Lógica de arranque.** Si el tipo de clave responde con una versión compatible, el proveedor se vincula y no se carga nada. En cada arranque, incluso cuando ninguna regla selecciona VFS, si la sonda permanece muda, la secuencia de arranque intenta primero el módulo incluido que coincide con la etiqueta Android/GKI de la versión del kernel, y luego otras compilaciones para la misma línea principal/secundaria del kernel, volviendo a sondear tras cada intento; si sigue sin estar disponible, todas las reglas `vfs` se degradan a `ignore`, o el arranque falla cuando se solicita VFS y `vfs_strict = true`. La carga se ejecuta antes de construir el plan de montaje, porque la planificación reescribe las reglas `vfs` a `ignore` mientras el proveedor está mudo y el ejecutor saldría antes de tiempo. Antes de `insmod` se escribe un marcador de protección y se elimina cuando el intento retorna, de modo que solo un fallo del kernel lo deja atrás; el siguiente arranque entonces rechaza un reintento automático hasta que el marcador se elimine manualmente.
+
+El cargador prueba `ksud insmod`, después el cargador integrado `hybrid-mount lkm-load` como alternativa y, por último, el `insmod` normal. La alternativa integrada resuelve los símbolos del núcleo y puede adaptar el vermagic en memoria tras un rechazo explícito del kernel. El espacio de usuario de Android ya no decide el objetivo GKI de VFS. Estas adaptaciones no garantizan la compatibilidad ABI; consulta [`module/vfs/README.md`](../module/vfs/README.md) para más detalles.
 
 **Integrar VFS en un kernel.** Las versiones incluyen un módulo aarch64 precompilado para cada objetivo Android/GKI compatible y lo cargan automáticamente, por lo que esos kernels no necesitan ningún paso de integración. Compílalo dentro del kernel cuando quieras evitar el `insmod`, o cuando tu línea del kernel no tenga precompilado. Desde la raíz de un árbol del kernel:
 
@@ -63,6 +65,10 @@ curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/
 Esto copia las fuentes en `fs/hybridmount/` y las añade a `fs/Makefile` y `fs/Kconfig`; habilita `CONFIG_HYBRIDMOUNT=y` para compilarlo dentro del kernel o `=m` para compilarlo como módulo. `bash -s -- --cleanup` revierte todos los cambios. Un árbol que ya integra NoMount se rechaza: ambas implementaciones secuestran las operaciones de inodo y el kernel no impedirá que coexistan, ya que registran tipos de clave diferentes.
 
 **Diagnóstico.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` informa del estado de presencia, de la versión que respondió el tipo de clave, de las versiones compatibles y, cuando un proveedor no es utilizable, del motivo.
+
+La WebUI y la descripción del gestor ocultan las opciones y los contadores de VFS cuando el proveedor no responde. Las reglas VFS guardadas se conservan intactas. Un proveedor integrado que responde es compatible incluso sin una entrada en `/proc/modules`.
+
+**CLI en tiempo de ejecución.** `hybrid-mount vfs help` enumera la gestión de reglas y UID, las reglas whiteout/opaque, los diagnósticos y el `load` explícito. Admite alias al estilo NoMount, texto legible y `--json`. El vaciado requiere `--yes`; los cambios manuales solo afectan al tiempo de ejecución. Consulta la [referencia de la CLI de VFS](VFS_CLI.md).
 
 ## Comentarios y errores
 

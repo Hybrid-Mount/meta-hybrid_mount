@@ -2,6 +2,7 @@
 
 import { ref } from "vue";
 import type {
+  BootGuardReport,
   DefaultMountMode,
   DeviceInfo,
   InstallState,
@@ -10,6 +11,7 @@ import type {
   SystemInfo,
 } from "../types";
 import { API } from "../api";
+import { clearableGuards } from "../bootGuard";
 import { uiStore } from "./uiStore";
 import { moduleStore } from "./moduleStore";
 
@@ -18,7 +20,21 @@ const version = ref("...");
 const systemInfo = ref<SystemInfo>({ kernel: "-", selinux: "-" });
 const state = ref<RunState | null>(null);
 const installState = ref<InstallState | null>(null);
+/**
+ * Why the last status load failed, or null after a successful one.
+ *
+ * The toast disappears on its own; the status banner reads this so a failed load stays visible
+ * instead of leaving stale numbers on screen with no explanation.
+ */
+const loadError = ref<string | null>(null);
 const loading = ref(false);
+/**
+ * Boot guards the running binary reported, or null when they could not be read.
+ *
+ * A binary without the guard command is not a status failure: null keeps the status page
+ * exactly as it was and simply offers no clear action.
+ */
+const bootGuards = ref<BootGuardReport | null>(null);
 let pendingLoad: Promise<void> | null = null;
 let hasLoaded = false;
 
@@ -41,8 +57,10 @@ async function loadStatus(): Promise<void> {
       systemInfo.value = info;
       state.value = nextState;
       installState.value = nextInstall;
+      loadError.value = null;
       hasLoaded = true;
-    } catch {
+    } catch (error) {
+      loadError.value = error instanceof Error ? error.message : String(error);
       uiStore.showToast("Failed to load system status");
     } finally {
       loading.value = false;
@@ -61,9 +79,30 @@ function ensureStatusLoaded(): Promise<void> {
 async function rebootDevice(): Promise<void> {
   try {
     await API.reboot();
-  } catch {
-    uiStore.showToast("Reboot failed");
+  } catch (error) {
+    uiStore.showToast(error instanceof Error ? error.message : "Reboot failed");
   }
+}
+
+/**
+ * Reads the boot guards for the status banner.
+ *
+ * The read is best effort: a binary that predates the guard command leaves the banner
+ * without a clear action instead of failing the whole status load.
+ */
+async function loadBootGuards(): Promise<void> {
+  try {
+    bootGuards.value = await API.getBootGuards();
+  } catch {
+    bootGuards.value = null;
+  }
+}
+
+/** Removes the guards the banner offered and re-reads what the device reports now. */
+async function clearBootGuards(): Promise<number> {
+  const cleared = await API.clearBootGuards();
+  await loadBootGuards();
+  return cleared.length;
 }
 
 async function clearMountErrors(): Promise<number> {
@@ -97,6 +136,13 @@ export const sysStore = {
   get installState() {
     return installState.value;
   },
+  get loadError() {
+    return loadError.value;
+  },
+  /** Guards the banner may offer to clear; empty when there is nothing to clear. */
+  get clearableBootGuards() {
+    return clearableGuards(bootGuards.value);
+  },
   get vfsSupported() {
     return installState.value?.vfs_supported === true;
   },
@@ -117,5 +163,7 @@ export const sysStore = {
   ensureStatusLoaded,
   loadStatus,
   rebootDevice,
+  loadBootGuards,
+  clearBootGuards,
   clearMountErrors,
 };

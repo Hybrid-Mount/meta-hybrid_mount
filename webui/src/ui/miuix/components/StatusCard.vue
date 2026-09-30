@@ -1,7 +1,7 @@
 <!--
 
     Copyright (C) 2026 meta-magic_mount-rs developers
-    SPDX-License-Identifier: GPL-v3
+    SPDX-License-Identifier: GPL-3.0-only
 
 -->
 <script setup lang="ts">

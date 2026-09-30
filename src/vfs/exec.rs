@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+﻿// SPDX-License-Identifier: GPL-3.0-only
 
 //! Apply a planned batch to the bound provider and summarise the result.
 //! Rollback belongs to the pipeline: the full batch is registered before any kernel
@@ -7,7 +7,6 @@
 use std::collections::BTreeSet;
 
 use crate::errors::Result;
-use crate::module_id::ModuleId;
 use crate::plan::MountPlan;
 use crate::vfs::backend::VfsKernel;
 use crate::vfs::protocol::{EncodedRule, ListedRule, encode_rule};
@@ -65,11 +64,7 @@ pub fn plan_rules(plan: &MountPlan) -> Result<VfsApplied> {
 
     Ok(VfsApplied {
         stats: VfsExecStats {
-            mounted_module_ids: plan
-                .vfs_module_ids
-                .iter()
-                .map(ModuleId::to_string)
-                .collect(),
+            mounted_module_ids: plan.vfs_module_id_strings(),
             active_targets,
             injected,
             whiteouts,
@@ -92,17 +87,6 @@ pub fn apply_rules(
         kernel.add_uids(&uids)?;
     }
     Ok(applied.stats.clone())
-}
-
-/// Compatibility wrapper for callers that only need to know whether VFS applied.
-#[allow(dead_code)]
-pub fn apply_rules_with_policy(
-    kernel: &mut dyn VfsKernel,
-    applied: &VfsApplied,
-    uids: &[u32],
-    strict: bool,
-) -> Result<Option<VfsExecStats>> {
-    apply_rules_with_policy_diagnosed(kernel, applied, uids, strict).map(|outcome| outcome.stats)
 }
 
 /// Returns a successful batch or a non-strict failure diagnosis. Both error paths first delete

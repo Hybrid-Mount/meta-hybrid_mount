@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2026 YuzakiKokuban <heibanbaize@gmail.com>
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +26,9 @@
 }
 .main-content {
   flex: 1;
-  overflow-x: hidden;
+  min-height: 0;
+  /* Focus must not scroll the translated track horizontally. */
+  overflow: clip;
   position: relative;
   display: flex;
   flex-direction: column;

@@ -194,11 +194,17 @@ pub fn responds_now() -> bool {
     false
 }
 
-/// Prints the diagnostic report as JSON on stdout.
-pub fn handle() -> Result<()> {
+/// Collects the live report without loading or unloading a provider.
+pub fn report() -> VfsDoctorReport {
     let (version, listed, probe_error) = observe();
     let mut report = summarize(version, presence_on_device(), listed);
     report.probe_error = probe_error;
+    report
+}
+
+/// Prints the diagnostic report as JSON on stdout.
+pub fn handle() -> Result<()> {
+    let report = report();
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
 }

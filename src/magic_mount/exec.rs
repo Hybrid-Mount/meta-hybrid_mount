@@ -61,6 +61,18 @@ impl MagicMountResult {
     }
 }
 
+/// The path one magic mount must contribute to the KernelSU try-umount list, if any.
+///
+/// `has_tmpfs` states where the bind actually landed: with a tmpfs skeleton the file is bound
+/// into the staging tree, otherwise it is bound onto the real system path. Only a real target is
+/// registered. A staging bind is transient — the directory owning it is later moved onto the real
+/// path and registered there — and an entry naming a staging path would outlive its mount, which
+/// the kernel replays on every later umount for the rest of the boot. Whether the staging root
+/// happens to live under `/mnt` says nothing about a real target, so it cannot decide this.
+fn unmountable_target(umount: bool, has_tmpfs: bool, target: &Path) -> Option<&Path> {
+    (umount && !has_tmpfs).then_some(target)
+}
+
 pub struct MagicMount<'tree, 'stats, 'mount> {
     node: &'tree MountNode,
     path: PathBuf,
@@ -172,8 +184,8 @@ impl MagicMount<'_, '_, '_> {
             ))
         })?;
 
-        if self.umount && !self.work_dir_path.starts_with("/mnt") {
-            crate::utils::ksu::send_unmountable(target);
+        if let Some(unmountable) = unmountable_target(self.umount, self.has_tmpfs, target) {
+            crate::utils::ksu::send_unmountable(unmountable);
         }
 
         // MS_REMOUNT | MS_BIND makes a single file read-only. When that fails, undo the bind
@@ -331,16 +343,12 @@ impl MagicMount<'_, '_, '_> {
             let result = MagicMountResult::new(operation, &self.path);
             record_mount_target(self.stats, &mut *self.on_mount, &result, &self.path);
 
-            // Drop to private to reduce the number of peer groups.
-            if !crate::sys::faults::use_fake_magic_mount_ops()
-                && let Err(err) = mount_change(
-                    &self.path,
-                    MountPropagationFlags::PRIVATE | MountPropagationFlags::REC,
-                )
-            {
-                log::warn!("make dir {} private: {err}", self.path.display());
-            }
+            // The staging tree, and every clone it carried, was bound from mounts that may be
+            // shared; unshare the whole subtree now that it sits on the real target.
+            normalize_propagation(&self.path, true);
 
+            // The staging tree was just moved onto the real target, so `self.path` is the mount
+            // point the kernel must unmount; there is no staging path to filter out here.
             if self.umount {
                 crate::utils::ksu::send_unmountable(&self.path);
             }
@@ -378,7 +386,13 @@ impl MagicMount<'_, '_, '_> {
                 .do_mount()
                 .map(|_| ())
             } else if has_tmpfs {
-                mount_mirror(&self.path, &self.work_dir_path, &entry)
+                mount_mirror(
+                    &self.path,
+                    &self.work_dir_path,
+                    &entry,
+                    self.stats,
+                    &mut *self.on_mount,
+                )
             } else {
                 Ok(())
             };
@@ -408,6 +422,9 @@ fn record_mount_target(
     stats
         .active_mounts
         .push(result.target.to_string_lossy().into_owned());
+    stats
+        .owned_mounts
+        .push(result.target.to_string_lossy().into_owned());
     on_mount(&rollback_target.to_string_lossy());
 }
 
@@ -420,6 +437,8 @@ pub struct MagicMountStats {
     pub ignored_files: u32,
     /// Successful module-controlled bind and directory mount targets.
     pub active_mounts: Vec<String>,
+    /// Exact final mount paths, including stock-file mirrors carried by directory moves.
+    pub owned_mounts: Vec<String>,
     /// Modules with at least one successfully executed magic operation
     /// (bind/move/replace/symlink/whiteout), used for `scan.ret.is_mounted`.
     pub mounted_module_ids: BTreeSet<String>,
@@ -485,8 +504,47 @@ pub fn magic_mount(
         stats.mounted_symlinks,
         stats.active_mounts.len()
     );
+    report_shared_targets(&stats.active_mounts);
 
     Ok(stats)
+}
+
+/// Reads mountinfo back and reports any target that is still a member of a peer group.
+///
+/// Normalisation is best-effort, so this is what makes a target that kept its group visible
+/// instead of silent: the propagation table is exactly what environment-detecting apps read.
+fn report_shared_targets(targets: &[String]) {
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return;
+    }
+    let entries = match crate::sys::mountinfo::mount_entries() {
+        Ok(entries) => entries,
+        Err(err) => {
+            log::warn!("propagation readback unavailable: {err}");
+            return;
+        }
+    };
+
+    let shared = entries
+        .iter()
+        .filter(|entry| entry.shared.is_some())
+        .filter(|entry| {
+            targets
+                .iter()
+                .any(|target| entry.mount_point.starts_with(target))
+        })
+        .map(|entry| format!("{}={}", entry.mount_point.display(), entry.propagation()))
+        .collect::<Vec<_>>();
+
+    if shared.is_empty() {
+        log::info!("magic mount propagation readback: all targets private");
+    } else {
+        log::warn!(
+            "magic mount targets still in a peer group: count={}, targets={}",
+            shared.len(),
+            shared.join(",")
+        );
+    }
 }
 
 /// Copies mode, uid, gid and SELinux context into staging from the real path when it exists, else the module source.
@@ -525,7 +583,13 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
 }
 
 /// Recursively mirrors entries of the real directory that the collected tree does not cover into the tmpfs staging.
-fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<()> {
+fn mount_mirror(
+    path: &Path,
+    work_dir_path: &Path,
+    entry: &DirEntry,
+    stats: &mut MagicMountStats,
+    on_mount: &mut dyn FnMut(&str),
+) -> Result<()> {
     let path = path.join(entry.file_name());
     let work_dir_path = work_dir_path.join(entry.file_name());
     let file_type = entry.file_type()?;
@@ -536,8 +600,13 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
             path.display(),
             work_dir_path.display()
         );
+        // A mirror carries stock content into the staging tree, so it needs no try-umount entry of
+        // its own: the directory mount owning this tree is later moved onto the real path and
+        // registered there, and detaching that mount takes this bind with it.
         fs::File::create(&work_dir_path)?;
         magic_mount_bind(&path, &work_dir_path)?;
+        stats.owned_mounts.push(path.to_string_lossy().into_owned());
+        on_mount(&work_dir_path.to_string_lossy());
     } else if file_type.is_dir() {
         log::debug!(
             "mount mirror dir {} -> {}",
@@ -557,7 +626,7 @@ fn mount_mirror(path: &Path, work_dir_path: &Path, entry: &DirEntry) -> Result<(
         }
 
         for child in path.read_dir()? {
-            mount_mirror(&path, &work_dir_path, &child?)?;
+            mount_mirror(&path, &work_dir_path, &child?, stats, on_mount)?;
         }
     } else if file_type.is_symlink() {
         log::debug!(
@@ -603,7 +672,25 @@ fn magic_mount_bind(source: &Path, target: &Path) -> Result<()> {
     if crate::sys::faults::use_fake_magic_mount_ops() {
         return Ok(());
     }
-    mount_bind(source, target).map_err(Error::from)
+    mount_bind(source, target).map_err(Error::from)?;
+
+    // The clone inherits the propagation type of whatever it was cloned from, so unshare it here:
+    // otherwise a target bound from a shared source joins that peer group and shows up in
+    // mountinfo as `shared:N` while the OverlayFS targets stay private.
+    normalize_propagation(target, false);
+
+    Ok(())
+}
+
+/// Best-effort propagation normalisation: a target that keeps a peer group is still a working
+/// mount, so a failure is reported without failing the boot over it.
+fn normalize_propagation(target: &Path, recursive: bool) {
+    if crate::sys::faults::use_fake_magic_mount_ops() {
+        return;
+    }
+    if let Err(err) = crate::sys::mount::normalize_propagation(target, recursive) {
+        log::warn!("make mount {} private: {err}", target.display());
+    }
 }
 
 fn magic_mount_remount(target: &Path, flags: MountFlags, data: &str) -> Result<()> {
@@ -646,3 +733,36 @@ fn rollback_magic_mount(target: &Path, error: Error) -> Error {
 #[cfg(all(test, target_os = "linux"))]
 #[path = "exec_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "linux"))]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn mirrored_stock_file_records_final_identity_and_staging_rollback_without_module_counts() {
+        let fixture = crate::test_support::Fixture::new("magic-mirror-ownership");
+        let source = fixture.join("source");
+        let staging = fixture.join("staging");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        fs::create_dir_all(&staging).unwrap();
+        fs::write(source.join("nested/stock"), b"stock").unwrap();
+        let entry = source.read_dir().unwrap().next().unwrap().unwrap();
+        let mut stats = MagicMountStats::default();
+        let mut rollback = Vec::new();
+        let _fake_ops = crate::sys::faults::fake_magic_mount_ops();
+        mount_mirror(&source, &staging, &entry, &mut stats, &mut |target| {
+            rollback.push(target.to_owned())
+        })
+        .unwrap();
+        assert_eq!(
+            stats.owned_mounts,
+            vec![source.join("nested/stock").display().to_string()]
+        );
+        assert_eq!(
+            rollback,
+            vec![staging.join("nested/stock").display().to_string()]
+        );
+        assert!(stats.active_mounts.is_empty());
+        assert_eq!(stats.mounted_files, 0);
+    }
+}

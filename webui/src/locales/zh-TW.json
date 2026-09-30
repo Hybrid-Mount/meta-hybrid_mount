@@ -14,6 +14,8 @@
     "language": "語言",
     "enabled": "已啟用",
     "disabled": "已關閉",
+    "statusErrors": "出現問題",
+    "statusErrorsHint": "下列步驟沒有照預期完成。請搭配下方模組與日誌排查，然後重新整理。",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -29,6 +31,11 @@
     "info": "關於"
   },
   "status": {
+    "guardAction": "清除 VFS 熔斷標記",
+    "guardDialogTitle": "清除 VFS 熔斷標記？",
+    "guardDialogBody": "請先確認上次 VFS 注入中斷的原因已解決再清除。清除後 VFS 會在下次開機重新注入規則，同樣的崩潰可能再次發生。",
+    "guardCleared": "已清除 {count} 個熔斷標記，重新開機後生效",
+    "guardClearFailed": "清除熔斷標記失敗",
     "backendTitle": "儲存空間",
     "sysInfoTitle": "系統資訊",
     "moduleActive": "活躍模組",
@@ -63,7 +70,18 @@
     "magicOperationCount": "{files} 個檔案掛載 · {symlinks} 個連結",
     "noActiveMounts": "本次啟動沒有活動掛載點",
     "mountTargetCount": "{count} 個掛載點",
-    "mountDetails": "檢視 {count} 個掛載點"
+    "mountDetails": "檢視 {count} 個掛載點",
+    "errorLoad": "讀取系統狀態失敗",
+    "errorBootFailure": "啟動流程失敗",
+    "errorVfsForeign": "偵測到外來 VFS 實作",
+    "errorVfsProvider": "VFS Provider 發生錯誤",
+    "errorMountError": "模組掛載失敗",
+    "errorStateLoad": "啟動快照無法讀取",
+    "errorModuleScan": "模組掃描失敗",
+    "detailStage": "階段",
+    "detailRollback": "回滾",
+    "detailVersion": "Provider 版本",
+    "errorItems": "受影響模組"
   },
   "config": {
     "moduledir": "模組路徑",
@@ -149,6 +167,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "tmpfs 支援",
     "vfsSupported": "VFS 支援",
+    "vfsType": "VFS 類型",
     "nukeSupported": "Nuke 支援",
     "unverified": "未驗證",
     "mountSource": "Detected mount source",

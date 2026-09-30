@@ -8,6 +8,10 @@
 //! before loading; a supported key-type response decides success. Try ksud first,
 //! then the built-in compatibility loader, then ordinary insmod.
 //!
+//! The guard records the build and the candidate it was about to insert, so a marker from an
+//! older build, or for a kernel object a refreshed package replaced, is retired and the module
+//! is tried again instead of blocking VFS until someone removes the file by hand.
+//!
 //! A failed load is not fatal: the caller probes again and degrades or reports
 //! according to vfs_strict, the same path taken when the module is absent entirely.
 
@@ -15,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::defs;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::sys::lkm::{
     LoadAttemptGuard, bundled_lkm_arch_supported, describe_attempts, kernel_release,
     load_with_candidates, unload,
@@ -37,18 +41,52 @@ pub fn load_hm_vfs() -> Result<()> {
     Ok(())
 }
 
+/// Explicit CLI loading retains errors and never inserts over an existing provider.
+pub fn load_explicit() -> Result<String> {
+    use super::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel, select_provider};
+    use super::sys::KeyringChannel;
+
+    let foreign = super::guard::detect_foreign_nomount();
+    if let Some(detail) = foreign.error {
+        return Err(Error::VfsUnavailable {
+            reason: format!("foreign-provider guard failed: {detail}"),
+        });
+    }
+    let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
+    let provider = select_provider(&mut kernel, SUPPORTED_VERSIONS, foreign.present, || {
+        load().map_err(|reason| Error::VfsUnavailable { reason })
+    })?;
+    if provider.is_none() {
+        return Err(Error::VfsUnavailable {
+            reason: "loaded candidate did not answer with a supported protocol".into(),
+        });
+    }
+    let found = kernel.version()?;
+    if !SUPPORTED_VERSIONS.contains(&found.as_str()) {
+        return Err(Error::VfsUnsupportedVersion {
+            found,
+            supported: SUPPORTED_VERSIONS.join(","),
+        });
+    }
+    Ok(found)
+}
+
 fn load() -> std::result::Result<(), String> {
     crate::vfs::doctor::ensure_provider_absent(crate::vfs::doctor::presence_on_device())?;
     let candidates = bundled_candidates()?;
+    // A crash leaves the exact failing candidate in the persistent boot guard. A marker this
+    // build wrote for a candidate it still ships aborts the whole search: it must never become
+    // an unattended retry, and never a fallback to another .ko. A marker from an older build, or
+    // for a kernel object the package has since replaced, is retired here instead.
+    crate::vfs::boot_guard::prepare_lkm_guard(&candidates).map_err(|err| err.to_string())?;
     let mut failures = Vec::new();
     for lkm_path in candidates {
         log::info!("trying VFS module candidate: {}", lkm_path.display());
-        // A crash leaves the exact failing candidate in the persistent boot guard. Guard
-        // failures abort the whole search; they must never become a fallback to another .ko.
+        let payload = crate::vfs::boot_guard::lkm_attempt_payload(&lkm_path);
         let _attempt = LoadAttemptGuard::arm(
             Path::new(defs::VFS_LKM_BOOT_GUARD_PATH),
             "VFS module load",
-            &format!("lkm={}", lkm_path.display()),
+            &payload,
         )?;
         match load_with_candidates(
             crate::sys::lkm::INSMOD_CANDIDATES.iter().copied(),

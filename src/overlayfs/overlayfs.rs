@@ -3,8 +3,9 @@
 //! OverlayFS mount orchestration (behaviour aligned with v4.2.0 `e20f9c19`):
 //! - fsopen("overlay") is the primary path, with an escaped traditional `mount(2)` fallback;
 //! - past 64 lowerdirs, the trailing layers are stacked into staging first and used as a new layer;
-//! - after the root mount, sub-mounts are rebuilt as overlays one by one from `/proc/self/mountinfo`,
-//!   leaving a failure to the pipeline transaction to roll back the registered targets.
+//! - after the root mount, sub-mounts are rebuilt as overlays one by one from `/proc/self/mountinfo`;
+//!   a sub-mount the kernel refuses is skipped and reported, while the root mount's failure is
+//!   returned so the pipeline transaction rolls back the registered targets.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;
@@ -280,6 +281,17 @@ pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
             | OpenTreeFlags::AT_RECURSIVE,
     );
 
+    // Both failure paths below need the same traditional bind, with the same error text.
+    let bind = || -> Result<()> {
+        mount(from, to, "", MountFlags::BIND | MountFlags::REC, None).map_err(|err| {
+            Error::msg(format!(
+                "bind mount {} -> {}: {err}",
+                from.display(),
+                to.display()
+            ))
+        })
+    };
+
     match tree {
         Ok(tree) => {
             if move_mount(
@@ -291,23 +303,11 @@ pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
             )
             .is_err()
             {
-                mount(from, to, "", MountFlags::BIND | MountFlags::REC, None).map_err(|err| {
-                    Error::msg(format!(
-                        "bind mount {} -> {}: {err}",
-                        from.display(),
-                        to.display()
-                    ))
-                })?;
+                bind()?;
             }
         }
         Err(_) => {
-            mount(from, to, "", MountFlags::BIND | MountFlags::REC, None).map_err(|err| {
-                Error::msg(format!(
-                    "bind mount {} -> {}: {err}",
-                    from.display(),
-                    to.display()
-                ))
-            })?;
+            bind()?;
         }
     }
 
@@ -357,6 +357,12 @@ fn mount_overlay_child(
         return Ok(());
     }
 
+    if crate::sys::faults::should_fail_next_child_overlay_mount() {
+        return Err(Error::msg(format!(
+            "injected child overlay mount failure: mount_point={mount_point}"
+        )));
+    }
+
     mount_overlayfs(
         &lower_dirs,
         stock_root,
@@ -379,7 +385,9 @@ fn mount_overlay_child(
     Ok(())
 }
 
-/// Mounts the root overlay and rebuilds its sub-mounts; on failure the pipeline transaction rolls back the registered targets.
+/// Mounts the root overlay and rebuilds its sub-mounts. A root mount failure is returned so the
+/// pipeline transaction rolls back the registered targets; a sub-mount that cannot be rebuilt is
+/// skipped with a warning, because exiting non-zero would stop every module from mounting.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
 pub fn mount_overlay(
@@ -417,12 +425,53 @@ pub fn mount_overlay(
     }
     on_effect(MountEffect::Target(root.to_owned()));
 
-    for mount_point in &mount_seq {
+    let skipped_children = rebuild_sub_mounts(
+        root,
+        stock_root,
+        &mount_seq,
+        module_roots,
+        staging_root,
+        mount_source,
+        register_unmountable,
+        on_effect,
+    );
+
+    if skipped_children > 0 {
+        log::warn!(
+            "overlay sub-mounts skipped: root={root}, skipped={skipped_children}, discovered={}",
+            mount_seq.len()
+        );
+    }
+
+    Ok(())
+}
+
+/// Rebuilds every sub-mount discovered under the root overlay and reports how many were skipped.
+///
+/// A sub-mount stays best-effort even though the root mount is not: a non-zero metamodule exit
+/// stops every module from mounting (docs/RUNTIME.md), and the root overlay already serves this
+/// subtree's module content. Kernels seen in the field reject a pre-existing child mount as a
+/// lower layer (an f2fs `filesystem on './x' not supported`, EINVAL through both mount paths),
+/// which must not take the whole boot down.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
+fn rebuild_sub_mounts(
+    root: &str,
+    stock_root: &str,
+    mount_seq: &[String],
+    module_roots: &[String],
+    staging_root: &Path,
+    mount_source: &str,
+    register_unmountable: bool,
+    on_effect: &mut dyn FnMut(MountEffect),
+) -> usize {
+    let mut skipped = 0usize;
+    for mount_point in mount_seq {
         let Some(relative) = child_relative_path(root, mount_point) else {
             continue;
         };
-        let stock_root = format!("{stock_root}{relative}");
-        if !Path::new(&stock_root).exists() {
+        let child_stock_root = format!("{stock_root}{relative}");
+        if !Path::new(&child_stock_root).exists() {
             continue;
         }
 
@@ -430,20 +479,18 @@ pub fn mount_overlay(
             mount_point,
             &relative,
             module_roots,
-            &stock_root,
+            &child_stock_root,
             staging_root,
             mount_source,
             register_unmountable,
             on_effect,
         ) {
-            log::warn!(
-                "child mount failed, deferring rollback: mount_point={mount_point}, error={err}"
-            );
-            return Err(err);
+            log::warn!("child mount skipped: mount_point={mount_point}, error={err}");
+            skipped += 1;
         }
     }
 
-    Ok(())
+    skipped
 }
 
 #[cfg(test)]
@@ -605,5 +652,50 @@ mod tests {
 
         assert!(err.to_string().contains("mountinfo"), "{err}");
         std::fs::remove_dir_all(&path).ok();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_refused_sub_mount_is_skipped_and_stays_unregistered() {
+        let _fault_guard = crate::sys::faults::test_lock();
+
+        let fixture = crate::test_support::Fixture::new("overlay-child-skip");
+        let root = &*fixture;
+        let target = root.join("target");
+        let layer = root.join("layer");
+        let staging = root.join("staging");
+        let child = target.join("child");
+        std::fs::create_dir_all(&child).unwrap();
+        // The module layer supplies the same relative path, which routes the sub-mount through
+        // the overlay path instead of the bind fallback.
+        std::fs::create_dir_all(layer.join("child")).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+
+        // The rebuild loop resolves the stock path from the working directory, which
+        // `mount_overlay` sets to the root before it rebuilds the sub-mounts.
+        let _current_dir = CurrentDirGuard::change_to(&target).unwrap();
+
+        crate::sys::faults::enable_next_child_overlay_mount_failure();
+        let mut effects = Vec::new();
+        let skipped = rebuild_sub_mounts(
+            &target.to_string_lossy(),
+            ".",
+            &[child.to_string_lossy().into_owned()],
+            &[layer.to_string_lossy().into_owned()],
+            &staging,
+            "overlay",
+            false,
+            &mut |effect| effects.push(effect),
+        );
+        crate::sys::faults::reset();
+
+        assert_eq!(
+            skipped, 1,
+            "the refused sub-mount must be reported as skipped"
+        );
+        assert!(
+            effects.is_empty(),
+            "a skipped sub-mount must not be registered: {effects:?}"
+        );
     }
 }

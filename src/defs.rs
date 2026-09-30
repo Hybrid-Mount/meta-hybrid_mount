@@ -15,8 +15,11 @@ pub const LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/lkm_boot_guard";
 pub const VFS_LKM_DIR: &str = "/data/adb/modules/hybrid_mount/vfs/binaries";
 pub const VFS_LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_lkm_boot_guard";
 
-/// VFS boot guard: written before rules are applied and cleared on success, so a hard
-/// crash leaves it behind and the next boot skips the VFS backend.
+/// VFS boot guard: written before rules are applied and cleared on success. The marker
+/// records the build and the mutation that armed it, so a hard crash leaves it behind and
+/// only that same build skips the VFS backend; a marker another build (or a pre-identity
+/// version) left is retired automatically. `hybrid-mount vfs guard clear --yes` removes it
+/// on demand.
 pub const VFS_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_boot_guard";
 
 pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
@@ -75,6 +78,10 @@ pub const REMOVE_FILE_NAME: &str = "remove";
 pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
 pub const MOUNT_ERROR_FILE_NAME: &str = "mount_error";
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
+
+/// Reason reported for a module whose `mount_error` marker exists but carries no
+/// recorded reason. Shared with the WebUI contract.
+pub const MOUNT_ERROR_REASON: &str = "mount_error marker present";
 
 /// Extended attribute names: the directory replace marker and the SELinux context.
 pub const REPLACE_DIR_XATTR: &str = "trusted.overlay.opaque";

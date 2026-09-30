@@ -20,7 +20,9 @@
     "uiStyle": "UI 风格",
     "styleChanged": "UI 风格已切换",
     "enabled": "已启用",
-    "disabled": "已禁用"
+    "disabled": "已禁用",
+    "statusErrors": "出现问题",
+    "statusErrorsHint": "下列步骤没有按预期完成。请结合下方模块与日志排查，然后刷新。"
   },
   "tabs": {
     "status": "状态",
@@ -29,6 +31,11 @@
     "info": "关于"
   },
   "status": {
+    "guardAction": "清除 VFS 熔断标记",
+    "guardDialogTitle": "清除 VFS 熔断标记？",
+    "guardDialogBody": "只有在确认上次 VFS 注入被中断的原因已解决后才清除。清除后 VFS 会在下次开机重新注入规则，同一崩溃可能再次发生。",
+    "guardCleared": "已清除 {count} 个熔断标记，重启后生效",
+    "guardClearFailed": "清除熔断标记失败",
     "backendTitle": "后端策略",
     "sysInfoTitle": "系统详情",
     "deviceTitle": "设备信息",
@@ -63,7 +70,18 @@
     "magicOperationCount": "{files} 个文件挂载 · {symlinks} 个链接",
     "noActiveMounts": "本次启动没有活动挂载点",
     "mountTargetCount": "{count} 个挂载点",
-    "mountDetails": "查看 {count} 个挂载点"
+    "mountDetails": "查看 {count} 个挂载点",
+    "errorLoad": "读取系统状态失败",
+    "errorBootFailure": "启动流水线失败",
+    "errorVfsForeign": "检测到外来 VFS 实现",
+    "errorVfsProvider": "VFS Provider 出错",
+    "errorMountError": "模块挂载失败",
+    "errorStateLoad": "启动快照无法读取",
+    "errorModuleScan": "模块扫描失败",
+    "detailStage": "阶段",
+    "detailRollback": "回滚",
+    "detailVersion": "Provider 版本",
+    "errorItems": "受影响模块"
   },
   "config": {
     "title": "配置",
@@ -149,6 +167,7 @@
     "overlaySupported": "OverlayFS 内核支持",
     "tmpfsSupported": "tmpfs 支持",
     "vfsSupported": "VFS 支持",
+    "vfsType": "VFS 类型",
     "nukeSupported": "Nuke 支持",
     "unverified": "未验证",
     "mountSource": "检测到的挂载源",
@@ -156,5 +175,18 @@
   },
   "content": {
     "welcome": "Hybrid Mount"
+  },
+  "runtime": {
+    "title": "热挂载",
+    "active": "已加载",
+    "inactive": "未加载",
+    "description": "仅本次生效，不更改开机设置。",
+    "load": "加载",
+    "unload": "卸载",
+    "reload": "重新加载",
+    "busy": "正在应用更改…",
+    "unavailable": "运行时操作不可用。",
+    "ineligible": "此模块不符合运行时 VFS 操作条件。",
+    "success": "本次挂载已更新"
   }
 }

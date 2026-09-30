@@ -17,13 +17,10 @@ static FAULT_TEST_LOCK: Mutex<()> = Mutex::new(());
 static OVERLAY_MOUNT_FAILURE_ARMED: AtomicBool = AtomicBool::new(false);
 static OVERLAY_MOUNT_SUCCESSES_BEFORE_FAILURE: AtomicUsize = AtomicUsize::new(0);
 static FAIL_NEXT_MAGIC_MOUNT: AtomicBool = AtomicBool::new(false);
-#[cfg(test)]
+static FAIL_NEXT_CHILD_OVERLAY_MOUNT: AtomicBool = AtomicBool::new(false);
 static FAIL_NEXT_MAGIC_BIND: AtomicBool = AtomicBool::new(false);
-#[cfg(test)]
 static FAIL_NEXT_MAGIC_REMOUNT: AtomicBool = AtomicBool::new(false);
-#[cfg(test)]
 static FAIL_NEXT_MAGIC_MOVE: AtomicBool = AtomicBool::new(false);
-#[cfg(test)]
 static FAIL_NEXT_MAGIC_SYMLINK: AtomicBool = AtomicBool::new(false);
 #[cfg(all(test, target_os = "linux"))]
 thread_local! {
@@ -34,6 +31,11 @@ static FAIL_STATE_SAVE: AtomicBool = AtomicBool::new(false);
 static FAIL_MOUNTINFO_READ: AtomicBool = AtomicBool::new(false);
 static FAIL_NEXT_UNMOUNT_EBUSY: AtomicBool = AtomicBool::new(false);
 static FAIL_STAGING_REMOVE: AtomicBool = AtomicBool::new(false);
+
+/// Consumes a one-shot fault gate: reports whether it was armed and disarms it.
+fn take(gate: &AtomicBool) -> bool {
+    gate.swap(false, Ordering::SeqCst)
+}
 
 pub fn should_fail_next_overlay_mount() -> bool {
     if !OVERLAY_MOUNT_FAILURE_ARMED.load(Ordering::SeqCst) {
@@ -49,51 +51,28 @@ pub fn should_fail_next_overlay_mount() -> bool {
 }
 
 pub fn should_fail_next_magic_mount() -> bool {
-    FAIL_NEXT_MAGIC_MOUNT.swap(false, Ordering::SeqCst)
+    take(&FAIL_NEXT_MAGIC_MOUNT)
+}
+
+/// Consumed by the sub-mount rebuild path, which skips a failing child instead of aborting the boot.
+pub fn should_fail_next_child_overlay_mount() -> bool {
+    take(&FAIL_NEXT_CHILD_OVERLAY_MOUNT)
 }
 
 pub fn should_fail_next_magic_bind() -> bool {
-    #[cfg(test)]
-    {
-        FAIL_NEXT_MAGIC_BIND.swap(false, Ordering::SeqCst)
-    }
-    #[cfg(not(test))]
-    {
-        false
-    }
+    take(&FAIL_NEXT_MAGIC_BIND)
 }
 
 pub fn should_fail_next_magic_remount() -> bool {
-    #[cfg(test)]
-    {
-        FAIL_NEXT_MAGIC_REMOUNT.swap(false, Ordering::SeqCst)
-    }
-    #[cfg(not(test))]
-    {
-        false
-    }
+    take(&FAIL_NEXT_MAGIC_REMOUNT)
 }
 
 pub fn should_fail_next_magic_move() -> bool {
-    #[cfg(test)]
-    {
-        FAIL_NEXT_MAGIC_MOVE.swap(false, Ordering::SeqCst)
-    }
-    #[cfg(not(test))]
-    {
-        false
-    }
+    take(&FAIL_NEXT_MAGIC_MOVE)
 }
 
 pub fn should_fail_next_magic_symlink() -> bool {
-    #[cfg(test)]
-    {
-        FAIL_NEXT_MAGIC_SYMLINK.swap(false, Ordering::SeqCst)
-    }
-    #[cfg(not(test))]
-    {
-        false
-    }
+    take(&FAIL_NEXT_MAGIC_SYMLINK)
 }
 
 pub fn use_fake_magic_mount_ops() -> bool {
@@ -141,6 +120,11 @@ pub fn enable_overlay_mount_failure_after(successes: usize) {
 #[cfg(test)]
 pub fn enable_next_magic_mount_failure() {
     FAIL_NEXT_MAGIC_MOUNT.store(true, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+pub fn enable_next_child_overlay_mount_failure() {
+    FAIL_NEXT_CHILD_OVERLAY_MOUNT.store(true, Ordering::SeqCst);
 }
 
 #[cfg(test)]
@@ -217,6 +201,7 @@ pub fn reset() {
     OVERLAY_MOUNT_SUCCESSES_BEFORE_FAILURE.store(0, Ordering::SeqCst);
     for gate in [
         &FAIL_NEXT_MAGIC_MOUNT,
+        &FAIL_NEXT_CHILD_OVERLAY_MOUNT,
         &FAIL_NEXT_MAGIC_BIND,
         &FAIL_NEXT_MAGIC_REMOUNT,
         &FAIL_NEXT_MAGIC_MOVE,
@@ -238,22 +223,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gates_are_consumed_exactly_once() {
-        let _fault_guard = test_lock();
-        reset();
-        enable_next_overlay_mount_failure();
-
-        assert!(should_fail_next_overlay_mount());
-        assert!(!should_fail_next_overlay_mount());
-        reset();
-    }
-
-    #[test]
     fn every_gate_is_consumed_exactly_once() {
         let _fault_guard = test_lock();
         reset();
         enable_next_overlay_mount_failure();
         enable_next_magic_mount_failure();
+        enable_next_child_overlay_mount_failure();
         enable_next_magic_bind_failure();
         enable_next_magic_remount_failure();
         enable_next_magic_move_failure();
@@ -266,6 +241,7 @@ mod tests {
 
         assert!(should_fail_next_overlay_mount());
         assert!(should_fail_next_magic_mount());
+        assert!(should_fail_next_child_overlay_mount());
         assert!(should_fail_next_magic_bind());
         assert!(should_fail_next_magic_remount());
         assert!(should_fail_next_magic_move());
@@ -278,6 +254,7 @@ mod tests {
 
         assert!(!should_fail_next_overlay_mount());
         assert!(!should_fail_next_magic_mount());
+        assert!(!should_fail_next_child_overlay_mount());
         assert!(!should_fail_next_magic_bind());
         assert!(!should_fail_next_magic_remount());
         assert!(!should_fail_next_magic_move());
@@ -307,12 +284,14 @@ mod tests {
     fn reset_clears_all_gates() {
         let _fault_guard = test_lock();
         enable_next_overlay_mount_failure();
+        enable_next_child_overlay_mount_failure();
         enable_state_save_failure();
         enable_next_unmount_ebusy_failure();
 
         reset();
 
         assert!(!should_fail_next_overlay_mount());
+        assert!(!should_fail_next_child_overlay_mount());
         assert!(!should_fail_state_save());
         assert!(!should_fail_next_unmount_ebusy());
     }

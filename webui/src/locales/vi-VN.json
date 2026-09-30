@@ -14,6 +14,8 @@
     "language": "Ngôn ngữ",
     "enabled": "Đã bật",
     "disabled": "Đã tắt",
+    "statusErrors": "Đã xảy ra lỗi",
+    "statusErrorsHint": "Các bước sau không hoàn tất như mong đợi. Hãy xem mô-đun và nhật ký bên dưới rồi làm mới.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -29,6 +31,11 @@
     "info": "Thông tin"
   },
   "status": {
+    "guardAction": "Xóa chốt khởi động VFS",
+    "guardDialogTitle": "Xóa chốt khởi động VFS?",
+    "guardDialogBody": "Chỉ xóa sau khi đã khắc phục nguyên nhân khiến VFS chèn quy tắc bị gián đoạn. VFS sẽ chèn lại quy tắc ở lần khởi động sau và sự cố tương tự có thể lặp lại.",
+    "guardCleared": "Đã xóa {count} chốt; khởi động lại để áp dụng",
+    "guardClearFailed": "Không xóa được chốt khởi động",
     "backendTitle": "Bộ nhớ",
     "sysInfoTitle": "Thông tin Hệ thống",
     "moduleActive": "Mô-đun Đang h.động",
@@ -56,7 +63,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} điểm gắn kết",
-    "mountDetails": "Xem {count} điểm gắn kết"
+    "mountDetails": "Xem {count} điểm gắn kết",
+    "errorLoad": "Không đọc được trạng thái hệ thống",
+    "errorBootFailure": "Pipeline khởi động thất bại",
+    "errorVfsForeign": "Phát hiện nhà cung cấp VFS lạ",
+    "errorVfsProvider": "Nhà cung cấp VFS gặp lỗi",
+    "errorMountError": "Mô-đun gắn kết thất bại",
+    "errorStateLoad": "Không đọc được ảnh chụp khởi động",
+    "errorModuleScan": "Quét mô-đun thất bại",
+    "detailStage": "Giai đoạn",
+    "detailRollback": "Khôi phục",
+    "detailVersion": "Phiên bản nhà cung cấp",
+    "errorItems": "Mô-đun bị ảnh hưởng"
   },
   "config": {
     "moduledir": "Thư mục Mô-đun",
@@ -140,6 +158,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "Hỗ trợ tmpfs",
     "vfsSupported": "Hỗ trợ VFS",
+    "vfsType": "Loại VFS",
     "nukeSupported": "Hỗ trợ Nuke",
     "unverified": "Chưa xác minh",
     "mountSource": "Detected mount source",

@@ -3,6 +3,7 @@
 use super::*;
 use crate::config::Mode;
 use crate::errors::Error;
+use crate::module_id::ModuleId;
 use crate::mount_tree::{MountTree, NodeFileType};
 use crate::test_support::mount_source as source;
 use crate::vfs::protocol::{FLAG_WHITEOUT, ListedRule};
@@ -204,7 +205,7 @@ fn strict_apply_failure_still_removes_the_prefix_and_reports_the_error() {
         ..RecordingKernel::default()
     };
 
-    let err = apply_rules_with_policy(&mut kernel, &planned, &[], true).unwrap_err();
+    let err = apply_rules_with_policy_diagnosed(&mut kernel, &planned, &[], true).unwrap_err();
 
     assert!(matches!(err, Error::VfsProtocol { .. }));
     assert_eq!(kernel.removed, 1);

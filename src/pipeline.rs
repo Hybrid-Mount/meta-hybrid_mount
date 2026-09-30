@@ -52,8 +52,17 @@ use std::rc::Rc;
 
 /// The single entry point for the argument-free boot pipeline.
 pub fn run_mount_pipeline() -> Result<()> {
+    run_pipeline(false)
+}
+
+pub fn run_boot_pipeline() -> Result<()> {
+    run_pipeline(true)
+}
+
+fn run_pipeline(boot_hook: bool) -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
+        let _ = boot_hook;
         Err(Error::msg(
             "mount pipeline is only supported on linux/android",
         ))
@@ -61,8 +70,40 @@ pub fn run_mount_pipeline() -> Result<()> {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        run_mount_pipeline_impl()
+        crate::runtime::enter_init_namespace()?;
+        let _operation = crate::runtime::ledger::OperationLock::acquire()?;
+        if boot_hook && crate::runtime::boot::already_applied()? {
+            log::info!("boot generation already applied; skipping duplicate mount hook");
+            return Ok(());
+        }
+        let session = crate::runtime::boot::start()?;
+        let mut mounted = MountedTargets::default();
+        let outcome = run_mount_pipeline_impl(&mut mounted);
+        let recorded = crate::runtime::boot::finish(session, outcome.is_ok(), &mounted.paths);
+        match (outcome, recorded) {
+            (Err(error), _) => Err(error),
+            (Ok(()), result) => result,
+        }
     }
+}
+
+/// Exact mount effects are distinct from the UI's summarized active roots.
+pub(crate) fn runtime_mount_targets(
+    state: &crate::state::RunState,
+    effects: &[String],
+) -> Vec<String> {
+    let mut targets = state
+        .overlay_active_mounts
+        .iter()
+        .chain(&state.magic_active_mounts)
+        .chain(&state.leftover_mount_targets)
+        .chain(effects)
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if !state.mount_point.as_os_str().is_empty() {
+        targets.insert(state.mount_point.display().to_string());
+    }
+    targets.into_iter().collect()
 }
 
 /// Summarises the execution counters into state statistics (pure, so it tests across platforms).
@@ -239,11 +280,12 @@ fn describe_path_mount(path: &Path) -> String {
     };
 
     format!(
-        "fs={},mount={},source={},device={}",
+        "fs={},mount={},source={},device={},propagation={}",
         entry.fs_type,
         entry.mount_point.display(),
         entry.mount_source.as_deref().unwrap_or("none"),
-        entry.majmin
+        entry.majmin,
+        entry.propagation()
     )
 }
 
@@ -606,6 +648,26 @@ fn persist_unmounted_module_snapshot(modules: &[ModuleRecord], config: &Config, 
     }
 }
 
+/// Records a boot failure after the mounts have been rolled back, then hands the error back to the
+/// caller.
+///
+/// Every failure site in the mount pipeline persists the same three things in the same order, so
+/// the summary the WebUI reads can never drift away from the state file or the module snapshot.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn record_mount_failure(
+    state: &mut RunState,
+    modules: &[ModuleRecord],
+    config: &Config,
+    plan: &MountPlan,
+    stage: &str,
+    err: Error,
+    rollback: &RollbackSummary,
+) -> Error {
+    persist_mount_failure_state(state, stage, &err.to_string(), rollback);
+    persist_unmounted_module_snapshot(modules, config, plan);
+    err
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn confirmed_mount_targets(
     targets: &[String],
@@ -667,7 +729,7 @@ fn startup_phase<T>(stage: &'static str, result: Result<T>) -> Result<T> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn run_mount_pipeline_impl() -> Result<()> {
+fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
 
@@ -732,7 +794,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     // Detect a foreign provider before considering insmod. This has to finish before planning:
     // a plan built while the module is unloaded carries no VFS work, while loading next to a
     // foreign provider would let two inode-hooking implementations coexist.
-    let nomount_probe = detect_foreign_nomount();
+    let nomount_probe = crate::vfs::guard::detect_foreign_nomount();
     let vfs_available = if nomount_probe.blocked() {
         crate::vfs::ensure_loaded_for_plan_with_guard(
             config.wants_vfs(),
@@ -823,6 +885,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
         }
     }
     plan_phase.finish();
+    crate::runtime::boot::stage_plan(&plan, &config.vfs_isolate_uids)?;
 
     // `modules` is a boot-time snapshot, not a proof that every mount already
     // succeeded.  Persist it before entering the fallible mount phases so the
@@ -853,11 +916,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             || "VFS provider unavailable; configured VFS rules were skipped".to_owned(),
             |error| format!("VFS provider guard failed closed: {error}"),
         ));
-        state.vfs_error_modules = plan
-            .vfs_module_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        state.vfs_error_modules = plan.vfs_module_id_strings();
     }
     startup_phase("state", state.save())?;
     state_phase.finish();
@@ -872,7 +931,6 @@ fn run_mount_pipeline_impl() -> Result<()> {
     transaction.register_rollback_only("ksu_try_umount_list", || {
         crate::utils::ksu::clear_unmount_list()
     });
-    let mut mounted = MountedTargets::default();
     let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats, vfs_stats) =
         match execute_mount_phases(
             &config,
@@ -881,7 +939,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
             mount_source,
             &mut state,
             &mut transaction,
-            &mut mounted,
+            mounted,
         ) {
             Ok(result) => result,
             Err(err) => {
@@ -890,15 +948,16 @@ fn run_mount_pipeline_impl() -> Result<()> {
                     plan.overlay_module_ids.join(","),
                     plan.magic_module_ids.join(",")
                 );
-                let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-                persist_mount_failure_state(
+                let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
+                return Err(record_mount_failure(
                     &mut state,
+                    &modules,
+                    &config,
+                    &plan,
                     "mount_execution",
-                    &err.to_string(),
+                    err,
                     &rollback,
-                );
-                persist_unmounted_module_snapshot(&modules, &config, &plan);
-                return Err(err);
+                ));
             }
         };
 
@@ -909,15 +968,16 @@ fn run_mount_pipeline_impl() -> Result<()> {
         Ok(snapshot) => snapshot,
         Err(err) => {
             log::error!("phase=mountinfo_confirm failed: {err}");
-            let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-            persist_mount_failure_state(
+            let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
+            return Err(record_mount_failure(
                 &mut state,
+                &modules,
+                &config,
+                &plan,
                 "mountinfo_confirm",
-                &err.to_string(),
+                err,
                 &rollback,
-            );
-            persist_unmounted_module_snapshot(&modules, &config, &plan);
-            return Err(err);
+            ));
         }
     };
     let confirmed_overlay_targets = confirmed_mount_targets(&active_mounts, &final_mountinfo);
@@ -965,20 +1025,21 @@ fn run_mount_pipeline_impl() -> Result<()> {
     );
     if let Err(err) = write_scan_ret(&app_modules) {
         log::error!("phase=module_snapshot_save failed, rolling back mounts: {err}");
-        let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-        persist_mount_failure_state(
+        let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
+        return Err(record_mount_failure(
             &mut state,
+            &modules,
+            &config,
+            &plan,
             "module_snapshot_save",
-            &err.to_string(),
+            err,
             &rollback,
-        );
-        persist_unmounted_module_snapshot(&modules, &config, &plan);
-        return Err(err);
+        ));
     }
 
     let mount_error_reasons = mount_error_modules
         .iter()
-        .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+        .map(|module| (module.clone(), crate::defs::MOUNT_ERROR_REASON.to_owned()))
         .collect();
 
     let state_phase = PhaseTimer::start("state");
@@ -998,11 +1059,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     state.mode_stats.vfs = vfs_stats.mounted_module_ids.len();
     if let Some(failure) = &vfs_stats.failure {
         state.vfs_error = Some(failure.clone());
-        state.vfs_error_modules = plan
-            .vfs_module_ids
-            .iter()
-            .map(ToString::to_string)
-            .collect();
+        state.vfs_error_modules = plan.vfs_module_id_strings();
     }
     state.mount_error_modules = mount_error_modules;
     state.mount_error_reasons = mount_error_reasons;
@@ -1014,10 +1071,16 @@ fn run_mount_pipeline_impl() -> Result<()> {
     }
     if let Err(err) = state.save() {
         log::error!("phase=state_save failed, rolling back mounts: {err}");
-        let rollback = rollback_mount_pipeline(transaction, &mounted, &baseline);
-        persist_mount_failure_state(&mut state, "state_save", &err.to_string(), &rollback);
-        persist_unmounted_module_snapshot(&modules, &config, &plan);
-        return Err(err);
+        let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
+        return Err(record_mount_failure(
+            &mut state,
+            &modules,
+            &config,
+            &plan,
+            "state_save",
+            err,
+            &rollback,
+        ));
     }
     state_phase.finish();
 
@@ -1025,7 +1088,7 @@ fn run_mount_pipeline_impl() -> Result<()> {
     if let Err(err) = transaction.commit(config.disable_umount) {
         cleanup_phase.abort();
         log::error!("phase=mount_transaction_commit failed: {err}");
-        let rollback = match mountinfo_mismatches(&baseline, &mounted) {
+        let rollback = match mountinfo_mismatches(&baseline, mounted) {
             Ok((leftover, missing)) => {
                 for target in &leftover {
                     log::error!("post-commit leftover mount target: {target}");
@@ -1043,14 +1106,15 @@ fn run_mount_pipeline_impl() -> Result<()> {
                 RollbackSummary::unverified()
             }
         };
-        persist_mount_failure_state(
+        return Err(record_mount_failure(
             &mut state,
+            &modules,
+            &config,
+            &plan,
             "mount_transaction_commit",
-            &err.to_string(),
+            err,
             &rollback,
-        );
-        persist_unmounted_module_snapshot(&modules, &config, &plan);
-        return Err(err);
+        ));
     }
     cleanup_phase.finish();
 
@@ -1147,7 +1211,7 @@ fn cleanup_tmp_root_best_effort(tmp_root: &Path) -> Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn detect_promoted_partitions() -> BTreeSet<String> {
+pub(crate) fn detect_promoted_partitions() -> BTreeSet<String> {
     use crate::mount_tree::BUILTIN_PARTITIONS;
 
     let builtin_requirements = BUILTIN_PARTITIONS
@@ -1169,7 +1233,7 @@ fn detect_promoted_partitions() -> BTreeSet<String> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn managed_partition_names() -> Vec<String> {
+pub(crate) fn managed_partition_names() -> Vec<String> {
     crate::defs::MANAGED_PARTITIONS
         .iter()
         .filter(|partition| Path::new("/").join(partition).is_dir())
@@ -1590,7 +1654,7 @@ fn mount_overlay_files(
                 entry.destination_relative.display(),
                 dest.display()
             );
-            copy_entry(&entry.source, &dest)?;
+            crate::sys::fs::copy_prepared_entry(&entry.source, &dest)?;
 
             lowerdirs.push(layer_dir.to_string_lossy().into_owned());
         }
@@ -1686,121 +1750,6 @@ fn overlay_mount_source<'a>(target: &str, configured: &'a str) -> &'a str {
     }
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn copy_entry(source: &Path, dest: &Path) -> Result<()> {
-    crate::sys::fs::copy_prepared_entry(source, dest)
-}
-
-/// RAII guard for the VFS boot guard file: once armed, any handled return (Ok or Err)
-/// clears it on Drop. Only a hard crash leaves it behind and trips the next boot.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-struct VfsBootGuard {
-    path: PathBuf,
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl VfsBootGuard {
-    fn arm() -> Result<Self> {
-        let path = PathBuf::from(defs::VFS_BOOT_GUARD_PATH);
-        crate::sys::fs::atomic_write(&path, b"1").map_err(|err| {
-            let cause = match err {
-                Error::Io(source) => crate::errors::CausalError::Io(source),
-                other => crate::errors::CausalError::Message(other.to_string()),
-            };
-            Error::Vfs(Box::new(crate::errors::ContextError::new(
-                "write vfs boot guard",
-                Some(path.clone()),
-                cause,
-            )))
-        })?;
-        Ok(Self { path })
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl Drop for VfsBootGuard {
-    fn drop(&mut self) {
-        if let Err(err) = fs::remove_file(&self.path) {
-            log::warn!("clear vfs boot guard failed: {err}");
-        }
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[derive(Debug, Default)]
-struct ForeignNomountProbe {
-    present: bool,
-    /// A probe infrastructure failure blocks an automatic load just like a positive detection.
-    /// Loading a second inode-hooking provider while the guard is uncertain is unsafe.
-    error: Option<String>,
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-impl ForeignNomountProbe {
-    fn blocked(&self) -> bool {
-        self.present || self.error.is_some()
-    }
-}
-
-/// One-way guard: detects whether a foreign NoMount implementation already exists on the device.
-///
-/// Module tables are checked first because an absent key type is the normal result on devices
-/// without NoMount. If those tables cannot be read, the decision fails closed and no bundled
-/// `hybridmount` module is loaded. The keyring probe catches built-in or renamed providers that
-/// are not visible in the usual module tables.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn detect_foreign_nomount() -> ForeignNomountProbe {
-    const PROC_MODULES: &str = "/proc/modules";
-    const SYS_MODULE_DIR: &str = "/sys/module/nomount";
-
-    let proc_modules = match fs::read_to_string(PROC_MODULES) {
-        Ok(text) => text,
-        Err(err) => {
-            return ForeignNomountProbe {
-                present: false,
-                error: Some(format!("read {PROC_MODULES}: {err}")),
-            };
-        }
-    };
-    let listed_in_proc = proc_modules
-        .lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .any(|name| name == "nomount");
-    let listed_in_sys = Path::new(SYS_MODULE_DIR).exists();
-    if listed_in_proc || listed_in_sys {
-        log::warn!(
-            "foreign NoMount VFS implementation detected: proc_modules={}, sys_module={}",
-            listed_in_proc,
-            listed_in_sys
-        );
-        return ForeignNomountProbe {
-            present: true,
-            error: None,
-        };
-    }
-
-    match KeyringKernel::new(KeyringChannel::Nomount) {
-        Ok(mut probe) => match probe.version() {
-            Ok(version) => {
-                log::warn!("foreign NoMount VFS implementation detected (version {version})");
-                ForeignNomountProbe {
-                    present: true,
-                    error: None,
-                }
-            }
-            Err(err) => {
-                // No module-table entry plus an unanswered key type is the expected absent case.
-                log::debug!("NoMount key type did not answer: {err}");
-                ForeignNomountProbe::default()
-            }
-        },
-        Err(err) => ForeignNomountProbe {
-            present: false,
-            error: Some(format!("create NoMount probe: {err}")),
-        },
-    }
-}
-
 /// Rollback closure: deletes the full batch registered for this run.
 ///
 /// Registering before applying means an applied prefix is undone too; rules that never
@@ -1840,11 +1789,7 @@ fn vfs_failure_stats(detail: impl Into<String>) -> VfsExecStats {
 fn record_vfs_failure(state: &mut RunState, plan: &MountPlan, detail: impl Into<String>) {
     state.vfs_provider = None;
     state.vfs_error = Some(detail.into());
-    state.vfs_error_modules = plan
-        .vfs_module_ids
-        .iter()
-        .map(ToString::to_string)
-        .collect();
+    state.vfs_error_modules = plan.vfs_module_id_strings();
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -1870,15 +1815,44 @@ fn apply_vfs_phase(
         config.vfs_isolate_uids.len(),
         config.vfs_strict
     );
-    let guard = Path::new(defs::VFS_BOOT_GUARD_PATH);
-    if guard.exists() {
-        let detail = "VFS boot guard present; VFS backend skipped this boot";
-        record_vfs_failure(state, plan, detail);
-        log::warn!("{detail}");
-        return Ok(vfs_failure_stats(detail));
+    match crate::vfs::boot_guard::inspect() {
+        Ok(crate::vfs::boot_guard::VfsGuardVerdict::Absent) => {}
+        // The marker speaks for this build, so the interrupted mutation is not retried.
+        Ok(crate::vfs::boot_guard::VfsGuardVerdict::Own(record)) => {
+            let detail = format!(
+                "VFS boot guard present; VFS backend skipped this boot ({}); run 'hybrid-mount vfs guard clear --yes' after resolving the crash to retry",
+                record.describe()
+            );
+            record_vfs_failure(state, plan, detail.clone());
+            log::warn!("{detail}");
+            return Ok(vfs_failure_stats(detail));
+        }
+        // A marker of another build, or the legacy marker without identity, cannot describe a
+        // crash this build would repeat: it is retired and the backend is tried again.
+        Ok(crate::vfs::boot_guard::VfsGuardVerdict::Foreign { record }) => {
+            log::warn!(
+                "retiring a VFS boot guard this build cannot attribute to itself: {}",
+                crate::vfs::boot_guard::describe(record.as_ref())
+            );
+            if let Err(err) = crate::vfs::boot_guard::clear_rule_guard() {
+                // A metamodule script that exits non-zero stops every module from mounting, so an
+                // unremovable stale marker degrades to skipping the backend instead of failing.
+                let detail = format!("VFS boot guard could not be retired: {err}");
+                record_vfs_failure(state, plan, detail.clone());
+                log::warn!("{detail}");
+                return Ok(vfs_failure_stats(detail));
+            }
+        }
+        Err(err) => {
+            record_vfs_failure(state, plan, err.to_string());
+            log::warn!("vfs boot guard could not be read: {err}");
+            return Ok(vfs_failure_stats(err.to_string()));
+        }
     }
     // Any handled return past this point clears the guard on Drop.
-    let _guard = match VfsBootGuard::arm() {
+    let _guard = match crate::vfs::boot_guard::VfsBootGuard::arm(
+        crate::vfs::boot_guard::VfsMutationSource::Boot,
+    ) {
         Ok(guard) => guard,
         Err(err) => {
             record_vfs_failure(state, plan, err.to_string());
@@ -2121,6 +2095,7 @@ fn mount_magic_phase(
         !config.disable_umount,
         &mut on_mount,
     )?;
+    mounted.paths.extend(stats.owned_mounts.iter().cloned());
     log::info!(
         "magic mount phase complete: files={}, symlinks={}, dirs={}, ignored={}",
         stats.mounted_files,
@@ -2167,6 +2142,36 @@ mod tests {
         assert_eq!(stats.ignored_entries, 5);
         assert_eq!(stats.total_mounts, 25);
         assert_eq!(stats.successful_mounts, 25);
+    }
+
+    #[test]
+    fn runtime_mount_targets_preserves_child_effects_omitted_from_ui_roots() {
+        let state = RunState {
+            overlay_active_mounts: vec!["/system".into()],
+            mount_point: "/mnt/private/storage".into(),
+            ..RunState::default()
+        };
+        let targets = runtime_mount_targets(&state, &["/system".into(), "/system/apex".into()]);
+        assert_eq!(
+            targets,
+            vec!["/mnt/private/storage", "/system", "/system/apex"]
+        );
+    }
+
+    #[test]
+    fn runtime_mount_targets_preserves_effects_after_failure_clears_active_snapshot() {
+        let state = RunState {
+            leftover_mount_targets: vec!["/vendor".into()],
+            ..RunState::default()
+        };
+        let targets = runtime_mount_targets(
+            &state,
+            &["/mnt/private/staging".into(), "/system/etc".into()],
+        );
+        assert_eq!(
+            targets,
+            vec!["/mnt/private/staging", "/system/etc", "/vendor"]
+        );
     }
 
     /// HM-RUST-013: Magic Mount 目录挂载（Move/Replace）必须进入 total_mounts。

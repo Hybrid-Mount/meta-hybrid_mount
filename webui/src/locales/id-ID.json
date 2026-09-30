@@ -14,6 +14,8 @@
     "language": "Bahasa",
     "enabled": "Aktif",
     "disabled": "Nonaktif",
+    "statusErrors": "Terjadi kesalahan",
+    "statusErrorsHint": "Langkah berikut tidak selesai seperti yang diharapkan. Periksa modul dan log di bawah, lalu muat ulang.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -29,6 +31,11 @@
     "info": "Info"
   },
   "status": {
+    "guardAction": "Hapus penjaga boot VFS",
+    "guardDialogTitle": "Hapus penjaga boot VFS?",
+    "guardDialogBody": "Hapus hanya setelah penyebab injeksi VFS yang terputus sudah diatasi. VFS akan menyuntikkan aturannya lagi saat boot berikutnya dan crash yang sama bisa terulang.",
+    "guardCleared": "{count} penjaga dihapus; reboot untuk menerapkan",
+    "guardClearFailed": "Gagal menghapus penjaga boot",
     "backendTitle": "Penyimpanan",
     "sysInfoTitle": "Informasi Sistem",
     "moduleActive": "Modul Aktif",
@@ -56,7 +63,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} titik mount",
-    "mountDetails": "Lihat {count} titik mount"
+    "mountDetails": "Lihat {count} titik mount",
+    "errorLoad": "Gagal membaca status sistem",
+    "errorBootFailure": "Pipeline boot gagal",
+    "errorVfsForeign": "Penyedia VFS asing terdeteksi",
+    "errorVfsProvider": "Penyedia VFS gagal",
+    "errorMountError": "Modul gagal dipasang",
+    "errorStateLoad": "Snapshot boot tidak dapat dibaca",
+    "errorModuleScan": "Pemindaian modul gagal",
+    "detailStage": "Tahap",
+    "detailRollback": "Rollback",
+    "detailVersion": "Versi penyedia",
+    "errorItems": "Modul terdampak"
   },
   "config": {
     "moduledir": "Direktori Modul",
@@ -140,6 +158,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "Dukungan tmpfs",
     "vfsSupported": "Dukungan VFS",
+    "vfsType": "Jenis VFS",
     "nukeSupported": "Dukungan Nuke",
     "unverified": "Belum diverifikasi",
     "mountSource": "Detected mount source",

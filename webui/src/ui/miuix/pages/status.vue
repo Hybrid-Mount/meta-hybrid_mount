@@ -2,10 +2,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { MiuixCard, MiuixSmallTitle, MiuixBasicComponent, MiuixText } from "miuix-vue";
+import {
+  MiuixCard,
+  MiuixSmallTitle,
+  MiuixBasicComponent,
+  MiuixText,
+  MiuixButton,
+  MiuixDialog,
+} from "miuix-vue";
 import { Motion, AnimatePresence } from "motion-v";
 
 import StatusCard from "../components/StatusCard.vue";
+import StatusErrorBanner from "../components/StatusErrorBanner.vue";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { sysStore } from "../../../lib/stores/sysStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
@@ -13,14 +21,20 @@ import { configStore } from "../../../lib/stores/configStore";
 import {
   activeMountState,
   backendDisplayKeys,
+  collectStatusErrors,
   groupActiveMounts,
+  statusErrorDetails,
+  statusErrorRows,
   statusFailureSummary,
   storageModeKey,
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
+import type { BannerAction } from "../../../lib/statusMounts";
 
 const { t } = useI18n();
 const expandSpring = { type: "spring" as const, stiffness: 400, damping: 40 };
+const guardOpen = ref(false);
+const guardBusy = ref(false);
 
 const state = computed(() => sysStore.state);
 const statusCheckFinished = ref(sysStore.hasLoaded);
@@ -109,13 +123,50 @@ const statusSummary = computed(() => {
     ) ?? t("status.workingVersion", { version: sysStore.version })
   );
 });
+// Every problem this boot reported, not just the first one. An empty list keeps the banner off
+// screen, so a healthy device never sees it.
+const statusErrors = computed(() =>
+  collectStatusErrors(state.value, {
+    loadError: sysStore.loadError,
+    moduleScanError: moduleStore.loadError,
+  }),
+);
+const errorRows = computed(() =>
+  statusErrorRows(statusErrorDetails(state.value, sysStore.vfsSupported), {
+    stage: t("status.detailStage"),
+    rollback: t("status.detailRollback"),
+    version: t("status.detailVersion"),
+  }),
+);
 function handleSetNav(index: number): void {
   if (!sysStore.loading) uiStore.setNavindex(index);
+}
+
+// Clearing a guard lets the next boot inject VFS rules again, so the banner offers it only
+// while the device really reports a marker this build owns or cannot attribute.
+const guardAction = computed<BannerAction | null>(() =>
+  sysStore.clearableBootGuards.length > 0
+    ? { label: t("status.guardAction"), busy: guardBusy.value }
+    : null,
+);
+
+async function clearBootGuards(): Promise<void> {
+  guardOpen.value = false;
+  guardBusy.value = true;
+  try {
+    const cleared = await sysStore.clearBootGuards();
+    uiStore.showToast(t("status.guardCleared", { count: cleared }));
+  } catch {
+    uiStore.showToast(t("status.guardClearFailed"));
+  } finally {
+    guardBusy.value = false;
+  }
 }
 
 onMounted(async () => {
   await Promise.all([
     sysStore.loadStatus(),
+    sysStore.loadBootGuards(),
     moduleStore.loadModules(),
     configStore.ensureConfigLoaded(),
   ]);
@@ -132,6 +183,16 @@ onMounted(async () => {
       :summary="statusSummary"
       :description="backendSummary"
     ></StatusCard>
+
+    <StatusErrorBanner
+      :title="t('common.statusErrors')"
+      :hint="t('common.statusErrorsHint')"
+      :errors="statusErrors"
+      :details="errorRows"
+      :items-label="t('status.errorItems')"
+      :action="guardAction"
+      @action="guardOpen = true"
+    />
 
     <div class="card-row">
       <MiuixCard show-indication press-feedback="sink" class="grow">
@@ -242,6 +303,23 @@ onMounted(async () => {
         :summary="sysStore.device.android"
       />
     </MiuixCard>
+    <MiuixDialog
+      v-model="guardOpen"
+      :title="t('status.guardDialogTitle')"
+      :summary="t('status.guardDialogBody')"
+      @close="guardOpen = false"
+    >
+      <template #default="{ close }">
+        <div class="guard-dialog-actions">
+          <MiuixButton class="grow" @click="close">
+            {{ t("common.cancel") }}
+          </MiuixButton>
+          <MiuixButton class="grow" type="primary" @click="clearBootGuards">
+            {{ t("status.guardAction") }}
+          </MiuixButton>
+        </div>
+      </template>
+    </MiuixDialog>
   </div>
 </template>
 
@@ -382,6 +460,16 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   margin: 12px 0;
+}
+
+.guard-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guard-dialog-actions .grow {
+  flex: 1;
 }
 
 .backend-card :deep(.m-basic-component__center) {

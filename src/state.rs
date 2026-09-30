@@ -306,7 +306,7 @@ impl RunState {
             .collect();
         let mount_error_reasons = mount_error_modules
             .iter()
-            .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+            .map(|module| (module.clone(), crate::defs::MOUNT_ERROR_REASON.to_owned()))
             .collect();
 
         let mut state = Self::new(
@@ -333,11 +333,7 @@ impl RunState {
                 vfs: plan.vfs_module_ids.len(),
             },
         );
-        state.vfs_modules = plan
-            .vfs_module_ids
-            .iter()
-            .map(ModuleId::to_string)
-            .collect();
+        state.vfs_modules = plan.vfs_module_id_strings();
         state.mount_error_modules = mount_error_modules;
         state.mount_error_reasons = mount_error_reasons;
         state
@@ -380,8 +376,24 @@ pub struct InstallState {
     pub nuke_type: String,
     /// Live protocol probe: includes built-in providers and excludes failed LKM loads.
     pub vfs_supported: bool,
+    /// How the provider is present on the device: `lkm` while `/proc/modules` lists
+    /// `hybridmount`, `builtin` while it lives in the kernel image, and `unknown` when neither
+    /// table entry exists. Independent of [`Self::vfs_supported`], which additionally requires
+    /// the key type to answer this boot.
+    pub vfs_type: String,
     pub mount_source: String,
     pub compatible: bool,
+}
+
+/// Label for the [`InstallState::vfs_type`] field, from the module tables alone.
+pub fn vfs_type_label(presence: crate::vfs::doctor::ModulePresence) -> &'static str {
+    use crate::vfs::doctor::ModulePresence;
+
+    match presence {
+        ModulePresence::Loadable => "lkm",
+        ModulePresence::BuiltIn => "builtin",
+        ModulePresence::NotPresent => "unknown",
+    }
 }
 
 pub fn build_install_state(
@@ -405,6 +417,7 @@ pub fn build_install_state(
         nuke_supported: None,
         nuke_type: "unknown".to_owned(),
         vfs_supported,
+        vfs_type: "unknown".to_owned(),
         mount_source: mount_source.to_owned(),
         compatible,
     }
@@ -440,7 +453,7 @@ pub fn app_modules(
             let mount_error = mount_errors
                 .iter()
                 .any(|id| id == module.id.as_str())
-                .then(|| "mount_error marker present".to_owned());
+                .then(|| crate::defs::MOUNT_ERROR_REASON.to_owned());
 
             AppModule {
                 id: module.id.clone(),
@@ -535,8 +548,6 @@ fn sync_app_module_rules(modules: &mut [AppModule], config: &Config) {
     for module in modules {
         module.blacklisted = config.is_module_blacklisted(module.id.as_str());
         if module.blacklisted {
-            module.mode = Mode::Ignore.as_str().to_owned();
-            module.is_mounted = false;
             module.enabled = false;
         }
         module.rules = app_module_rules(config, &module.id);
@@ -555,54 +566,88 @@ pub(crate) fn write_scan_ret_to(modules: &[AppModule], path: &Path) -> Result<()
     crate::sys::fs::atomic_write(path, json.as_bytes())
 }
 
-/// `modules`: outputs the `scan.ret` cached at boot.
-pub fn handle_modules() -> Result<()> {
-    match fs::read_to_string(defs::SCAN_RET_PATH) {
+/// Merge live installation metadata into the committed runtime snapshot. A
+/// disable/blacklist edit changes the next boot, never already active resources.
+///
+/// A removed source stays listed only while `boot_owned` proves that this kernel boot still owns a
+/// live mount or VFS rule for it: `scan.ret` outlives the boot that wrote it, so keeping every
+/// removed `is_mounted` entry listed a module the device had already lost on a physical reboot.
+fn merge_module_snapshot(
+    cached: Vec<AppModule>,
+    installed: &[ModuleRecord],
+    config: &Config,
+    boot_owned: &BTreeSet<String>,
+) -> Vec<AppModule> {
+    let mut cached: BTreeMap<_, _> = cached
+        .into_iter()
+        .map(|module| (module.id.clone(), module))
+        .collect();
+    let mut merged = fallback_app_modules(installed, config);
+    for module in &mut merged {
+        if let Some(previous) = cached.remove(&module.id) {
+            module.mode = previous.mode;
+            module.is_mounted = previous.is_mounted;
+        }
+    }
+    // A removed source can still have pinned VFS rules or mounts. Keep its ownership visible
+    // until an explicit unload or cleanup removes it, but only with boot-scoped proof.
+    for mut removed in cached
+        .into_values()
+        .filter(|module| module.is_mounted && boot_owned.contains(module.id.as_str()))
+    {
+        removed.enabled = false;
+        merged.push(removed);
+    }
+    sync_app_module_rules(&mut merged, config);
+    merged
+}
+
+fn query_module_snapshot(
+    path: &Path,
+    installed: &[ModuleRecord],
+    config: &Config,
+    boot_owned: &BTreeSet<String>,
+) -> Vec<AppModule> {
+    let cached = match fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
-            Ok(mut modules) => {
-                let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
-                sync_app_module_rules(&mut modules, &config);
-                if let Err(write_err) = write_scan_ret(&modules) {
-                    log::warn!(
-                        "failed to refresh rules in {}: {write_err}",
-                        defs::SCAN_RET_PATH
-                    );
-                }
-                println!("{}", serde_json::to_string_pretty(&modules)?);
-                return Ok(());
+            Ok(modules) => modules,
+            Err(err) => {
+                log::warn!(
+                    "failed to parse {}, rebuilding module view: {err}",
+                    path.display()
+                );
+                Vec::new()
             }
-            Err(err) => log::warn!(
-                "failed to parse {}, rebuilding module snapshot: {err}",
-                defs::SCAN_RET_PATH
-            ),
         },
         Err(err) => {
             log::warn!(
-                "failed to read {}, rebuilding module snapshot: {err}",
-                defs::SCAN_RET_PATH
+                "failed to read {}, rebuilding module view: {err}",
+                path.display()
             );
+            Vec::new()
         }
-    }
-
-    let modules = rebuild_module_snapshot()?;
-    if let Err(write_err) = write_scan_ret(&modules) {
-        log::warn!(
-            "failed to cache rebuilt module snapshot at {}: {write_err}",
-            defs::SCAN_RET_PATH
-        );
-    }
-    println!("{}", serde_json::to_string_pretty(&modules)?);
-    Ok(())
+    };
+    merge_module_snapshot(cached, installed, config, boot_owned)
 }
 
-fn rebuild_module_snapshot() -> Result<Vec<AppModule>> {
+/// `modules`: combine committed runtime ownership with current installed metadata.
+/// A query never rewrites the cache: a concurrent hot operation owns that snapshot.
+pub fn handle_modules() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let managed_partitions = defs::MANAGED_PARTITIONS
         .iter()
         .map(|partition| (*partition).to_owned())
         .collect::<Vec<_>>();
-    let modules = list_modules(&config.moduledir, &managed_partitions)?;
-    Ok(fallback_app_modules(&modules, &config))
+    let installed = list_modules(&config.moduledir, &managed_partitions)?;
+    let boot_owned = crate::runtime::boot_owned_module_ids();
+    let modules = query_module_snapshot(
+        Path::new(defs::SCAN_RET_PATH),
+        &installed,
+        &config,
+        &boot_owned,
+    );
+    println!("{}", serde_json::to_string_pretty(&modules)?);
+    Ok(())
 }
 
 fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
@@ -656,6 +701,11 @@ pub fn handle_install_state() -> Result<()> {
         &mount_source,
     );
     state.tmpfs_supported = crate::sys::fs::is_overlay_xattr_supported().unwrap_or(false);
+    // Read-only module-table classification; never triggers an insmod.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        state.vfs_type = vfs_type_label(crate::vfs::doctor::presence_on_device()).to_owned();
+    }
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         state.nuke_type = if crate::utils::ksu::is_active() {
@@ -675,33 +725,42 @@ pub fn handle_install_state() -> Result<()> {
     Ok(())
 }
 
-/// Collects modules carrying a `mount_error` marker (case-insensitive, read-only).
-pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
-    let mut modules = Vec::new();
+/// Calls `visit(module_dir, marker_file)` for every `<moduledir>/<module>/mount_error` marker.
+///
+/// Unreadable directories and entries are skipped, matching the tolerant behaviour both callers need.
+fn for_each_mount_error_marker(
+    moduledir: &Path,
+    mut visit: impl FnMut(&fs::DirEntry, &fs::DirEntry),
+) {
     let Ok(entries) = fs::read_dir(moduledir) else {
-        return modules;
+        return;
     };
 
-    for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
+    for entry in entries.filter_map(std::result::Result::ok) {
         if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
             continue;
         }
         let Ok(children) = fs::read_dir(entry.path()) else {
             continue;
         };
-        let has_marker = children.filter_map(std::result::Result::ok).any(|child| {
-            child
+        for child in children.filter_map(std::result::Result::ok) {
+            if child
                 .file_name()
                 .to_string_lossy()
                 .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
-        });
-        if has_marker {
-            modules.push(entry.file_name().to_string_lossy().into_owned());
+            {
+                visit(&entry, &child);
+            }
         }
     }
+}
+
+/// Collects modules carrying a `mount_error` marker (case-insensitive, read-only).
+pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
+    let mut modules = Vec::new();
+    for_each_mount_error_marker(moduledir, |module, _marker| {
+        modules.push(module.file_name().to_string_lossy().into_owned());
+    });
 
     modules.sort();
     modules
@@ -710,58 +769,37 @@ pub fn collect_mount_error_modules(moduledir: &Path) -> Vec<String> {
 /// Clears module `mount_error` markers and returns how many were deleted. Only marker files are removed, never directories.
 pub fn clear_mount_error_markers(moduledir: &Path) -> usize {
     let mut removed = 0;
-    let Ok(entries) = fs::read_dir(moduledir) else {
-        return 0;
-    };
-
-    for entry in entries {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        if !entry.file_type().is_ok_and(|file_type| file_type.is_dir()) {
-            continue;
-        }
-        let Ok(children) = fs::read_dir(entry.path()) else {
-            continue;
-        };
-        for child in children.filter_map(std::result::Result::ok) {
-            if !child
-                .file_name()
-                .to_string_lossy()
-                .eq_ignore_ascii_case(defs::MOUNT_ERROR_FILE_NAME)
-            {
-                continue;
-            }
-
-            let marker_path = child.path();
-            match child.file_type() {
-                Ok(file_type) if file_type.is_file() => match fs::remove_file(&marker_path) {
-                    Ok(()) => {
-                        removed += 1;
-                        log::info!("cleared mount_error marker: {}", marker_path.display());
-                    }
-                    Err(err) => log::warn!(
-                        "failed to remove mount_error marker {}: {err}",
-                        marker_path.display()
-                    ),
-                },
-                Ok(_) => log::warn!(
-                    "mount_error is not a regular file: {}",
-                    marker_path.display()
-                ),
+    for_each_mount_error_marker(moduledir, |_module, marker| {
+        let marker_path = marker.path();
+        match marker.file_type() {
+            Ok(file_type) if file_type.is_file() => match fs::remove_file(&marker_path) {
+                Ok(()) => {
+                    removed += 1;
+                    log::info!("cleared mount_error marker: {}", marker_path.display());
+                }
                 Err(err) => log::warn!(
-                    "failed to check mount_error marker {}: {err}",
+                    "failed to remove mount_error marker {}: {err}",
                     marker_path.display()
                 ),
-            }
+            },
+            Ok(_) => log::warn!(
+                "mount_error is not a regular file: {}",
+                marker_path.display()
+            ),
+            Err(err) => log::warn!(
+                "failed to check mount_error marker {}: {err}",
+                marker_path.display()
+            ),
         }
-    }
+    });
 
     removed
 }
 
 /// `clear-mount-errors`: clears the markers and refreshes the state snapshot.
 pub fn handle_clear_mount_errors() -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let _operation = crate::runtime::ledger::OperationLock::acquire()?;
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
     let removed = clear_mount_error_markers(&config.moduledir);
 
@@ -771,7 +809,7 @@ pub fn handle_clear_mount_errors() -> Result<()> {
     state.mount_error_reasons = state
         .mount_error_modules
         .iter()
-        .map(|module| (module.clone(), "mount_error marker present".to_owned()))
+        .map(|module| (module.clone(), crate::defs::MOUNT_ERROR_REASON.to_owned()))
         .collect();
     state.save()?;
 
@@ -799,7 +837,7 @@ fn clear_app_module_errors(modules: &mut [AppModule], remaining_errors: &[String
         module.mount_error = remaining_errors
             .iter()
             .any(|id| id == module.id.as_str())
-            .then(|| "mount_error marker present".to_owned());
+            .then(|| crate::defs::MOUNT_ERROR_REASON.to_owned());
         module.suggest_ignore = module.mount_error.is_some();
     }
 }
@@ -912,6 +950,153 @@ mod tests {
     }
 
     #[test]
+    fn query_merge_refreshes_metadata_and_enablement_without_changing_runtime_ownership() {
+        let original = record("existing");
+        let config = Config::default();
+        let plan = MountPlan {
+            vfs_module_ids: vec![original.id.clone()],
+            ..MountPlan::default()
+        };
+        let cached = app_modules(
+            std::slice::from_ref(&original),
+            &config,
+            &plan,
+            &[],
+            &BTreeSet::from(["existing".into()]),
+        );
+        let mut installed = original;
+        installed.name = "updated name".into();
+        installed.version = "2".into();
+        installed.disabled = true;
+        let mut edited = config;
+        edited.rules.insert(
+            installed.id.clone(),
+            crate::config::ModuleRule {
+                default_mode: Some(Mode::Magic),
+                paths: BTreeMap::new(),
+            },
+        );
+        edited.module_blacklist.insert(installed.id.clone());
+        let merged = merge_module_snapshot(cached, &[installed], &edited, &BTreeSet::new());
+        assert_eq!(merged[0].name, "updated name");
+        assert_eq!(merged[0].version, "2");
+        assert!(!merged[0].enabled);
+        assert!(merged[0].blacklisted);
+        assert_eq!(merged[0].rules.default_mode.as_deref(), Some("magic"));
+        assert!(merged[0].is_mounted);
+        assert_eq!(merged[0].mode, "vfs");
+    }
+
+    #[test]
+    fn query_merge_exposes_new_modules_without_claiming_they_are_mounted() {
+        let mut installed = record("new_module");
+        installed.entries.push(crate::scanner::ModuleEntry {
+            relative: "system/etc/new".into(),
+            file_type: crate::mount_tree::NodeFileType::RegularFile,
+            replace: false,
+        });
+        let merged = merge_module_snapshot(
+            Vec::new(),
+            &[installed],
+            &Config::default(),
+            &BTreeSet::new(),
+        );
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].id, "new_module");
+        assert!(merged[0].enabled);
+        assert!(!merged[0].is_mounted);
+    }
+
+    #[test]
+    fn query_merge_keeps_removed_modules_only_while_this_boot_owns_them() {
+        let records = [record("active"), record("inactive")];
+        let plan = MountPlan {
+            vfs_module_ids: vec![records[0].id.clone()],
+            ..MountPlan::default()
+        };
+        let cached = app_modules(
+            &records,
+            &Config::default(),
+            &plan,
+            &[],
+            &BTreeSet::from(["active".into()]),
+        );
+
+        let owned = BTreeSet::from(["active".into()]);
+        let merged = merge_module_snapshot(cached.clone(), &[], &Config::default(), &owned);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].id, "active");
+        assert!(merged[0].is_mounted);
+        assert!(!merged[0].enabled);
+        assert_eq!(merged[0].mode, "vfs");
+
+        // A physical boot drops mount ownership, so the same cached snapshot must stop listing a
+        // source the device no longer has installed.
+        let merged = merge_module_snapshot(cached, &[], &Config::default(), &BTreeSet::new());
+        assert!(merged.is_empty());
+    }
+
+    #[test]
+    fn module_query_drops_a_removed_source_the_boot_no_longer_owns() {
+        let fixture = crate::test_support::Fixture::new("module-query-removed-source");
+        let path = fixture.join("scan.ret");
+        let original = record("uninstalled");
+        let plan = MountPlan {
+            overlay_module_ids: vec![original.id.clone()],
+            ..MountPlan::default()
+        };
+        let cached = app_modules(
+            std::slice::from_ref(&original),
+            &Config::default(),
+            &plan,
+            &[],
+            &BTreeSet::from(["uninstalled".into()]),
+        );
+        assert!(cached[0].is_mounted);
+        write_scan_ret_to(&cached, &path).unwrap();
+        let committed = fs::read(&path).unwrap();
+
+        let view = query_module_snapshot(&path, &[], &Config::default(), &BTreeSet::new());
+        assert!(view.is_empty());
+        assert_eq!(fs::read(path).unwrap(), committed);
+    }
+
+    #[test]
+    fn module_query_keeps_committed_cache_bytes_unchanged() {
+        let fixture = crate::test_support::Fixture::new("module-query-readonly");
+        let path = fixture.join("scan.ret");
+        let original = record("module");
+        let cached = app_modules(
+            std::slice::from_ref(&original),
+            &Config::default(),
+            &MountPlan::default(),
+            &[],
+            &BTreeSet::new(),
+        );
+        write_scan_ret_to(&cached, &path).unwrap();
+        let committed = fs::read(&path).unwrap();
+        let mut updated = original;
+        updated.name = "live metadata".into();
+        let view = query_module_snapshot(&path, &[updated], &Config::default(), &BTreeSet::new());
+        assert_eq!(view[0].name, "live metadata");
+        assert_eq!(fs::read(path).unwrap(), committed);
+    }
+
+    #[test]
+    fn module_query_does_not_create_missing_cache() {
+        let fixture = crate::test_support::Fixture::new("module-query-missing");
+        let path = fixture.join("scan.ret");
+        let view = query_module_snapshot(
+            &path,
+            &[record("installed")],
+            &Config::default(),
+            &BTreeSet::new(),
+        );
+        assert_eq!(view.len(), 1);
+        assert!(!path.exists());
+    }
+
+    #[test]
     fn app_modules_surface_mount_error_markers() {
         let modules = [record("bad_mod")];
         let config = Config::default();
@@ -927,7 +1112,7 @@ mod tests {
 
         assert_eq!(
             list[0].mount_error,
-            Some("mount_error marker present".to_owned())
+            Some(crate::defs::MOUNT_ERROR_REASON.to_owned())
         );
         assert!(list[0].suggest_ignore);
     }
@@ -1223,7 +1408,7 @@ mod tests {
         assert_eq!(state.mode_stats.magicmount, 1);
         assert_eq!(
             state.mount_error_reasons["overlay_mod"],
-            "mount_error marker present"
+            crate::defs::MOUNT_ERROR_REASON
         );
     }
 
@@ -1505,6 +1690,22 @@ mod tests {
         assert!(state.vfs_supported);
     }
 
+    /// The UI offers "LKM" or "Built-in" from this label, so the mapping has to follow
+    /// `/proc/modules` (loadable) versus a `/sys/module` entry alone (built into the kernel).
+    #[test]
+    fn install_state_vfs_type_labels_follow_the_module_tables() {
+        use crate::vfs::doctor::ModulePresence;
+
+        assert_eq!(vfs_type_label(ModulePresence::Loadable), "lkm");
+        assert_eq!(vfs_type_label(ModulePresence::BuiltIn), "builtin");
+        assert_eq!(vfs_type_label(ModulePresence::NotPresent), "unknown");
+        assert_eq!(
+            build_install_state(true, true, true, true, false, "KSU").vfs_type,
+            "unknown",
+            "the builder has no module tables to read, so it must not claim a provider"
+        );
+    }
+
     #[test]
     fn install_state_wire_snapshot_is_stable() {
         let state = build_install_state(true, true, true, true, false, "KSU");
@@ -1521,6 +1722,7 @@ mod tests {
   "nuke_supported": null,
   "nuke_type": "unknown",
   "vfs_supported": false,
+  "vfs_type": "unknown",
   "mount_source": "KSU",
   "compatible": true
 }"#

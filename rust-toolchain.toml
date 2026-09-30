@@ -2,5 +2,6 @@
 
 [toolchain]
 channel = "nightly"
-components = ["rustfmt", "clippy"]
+# rust-src provides the std sources riscv64 needs, since no prebuilt std exists for it.
+components = ["rustfmt", "clippy", "rust-src"]
 profile = "minimal"

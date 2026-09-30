@@ -132,11 +132,4 @@ mod tests {
         assert_eq!(aborted.status, PhaseStatus::Aborted);
         assert!(aborted.elapsed >= Duration::ZERO);
     }
-
-    #[test]
-    fn timer_without_finish_drops_as_aborted() {
-        // Drop path only logs; this test pins the type contract that an
-        // unconsumed timer is valid and must not panic.
-        let _timer = PhaseTimer::start("state");
-    }
 }

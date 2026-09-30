@@ -14,6 +14,8 @@
     "language": "Idioma",
     "enabled": "Activado",
     "disabled": "Desactivado",
+    "statusErrors": "Algo ha salido mal",
+    "statusErrorsHint": "Estos pasos no se completaron como se esperaba. Revisa los módulos y los registros de abajo y actualiza.",
     "save": "Save",
     "reset": "Reset",
     "reload": "Reload",
@@ -29,6 +31,11 @@
     "info": "Información"
   },
   "status": {
+    "guardAction": "Borrar los protectores de arranque de VFS",
+    "guardDialogTitle": "¿Borrar los protectores de arranque de VFS?",
+    "guardDialogBody": "Bórralos solo después de resolver la causa de la inyección de VFS interrumpida. VFS volverá a inyectar sus reglas en el próximo arranque y el mismo fallo puede repetirse.",
+    "guardCleared": "Se borraron {count} protectores; reinicia para aplicarlo",
+    "guardClearFailed": "No se pudieron borrar los protectores",
     "backendTitle": "Almacenamiento",
     "sysInfoTitle": "Información del sistema",
     "moduleActive": "Activos",
@@ -56,7 +63,18 @@
     "magicOperationCount": "{files} file mounts · {symlinks} links",
     "noActiveMounts": "No active mount targets in this startup snapshot",
     "mountTargetCount": "{count} destino | {count} destinos",
-    "mountDetails": "Ver {count} destino de montaje | Ver {count} destinos de montaje"
+    "mountDetails": "Ver {count} destino de montaje | Ver {count} destinos de montaje",
+    "errorLoad": "No se pudo leer el estado del sistema",
+    "errorBootFailure": "Falló la canalización de arranque",
+    "errorVfsForeign": "Se detectó un proveedor VFS ajeno",
+    "errorVfsProvider": "El proveedor VFS falló",
+    "errorMountError": "Un módulo no se pudo montar",
+    "errorStateLoad": "No se puede leer la instantánea de arranque",
+    "errorModuleScan": "Falló el escaneo de módulos",
+    "detailStage": "Etapa",
+    "detailRollback": "Reversión",
+    "detailVersion": "Versión del proveedor",
+    "errorItems": "Módulos afectados"
   },
   "config": {
     "moduledir": "Dir. Módulos",
@@ -140,6 +158,7 @@
     "overlaySupported": "OverlayFS kernel support",
     "tmpfsSupported": "Compatibilidad con tmpfs",
     "vfsSupported": "Compatibilidad con VFS",
+    "vfsType": "Tipo de VFS",
     "nukeSupported": "Compatibilidad con Nuke",
     "unverified": "Sin verificar",
     "mountSource": "Detected mount source",

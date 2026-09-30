@@ -39,6 +39,16 @@ pub struct MountPlan {
     pub vfs_module_ids: Vec<ModuleId>,
 }
 
+impl MountPlan {
+    /// VFS module ids as strings, for the persisted state snapshot and the WebUI contract.
+    pub fn vfs_module_id_strings(&self) -> Vec<String> {
+        self.vfs_module_ids
+            .iter()
+            .map(ToString::to_string)
+            .collect()
+    }
+}
+
 pub struct PlanInput<'a> {
     pub modules: &'a [ModuleRecord],
     pub config: &'a Config,
@@ -460,16 +470,22 @@ fn collect_vfs(module: &ModuleRecord, decisions: &[EntryDecision<'_>], builder: 
     builder.vfs_module_ids.insert(module.id.clone());
 }
 
-/// A Magic `.replace` replaces the whole target directory after the Overlay phase, so it
-/// cannot contain Overlay descendants that already mounted. An Overlay `.replace` may still receive Magic children.
-fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<()> {
-    let current_target = if node.name.is_empty() {
+/// The absolute target of `node` under its parent's `target`, used by the plan-time walkers
+/// that report a conflict at the offending path.
+fn child_target(target: &str, node: &MountNode) -> String {
+    if node.name.is_empty() {
         target.to_owned()
     } else if target.is_empty() {
         format!("/{}", node.name)
     } else {
         format!("{target}/{}", node.name)
-    };
+    }
+}
+
+/// A Magic `.replace` replaces the whole target directory after the Overlay phase, so it
+/// cannot contain Overlay descendants that already mounted. An Overlay `.replace` may still receive Magic children.
+fn ensure_replace_backend_consistency(node: &MountNode, target: &str) -> Result<()> {
+    let current_target = child_target(target, node);
 
     if let Some(replace_source) = node
         .sources
@@ -505,13 +521,7 @@ fn ensure_vfs_not_shadowed(
     target: &str,
     ancestor_mount: Option<(Mode, &MountSource)>,
 ) -> Result<()> {
-    let current_target = if node.name.is_empty() {
-        target.to_owned()
-    } else if target.is_empty() {
-        format!("/{}", node.name)
-    } else {
-        format!("{target}/{}", node.name)
-    };
+    let current_target = child_target(target, node);
 
     if let (Some((mode, source)), Some(vfs_source)) = (
         ancestor_mount,
@@ -552,13 +562,7 @@ fn ensure_vfs_opaque_exclusive(
     target: &str,
     opaque_owner: Option<&MountSource>,
 ) -> Result<()> {
-    let current_target = if node.name.is_empty() {
-        target.to_owned()
-    } else if target.is_empty() {
-        format!("/{}", node.name)
-    } else {
-        format!("{target}/{}", node.name)
-    };
+    let current_target = child_target(target, node);
 
     let owner = node
         .sources

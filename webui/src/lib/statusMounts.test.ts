@@ -2,10 +2,15 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  MODULE_SCAN_ERROR_CODE,
+  STATUS_LOAD_ERROR_CODE,
   activeBackends,
   activeMountState,
   backendDisplayKeys,
+  collectStatusErrors,
   groupActiveMounts,
+  statusErrorDetails,
+  statusErrorRows,
   statusFailureSummary,
   storageModeKey,
   uniqueActiveMounts,
@@ -113,6 +118,130 @@ describe("status failure presentation", () => {
     snapshot.rollback_status = "committed";
     snapshot.state_load = { kind: "io_error", detail: "state unreadable" };
     expect(statusFailureSummary(snapshot, labels)).toBe("state unreadable");
+  });
+});
+
+describe("status error banner", () => {
+  it("stays empty for a healthy boot, which is what hides the banner", () => {
+    expect(collectStatusErrors(state(1))).toEqual([]);
+    expect(collectStatusErrors(null)).toEqual([]);
+  });
+
+  it("reports the failed stage, the reason and the left-over targets", () => {
+    const snapshot: RunState = {
+      ...state(1),
+      failed_stage: "magic_mount",
+      failure_reason: "bind mount failed",
+      rollback_status: "incomplete",
+      leftover_mount_targets: ["/system/framework"],
+    };
+
+    expect(collectStatusErrors(snapshot)).toEqual([
+      {
+        code: "status.errorBootFailure",
+        detail: "bind mount failed",
+        items: ["/system/framework"],
+      },
+    ]);
+    expect(statusErrorDetails(snapshot)).toEqual({
+      stage: "magic_mount",
+      rollback: "incomplete",
+      version: "",
+    });
+  });
+
+  it("keeps a committed rollback out of the labelled rows", () => {
+    expect(statusErrorDetails(state(1)).rollback).toBe("");
+    expect(
+      statusErrorDetails({ ...state(1), rollback_status: "unverified" }).rollback,
+    ).toBe("unverified");
+  });
+
+  it("shows a foreign provider even when this build cannot use VFS", () => {
+    const snapshot: RunState = { ...state(1), vfs_foreign_nomount: true };
+
+    expect(collectStatusErrors(snapshot)).toEqual([
+      { code: "status.errorVfsForeign", detail: "", items: [] },
+    ]);
+  });
+
+  it("names the modules a VFS provider failure affected", () => {
+    const snapshot: RunState = {
+      ...state(1),
+      vfs_error: "read-back mismatch",
+      vfs_error_modules: ["vfs_mod"],
+      vfs_provider: "3",
+    };
+
+    expect(collectStatusErrors(snapshot)).toEqual([
+      {
+        code: "status.errorVfsProvider",
+        detail: "read-back mismatch",
+        items: ["vfs_mod"],
+      },
+    ]);
+    expect(statusErrorDetails(snapshot).version).toBe("3");
+  });
+
+  it("lists module mount failures once per module, with their reasons", () => {
+    const snapshot: RunState = {
+      ...state(1),
+      mount_error_modules: ["b_mod", "a_mod", "b_mod"],
+      mount_error_reasons: { b_mod: "marker present" },
+    };
+
+    expect(collectStatusErrors(snapshot)).toEqual([
+      {
+        code: "status.errorMountError",
+        detail: "a_mod\nb_mod: marker present",
+        items: ["a_mod", "b_mod"],
+      },
+    ]);
+  });
+
+  it("reports an unreadable snapshot and frontend failures side by side", () => {
+    const snapshot: RunState = {
+      ...state(1),
+      state_load: { kind: "io_error", detail: "state unreadable" },
+    };
+
+    expect(
+      collectStatusErrors(snapshot, {
+        loadError: "status command failed",
+        moduleScanError: "scan failed",
+      }),
+    ).toEqual([
+      { code: STATUS_LOAD_ERROR_CODE, detail: "status command failed", items: [] },
+      { code: MODULE_SCAN_ERROR_CODE, detail: "scan failed", items: [] },
+      { code: "status.errorStateLoad", detail: "state unreadable", items: [] },
+    ]);
+  });
+
+  it("keeps the most severe problem first when several are reported", () => {
+    const snapshot: RunState = {
+      ...state(1),
+      failure_reason: "startup failed",
+      vfs_foreign_nomount: true,
+      mount_error_modules: ["a_mod"],
+      mount_error_reasons: { a_mod: "marker present" },
+      state_load: { kind: "corrupt", detail: "bad json" },
+    };
+
+    expect(collectStatusErrors(snapshot).map((error) => error.code)).toEqual([
+      "status.errorBootFailure",
+      "status.errorVfsForeign",
+      "status.errorMountError",
+      "status.errorStateLoad",
+    ]);
+  });
+
+  it("drops blank rows so the banner never shows an empty label", () => {
+    const rows = statusErrorRows(
+      { stage: "plan", rollback: "", version: "" },
+      { stage: "Stage", rollback: "Rollback", version: "Version" },
+    );
+
+    expect(rows).toEqual([{ label: "Stage", value: "plan" }]);
   });
 });
 

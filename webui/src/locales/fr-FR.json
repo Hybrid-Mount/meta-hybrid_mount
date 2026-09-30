@@ -20,7 +20,9 @@
     "uiStyle": "Style de l'interface utilisateur",
     "styleChanged": "Style de l'interface utilisateur changé",
     "enabled": "Activé",
-    "disabled": "Désactivé"
+    "disabled": "Désactivé",
+    "statusErrors": "Un problème est survenu",
+    "statusErrorsHint": "Ces étapes ne se sont pas terminées comme prévu. Consultez les modules et les journaux ci-dessous, puis actualisez."
   },
   "tabs": {
     "status": "État",
@@ -29,6 +31,11 @@
     "info": "Infos"
   },
   "status": {
+    "guardAction": "Effacer les gardes de démarrage VFS",
+    "guardDialogTitle": "Effacer les gardes de démarrage VFS ?",
+    "guardDialogBody": "Ne les effacez qu'après avoir résolu la cause de l'injection VFS interrompue. VFS réinjectera ses règles au prochain démarrage et le même plantage peut se reproduire.",
+    "guardCleared": "{count} gardes effacées ; redémarrez pour appliquer",
+    "guardClearFailed": "Échec de l'effacement des gardes",
     "backendTitle": "Stratégie du backend",
     "sysInfoTitle": "Détails du système",
     "deviceTitle": "Détails de l'appareil",
@@ -63,7 +70,18 @@
     "magicOperationCount": "{files} montage(s) de fichier · {symlinks} lien(s)",
     "noActiveMounts": "Aucune cible de montage active dans cet instantané de démarrage",
     "mountTargetCount": "{count} cible | {count} cible | {count} cibles",
-    "mountDetails": "Afficher {count} cible de montage | Afficher {count} cible de montage | Afficher {count} cibles de montage"
+    "mountDetails": "Afficher {count} cible de montage | Afficher {count} cible de montage | Afficher {count} cibles de montage",
+    "errorLoad": "Échec de la lecture de l'état du système",
+    "errorBootFailure": "Échec du pipeline de démarrage",
+    "errorVfsForeign": "Un fournisseur VFS étranger est installé",
+    "errorVfsProvider": "Le fournisseur VFS a échoué",
+    "errorMountError": "Échec du montage d'un module",
+    "errorStateLoad": "L'instantané de démarrage est illisible",
+    "errorModuleScan": "Échec de l'analyse des modules",
+    "detailStage": "Étape",
+    "detailRollback": "Retour arrière",
+    "detailVersion": "Version du fournisseur",
+    "errorItems": "Modules concernés"
   },
   "config": {
     "title": "Configuration",
@@ -149,6 +167,7 @@
     "overlaySupported": "Prise en charge d'OverlayFS par le noyau",
     "tmpfsSupported": "Prise en charge de tmpfs",
     "vfsSupported": "Prise en charge de VFS",
+    "vfsType": "Type de VFS",
     "nukeSupported": "Prise en charge de Nuke",
     "unverified": "Non vérifié",
     "mountSource": "Source de montage détectée",
