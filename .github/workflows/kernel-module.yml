@@ -67,7 +67,27 @@ jobs:
           docker run --rm --platform linux/amd64 \
             -v "$PWD":/build -w /build \
             "${DDK_IMAGE}:${TARGET}" \
-            make -C module/vfs/src
+            sh -eu -c '
+              make -C module/vfs/src
+
+              # The .ko is shipped inside the release zip, and an out-of-tree Kbuild build
+              # emits DWARF that dwarfs the module itself: the 5.15 module is 640 KiB of
+              # which 25 KiB is .text. No device reads any of it at load time, so drop the
+              # debug sections here, where the LLVM that produced them lives, and keep the
+              # symbol table and relocations the kernel loader does resolve through.
+              #
+              # Done in the build rather than while packaging, so the committed binaries
+              # and their list.txt stay a description of what actually ships, which is the
+              # invariant lints.yml checks.
+              strip_bin="$(command -v llvm-strip || command -v "${LLVM:-}strip" || true)"
+              if [ -z "$strip_bin" ]; then
+                echo "no llvm-strip found in the DDK image; refusing to ship debug sections" >&2
+                exit 1
+              fi
+              before="$(wc -c < module/vfs/src/hybridmount.ko)"
+              "$strip_bin" --strip-debug module/vfs/src/hybridmount.ko
+              echo "hybridmount.ko: ${before} -> $(wc -c < module/vfs/src/hybridmount.ko) bytes ($strip_bin)"
+            '
 
       - name: Stage the artifact
         run: |

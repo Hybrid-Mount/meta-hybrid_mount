@@ -45,3 +45,12 @@ loopdev = { git = "https://github.com/Hybrid-Mount/loopdev.git", version = "0.5.
 procfs = "0.18"
 rustix = { version = "1.1.4", features = ["fs", "mount", "thread"] }
 libc = "0.2"
+
+[profile.release]
+# The four Android binaries are ~75% of the release zip, and they are the only copy
+# of this code that leaves the repository, so they ship without the ELF symbol table.
+# What it costs: 4.7 MiB across the four binaries, and about 0.7 MiB once the
+# release zip deflates them. The conservative `debuginfo` setting would recover
+# only 98 KiB of that, because these binaries carry no DWARF at all — the symbol
+# table is the whole cost — so it buys nothing here.
+strip = "symbols"

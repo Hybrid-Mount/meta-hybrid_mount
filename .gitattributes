@@ -1,2 +1,7 @@
 *.sh text eol=lf
-module/lkm/binaries/list.txt text eol=lf
+# The prebuilt kernel modules and their digests ship verbatim, and the digest
+# manifests are compared byte-for-byte by scripts that assume LF, so pin them
+# against a CRLF checkout on Windows.
+module/*/binaries/list.txt text eol=lf
+module/*/binaries/sources.txt text eol=lf
+*.ko -text
