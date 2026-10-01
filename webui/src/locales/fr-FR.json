@@ -18,11 +18,11 @@
     "rebootFailed": "Échec du redémarrage",
     "language": "Langue",
     "uiStyle": "Style de l'interface utilisateur",
-    "styleChanged": "Style de l'interface utilisateur changé",
+    "styleChanged": "Style de l'interface utilisateur modifié",
     "enabled": "Activé",
     "disabled": "Désactivé",
     "statusErrors": "Un problème est survenu",
-    "statusErrorsHint": "Ces étapes ne se sont pas terminées comme prévu. Consultez les modules et les journaux ci-dessous, puis actualisez."
+    "statusErrorsHint": "Certaines actions ne se sont pas exécutées comme prévu. Consulter ci-dessous les détails des modules et des journaux, puis actualiser."
   },
   "tabs": {
     "status": "État",
@@ -31,11 +31,11 @@
     "info": "Infos"
   },
   "status": {
-    "guardAction": "Effacer les gardes de démarrage VFS",
-    "guardDialogTitle": "Effacer les gardes de démarrage VFS ?",
-    "guardDialogBody": "Ne les effacez qu'après avoir résolu la cause de l'injection VFS interrompue. VFS réinjectera ses règles au prochain démarrage et le même plantage peut se reproduire.",
-    "guardCleared": "{count} gardes effacées ; redémarrez pour appliquer",
-    "guardClearFailed": "Échec de l'effacement des gardes",
+    "guardAction": "Effacer les protections au démarrage de VFS",
+    "guardDialogTitle": "Effacer les protections au démarrage de VFS ?",
+    "guardDialogBody": "Ne les supprimer qu'une fois la cause de l'interruption de l'injection VFS résolue. Sinon VFS réinjectera ses règles au prochain démarrage, et le même plantage risque de se reproduire.",
+    "guardCleared": "{count} protections effacées. Redémarrer pour appliquer",
+    "guardClearFailed": "Échec de l'effacement des protections",
     "backendTitle": "Stratégie du backend",
     "sysInfoTitle": "Détails du système",
     "deviceTitle": "Détails de l'appareil",
@@ -74,7 +74,7 @@
     "errorLoad": "Échec de la lecture de l'état du système",
     "errorBootFailure": "Échec du pipeline de démarrage",
     "errorVfsForeign": "Un fournisseur VFS étranger est installé",
-    "errorVfsProvider": "Le fournisseur VFS a échoué",
+    "errorVfsProvider": "Échec du fournisseur VFS",
     "errorMountError": "Échec du montage d'un module",
     "errorStateLoad": "L'instantané de démarrage est illisible",
     "errorModuleScan": "Échec de l'analyse des modules",
@@ -175,5 +175,18 @@
   },
   "content": {
     "welcome": "Hybrid Mount"
+  },
+  "runtime": {
+    "title": "Montage à chaud",
+    "active": "Chargé",
+    "inactive": "Non chargé",
+    "description": "Cette session uniquement. Les paramètres de démarrage restent inchangés.",
+    "load": "Charger",
+    "unload": "Décharger",
+    "reload": "Recharger",
+    "busy": "Application des modifications...",
+    "unavailable": "Opérations à chaud non disponibles",
+    "ineligible": "Ce module ne prend pas en charge les modifications de VFS à l'exécution.",
+    "success": "Montages de la session mis à jour"
   }
 }
