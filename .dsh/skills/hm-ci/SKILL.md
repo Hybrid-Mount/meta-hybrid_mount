@@ -59,6 +59,10 @@ gh workflow run 'Build VFS kernel module' --ref dev -f commit_binaries=true
 versionCode 换算：`(major*100000 + minor*1000 + patch) * 1000 + 槽位`；正式版槽位 `999`，预发布槽位 = stage 序号 ×100 + number，stage 固定顺序 `alpha` → `beta` → `rc`，number 取 1–99。所以 `v6.2.1-rc.1` = 602001301 **低于** `v6.2.1` = 602001999。带 `+build` 元数据、非 semver、patch 前导零、未列出的 stage 一律被 `release-version` 拒绝。
 `workflow_dispatch` 触发时没有 tag：版本解析、写版本、`update-json`、建 release、同步回 dev 全部跳过，只构建 + 发通知。
 
+缓存策略（tag 发布不再全量冷编译）：一次 run 只能命中「自身 ref + 默认分支」的缓存，默认分支是 `main`。`build.yml` 现在在 `dev` 与 `main` 上都跑（`on.push.branches` 加了 `main`；预热 run 不发通知，`Notify Telegram` 的 `if` 带 `github.ref != 'refs/heads/main'`），它在 `main` 上的那一次是发布唯一的预热来源——`lints.yml` 虽然也在默认分支上写缓存，但它跑的是 `cargo check`（只产元数据、debug profile），推不出 release profile 的 codegen。因此 `release.yml` 的 build job 用 `shared-key: build`（= `build.yml` 的 job id，取代自动的 job-key）复用这条释放链，`Resolve the release tag` 的 63 s 冷编译由此消除；release job 只跑 `cargo xtask notify`/`update-json` 这类宿主命令，仍旧用 `shared-key: rust-lints` 蹭 `lints.yml` 更小的宿主缓存（替掉它原来 54 s 的冷编译），不必拉 build job 那份四架构缓存。三个 workflow 都必须保留 workflow 级 `CARGO_TERM_COLOR: always`（`build.yml` 原本没有，是这次补上的），否则 key 对不上、退回前缀回退或直接 `No cache found.`。rust-cache@v2 的键是 `{prefix-key}-{shared-key 或 job}-{os}-{arch}-{sha1(rustc 版本 + 所有 CARGO/CC/CFLAGS/CXX/CMAKE/RUST* 环境变量)}-{sha1(依赖清单)}`，所以两边环境变量必须逐个一致，否则 key 永远对不上、只剩前缀回退；反过来 `Cargo.toml` 的 `package.version` 在哈希前被归一化成 `0.0.0`、`Cargo.lock` 里的 path 包被过滤，所以「写 tag 版本」的 `sed` 不影响 key。`build.yml` 另补了 pnpm store 缓存：key 与 `webui-lints` 相同，`cargo xtask build` 里的 `pnpm install --frozen-lockfile` 不再每次重下依赖。
+
+riscv64 的 std 必须单独缓存，rust-cache 永远兜不住它：`riscv64-linux-android` 是 Tier 3、没有可下载的 std（`rustup target list --toolchain nightly` 里根本没有它），所以 `rust-toolchain.toml` 必须留 `rust-src`、`xtask/src/main.rs` 必须用 `-Z build-std=std,panic_abort`，标准库只能在 `target/riscv64-linux-android/{release,debug}` 里现场编。而 rust-cache 的 `cleanup.ts` 只保留 `cargo metadata` 里的包，`core`/`std`/`alloc`/`panic_abort`/`compiler_builtins` 都不在其中，于是每次都在写归档前把 sysroot 从 `deps/` 与 `.fingerprint/` 删掉——**即使日志显示 `full match: true` 也照删**（run 36726042842 实测：缓存完全命中后仍重编 core/std 约 58 s，而 aarch64/armv7/x86_64 与 workspace crate 全部复用）。`cache-targets`/`cache-all-crates`/`cache-directories` 都改不了这个行为：清理只走 workspace target 目录与 `CARGO_HOME`，路径只要在 `target/` 之内就一定会被剪掉。因此 `build.yml` 用独立的 `actions/cache/restore@v6` + `actions/cache/save@v6` 直接缓存 `target/riscv64-linux-android`，key = `riscv64-sysroot-${runner.os}-${rustc -vV 经 sha256 取前 16 位}-${hashFiles('Cargo.lock', 'xtask/src/main.rs')}`（用 `restore-keys` 前缀回退）。key 里的 toolchain 身份片段是必需的：`channel = "nightly"` 不锁日期，rustc 每晚都在变，而缓存条目一经写入不可覆盖，key 里不带 rustc 版本就会永久命中一个过期的 sysroot。两条缓存步骤都带 `continue-on-error: true`，缓存出问题不能挡住构建；save 只在非 PR 上执行（`steps.riscv64-sysroot.outputs.cache-primary-key != ''` 同时保证 restore 步骤没跑成时不 save）。`release.yml` 的 build job 也插入了同样的 `actions/cache/restore@v6`（key 与 `build.yml` 逐字一致，`continue-on-error: true`）但**故意不写 save**：在 tag ref 上写进去只有重跑同一个 run 读得到，纯占预算；它同时补了 pnpm store 缓存步骤（key 与 `build.yml`/`webui-lints` 同形状），因为 `cargo xtask build` 里的 `pnpm install --frozen-lockfile` 之前每次发布都重下依赖。发布顺序因此固定：先合并 `dev` → `main`，等 `main` 的 Build run 变绿再打 tag；顺序反了不会构建出错，但 tag run 会抢在预热写缓存之前启动，退回全量冷编译。
+
 ## kernel-module.yml：DDK 构建与 sources.txt 门禁
 
 - `build-module` 的 matrix：`android12-5.10`、`android13-5.10`、`android13-5.15`、`android14-5.15`、`android14-6.1`、`android15-6.6`、`android16-6.12`；`fail-fast: false`。这一步用 `docker run --rm --platform linux/amd64 -v "$PWD":/build` 跑镜像 `ghcr.io/ylarod/ddk:<target>` 的 `make -C module/vfs/src`（不是 `container:`，所以 job 本身是普通 runner）。产物改名 `dist/hybridmount-<target>.ko` 后上传 artifact。
@@ -68,7 +72,7 @@ versionCode 换算：`(major*100000 + minor*1000 + patch) * 1000 + 槽位`；正
 
 ## 权限与 secrets 注意事项
 
-- 只有 Telegram 通知用真实 secret：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`，出现在 `build.yml`（步骤带 `if: github.event_name != 'pull_request'`，且该步骤无 `continue-on-error`）与 `release.yml`。fork PR 不提供 secrets，这个 `if` 就是防线；改动时不要去掉它，也不要把 notify 提到 PR 会跑的 job 里。
+- 只有 Telegram 通知用真实 secret：`TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`，出现在 `build.yml`（步骤带 `if: github.event_name != 'pull_request' && github.ref != 'refs/heads/main'`，后半段只挡 `main` 的预热 run，且该步骤无 `continue-on-error`）与 `release.yml`。fork PR 不提供 secrets，`github.event_name != 'pull_request'` 就是防线；改动时不要去掉它，也不要把 notify 提到 PR 会跑的 job 里。
 - CI 容器镜像 `ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest` 用 `container.credentials`（`username: github.actor` + `secrets.GITHUB_TOKEN`）拉取，因此相关 workflow 需要 `packages: read`。`lints.yml`、`build.yml`、`dependency-audit.yml` 在 workflow 级给了它；`kernel-module.yml` 的 workflow 级只有 `contents: read`（它不用该镜像）。
 - 权限按 job 最小化：`contents: write` 只出现在会写仓库的 job——`release.yml` 的 release job、`kernel-module.yml` 的 package-binaries、`auto-blacklist-pr.yml`（另有 `pull-requests: write`、`issues: write`）、`auto-label.yml`（`issues: write`）。改 workflow 时不要把 `contents: write` 提到 workflow 级，尤其是有 `pull_request` 触发的文件。
 - `[skip ci]` 保留在自动提交的 message 里：`kernel-module.yml` 的注释明确写了默认 `GITHUB_TOKEN` 推送本就不会触发 workflow，标记是为了将来换成其他推送 token 时不至于自触发循环。
@@ -76,7 +80,7 @@ versionCode 换算：`(major*100000 + minor*1000 + patch) * 1000 + 槽位`；正
 
 ## 改 workflow 的自查清单
 
-- [ ] 触发面：`lints.yml` 无 paths 过滤，改任何文件都会跑；`build.yml` 是显式白名单，新增顶层目录（如 `tools/<new>`、`docs/**`、`tests/**`）**不会**触发它，需要时手动加路径。
+- [ ] 触发面：`lints.yml` 无 paths 过滤，改任何文件都会跑；`build.yml` 是显式白名单，新增顶层目录（如 `tools/<new>`、`docs/**`、`tests/**`）**不会**触发它，需要时手动加路径。`build.yml` 同时在 `dev` 与 `main` 上跑，`main` 那一次是发布的缓存预热（见缓存策略一节），动 `on.push.branches` 前先确认释放链还接得上。
 - [ ] `release.yml` 只在 tag 上做版本与发布相关步骤，新增步骤同样要用 `startsWith(github.ref, 'refs/tags/')` 兜住。
 - [ ] 会提交回仓库的步骤：message 带 `[skip ci]`、确认不会自触发、确认目标 ref 是分支而非 tag。
 - [ ] 权限写在 job 级、只给需要的 scope；新增 secret 前先确认 fork PR 路径不会引用它。
@@ -84,6 +88,8 @@ versionCode 换算：`(major*100000 + minor*1000 + patch) * 1000 + 槽位`；正
 - [ ] 本地能否复现（见下）；DDK、Telegram、gh release 只能靠 CI。
 - [ ] 同步文档：`CLAUDE.md` 的「Release Process」「Tag 约定」「LKM（可选）」「Git Workflow」；本地命令清单同步进 `.dsh/skills/hm-verify/SKILL.md`，发布命令同步进 `hm-build-release`。
 - [ ] action 版本跟仓库惯例对齐（checkout@v7、upload-artifact@v7、download-artifact@v8、cache@v6、Swatinem/rust-cache@v2、pnpm/action-setup@v6、setup-node@v7、github-script@v9、git-cliff-action@v4、action-gh-release@v3、rustsec/audit-check@v2）；`.github/dependabot.yml` 每月分组更新 github-actions，cargo/npm 走周更并锁 `target-branch: dev`。
+- [ ] 缓存契约别拆散，它现在是两条链：**释放链** = `build.yml` 在默认分支 `main` 上产出的 release 缓存（job id `build`）+ `release.yml` build job 的 `shared-key: build`；**宿主链** = `lints.yml` 的 `rust-lints` + `release.yml` release job 的 `shared-key: rust-lints`。两条链都靠 workflow 级 `CARGO_TERM_COLOR: always` 对齐（`build.yml`/`release.yml`/`lints.yml` 三处都要有），少写一处或给 `rust-lints` 加 `shared-key`，对应 job 就退回全量冷编译（表现为 `No cache found.`）。`release.yml` build job 的 pnpm store 与 riscv64 sysroot 步骤也必须与 `build.yml`/`webui-lints` 保持同一 key 形状；`build.yml` 的 `main` 触发是释放链的上游，删掉它 tag 就只能读 `lints.yml` 的 `cargo check` 产物。PR 与 tag 上写入缓存要有意识：仓库 10 GB 缓存预算已满，PR 缓存从不复用，所以 rust-cache 一律带 `save-if: ${{ github.event_name != 'pull_request' }}`。
+- [ ] tag 上的缓存一律 restore-only：`release.yml` 两个 job 的 rust-cache 步骤都带 `save-if: "false"`，而 rust-cache 的 `save.ts` 在 `save-if !== "true"` 时**直接 return**（连 cleanup 都不执行），所以 tag 运行只读不写。理由是 tag ref 不可变且一次发布只跑一次：写进去的条目只有「重跑同一个 run」能读到，却要占共享预算（实测 3 个 tag × 304 MB 全是没人复用的死条目）；要恢复可写只需删掉 `save-if`，但先想清楚谁会读它。反之 `build.yml` 的 riscv64 sysroot 缓存是有意写 `dev`/`main` 的（`main` 那次才是发布要读的）：它的 save 步骤带 `if: github.event_name != 'pull_request' && steps.riscv64-sysroot.outputs.cache-primary-key != ''`，别误删这个 if。
 
 ## 本地可复现 vs 只能 CI
 

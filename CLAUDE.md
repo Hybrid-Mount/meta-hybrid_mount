@@ -237,6 +237,8 @@ VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模�
 
 `.github/workflows/release.yml` 负责发布与更新 `update.json`、`changelog.md` 和版本信息；`cargo xtask update-json` 也可单独生成更新元数据。Telegram 通知由独立的 `cargo xtask notify` 命令发送，构建命令不会自动发送。
 
+发布构建依赖的缓存由 CI 预热：`build.yml` 在 `dev` 与 `main` 上都会运行，`main` 上那一次同时把 4 个架构的 release 产物、riscv64 的 std（Tier 3，没有可下载的 std，只能靠 `-Z build-std` 现编）与 pnpm store 写进缓存。tag run 只能读「自身 ref + 默认分支」的缓存，而 `lints.yml` 在默认分支上产出的只有 `cargo check` 产物（check 元数据推不出 release profile 的 codegen），所以这是发布能复用编译结果的唯一来源。**发布顺序因此是固定的：先合并 `dev` → `main`，等 `main` 的 Build Hybrid Mount workflow 变绿，再打 tag**；合并后立刻打 tag 不会出错，但 tag run 会抢在预热写入缓存之前启动，退回全量冷编译。
+
 ### Tag 约定
 
 发布 tag 必须是合法 semver，**patch 不允许前导零**：`v6.2.1` 可以，`v6.2.01` 不行（Cargo 会拒绝 `version = "6.2.01"`）。预发布写成 `-<stage>.<number>`，stage 取 `alpha`、`beta`、`rc`，number 为 1–99：
@@ -254,7 +256,7 @@ versionCode 为 `major*100000 + minor*1000 + patch` 再乘 1000 加槽位；预�
 - 主分支: `main`
 - 开发分支: `dev`
 - PR 目标: `dev`
-- 发布时从 `dev` 合并到 `main`
+- 发布时从 `dev` 合并到 `main`，等 `main` 的 Build workflow 通过后再打 tag（见 Release Process：tag 只能复用默认分支已经预热好的缓存）
 
 ## Contact
 

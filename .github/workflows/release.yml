@@ -7,6 +7,20 @@ on:
     tags: ["v*.*.*"]
   workflow_dispatch:
 
+concurrency:
+  # A release publishes a GitHub release and then pushes a version-sync commit back to dev.
+  # Runs are therefore queued instead of replaced: cancelling one halfway can leave the
+  # published release and the development branch disagreeing about the current version.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # lints.yml sets this workflow-wide, and Swatinem/rust-cache folds every matching environment
+  # variable into its cache key (the default env-vars list matches the CARGO prefix). Without it
+  # this workflow computes a different toolchain hash than lints.yml, so it could never restore
+  # the rust-lints cache below — the only Rust cache the default branch ever publishes.
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     name: Build package
@@ -34,6 +48,83 @@ jobs:
 
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        # Restored before anything compiles, so `Resolve the release tag` and the four-architecture
+        # `cargo xtask build --release` below reuse a previous run's artifacts instead of building
+        # the whole release profile from scratch.
+        #
+        # `shared-key` replaces the automatic job-based key, and `build` is build.yml's job id. That
+        # workflow now also runs on `main`, and a tag run may only restore caches created on its own
+        # ref or on the default branch — so its entry is the one cache a release can actually see.
+        # lints.yml's `rust-lints` cache cannot serve this job: it only ever holds `cargo check` and
+        # clippy artifacts, and release-profile codegen cannot be derived from check metadata.
+        #
+        # The key folds in the environment, so build.yml, lints.yml and this workflow must all keep
+        # `CARGO_TERM_COLOR: always`; a divergence silently turns every restore into a miss. It also
+        # normalises every workspace `package.version` to 0.0.0 before hashing, so the version `sed`
+        # applied later in this job does not change the key.
+        #
+        # Restore-only: the action's save step returns before both the cleanup and the save unless
+        # `save-if` is exactly "true". A tag ref is immutable and belongs to a single release, so an
+        # entry written here could only ever be read by a rerun of that same run, while it costs
+        # ~300 MB of the shared 10 GB cache budget every dev build competes for. The three
+        # tag-scoped entries already in the repository are exactly that: written once, never
+        # restored. Removing `save-if` is all it takes to make tag reruns warm again.
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: build
+          cache-all-crates: true
+          save-if: "false"
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        working-directory: webui
+        # The WebUI dependency tree is not part of any Rust cache, and this workflow had no pnpm
+        # cache at all, so every release re-downloaded it inside `cargo xtask build`. The key is the
+        # one lints.yml's webui-lints job publishes on the default branch, so a tag run restores it
+        # straight away.
+        run: |
+          set -euo pipefail
+          STORE_PATH="$(pnpm store path --silent)"
+          mkdir -p "$STORE_PATH"
+          echo "path=$STORE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store
+        # Restore-only, like every other cache on a tag ref: if the lockfile has moved on since the
+        # default branch published this key, an exact miss would otherwise leave a saving action
+        # writing a ~100 MB entry that only a rerun of this same run could ever read.
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Resolve Rust toolchain identity
+        id: rust-toolchain
+        # Mirrors build.yml. `rust-toolchain.toml` pins the `nightly` channel rather than a date, so
+        # the compiler the CI image carries can change with no repository change at all — and the
+        # riscv64 sysroot below is only valid for one exact rustc.
+        run: |
+          set -euo pipefail
+          echo "id=$(rustc -vV | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the riscv64 sysroot
+        # The same key build.yml writes on `main`, and restore-only. riscv64 has no prebuilt std, so
+        # without this the release compiles `core`, `std`, `alloc`, `panic_abort` and
+        # `compiler_builtins` from source on every tag (58 s in run 36726042842, against 12-14 s for
+        # each of the other three targets). Swatinem/rust-cache cannot carry those artifacts — its
+        # save step keeps only crates that appear as packages in `cargo metadata` — hence a cache of
+        # its own. There is deliberately no save step in this workflow: an entry written on a tag ref
+        # would be ~300 MB of dead budget, readable only by a rerun of this very run.
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: target/riscv64-linux-android
+          key: riscv64-sysroot-${{ runner.os }}-${{ steps.rust-toolchain.outputs.id }}-${{ hashFiles('Cargo.lock', 'xtask/src/main.rs') }}
+          restore-keys: |
+            riscv64-sysroot-${{ runner.os }}-${{ steps.rust-toolchain.outputs.id }}-
 
       - name: Resolve the release tag
         # Every version fact the release needs comes from here: the version injected into
@@ -67,12 +158,6 @@ jobs:
           sed -i "s/^version = \".*\"/version = \"$RELEASE_VERSION\"/" Cargo.toml
           grep -q "^version = \"$RELEASE_VERSION\"$" Cargo.toml
           echo "building package version $RELEASE_VERSION from tag $RELEASE_TAG"
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-all-crates: true
-          cache-on-failure: true
 
       - name: Build release package
         run: |
@@ -123,6 +208,19 @@ jobs:
 
       - name: Trust checkout directory
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Cache Rust dependencies
+        # `notify` and `update-json` are Rust commands, and this job is a fresh container: without
+        # a cache the whole xtask dependency tree is compiled a second time here (~50 s of the
+        # release). Unlike the build job, this one only needs host artifacts, so it keeps aliasing
+        # lints.yml's smaller `rust-lints` entry on the default branch rather than pulling in the
+        # build job's four-architecture cache. Restore-only for the same reason as above; a save
+        # here would only fill the budget with an entry nothing can ever read.
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-lints
+          cache-all-crates: true
+          save-if: "false"
 
       - name: Download package artifact
         uses: actions/download-artifact@v8

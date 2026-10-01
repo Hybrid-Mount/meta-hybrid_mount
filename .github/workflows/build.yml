@@ -6,6 +6,13 @@ on:
   push:
     branches:
       - "dev"
+      # `main` too: this run is what warms the cache a tag release restores. A release is a merge of
+      # dev into main followed by a tag, and a tag run can only restore caches created on its own ref
+      # or on the default branch — so a full release-profile build on main is the only way to stop the
+      # release run from recompiling all four architectures (and the riscv64 sysroot) from scratch.
+      # Tag only once this run is green: tagging immediately after the merge starts the release
+      # before the cache below has been written, so it misses and cold-builds exactly as before.
+      - "main"
     paths:
       - "src/**"
       - "Cargo.*"
@@ -36,6 +43,13 @@ permissions:
   contents: read
   packages: read
 
+env:
+  # lints.yml and release.yml set this as well, and Swatinem/rust-cache folds every matching
+  # CARGO/RUST* environment variable into its cache key. Leaving it unset here would give this
+  # workflow a toolchain hash no other workflow can compute, and release.yml depends on restoring
+  # exactly this run's cache from the default branch.
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     name: Build package
@@ -65,6 +79,63 @@ jobs:
         with:
           cache-all-crates: true
           cache-on-failure: true
+          # Pull requests can restore from the base branch but must not write: with a 10 GB
+          # per-repository cache budget, per-PR entries only evict the dev caches every run
+          # depends on, and they are never reused once the PR is merged.
+          save-if: ${{ github.event_name != 'pull_request' }}
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        working-directory: webui
+        run: |
+          set -euo pipefail
+          STORE_PATH="$(pnpm store path --silent)"
+          mkdir -p "$STORE_PATH"
+          echo "path=$STORE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        # `cargo xtask build` runs `pnpm install --frozen-lockfile` itself, and this workflow had
+        # no pnpm cache at all, so every run re-downloaded the whole WebUI dependency tree. The
+        # key matches webui-lints' step in lints.yml, so both jobs share one store — and a tag run
+        # can restore the store lints.yml published on the default branch.
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('webui/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Resolve Rust toolchain identity
+        id: rust-toolchain
+        # `rust-toolchain.toml` pins the `nightly` channel, not a date, so the compiler this image
+        # happens to carry can change without any file in the repository changing. The riscv64
+        # sysroot below is only valid for one exact rustc, so the cache key carries the compiler
+        # identity: without it a refreshed image would leave an entry cargo can never reuse and
+        # `actions/cache` refuses to overwrite, turning the cache into a permanent restore-only
+        # cost.
+        run: |
+          set -euo pipefail
+          echo "id=$(rustc -vV | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the riscv64 sysroot
+        id: riscv64-sysroot
+        # riscv64 has no prebuilt std — rust-toolchain.toml pulls in rust-src for exactly that
+        # reason — so every build compiles `compiler_builtins`, `core`, `std`, `alloc` and
+        # `panic_abort` from source. Swatinem/rust-cache cannot carry those artifacts: its save
+        # step keeps only crates that appear as packages in `cargo metadata`, and the sysroot
+        # crates do not. The logs of run 36726042842 show the result — an exact cache hit
+        # (`full match: true`, 558 MB restored) still recompiled the sysroot and spent 58 s on
+        # riscv64 while the other three targets finished in 12-14 s each. `actions/cache` prunes
+        # nothing, so the sysroot survives here, and a lockfile change still leaves the sysroot
+        # itself valid, which is what the toolchain-scoped prefix below restores. Cache problems
+        # must never fail a build, so this step degrades to a cold build like rust-cache does.
+        continue-on-error: true
+        uses: actions/cache/restore@v6
+        with:
+          path: target/riscv64-linux-android
+          key: riscv64-sysroot-${{ runner.os }}-${{ steps.rust-toolchain.outputs.id }}-${{ hashFiles('Cargo.lock', 'xtask/src/main.rs') }}
+          restore-keys: |
+            riscv64-sysroot-${{ runner.os }}-${{ steps.rust-toolchain.outputs.id }}-
 
       - name: Build package
         run: |
@@ -79,6 +150,19 @@ jobs:
           echo "ARTIFACT_ZIP=$ZIP_PATH" >> "$GITHUB_ENV"
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
 
+      - name: Save the riscv64 sysroot
+        # Saved from an ordinary step rather than from a post step on purpose: this has to run
+        # before rust-cache's save step prunes the sysroot back out of the target directory.
+        # `continue-on-error` keeps a cache reservation race (two runs saving the same key) from
+        # turning a good build red, and pull requests never write, exactly as above. The key guard
+        # covers a failed restore: it leaves no resolved key to save under.
+        if: github.event_name != 'pull_request' && steps.riscv64-sysroot.outputs.cache-primary-key != ''
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: target/riscv64-linux-android
+          key: ${{ steps.riscv64-sysroot.outputs.cache-primary-key }}
+
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
@@ -88,7 +172,9 @@ jobs:
           if-no-files-found: error
 
       - name: Notify Telegram
-        if: github.event_name != 'pull_request'
+        # dev builds announce themselves; a `main` run exists only to warm the release cache, and a
+        # "Daily Tilling - main" message on the same channel would just be noise.
+        if: github.event_name != 'pull_request' && github.ref != 'refs/heads/main'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

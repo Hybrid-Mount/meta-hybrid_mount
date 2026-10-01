@@ -46,6 +46,11 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          # Pull requests may restore from their base branch but must not write: every per-PR
+          # entry competes for the same 10 GB budget as the dev/main caches the release pipeline
+          # restores, and a PR's own cache is never reused after it is merged.
+          save-if: ${{ github.event_name != 'pull_request' }}
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -174,6 +179,7 @@ jobs:
         with:
           key: android-${{ matrix.target }}
           cache-on-failure: true
+          save-if: ${{ github.event_name != 'pull_request' }}
 
       - name: Check Android target
         run: |
