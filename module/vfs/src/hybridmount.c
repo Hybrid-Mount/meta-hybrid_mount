@@ -1356,6 +1356,11 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
             } else if ((err = __hybridmount_inject_child_locked(dir_node, current_rule, child_name, child_len))) {
                 if (!old_node) kfree(dir_node);
             } else {
+                /* The hooks belong to this inode, not its persistent inode number.
+                 * Pin its path until the attached rule is retired, including when
+                 * current_rule is a generated ancestor of the requested rule. */
+                current_rule->parent_path = p_path;
+                path_get(&current_rule->parent_path);
                 hybridmount_hijack_dir_ops(dir_node, v_inode);
                 hybridmount_hijack_superblock(p_path.dentry->d_sb);
                 struct dentry *dentry = hm_hash_and_lookup(p_path.dentry, &(struct qstr)QSTR_INIT(child_name, child_len));
@@ -1526,6 +1531,10 @@ static void hm_free_rule(struct hybridmount_rule *rule)
     }
     if (!(rule->flags & HM_FLAG_VIRTUAL_DIR) && rule->r_path.dentry)
         path_put(&rule->r_path);
+    /* Callers have drained rule readers before freeing retired rules. Generated
+     * virtual rules can also pin a real parent, independently of r_path. */
+    if (rule->parent_path.dentry)
+        path_put(&rule->parent_path);
     kfree(rule);
 }
 

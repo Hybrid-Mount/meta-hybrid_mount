@@ -19,6 +19,24 @@ Changes are verified by reading the kernel tables back and are not persisted.
 Only explicit `vfs load` invokes the bundled loader; normal queries and rule/UID operations do not.
 See [VFS CLI](../../docs/VFS_CLI.md) for arguments, aliases and batch failure semantics.
 
+## Rule lifetime
+
+A rule attached to a real directory holds a reference to that parent's path, keeping
+the directory inode and its lookup/iterate hooks alive while the rule is registered.
+Generated virtual ancestors hold the reference when they are the entry attached to
+the real directory. This does not depend on an application keeping an injected file
+open or mapped. Rule replacement, rollback, deletion and clear release retired
+references after the existing RCU/SRCU reader drain; module teardown releases them
+before shrinking the dcache and restoring the filesystem operations.
+
+For manual regression on a test device with a compatible provider loaded, run
+[vfs_parent_lifetime.sh](../../tests/device/vfs_parent_lifetime.sh) as root with the
+Hybrid Mount binary and a quiet read-only directory on EROFS or another disk
+filesystem. It checks actual injected contents after cache reclaim, shared-parent
+deletion, replacement and generated-directory pruning. The test writes to the global
+`drop_caches` control and deletes only its own rules; it does not clear the provider's
+tables. DDK compilation and this device test are separate validation steps.
+
 ## Layout
 
 - `src/` — the forked kernel sources
