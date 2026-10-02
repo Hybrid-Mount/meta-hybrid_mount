@@ -121,6 +121,8 @@ struct hybridmount_dir_node {
 
 struct hybridmount_rule {
     struct path r_path;
+    /* Keep the real parent with hijacked VFS operations alive while registered. */
+    struct path parent_path;
     struct hybridmount_dir_node *this_dir;
     unsigned long v_ino;
     u32 v_hash;

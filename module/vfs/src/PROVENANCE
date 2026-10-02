@@ -50,6 +50,11 @@ GPL-3.0 text. To compare against the pristine baseline, use the import commit:
 - The isolated-uid table stays sorted, so the per-lookup isolation check bisects instead
   of scanning every entry.
 - Builds for pre-5.18 kernels need -std=gnu11, which the Makefile sets.
+- Rules attached to a real directory retain its path for their registered lifetime.
+  This keeps the inode carrying the lookup/iterate hooks alive under cache reclaim;
+  generated virtual ancestors retain the same reference when they attach to a real
+  parent. Retired rules release it after the existing RCU/SRCU reader drain, including
+  replacement, rollback, deletion and clear before module teardown restores VFS ops.
 
 Behaviour is no longer byte-identical to upstream, and the wire magic no longer matches
 it: a stock nm CLI is rejected at preparse with -EFAULT. The payload field order, sizes
