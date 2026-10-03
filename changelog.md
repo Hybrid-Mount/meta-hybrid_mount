@@ -1,4 +1,44 @@
 
+## v6.2.3-rc.3
+
+
+### <!-- 1 --> Features
+
+- `webui` Clear the VFS boot guards from the status card The status banner now offers a clear action when the device reports a boot guard, together with the confirmation that clearing it lets VFS inject its rules again on the next boot. The action runs `hybrid-mount vfs guard clear --yes --json` and refreshes the status. Both the Material and the MiuiX layouts, every locale and the mock API (VITE_MOCK_STATUS_ERROR=1) are covered. Verified with pnpm run test, pnpm run lint and pnpm run build.
+
+- `mount` Support configured top-level extra partitions Adapt extra_mount from Tools-cx-app/meta-magic_mount-rs commit 02c306a43ba1f90b678a626614a86e0011f1244f to the shared scanner and planner. Validate target roots and absent system entries, preserve configuration through WebUI saves, and include additional partitions in boot, queries and hot operations. Retain partition-root replace metadata and route standalone roots to their own overlay partition.
+
+
+
+### <!-- 2 --> Fixes
+
+- `vfs` Retire boot guards a build cannot attribute to itself A one-byte boot guard left behind by an interrupted VFS mutation kept the VFS backend disabled forever: the marker was written before injecting the rules, and every later boot only checked whether it existed. Boot guards now carry the writing build's identity (version, binary size and mtime) plus the mutated object, the boot id and the mutation source. On boot, a marker that this build cannot attribute to itself - another version or binary, the legacy one-byte marker, or a packaged module object that the current package no longer ships - is retired and the backend runs again. A marker this build did write, for an object it still ships, keeps refusing automatic retries so a crashing injection cannot loop. The same identity applies to the kernel module guard, so refreshing the prebuilt modules no longer needs a manual removal before VFS returns. Add `hybrid-mount vfs guard [--json]` to inspect every guard and `hybrid-mount vfs guard clear --yes` to clear them from a shell. Verified with cargo fmt --all -- --check, cargo clippy --offline --all-targets and cargo test --offline.
+
+- `vfs` Read the boot id through the runtime re-export `crate::runtime::device` is private, so the Linux/Android path of the new boot identity did not compile: error[E0603] module `device` is private. Both branches that reach it are behind `cfg(any(target_os = "linux", target_os = "android"))`, which the Windows development host never type-checks, so it slipped past local verification. Re-export `boot_id` next to `enter_init_namespace` and call it as `crate::runtime::boot_id()`. Verified with cargo check -p hybrid-mount --all-targets for x86_64-unknown-linux-gnu and aarch64-linux-android, plus cargo fmt --all -- --check, cargo clippy --workspace --all-targets -- -D warnings and cargo test --offline.
+
+- `vfs` Retain hooked parent paths while rules are active Keep a path reference on each rule attached to a real directory, including generated virtual ancestors, and release it when the retired rule is freed after the existing reader drain. This prevents cache reclaim from removing active lookup and iterate hooks. Add a manual device regression for cache reclaim, shared parents, replacement and virtual subtree pruning. Host VFS CLI tests, integration, format and shell checks passed. DDK compilation, prebuilt module refresh and device verification remain pending.
+
+- `magic` Tolerate SELinux context write failures Keep Magic Mount staging label writes best-effort so denied OEM contexts do not roll back every module. Preserve strict writes for OverlayFS layer roots and add a Linux xattr failure regression test.
+
+
+
+### <!-- 4 --> Tests
+
+- `selinux` Make xattr failure regression deterministic
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Warm the release caches from main and reuse them on tags A tag run can only restore caches created on its own ref or on the default branch, and build.yml only ran on dev. Every release therefore cross-compiled four architectures, the riscv64 std and the WebUI dependency tree from scratch, and lints.yml could not help: it produces cargo check metadata, from which release-profile codegen cannot be derived. - build.yml: also run on main (that run is what warms a release) and add the workflow-level CARGO_TERM_COLOR: always that rust-cache folds into its key, so build.yml and release.yml finally hash the same environment. The main run exists to warm caches, so it skips the Telegram notification. - release.yml build job: shared-key: build to alias that entry, plus pnpm store and riscv64 sysroot restores. rust-cache prunes core/std from its own archive even on a full match, which is the 58 s it still spent per release. - release.yml: every cache step is restore-only (save-if: "false", and the pnpm/sysroot steps restore without saving) because an entry written on an immutable tag ref is readable only by a rerun of that same run while it occupies the shared 10 GB budget - three such tag entries already exist. - lints.yml: PRs restore rust-cache but never write it. Merge dev into main and wait for that Build run to go green before tagging; tagging immediately still works but starts before the cache is written. CLAUDE.md and the hm-ci skill document the ordering rule.
+
+- New strings french translation (#485) WebUI: new strings french translation --------- Co-authored-by: PifGadget92 <tiktok.ds@outlook.com>
+
+- `vfs` Refresh the prebuilt hybridmount modules
+
+
+
+
 ## v6.2.3-rc.2
 
 
