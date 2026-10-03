@@ -8,6 +8,91 @@ fn module_id(id: &str) -> ModuleId {
 }
 
 #[test]
+fn extra_mount_roundtrips_and_patches_preserve_or_clear_it() {
+    let dir = Fixture::new("extra-mount-config");
+    let path = dir.join("config.toml");
+    let mut config = Config::from_toml("default_mode = 'magic'").unwrap();
+    assert!(config.extra_mount.is_empty());
+    config
+        .apply_patch(serde_json::from_str(r#"{"extra_mount":["my_extra"]}"#).unwrap())
+        .unwrap();
+    config.save(&path).unwrap();
+    let mut loaded = Config::load(&path).unwrap();
+    loaded
+        .apply_patch(serde_json::from_str(r#"{"disable_umount":true}"#).unwrap())
+        .unwrap();
+    assert_eq!(loaded.extra_mount, ["my_extra"]);
+    let json: serde_json::Value =
+        serde_json::from_str(&loaded.to_webui_json(false).unwrap()).unwrap();
+    assert_eq!(json["extra_mount"], serde_json::json!(["my_extra"]));
+    loaded
+        .apply_patch(serde_json::from_str(r#"{"extra_mount":[]}"#).unwrap())
+        .unwrap();
+    assert!(loaded.extra_mount.is_empty());
+}
+
+#[test]
+fn extra_mount_selects_existing_roots_without_system_entries() {
+    let root = Fixture::new("extra-mount-targets");
+    fs::create_dir(root.join("system")).unwrap();
+    for name in ["my_extra", "directory", "file", "apex", "product"] {
+        fs::create_dir(root.join(name)).unwrap();
+    }
+    fs::create_dir(root.join("system/directory")).unwrap();
+    fs::write(root.join("system/file"), b"").unwrap();
+    fs::write(root.join("not_directory"), b"").unwrap();
+    let config = Config {
+        extra_mount: [
+            "my_extra",
+            "my_extra",
+            "directory",
+            "file",
+            "missing",
+            "not_directory",
+            "",
+            ".",
+            "..",
+            "system",
+            "apex",
+            "/my_extra",
+            "../my_extra",
+            "my_extra/",
+            "a/b",
+            "a\\b",
+            "C:my_extra",
+            "a\0b",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        ..Config::default()
+    };
+    assert_eq!(config.extra_mount_partitions(&root), ["my_extra"]);
+    assert_eq!(config.scan_partition_names(&root), ["my_extra", "product"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn extra_mount_rejects_system_symlinks_and_inspection_errors() {
+    use std::os::unix::fs::symlink;
+    let root = Fixture::new("extra-mount-symlinks");
+    fs::create_dir(root.join("system")).unwrap();
+    for name in ["link", "dangling", "loop"] {
+        fs::create_dir(root.join(name)).unwrap();
+    }
+    symlink(root.join("link"), root.join("system/link")).unwrap();
+    symlink("missing", root.join("system/dangling")).unwrap();
+    symlink("loop", root.join("system/loop")).unwrap();
+    let config = Config {
+        extra_mount: ["link", "dangling", "loop"].map(str::to_owned).to_vec(),
+        ..Config::default()
+    };
+    assert!(config.extra_mount_partitions(&root).is_empty());
+    fs::remove_dir_all(root.join("system")).unwrap();
+    symlink("system", root.join("system")).unwrap();
+    assert!(config.extra_mount_partitions(&root).is_empty());
+}
+
+#[test]
 fn defaults_match_contract() {
     let config = Config::default();
 
@@ -15,6 +100,7 @@ fn defaults_match_contract() {
     assert_eq!(config.overlay_mode, OverlayMode::Ext4);
     assert!(!config.disable_umount);
     assert_eq!(config.default_mode, Mode::Overlay);
+    assert!(config.extra_mount.is_empty());
     assert!(config.rules.is_empty());
 }
 
@@ -30,6 +116,7 @@ fn default_config_toml_snapshot_is_stable() {
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
+extra_mount = []
 vfs_strict = false
 
 [rules]
@@ -261,6 +348,7 @@ fn json_uses_contract_shape() {
             "overlay_mode": "ext4",
             "disable_umount": false,
             "default_mode": "overlay",
+            "extra_mount": [],
             "vfs_strict": false,
             "rules": {}
         })

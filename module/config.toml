@@ -4,6 +4,9 @@ moduledir = "/data/adb/modules"
 overlay_mode = "ext4"
 disable_umount = false
 default_mode = "overlay"
+# Read additional partitions from <module>/<name>/ into /<name>/.
+# Targets must exist and have no corresponding /system entry.
+extra_mount = []
 # default_mode also accepts "vfs", the kernel-side injection backend driven by the
 # bundled hybridmount module (an independent implementation, not NoMount-compatible).
 # vfs_strict = false        # true fails the boot when a rule selects vfs and none is available

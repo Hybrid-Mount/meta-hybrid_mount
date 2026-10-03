@@ -13,6 +13,7 @@ describe("cloneAppConfig", () => {
       tmpfs_xattr_supported: false,
       disable_umount: false,
       default_mode: "overlay",
+      extra_mount: ["my_extra"],
       rules: {
         demo: {
           default_mode: "magic",
@@ -23,12 +24,14 @@ describe("cloneAppConfig", () => {
 
     const cloned = cloneAppConfig(source);
     cloned.rules.demo.paths["system/etc/hosts"] = "ignore";
+    cloned.extra_mount.push("another_extra");
 
     expect(cloned).not.toBe(source);
     expect(cloned.rules).not.toBe(source.rules);
     expect(cloned.rules.demo).not.toBe(source.rules.demo);
     expect(cloned.rules.demo.paths).not.toBe(source.rules.demo.paths);
     expect(source.rules.demo.paths["system/etc/hosts"]).toBe("overlay");
+    expect(source.extra_mount).toEqual(["my_extra"]);
   });
 });
 

@@ -634,10 +634,7 @@ fn query_module_snapshot(
 /// A query never rewrites the cache: a concurrent hot operation owns that snapshot.
 pub fn handle_modules() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
-    let managed_partitions = defs::MANAGED_PARTITIONS
-        .iter()
-        .map(|partition| (*partition).to_owned())
-        .collect::<Vec<_>>();
+    let managed_partitions = config.scan_partition_names(Path::new("/"));
     let installed = list_modules(&config.moduledir, &managed_partitions)?;
     let boot_owned = crate::runtime::boot_owned_module_ids();
     let modules = query_module_snapshot(

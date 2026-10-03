@@ -202,6 +202,15 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
                 }
             }
             has_mount_files = true;
+            // A partition-root .replace can intentionally contain no children.
+            // Keep it as directory metadata so all backends see the replacement.
+            if partition != "system" && is_replace_dir(&partition_dir) {
+                entries.push(ModuleEntry {
+                    relative: partition.clone(),
+                    file_type: NodeFileType::Directory,
+                    replace: true,
+                });
+            }
             entries.extend(collect_partition_entries(&partition_dir, &partition));
         }
         entries.sort_by(|left, right| left.relative.cmp(&right.relative));

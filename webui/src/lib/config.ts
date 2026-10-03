@@ -9,6 +9,7 @@ import type { AppConfig } from "./types";
 export function cloneAppConfig(source: AppConfig): AppConfig {
   return {
     ...source,
+    extra_mount: [...source.extra_mount],
     rules: Object.fromEntries(
       Object.entries(source.rules).map(([moduleId, rule]) => [
         moduleId,

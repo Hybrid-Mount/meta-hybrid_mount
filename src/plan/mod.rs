@@ -400,10 +400,32 @@ fn add_whole_overlay_layers(
     promoted: &BTreeSet<String>,
     builder: &mut PlanBuilder,
 ) {
+    let replaced_roots = decisions
+        .iter()
+        .filter(|decision| {
+            let components = decision.entry.relative.split('/').collect::<Vec<_>>();
+            decision.entry.replace && components.len() == partition_root_len(&components, promoted)
+        })
+        .map(|decision| decision.entry.relative.as_str())
+        .collect::<BTreeSet<_>>();
     for decision in decisions {
         let relative = decision.entry.relative.as_str();
+        if has_overlay_ancestor(relative, &replaced_roots) {
+            continue;
+        }
         let components = relative.split('/').collect::<Vec<_>>();
         let root_len = partition_root_len(&components, promoted);
+
+        if components.len() == root_len && decision.entry.replace {
+            let (partition, target) = map_target(relative, promoted);
+            builder.add_overlay_layer(
+                &partition,
+                &target,
+                &module.id,
+                join_relative(&module.source_path, relative),
+            );
+            continue;
+        }
 
         if components.len() > root_len + 1
             || (decision.entry.file_type == NodeFileType::Directory
@@ -655,7 +677,7 @@ fn map_target(relative: &str, promoted: &BTreeSet<String>) -> (String, String) {
         (partition, target)
     } else if parts
         .first()
-        .is_some_and(|partition| promoted.contains(*partition))
+        .is_some_and(|partition| *partition != "system")
     {
         (parts[0].to_owned(), format!("/{relative}"))
     } else {
@@ -1522,6 +1544,120 @@ mod tests {
         assert_eq!(scanned, crate::scanner::list_modules(&root, &[]).unwrap());
 
         fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn extra_mount_scans_top_level_only_modules_and_honors_exclusions() {
+        use std::fs;
+        let root = crate::test_support::Fixture::new("extra-mount-plan");
+        fs::create_dir(root.join("my_extra")).unwrap();
+        let modules_dir = root.join("modules");
+        for (id, marker) in [
+            ("first", None),
+            ("second", None),
+            ("disabled", Some("disable")),
+            ("removed", Some("remove")),
+            ("skipped", Some("skip_mount")),
+            ("blocked", None),
+        ] {
+            let module = modules_dir.join(id);
+            fs::create_dir_all(module.join("my_extra/etc")).unwrap();
+            fs::write(module.join("my_extra/etc").join(id), id).unwrap();
+            fs::write(
+                module.join("module.prop"),
+                format!("id={id}\nname={id}\nversion=1\nauthor=A\ndescription=D\n"),
+            )
+            .unwrap();
+            if let Some(marker) = marker {
+                fs::write(module.join(marker), b"").unwrap();
+            }
+        }
+        let mut config = Config {
+            moduledir: modules_dir,
+            default_mode: Mode::Magic,
+            extra_mount: vec!["my_extra".to_owned()],
+            ..Config::default()
+        };
+        config
+            .module_blacklist
+            .insert(ModuleId::try_from("blocked").unwrap());
+        let scan = |config: &Config| {
+            crate::scanner::list_modules(&config.moduledir, &config.scan_partition_names(&root))
+                .unwrap()
+        };
+        let mut old_config = config.clone();
+        old_config.extra_mount.clear();
+        assert!(scan(&old_config).iter().all(|module| !module.mountable()));
+        let modules = scan(&config);
+        for mode in [Mode::Magic, Mode::Overlay, Mode::Vfs] {
+            config.default_mode = mode;
+            let result = plan(&modules, &config, &[]);
+            let files = &result.tree.root.children["my_extra"].children["etc"].children;
+            assert_eq!(files.len(), 2);
+            for id in ["first", "second"] {
+                let source = files[id].source_for(mode).unwrap();
+                assert_eq!(fs::read_to_string(&source.source_path).unwrap(), id);
+            }
+            if mode == Mode::Overlay {
+                assert_eq!(result.overlay_ops.len(), 1);
+                assert_eq!(result.overlay_ops[0].partition, "my_extra");
+                assert_eq!(result.overlay_ops[0].target, "/my_extra/etc");
+                assert_eq!(result.overlay_ops[0].lowerdirs.len(), 2);
+            }
+        }
+        fs::create_dir_all(config.moduledir.join("first/system/etc")).unwrap();
+        fs::write(config.moduledir.join("first/system/etc/stock"), b"system").unwrap();
+        let modules = scan(&config);
+        let result = plan(&modules, &config, &[]);
+        assert!(result.tree.root.children.contains_key("system"));
+        assert!(result.tree.root.children.contains_key("my_extra"));
+        config.default_mode = Mode::Magic;
+        config.rules.insert(
+            ModuleId::try_from("first").unwrap(),
+            crate::config::ModuleRule {
+                paths: BTreeMap::from([("my_extra/etc/first".to_owned(), Mode::Ignore)]),
+                ..crate::config::ModuleRule::default()
+            },
+        );
+        let result = plan(&modules, &config, &[]);
+        let files = &result.tree.root.children["my_extra"].children["etc"].children;
+        assert!(files["first"].source_for(Mode::Magic).is_none());
+        assert!(files["second"].source_for(Mode::Magic).is_some());
+    }
+
+    #[test]
+    fn extra_partition_root_replace_is_preserved_for_all_backends() {
+        use std::fs;
+        let root = crate::test_support::Fixture::new("extra-root-replace");
+        let module = root.join("replace_mod");
+        fs::create_dir_all(module.join("my_extra")).unwrap();
+        fs::write(module.join("my_extra/.replace"), b"").unwrap();
+        fs::write(
+            module.join("module.prop"),
+            "id=replace_mod\nname=M\nversion=1\nauthor=A\ndescription=D\n",
+        )
+        .unwrap();
+        for populated in [false, true] {
+            if populated {
+                fs::create_dir(module.join("my_extra/etc")).unwrap();
+                fs::write(module.join("my_extra/etc/file"), b"extra").unwrap();
+            }
+            let modules = crate::scanner::list_modules(&root, &["my_extra".to_owned()]).unwrap();
+            for mode in [Mode::Magic, Mode::Overlay, Mode::Vfs] {
+                let result = plan(&modules, &config(mode, no_rules()), &[]);
+                let source = result.tree.root.children["my_extra"]
+                    .source_for(mode)
+                    .unwrap();
+                assert!(source.replace);
+                assert_eq!(source.source_path, module.join("my_extra"));
+                if mode == Mode::Overlay {
+                    assert_eq!(result.overlay_ops.len(), 1);
+                    assert_eq!(result.overlay_ops[0].target, "/my_extra");
+                    assert_eq!(result.overlay_ops[0].partition, "my_extra");
+                    assert_eq!(result.overlay_ops[0].lowerdirs, [module.join("my_extra")]);
+                }
+            }
+        }
     }
 
     #[test]

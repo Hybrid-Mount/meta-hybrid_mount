@@ -765,7 +765,7 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     config_phase.finish();
 
     let scan_phase = PhaseTimer::start("scan");
-    let managed_partitions = managed_partition_names();
+    let managed_partitions = config.scan_partition_names(Path::new("/"));
     let modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {

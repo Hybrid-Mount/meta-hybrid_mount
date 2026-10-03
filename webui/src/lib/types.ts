@@ -16,6 +16,7 @@ export interface AppConfig {
   tmpfs_xattr_supported: boolean;
   disable_umount: boolean;
   default_mode: DefaultMountMode;
+  extra_mount: string[];
   rules: Record<string, ModuleRule>;
 }
 

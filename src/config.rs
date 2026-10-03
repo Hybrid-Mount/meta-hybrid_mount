@@ -96,6 +96,10 @@ pub struct Config {
     #[serde(default)]
     pub default_mode: Mode,
 
+    /// Additional root partitions read from module top-level directories.
+    #[serde(default)]
+    pub extra_mount: Vec<String>,
+
     /// Fail the boot (`true`) or degrade (`false`) when the VFS backend is unavailable.
     #[serde(default)]
     pub vfs_strict: bool,
@@ -141,6 +145,7 @@ impl Default for Config {
             overlay_mode: OverlayMode::default(),
             disable_umount: false,
             default_mode: Mode::default(),
+            extra_mount: Vec::new(),
             vfs_strict: false,
             vfs_isolate_uids: Vec::new(),
             rules: BTreeMap::new(),
@@ -154,6 +159,46 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Select extra partitions only when the target exists and /system has no
+    /// corresponding entry, including dangling symlinks. Invalid names never
+    /// become paths; a failed filesystem check skips that partition.
+    pub(crate) fn extra_mount_partitions(&self, root: &Path) -> Vec<String> {
+        let mut partitions = Vec::new();
+        for name in &self.extra_mount {
+            if name.is_empty()
+                || matches!(name.as_str(), "." | ".." | "system" | "apex")
+                || name.contains(['/', '\\', '\0', ':'])
+            {
+                log::warn!("invalid extra_mount partition: {name:?}");
+                continue;
+            }
+            if partitions.contains(name) {
+                continue;
+            }
+            if !root.join(name).is_dir() {
+                log::warn!("extra_mount {name}: target is not an existing directory");
+                continue;
+            }
+            match fs::symlink_metadata(root.join("system").join(name)) {
+                Err(err) if err.kind() == ErrorKind::NotFound => partitions.push(name.clone()),
+                Ok(_) => log::warn!("extra_mount {name}: /system entry already exists"),
+                Err(err) => log::warn!("extra_mount {name}: cannot check /system entry: {err}"),
+            }
+        }
+        partitions
+    }
+
+    /// The same scan roots feed boot, module queries and hot operations.
+    pub(crate) fn scan_partition_names(&self, root: &Path) -> Vec<String> {
+        let mut partitions = defs::MANAGED_PARTITIONS
+            .iter()
+            .filter(|name| root.join(name).is_dir())
+            .map(|name| (*name).to_owned())
+            .collect::<BTreeSet<_>>();
+        partitions.extend(self.extra_mount_partitions(root));
+        partitions.into_iter().collect()
+    }
+
     /// Parses TOML text; empty text is equivalent to all defaults.
     ///
     /// `default_mode = "ignore"` parses but is deprecated, so it is rejected outright
@@ -363,6 +408,9 @@ impl Config {
         if let Some(default_mode) = patch.default_mode {
             self.default_mode = default_mode;
         }
+        if let Some(extra_mount) = patch.extra_mount {
+            self.extra_mount = extra_mount;
+        }
 
         if patch.replace_rules.unwrap_or(false) {
             self.rules.clear();
@@ -494,6 +542,9 @@ pub struct ConfigPatch {
 
     #[serde(default)]
     pub default_mode: Option<Mode>,
+
+    #[serde(default)]
+    pub extra_mount: Option<Vec<String>>,
 
     #[serde(default)]
     pub rules: Option<BTreeMap<ModuleId, ModuleRulePatch>>,

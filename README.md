@@ -28,6 +28,7 @@ moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
 default_mode = "overlay" # overlay | magic | vfs
+extra_mount = []
 
 [rules.example_module]
 default_mode = "magic"
@@ -39,6 +40,8 @@ default_mode = "magic"
 Rule paths are relative to the module root. Module-level and path-level rules may also use `ignore`; the global default backend accepts `overlay`, `magic`, or `vfs`. `vfs_strict = true` makes startup fail when VFS is unavailable, and `vfs_isolate_uids` lists the UIDs that should see the native filesystem. The same file path cannot be assigned to more than one backend. Overlay and Magic, the two real mount backends, may share ordinary directories as structural nodes; VFS is a third injection path rather than a real mount. File, type, and `.replace` conflicts cause the startup planning stage to fail immediately. Configuration changes take effect after reboot.
 
 This routing does not change the project's existing `CONFIG_TMPFS_XATTR` capability check. On KernelSU, installation removes the module's entire `lkm/` directory and runtime uses only the official `NukeExt4Sysfs` ioctl. APatch and other non-KSU installations keep the LKM and try it by default after mounting ext4 staging. The bundled `.ko` files support aarch64 only. Automatic selection requires an exact kernel line and Android/GKI tag match; unknown combinations are rejected. Prebuilt LKMs must still be validated for ABI compatibility on the corresponding real device. If the device crashes during `insmod`, a persistent circuit-breaker marker prevents the LKM from loading again on the next boot while preserving the rest of Hybrid Mount. See [`module/lkm/README.md`](module/lkm/README.md) for the support matrix, checksums, sources, and licenses.
+
+`extra_mount = ["my_extra"]` reads `<module>/my_extra/` into `/my_extra/`. Each target must already be a directory, with no corresponding `/system/my_extra` entry (including a dangling symlink). Use single partition names, not paths; invalid entries are logged and skipped, and `apex` remains excluded. Modules without `system/` work and still honor `disable`, `remove`, `skip_mount`, and the module blacklist. Existing built-in partition handling is preserved. Additional entries use the same backend and path rules, for example `"my_extra/etc/file" = "magic"`. WebUI preserves this field when saving settings; edit it in `config.toml` and reboot to apply it.
 
 ## VFS backend
 

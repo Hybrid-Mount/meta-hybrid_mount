@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   tmpfs_xattr_supported: false,
   disable_umount: false,
   default_mode: "overlay",
+  extra_mount: [],
   rules: {},
 };
 

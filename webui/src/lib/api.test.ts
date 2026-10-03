@@ -227,6 +227,13 @@ describe("WebUI reboot safety", () => {
 });
 
 describe("WebUI configuration contract", () => {
+  it("round-trips extra_mount while defaulting older responses to an empty list", () => {
+    expect(normalizeConfigPayload({}).extra_mount).toEqual([]);
+    const config = normalizeConfigPayload({ extra_mount: ["my_extra", 7, null, ""] });
+    expect(config.extra_mount).toEqual(["my_extra"]);
+    expect(createConfigPayload(config).extra_mount).toEqual(["my_extra"]);
+  });
+
   it("rejects production API calls when the manager bridge is unavailable", async () => {
     const api = createApi(false, false);
 
@@ -242,6 +249,7 @@ describe("WebUI configuration contract", () => {
       tmpfs_xattr_supported: false,
       disable_umount: false,
       default_mode: "overlay",
+      extra_mount: ["my_extra"],
       rules: {
         inherited: { default_mode: null, paths: {} },
       },
@@ -252,6 +260,7 @@ describe("WebUI configuration contract", () => {
       overlay_mode: config.overlay_mode,
       disable_umount: config.disable_umount,
       default_mode: config.default_mode,
+      extra_mount: config.extra_mount,
     });
   });
 

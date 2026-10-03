@@ -28,6 +28,7 @@ moduledir = "/data/adb/modules"
 overlay_mode = "ext4" # ext4 | tmpfs
 disable_umount = false
 default_mode = "overlay" # overlay | magic | vfs
+extra_mount = []
 
 [rules.example_module]
 default_mode = "magic"
@@ -37,6 +38,8 @@ default_mode = "magic"
 ```
 
 规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端接受 `overlay`、`magic` 或 `vfs`。`vfs_strict = true` 时 VFS 不可用即启动失败，`vfs_isolate_uids` 列出应看到原生文件系统的 UID。同一文件路径不能同时进入多个后端；Overlay 与 Magic 两个真实挂载后端可以共享普通目录作为结构节点，VFS 是第三条注入路径、不是真实挂载。文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
+
+`extra_mount = ["my_extra"]` 将 `<模块>/my_extra/` 合并到 `/my_extra/`。目标必须已存在且为目录，`/system/my_extra` 不得有任何同名项（包括悬空符号链接）。只填写单级分区名，不填写路径；无效项会记录警告并跳过，`apex` 仍不允许。没有 `system/` 的模块也受支持，仍遵循 `disable`、`remove`、`skip_mount` 和模块黑名单。内置分区沿用原有处理逻辑；额外分区内容按现有后端及路径规则分配，例如 `"my_extra/etc/file" = "magic"`。WebUI 保存设置时会保留该字段；在 `config.toml` 中编辑并重启生效。
 
 命令行工具的完整命令、参数和 JSON 输出说明见[CLI 参考](ARCHITECTURE.md#cli-契约)。
 

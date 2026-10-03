@@ -107,6 +107,11 @@ export function normalizeConfigPayload(payload: Record<string, unknown>): AppCon
     default_mode: isDefaultMountMode(payload.default_mode)
       ? payload.default_mode
       : DEFAULT_CONFIG.default_mode,
+    extra_mount: Array.isArray(payload.extra_mount)
+      ? payload.extra_mount.filter(
+          (value): value is string => typeof value === "string" && value.length > 0,
+        )
+      : [],
     rules,
   };
 }
@@ -117,6 +122,7 @@ export function createConfigPayload(config: AppConfig): Record<string, unknown> 
     overlay_mode: config.overlay_mode,
     disable_umount: config.disable_umount,
     default_mode: config.default_mode,
+    extra_mount: config.extra_mount,
   };
 }
 

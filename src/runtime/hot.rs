@@ -48,7 +48,7 @@ fn config_and_modules() -> Result<(Config, Vec<scanner::ModuleRecord>)> {
     let config = Config::load_for_boot(Path::new(defs::CONFIG_PATH))?;
     let modules = scanner::list_modules(
         &config.moduledir,
-        &crate::pipeline::managed_partition_names(),
+        &config.scan_partition_names(Path::new("/")),
     )?;
     Ok((config, modules))
 }
