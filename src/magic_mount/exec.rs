@@ -22,7 +22,7 @@ use rustix::mount::{
 use crate::config::Mode as MountMode;
 use crate::errors::{Error, Result};
 use crate::mount_tree::{MountNode, MountTree, NodeFileType};
-use crate::utils::{ensure_dir_exists, getfilecon, lgetfilecon, lsetfilecon};
+use crate::utils::{ensure_dir_exists, getfilecon, lgetfilecon, lsetfilecon_best_effort};
 
 /// A single externally visible result from the Magic Mount executor.
 ///
@@ -577,7 +577,7 @@ fn tmpfs_skeleton(path: &Path, work_dir_path: &Path, node: &MountNode) -> Result
         Some(Gid::from_raw(metadata.gid())),
     )?;
     if !crate::sys::faults::use_fake_magic_mount_ops() {
-        lsetfilecon(work_dir_path, &getfilecon(&reference)?)?;
+        lsetfilecon_best_effort(work_dir_path, &getfilecon(&reference)?);
     }
     Ok(())
 }
@@ -622,7 +622,7 @@ fn mount_mirror(
             Some(Gid::from_raw(metadata.gid())),
         )?;
         if !crate::sys::faults::use_fake_magic_mount_ops() {
-            lsetfilecon(&work_dir_path, &getfilecon(&path)?)?;
+            lsetfilecon_best_effort(&work_dir_path, &getfilecon(&path)?);
         }
 
         for child in path.read_dir()? {
@@ -650,7 +650,7 @@ fn clone_symlink(source: &Path, target: &Path) -> Result<()> {
     let link = fs::read_link(source)?;
     symlink(&link, target)?;
     if !crate::sys::faults::use_fake_magic_mount_ops() {
-        lsetfilecon(target, &lgetfilecon(source)?)?;
+        lsetfilecon_best_effort(target, &lgetfilecon(source)?);
     }
     log::debug!(
         "clone symlink {} -> {}({})",

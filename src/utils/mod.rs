@@ -69,7 +69,7 @@ pub(crate) fn write_xattr(path: &Path, name: &str, value: &[u8]) -> io::Result<(
     Ok(lsetxattr(path, name, value, XattrFlags::empty())?)
 }
 
-/// Sets a path's SELinux context.
+/// Sets a path's SELinux context, propagating failures for callers that require it.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
     log::debug!("file: {}, con: {context}", path.display());
@@ -79,6 +79,16 @@ pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
             path.display()
         ))
     })
+}
+
+/// Attempts to set a staging path's SELinux context, keeping its existing label on failure.
+/// OEM labels may be denied by the root manager's policy; Magic Mount must still
+/// finish mirroring the stock tree rather than rolling back every module.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn lsetfilecon_best_effort(path: &Path, context: &str) {
+    if let Err(err) = lsetfilecon(path, context) {
+        log::warn!("{err}; requested context={context}, keeping existing label");
+    }
 }
 
 /// Reads a path's SELinux context.
@@ -191,6 +201,24 @@ mod tests {
 #[cfg(all(test, target_os = "linux"))]
 mod linux_tests {
     use super::*;
+
+    #[test]
+    fn selinux_write_failure_is_best_effort_only_when_requested() {
+        let dir = std::env::temp_dir().join(format!(
+            "hybrid-mount-selinux-write-failure-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // An invalid context is rejected with or without SELinux enabled. This
+        // exercises the real xattr failure path without root or policy changes.
+        let context = "hybrid_mount_invalid_context";
+        assert!(write_xattr(&dir, defs::SELINUX_XATTR, context.as_bytes()).is_err());
+        assert!(lsetfilecon(&dir, context).is_err());
+        lsetfilecon_best_effort(&dir, context);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     fn xattr_unavailable(err: &std::io::Error) -> bool {
         err.raw_os_error().is_some_and(|code| {
