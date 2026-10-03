@@ -210,12 +210,14 @@ mod linux_tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
-        // An invalid context is rejected with or without SELinux enabled. This
-        // exercises the real xattr failure path without root or policy changes.
-        let context = "hybrid_mount_invalid_context";
-        assert!(write_xattr(&dir, defs::SELINUX_XATTR, context.as_bytes()).is_err());
-        assert!(lsetfilecon(&dir, context).is_err());
-        lsetfilecon_best_effort(&dir, context);
+        // A missing destination makes the real xattr syscall fail regardless of
+        // privileges or SELinux policy (CI can accept even invalid labels).
+        let path = dir.join("missing");
+        let context = "u:object_r:rootfs:s0";
+        let err = write_xattr(&path, defs::SELINUX_XATTR, context.as_bytes()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(lsetfilecon(&path, context).is_err());
+        lsetfilecon_best_effort(&path, context);
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
