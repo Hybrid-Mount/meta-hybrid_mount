@@ -43,6 +43,8 @@ This routing does not change the project's existing `CONFIG_TMPFS_XATTR` capabil
 
 `extra_mount = ["my_extra"]` reads `<module>/my_extra/` into `/my_extra/`. Each target must already be a directory, with no corresponding `/system/my_extra` entry (including a dangling symlink). Use single partition names, not paths; invalid entries are logged and skipped, and `apex` remains excluded. Modules without `system/` work and still honor `disable`, `remove`, `skip_mount`, and the module blacklist. Existing built-in partition handling is preserved. Additional entries use the same backend and path rules, for example `"my_extra/etc/file" = "magic"`. WebUI preserves this field when saving settings; edit it in `config.toml` and reboot to apply it.
 
+Upgrades accept the retired `partitions` key in its former array or comma-separated string form. It is ignored without discarding other settings or rules, and omitted from WebUI responses and subsequent configuration saves. Use `extra_mount` for additional partition roots. Unknown keys and malformed values still cause boot configuration loading to fail.
+
 ## VFS backend
 
 VFS is Hybrid Mount's own kernel-side injection path, driven over the keyring by the `hybridmount` module. It is an independent implementation and does not interoperate with NoMount.

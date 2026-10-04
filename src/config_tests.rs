@@ -261,6 +261,84 @@ fn retired_daemon_mode_does_not_allow_unknown_or_malformed_config() {
 }
 
 #[test]
+fn boot_upgrade_accepts_retired_partitions_without_losing_settings() {
+    for (name, partitions) in [
+        ("empty-array", "[]"),
+        ("array", "[\"system\", \"vendor\", \"my_old\"]"),
+        ("empty-string", "\"\""),
+        ("string", "\"system, vendor , my_old\""),
+    ] {
+        let dir = Fixture::new(&format!("legacy-partitions-{name}"));
+        let path = dir.join("config.toml");
+        let original = format!(
+            r#"moduledir = "/data/adb/modules"
+mountsource = "KSU"
+partitions = {partitions}
+overlay_mode = "tmpfs"
+disable_umount = true
+default_mode = "magic"
+extra_mount = ["my_extra"]
+custom_mounts = []
+daemon_startup_mode = "persistent"
+
+[rules.demo]
+default_mode = "ignore"
+[rules.demo.paths]
+"system/etc/hosts" = "vfs"
+"#
+        );
+        fs::write(&path, &original).unwrap();
+        fs::write(dir.join("module_blacklist.toml"), "blacklist = ['blocked']").unwrap();
+
+        let loaded = Config::load_for_boot(&path).unwrap();
+        assert_eq!(loaded.overlay_mode, OverlayMode::Tmpfs);
+        assert!(loaded.disable_umount);
+        assert_eq!(loaded.default_mode, Mode::Magic);
+        assert_eq!(loaded.extra_mount, ["my_extra"]);
+        assert_eq!(loaded.rules["demo"].default_mode, Some(Mode::Ignore));
+        assert_eq!(loaded.rules["demo"].paths["system/etc/hosts"], Mode::Vfs);
+        assert!(loaded.is_module_blacklisted("blocked"));
+        assert_eq!(Config::load_or_default(&path).unwrap(), loaded);
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        let json = loaded.to_webui_json(false).unwrap();
+        assert!(!json.contains("partitions"));
+
+        // A WebUI save must load the old config, preserve the other settings,
+        // and remove the retired key only when the user actually saves.
+        save_config_payload(&path, &hex::encode(r#"{"disable_umount":false}"#)).unwrap();
+        let saved = Config::load_for_boot(&path).unwrap();
+        assert_eq!(
+            saved,
+            Config {
+                disable_umount: false,
+                ..loaded
+            }
+        );
+        assert!(!fs::read_to_string(&path).unwrap().contains("partitions"));
+    }
+}
+
+#[test]
+fn retired_partitions_keep_invalid_config_and_patch_validation_strict() {
+    for (name, text) in [
+        ("unknown", "partitions = []\nunknown_setting = true\n"),
+        ("wrong-type", "partitions = 42\n"),
+        ("mixed-array", "partitions = ['system', 42]\n"),
+        ("malformed", "partitions = []\nrules = ["),
+    ] {
+        let dir = Fixture::new(&format!("invalid-legacy-partitions-{name}"));
+        let path = dir.join("config.toml");
+        fs::write(&path, text).unwrap();
+        assert!(matches!(
+            Config::load_for_boot(&path),
+            Err(Error::ConfigParse { .. })
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+    }
+    assert!(serde_json::from_str::<ConfigPatch>(r#"{"partitions":[]}"#).is_err());
+}
+
+#[test]
 fn invalid_module_id_rule_key_is_rejected_with_context() {
     let err = Config::from_toml(
         r#"

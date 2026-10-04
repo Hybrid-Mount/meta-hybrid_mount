@@ -81,6 +81,14 @@ pub struct ModuleRule {
     pub paths: BTreeMap<String, Mode>,
 }
 
+/// Retired partition input supported both an array and a comma-separated string.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum LegacyPartitions {
+    Names(Vec<String>),
+    CommaSeparated(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -125,6 +133,11 @@ pub struct Config {
     #[serde(default, rename = "mountsource", skip_serializing)]
     pub(crate) legacy_mountsource: Option<String>,
 
+    /// Upgrade-only input from releases with configurable partition discovery.
+    /// Discovery now uses built-in roots and explicit `extra_mount` entries.
+    #[serde(default, rename = "partitions", skip_serializing)]
+    pub(crate) legacy_partitions: Option<LegacyPartitions>,
+
     /// Upgrade-only input from releases that exposed custom bind mounts.
     /// The backend no longer implements that feature; accepting and omitting
     /// this field prevents one obsolete empty array from discarding the rest
@@ -152,6 +165,7 @@ impl Default for Config {
             module_blacklist: BTreeSet::new(),
             config_missing: false,
             legacy_mountsource: None,
+            legacy_partitions: None,
             legacy_custom_mounts: Vec::new(),
             legacy_daemon_startup_mode: None,
         }
@@ -257,6 +271,21 @@ impl Config {
     fn finish_loaded(mut config: Self) -> Self {
         if config.legacy_mountsource.take().is_some() {
             log::info!("ignoring obsolete mountsource; using the detected root backend");
+        }
+        if let Some(partitions) = config.legacy_partitions.take() {
+            let has_entries = match partitions {
+                LegacyPartitions::Names(names) => names.iter().any(|name| !name.trim().is_empty()),
+                LegacyPartitions::CommaSeparated(names) => {
+                    names.split(',').any(|name| !name.trim().is_empty())
+                }
+            };
+            if has_entries {
+                log::warn!(
+                    "obsolete partitions entries are ignored; configure extra_mount for additional roots"
+                );
+            } else {
+                log::info!("ignoring obsolete empty partitions during configuration upgrade");
+            }
         }
         if !config.legacy_custom_mounts.is_empty() {
             log::warn!(

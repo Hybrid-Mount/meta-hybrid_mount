@@ -43,6 +43,8 @@ default_mode = "magic"
 
 命令行工具的完整命令、参数和 JSON 输出说明见[CLI 参考](ARCHITECTURE.md#cli-契约)。
 
+升级时兼容旧版 `partitions` 字段的数组和逗号分隔字符串格式。该字段会被忽略，其他设置与规则仍保留；WebUI 输出和后续配置保存会移除它。需要额外分区时使用 `extra_mount`。未知字段和格式错误仍会导致启动配置加载失败。
+
 `hybrid-mount vfs` 提供运行态规则／UID 管理、whiteout／opaque、诊断和显式 LKM 加载。
 支持 NoMount 风格短命令，默认文本、可选 `--json`；清空需 `--yes`，手工修改不持久化。
 命令与示例见 [VFS CLI](VFS_CLI.md)。
