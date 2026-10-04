@@ -164,7 +164,7 @@ static const struct inode_operations hm_dir_iops;
 /*** forward declarations ***/
 static struct dentry *hybridmount_hijacked_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags);
 static int hybridmount_hijacked_iterate_dir(struct file *file, struct dir_context *ctx);
-static void hybridmount_hijacked_destroy_inode(struct inode *inode);
+static void hybridmount_hijacked_evict_inode(struct inode *inode);
 static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dentry, bool injected);
 static void hm_free_rule(struct hybridmount_rule *rule);
 
@@ -743,7 +743,7 @@ static inline struct hm_fop *hm_get_hm_fop(const struct file_operations *fop) {
 }
 
 static inline struct hm_sop *hm_get_hm_sop(const struct super_operations *sop) {
-    if (likely(sop) && sop->destroy_inode == hybridmount_hijacked_destroy_inode)
+    if (likely(sop) && sop->evict_inode == hybridmount_hijacked_evict_inode)
         return container_of(sop, struct hm_sop, fake_sop);
     return NULL;
 }

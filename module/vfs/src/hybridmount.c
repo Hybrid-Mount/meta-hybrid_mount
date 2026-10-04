@@ -19,6 +19,7 @@ static __always_inline bool hybridmount_is_uid_blocked(uid_t target_uid)
 {
     struct hm_uid_array *arr;
     bool blocked = false;
+    if (likely(!rcu_access_pointer(hybridmount_uids))) return false;
     rcu_read_lock();
     if ((arr = rcu_dereference(hybridmount_uids))) {
         int lo = 0, hi = arr->count;
@@ -118,12 +119,20 @@ static inline void hm_destroy_virtual_inode(struct inode *inode)
 {
     struct hm_inode_info *info = inode->i_private;
     if (!info) return;
+    /* The proxy borrows the backing inode's mapping; eviction must only touch
+     * this inode's own pages, and the backing path can now be released. */
+    inode->i_mapping = &inode->i_data;
     if (info->r_path.dentry) path_put(&info->r_path);
 
     if (info->dir_node) {
-        WRITE_ONCE(info->dir_node->v_inode, NULL);
-        if (hm_dir_tag(info->dir_node) == 1UL)
+        rcu_read_lock();
+        cmpxchg(&info->dir_node->v_inode, inode, NULL);
+        /* Retiring the empty slot prevents a new creator from publishing
+         * after this decision. Another inode may already have reused it. */
+        if (hm_dir_tag(info->dir_node) == 1UL &&
+            cmpxchg(&info->dir_node->v_inode, NULL, (struct inode *)-1L) == NULL)
             call_rcu(&info->dir_node->rcu, hm_dir_rcu_free);
+        rcu_read_unlock();
     }
 
     kfree(info);
@@ -259,8 +268,16 @@ static struct dentry *hybridmount_resolve_rule_dentry(struct inode *dir, struct 
     rcu_read_lock();
     if (!dir_node || !__hybridmount_get_rule_info(dir_node, dentry->d_name.name, dentry->d_name.len, hash, &rule_info, false))
         goto unlock_out;
+    if (unlikely(hybridmount_is_uid_blocked(current_fsuid().val)))
+        goto unlock_out;
     if (rule_info.flags & HM_FLAG_WHITEOUT)
         goto resolve_rule;
+    if (rule_info.this_dir && (splice_inode = smp_load_acquire(&rule_info.this_dir->v_inode))) {
+        if (splice_inode == (struct inode *)-1L || !(splice_inode = igrab(splice_inode)))
+            goto unlock_out;
+        rcu_read_unlock();
+        goto do_splice;
+    }
     rcu_read_unlock();
 
     if (likely((prealloc_inode = new_inode(dir->i_sb)))) {
@@ -285,17 +302,22 @@ resolve_rule:
     }
 
     if (likely(prealloc_inode && ((rule_info.flags & HM_FLAG_VIRTUAL_DIR) || rule_info.r_path.dentry))) {
+        /* Publish only a fully initialized inode. A competing creator owns
+         * its spare inode and path, but must not clear the winner's dir node. */
+        hybridmount_init_prealloc_inode(prealloc_inode, prealloc_info, &rule_info);
+        rule_info.r_path.dentry = NULL;
         if (rule_info.this_dir && (splice_inode = cmpxchg(&rule_info.this_dir->v_inode, NULL, prealloc_inode))) {
-            if (splice_inode == (struct inode *)-1L) goto unlock_out;
-            igrab(splice_inode);
+            prealloc_info->dir_node = NULL;
+            prealloc_info = NULL;
+            if (splice_inode == (struct inode *)-1L || !(splice_inode = igrab(splice_inode)))
+                goto unlock_out;
         } else {
-            hybridmount_init_prealloc_inode(prealloc_inode, prealloc_info, &rule_info);
             splice_inode = prealloc_inode;
             prealloc_inode = NULL; prealloc_info = NULL;
-            rule_info.r_path.dentry = NULL; 
         }
 
         rcu_read_unlock();
+do_splice:
         if (!IS_ERR((res = d_splice_alias(splice_inode, dentry))))
             hybridmount_hijack_dentry_ops(dir, res ? res : dentry, true);
             
@@ -399,16 +421,6 @@ do_real_iterate:
     return -ENOTDIR;
 }
 
-static void hybridmount_hijacked_destroy_inode(struct inode *inode)
-{
-    struct hm_sop *hm_sop;
-    (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops) ? hm_destroy_virtual_inode(inode) : hm_destroy_hijacked_inode(inode, false);
-
-    hm_sop = hm_get_hm_sop(smp_load_acquire(&inode->i_sb->s_op));
-    if (hm_sop && hm_sop->orig_sop && hm_sop->orig_sop->destroy_inode)
-        hm_sop->orig_sop->destroy_inode(inode);
-}
-
 static int hybridmount_hijacked_drop_inode(struct inode *inode)
 {
     struct hm_sop *hm_sop;
@@ -424,10 +436,13 @@ generic_fn:
 
 static void hybridmount_hijacked_evict_inode(struct inode *inode)
 {
-    struct hm_sop *hm_sop;
-    if (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops) goto generic_fn;
+    struct hm_sop *hm_sop = hm_get_hm_sop(smp_load_acquire(&inode->i_sb->s_op));
+    if (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops) {
+        hm_destroy_virtual_inode(inode);
+        goto generic_fn;
+    }
 
-    hm_sop = hm_get_hm_sop(smp_load_acquire(&inode->i_sb->s_op));
+    hm_destroy_hijacked_inode(inode, true);
     if (hm_sop && hm_sop->orig_sop && hm_sop->orig_sop->evict_inode) {
         hm_sop->orig_sop->evict_inode(inode);
     } else {
@@ -972,7 +987,6 @@ static inline void hybridmount_hijack_superblock(struct super_block *sb)
     hm_sop->orig_sop = sb->s_op;
     hm_sop->orig_xattr = hm_sop->fake_xattr = NULL;
     hm_sop->sb = sb;
-    hm_sop->fake_sop.destroy_inode = hybridmount_hijacked_destroy_inode;
     hm_sop->fake_sop.drop_inode = hybridmount_hijacked_drop_inode;
     hm_sop->fake_sop.evict_inode = hybridmount_hijacked_evict_inode;
 
@@ -1345,11 +1359,23 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
         if (i > 0) v_path[i] = '\0';
         if ((p = kern_path((parent_len == 1) ? "/" : v_path, LOOKUP_FOLLOW, &p_path)), (v_path[i] = orig_vpath), (p == 0)) {
             struct inode *v_inode = d_backing_inode(p_path.dentry);
-            struct hybridmount_dir_node *old_node = ({
+            struct hybridmount_dir_node *old_node = NULL;
+            bool is_virtual = v_inode->i_op == &hm_dir_iops || v_inode->i_op == &hm_file_iops;
+
+            if (is_virtual) {
+                struct hm_inode_info *info = v_inode->i_private;
+                old_node = info ? info->dir_node : NULL;
+                /* A virtual parent without its topology cannot own a new hook. */
+                if (!old_node) {
+                    err = -ENOTDIR;
+                    path_put(&p_path);
+                    break;
+                }
+            } else {
                 struct hm_iop *iop = hm_get_hm_iop(smp_load_acquire(&v_inode->i_op));
                 struct hm_fop *fop = hm_get_hm_fop(smp_load_acquire(&v_inode->i_fop));
-                (iop && iop->dir_node) ? iop->dir_node : (fop ? fop->dir_node : NULL);
-            });
+                old_node = (iop && iop->dir_node) ? iop->dir_node : (fop ? fop->dir_node : NULL);
+            }
 
             if (unlikely(!(dir_node = old_node ?: __hybridmount_alloc_dir_node()))) {
                 err = -ENOMEM;
@@ -1359,10 +1385,12 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
                 /* The hooks belong to this inode, not its persistent inode number.
                  * Pin its path until the attached rule is retired, including when
                  * current_rule is a generated ancestor of the requested rule. */
-                current_rule->parent_path = p_path;
-                path_get(&current_rule->parent_path);
-                hybridmount_hijack_dir_ops(dir_node, v_inode);
-                hybridmount_hijack_superblock(p_path.dentry->d_sb);
+                if (!is_virtual) {
+                    current_rule->parent_path = p_path;
+                    path_get(&current_rule->parent_path);
+                    hybridmount_hijack_dir_ops(dir_node, v_inode);
+                    hybridmount_hijack_superblock(p_path.dentry->d_sb);
+                }
                 struct dentry *dentry = hm_hash_and_lookup(p_path.dentry, &(struct qstr)QSTR_INIT(child_name, child_len));
                 if (dentry) { d_drop(dentry); dput(dentry); }
             }
@@ -1522,12 +1550,17 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
 static void hm_free_rule(struct hybridmount_rule *rule)
 {
     if (rule->this_dir) {
+        /* Publish orphan ownership before testing the inode slot. Eviction can
+         * then retire it if the inode is still present; RCU keeps the node alive
+         * while both paths compete for the same NULL -> retired transition. */
+        rcu_read_lock();
+        hm_dir_set_owner(rule->this_dir, NULL);
+        smp_mb();
         if (cmpxchg(&rule->this_dir->v_inode, NULL, (struct inode *)-1L) == NULL) {
             hm_detach_dir_node(rule->this_dir);
             call_rcu(&rule->this_dir->rcu, hm_dir_rcu_free);
-        } else {
-            hm_dir_set_owner(rule->this_dir, NULL);
         }
+        rcu_read_unlock();
     }
     if (!(rule->flags & HM_FLAG_VIRTUAL_DIR) && rule->r_path.dentry)
         path_put(&rule->r_path);

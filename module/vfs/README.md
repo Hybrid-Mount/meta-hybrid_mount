@@ -29,6 +29,16 @@ open or mapped. Rule replacement, rollback, deletion and clear release retired
 references after the existing RCU/SRCU reader drain; module teardown releases them
 before shrinking the dcache and restoring the filesystem operations.
 
+Virtual directory inodes are initialized before publication, and concurrent creators
+release their unused candidate without detaching the published inode. Existing
+virtual parents reuse their topology instead of being hooked a second time. Inode
+private state is released during eviction; virtual proxies first restore their own
+mapping, while real inodes restore their filesystem operations before native eviction.
+
+`CC=clang python3 tests/kernel/inode_lifecycle.py` runs deterministic interleavings
+against the production C functions with controlled kernel primitives. These host
+checks cover ownership and publication decisions; DDK and device checks remain separate.
+
 For manual regression on a test device with a compatible provider loaded, run
 [vfs_parent_lifetime.sh](../../tests/device/vfs_parent_lifetime.sh) as root with the
 Hybrid Mount binary and a quiet read-only directory on EROFS or another disk
@@ -98,7 +108,7 @@ packaged builds for the same kernel major/minor line. Android userspace is not u
 as a GKI label: a custom `5.15` kernel running Android 16 still tries the Android 13
 and Android 14 builds for `5.15`. Other kernel lines are never substituted.
 
-The loading order for each candidate is `/data/adb/ksud insmod`, the built-in
+The loading order for each candidate is `/data/adb/ksud insmod`, APatch `apd insmod`, the built-in
 `hybrid-mount lkm-load` command, then ordinary system/BusyBox `insmod`. The built-in
 loader implements the strategy used by NoMount's `lkmloader` in Rust: resolve
 undefined ELF symbols from nonzero core-kernel addresses in `/proc/kallsyms`, then

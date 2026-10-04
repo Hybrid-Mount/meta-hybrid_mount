@@ -80,10 +80,13 @@ fn select_for_release(
     Ok(Path::new(directory).join(file_name))
 }
 
-/// Shared VFS/nuke loading order: ksud, our built-in loader, then ordinary insmod.
+/// Shared VFS/nuke loading order: native root managers, our loader, then insmod.
 /// The optional subcommand precedes the module path and parameters.
 pub const INSMOD_CANDIDATES: &[(&str, Option<&str>)] = &[
     ("/data/adb/ksud", Some("insmod")),
+    ("/data/adb/apd", Some("insmod")),
+    ("/data/adb/ap/bin/apd", Some("insmod")),
+    ("apd", Some("insmod")),
     (
         "/data/adb/modules/hybrid_mount/hybrid-mount",
         Some("lkm-load"),
@@ -330,6 +333,29 @@ impl Drop for LoadAttemptGuard {
 mod tests {
     use super::*;
     use std::cell::Cell;
+
+    #[test]
+    fn native_root_loaders_precede_the_abi_compatibility_loader() {
+        let compatibility = INSMOD_CANDIDATES
+            .iter()
+            .position(|(_, applet)| *applet == Some("lkm-load"))
+            .unwrap();
+        for program in [
+            "/data/adb/ksud",
+            "/data/adb/apd",
+            "/data/adb/ap/bin/apd",
+            "apd",
+        ] {
+            let position = INSMOD_CANDIDATES
+                .iter()
+                .position(|candidate| *candidate == (program, Some("insmod")))
+                .unwrap_or_else(|| panic!("missing native root loader: {program}"));
+            assert!(
+                position < compatibility,
+                "{program} must precede ABI adaptation"
+            );
+        }
+    }
 
     #[cfg(unix)]
     #[test]

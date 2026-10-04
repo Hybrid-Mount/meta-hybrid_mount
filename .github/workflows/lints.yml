@@ -61,6 +61,9 @@ jobs:
       - name: Unit tests
         run: cargo test --workspace
 
+      - name: Test VFS inode lifecycle interleavings
+        run: python3 tests/kernel/inode_lifecycle.py
+
       - name: Gate banned symbols
         run: |
           set -euo pipefail

@@ -55,6 +55,24 @@ GPL-3.0 text. To compare against the pristine baseline, use the import commit:
   generated virtual ancestors retain the same reference when they attach to a real
   parent. Retired rules release it after the existing RCU/SRCU reader drain, including
   replacement, rollback, deletion and clear before module teardown restores VFS ops.
+- Selective upstream review through NoMount dev
+  71ff9c4cd3037e3c968263a1d82b447f511cc658 (2026-10-04 review):
+  - 60073edc / fd1201a4: initialize virtual inodes before publishing them and reuse
+    existing inodes without allocating a spare. Unlike upstream's initializing
+    sentinel, fully initialized candidates compete via cmpxchg; the loser detaches
+    its directory association before eviction. Failed igrab is handled explicitly.
+    Eviction protects the node with RCU and retires an empty inode slot atomically
+    before freeing orphan topology, so an old inode cannot free a new owner's node.
+    Rule retirement publishes orphan ownership before checking the inode slot, so
+    concurrent eviction cannot leave an empty orphan node without a free claimant.
+  - 53e4c93e: clean up in evict_inode, retaining the original destroy_inode callback.
+    Virtual inodes restore their own mapping and use generic eviction; real inodes
+    restore their filesystem operations before calling the original evict_inode.
+  - 6a899d50: reuse existing virtual-parent topology without hooking it again or
+    retaining a parent-path reference to our own virtual inode.
+  - fea33dd0: skip the UID-table RCU section when no isolation table is installed.
+  The imported baseline above remains unchanged. ART, seqcount and SRCU are retained;
+  this is a selective port, not a wholesale upstream snapshot replacement.
 
 Behaviour is no longer byte-identical to upstream, and the wire magic no longer matches
 it: a stock nm CLI is rejected at preparse with -EFAULT. The payload field order, sizes
