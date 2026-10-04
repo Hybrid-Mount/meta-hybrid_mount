@@ -12,8 +12,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use ::ksu::NukeExt4Sysfs;
-
 use crate::defs;
 use crate::errors::{ContextError, Error};
 use crate::sys::lkm::{
@@ -55,9 +53,7 @@ pub fn nuke_ext4_sysfs(path: &Path) {
 }
 
 fn run_ksu_nuke(path: &Path) {
-    let mut nuke = NukeExt4Sysfs::new();
-    nuke.add(path);
-    match nuke.execute() {
+    match ksu::nuke_ext4_sysfs(path) {
         Ok(()) => {
             log::info!(
                 "ext4 sysfs nuke complete: backend=ksu_ioctl, path={}",

@@ -631,7 +631,6 @@ dependencies = [
  "flate2",
  "getrandom 0.4.3",
  "hex",
- "ksu",
  "libc",
  "log",
  "loopdev",
@@ -933,20 +932,6 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "ksu"
-version = "0.2.0"
-source = "git+https://github.com/Tools-cx-app/ksu.git#cedc38071c8cf0e84e6b601201bfc836ba563f1f"
-dependencies = [
- "anyhow",
- "bitflags",
- "libc",
- "linux-raw-sys",
- "log",
- "rustix",
- "thiserror",
 ]
 
 [[package]]

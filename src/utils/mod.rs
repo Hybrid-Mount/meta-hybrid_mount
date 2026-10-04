@@ -141,6 +141,12 @@ pub mod ksu;
 #[cfg(any(target_os = "linux", target_os = "android", test))]
 pub(crate) mod ksu_umount;
 
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub(crate) mod ksu_protocol;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod ksu_driver;
+
 #[cfg(test)]
 mod tests {
     use super::*;

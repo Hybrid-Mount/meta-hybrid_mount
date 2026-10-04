@@ -3,11 +3,11 @@
 //! KernelSU registration ownership and the try-umount wire protocol.
 
 use std::collections::BTreeSet;
-use std::ffi::CString;
 use std::io;
 
 // KernelSU uapi/supercall.h: __aligned_u64 arg; __u32 flags; __u8 mode.
 #[repr(C, align(8))]
+#[derive(Clone, Copy)]
 pub(crate) struct UmountCommand {
     pub arg: u64,
     pub flags: u32,
@@ -19,7 +19,7 @@ fn issue(
     mode: u8,
     send: &mut impl FnMut(&UmountCommand) -> io::Result<()>,
 ) -> io::Result<()> {
-    let path = CString::new(path)?;
+    let path = super::ksu_protocol::mount_path(path.as_bytes())?;
     send(&UmountCommand {
         arg: path.as_ptr() as u64,
         flags: 2, // MNT_DETACH
@@ -59,8 +59,14 @@ impl Registrations {
     ) -> io::Result<()> {
         for path in &self.queued {
             if !self.installed.contains(path) {
-                issue(path, 1, send)?;
-                self.installed.insert(path.clone());
+                match issue(path, 1, send) {
+                    Ok(()) => {
+                        self.installed.insert(path.clone());
+                    }
+                    // Existing entries belong to another writer. Do not delete them on rollback.
+                    Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(err) => return Err(err),
+                }
             }
         }
         Ok(())
@@ -185,14 +191,54 @@ mod tests {
     #[test]
     fn partial_commit_rollback_deletes_only_successful_owned_registrations() {
         let mut state = Registrations::default();
-        let mut kernel = Kernel::default();
-        kernel.paths.insert("/b".into());
+        let mut kernel = Kernel {
+            fail: Some("/b".into()),
+            ..Kernel::default()
+        };
         state.queue("/a");
         state.queue("/b");
         assert!(state.commit(&mut |cmd| kernel.apply(cmd)).is_err());
         assert_eq!(state.committed(), vec!["/a"]);
         state.rollback(&mut |cmd| kernel.apply(cmd)).unwrap();
+        assert!(kernel.paths.is_empty());
+    }
+
+    #[test]
+    fn already_registered_paths_do_not_fail_or_become_owned() {
+        let mut kernel = Kernel::default();
+        kernel.paths.insert("/b".into());
+        let mut state = Registrations::default();
+        state.queue("/a");
+        state.queue("/b");
+        state.queue("/c");
+        state.commit(&mut |cmd| kernel.apply(cmd)).unwrap();
+        assert_eq!(state.committed(), vec!["/a", "/c"]);
+        state.rollback(&mut |cmd| kernel.apply(cmd)).unwrap();
         assert_eq!(kernel.paths, BTreeSet::from(["/b".into()]));
+    }
+
+    #[test]
+    fn invalid_paths_never_reach_the_kernel_or_acquire_ownership() {
+        for path in [String::new(), "x".repeat(256), "a\0b".into()] {
+            let mut state = Registrations::default();
+            state.queue(&path);
+            assert!(
+                state
+                    .commit(&mut |_| panic!("invalid path reached ioctl"))
+                    .is_err()
+            );
+            assert!(state.committed().is_empty());
+        }
+    }
+
+    #[test]
+    fn maximum_length_path_is_registered_without_truncation() {
+        let mut state = Registrations::default();
+        let mut kernel = Kernel::default();
+        let path = format!("/{}", "x".repeat(254));
+        state.queue(&path);
+        state.commit(&mut |cmd| kernel.apply(cmd)).unwrap();
+        assert_eq!(state.committed(), vec![path]);
     }
 
     #[test]

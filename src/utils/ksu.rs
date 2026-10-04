@@ -6,53 +6,25 @@
 //! Note the boundary: this only **registers** mountpoints with the kernel list and never
 //! unmounts immediately, which requires the rustix `unmount` syscall.
 
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::Path;
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use super::ksu_driver;
 use super::ksu_umount::{self, Registrations, UmountCommand};
 use crate::errors::{ContextError, Error, Result};
 use crate::utils::is_ignored_unmount_partition;
 
 static KSU_ACTIVE: AtomicBool = AtomicBool::new(false);
-static UMOUNT_BROKEN: AtomicBool = AtomicBool::new(false);
 static REGISTERED_PATHS: OnceLock<Mutex<Registrations>> = OnceLock::new();
 
 fn registered_paths() -> &'static Mutex<Registrations> {
     REGISTERED_PATHS.get_or_init(|| Mutex::new(Registrations::default()))
 }
 
-/// Use the documented ioctl directly: ksu 0.2.0's del() mistakenly sends WIPE.
-/// Keep the descriptor owned and never treat a failed installation as a valid fd.
-fn open_driver() -> std::io::Result<OwnedFd> {
-    let mut fd: libc::c_int = -1;
-    // SAFETY: KernelSU intercepts these magic reboot arguments and writes a new fd
-    // into the valid output pointer. Other kernels reject the invalid magic values.
-    unsafe {
-        libc::syscall(libc::SYS_reboot, 0xDEADBEEFu32, 0xCAFEBABEu32, 0, &mut fd);
-    }
-    if fd < 0 {
-        return Err(std::io::Error::other(
-            "KernelSU driver descriptor unavailable",
-        ));
-    }
-    // SAFETY: KernelSU returned a newly installed descriptor owned by this process.
-    Ok(unsafe { OwnedFd::from_raw_fd(fd) })
-}
-
 fn kernel_command(command: &UmountCommand) -> std::io::Result<()> {
-    let fd = open_driver()?;
-    // The ioctl has an empty encoded size despite carrying the UAPI struct.
-    let request = libc::_IOW::<()>(u32::from(b'K'), 18);
-    // SAFETY: fd is live; command's path pointer stays valid through this call.
-    let ret = unsafe { libc::ioctl(fd.as_raw_fd(), request as _, command) };
-    if ret < 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
+    ksu_driver::manage_umount(command)
 }
 
 pub fn committed_unmounts() -> Vec<String> {
@@ -76,18 +48,24 @@ pub fn release_unmounts(paths: &[String]) -> Result<()> {
     })
 }
 
-/// Detects whether KernelSU is available at boot; major version 4 disables the umount list.
+/// Detect KernelSU through modern or legacy GET_INFO, without version-number heuristics.
 pub fn init() {
-    let active = ksu::version().is_some_and(|version| {
-        log::info!("KernelSU Version: {version}");
-        if version.to_string().starts_with('4') {
-            log::warn!(
-                "the ioctl function of this KernelSU line is broken, umount list is disabled"
-            );
-            UMOUNT_BROKEN.store(true, Ordering::Relaxed);
+    let active = match ksu_driver::info() {
+        Ok(info) => {
+            log::info!("KernelSU Version: {}", info.version);
+            if info.late_load() || std::env::var_os("KSU_LATE_LOAD").is_some() {
+                log::info!("KernelSU late-load mode");
+            }
+            if let Some(enabled) = ksu_driver::kpm_enabled() {
+                log::debug!("KernelSU KPM API accessible: enabled={enabled}");
+            }
+            true
         }
-        true
-    });
+        Err(err) => {
+            log::debug!("KernelSU detection failed: {err}");
+            false
+        }
+    };
 
     KSU_ACTIVE.store(active, Ordering::Relaxed);
 }
@@ -96,9 +74,14 @@ pub fn is_active() -> bool {
     KSU_ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Adds a mountpoint to the KernelSU try-umount list, a no-op when unavailable, disabled, ignored or already present.
+/// Use the same driver transport for staging concealment and try-umount registration.
+pub fn nuke_ext4_sysfs(path: &Path) -> std::io::Result<()> {
+    ksu_driver::nuke_ext4_sysfs(path)
+}
+
+/// Adds a mountpoint to the KernelSU try-umount list, a no-op when unavailable, ignored or already queued.
 pub fn send_unmountable(target: impl AsRef<Path>) {
-    if !is_active() || UMOUNT_BROKEN.load(Ordering::Relaxed) {
+    if !is_active() {
         return;
     }
 
@@ -125,7 +108,7 @@ pub fn send_unmountable(target: impl AsRef<Path>) {
 /// point no longer exists keeps logging `KernelSU: ksu_handle_umount: unmounting: <path>`
 /// for the whole boot.
 pub fn withdraw_unmountable(target: impl AsRef<Path>) {
-    if !is_active() || UMOUNT_BROKEN.load(Ordering::Relaxed) {
+    if !is_active() {
         return;
     }
 
@@ -154,7 +137,7 @@ pub fn commit_unmount_list() -> Result<()> {
             "injected KernelSU try-umount commit failure".to_owned(),
         ))));
     }
-    if !is_active() || UMOUNT_BROKEN.load(Ordering::Relaxed) {
+    if !is_active() {
         return Ok(());
     }
 

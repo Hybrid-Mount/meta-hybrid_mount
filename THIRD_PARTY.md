@@ -42,6 +42,8 @@ This file records third-party components that Hybrid Mount is derived from or di
 - License: **GPL-3.0** (upstream). Re-derived files keep the upstream copyright notice and carry an explicit `SPDX-License-Identifier`, using `GPL-3.0-only` to match the identifier this repository already uses for the GPL-3.0-only core; the Rust reimplementation is distributed under the core's GPL-3.0-only license.
 - Attribution Hybrid Mount commits to: preserve upstream copyright notices in derived files, record the reference revision, and credit the project in the README and its translations.
 
+- Additional reference: commit [`9d401ef41570a191ad3732328679c88570f42467`](https://github.com/Tools-cx-app/meta-magic_mount-rs/commit/9d401ef41570a191ad3732328679c88570f42467), direct KernelSU ioctl transport. `src/utils/ksu_protocol.rs` and `src/utils/ksu_driver.rs` adapt inherited driver discovery, modern/legacy GET_INFO, KPM probing and path validation. Hybrid Mount retains owned descriptors and its own registration ledger, preserves foreign entries on EEXIST, and routes ext4 concealment through the same transport.
+
 ## Mountify — ext4 sysfs LKM
 
 - Upstream project: Mountify, https://github.com/backslashxx/mountify
