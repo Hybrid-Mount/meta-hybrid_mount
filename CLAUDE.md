@@ -237,7 +237,7 @@ VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模�
 
 仓库根目录 `module.yaml` 提供 KernelSU Modules 展示元数据，图标为从 `icon.svg` 导出的 `icon.png`；默认分支 `main` 必须包含这些文件。首次上架流程见 `docs/KERNELSU_MODULES.md`。
 
-`.github/workflows/release.yml` 使用固定完整 SHA 的官方 `KernelSU-Modules/tools/actions/module-release` 预检 ZIP 与元数据，按 draft → 上传 ZIP → 发布的顺序创建不可变 release，并使用 action 的 `asset-name` 输出生成 `update.json`，随后更新 `changelog.md` 和版本信息；`cargo xtask update-json` 也可单独生成更新元数据。Telegram 通知由独立的 `cargo xtask notify` 命令发送，构建命令不会自动发送。
+`.github/workflows/release.yml` 使用固定完整 SHA 的官方 `KernelSU-Modules/tools/actions/module-release` 以 dry-run 预检 ZIP 与元数据，保留 `Hybrid-Mount-{version}-{commit_count}.zip` 原命名，按 draft → 上传 ZIP → 校验名称及 SHA256 → 发布的顺序创建不可变 release，并使用原始 ZIP 名生成 `update.json`，随后更新 `changelog.md` 和版本信息；`cargo xtask update-json` 也可单独生成更新元数据。Telegram 通知由独立的 `cargo xtask notify` 命令发送，构建命令不会自动发送。
 
 发布构建依赖的缓存由 CI 预热：`build.yml` 在 `dev` 与 `main` 上都会运行，`main` 上那一次同时把 4 个架构的 release 产物、riscv64 的 std（Tier 3，没有可下载的 std，只能靠 `-Z build-std` 现编）与 pnpm store 写进缓存。tag run 只能读「自身 ref + 默认分支」的缓存，而 `lints.yml` 在默认分支上产出的只有 `cargo check` 产物（check 元数据推不出 release profile 的 codegen），所以这是发布能复用编译结果的唯一来源。**发布顺序因此是固定的：先合并 `dev` → `main`，等 `main` 的 Build Hybrid Mount workflow 变绿，再打 tag**；合并后立刻打 tag 不会出错，但 tag run 会抢在预热写入缓存之前启动，退回全量冷编译。
 

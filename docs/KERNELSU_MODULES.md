@@ -24,11 +24,14 @@ Integrate `dev` into `main` and wait for **Build Hybrid Mount** to pass before
 tagging. The release workflow resolves the tag through `cargo xtask release-version`,
 builds all four Android binaries, and verifies the prebuilt VFS source digests.
 The official `KernelSU-Modules/tools/actions/module-release` action is pinned to a
-full commit SHA. It validates the ZIP and `module.yaml`, creates a draft, uploads
-one module ZIP, publishes, and verifies `immutable: true`.
+full commit SHA. It validates the ZIP and `module.yaml` with `dry-run: true`. The existing
+release action then creates a draft and uploads the original ZIP. Before
+publishing, the workflow verifies its filename, SHA256 and single-asset layout,
+then publishes and checks `immutable: true`.
 
-The asset name is `hybrid_mount-{versionCode}-{version}.zip`. The workflow uses
-the action's actual asset name when generating `update.json`, so manager updates
+The asset name remains `Hybrid-Mount-{version}-{commit_count}.zip`, for example
+`Hybrid-Mount-6.2.3-rc.3-2083.zip`. The manifest matches `Hybrid-Mount-*.zip`,
+and the workflow uses the verified original filename in `update.json`, so manager updates
 resolve to the same uploaded file. Telegram notification runs after version sync
 so a notification failure cannot leave manager updates pointing at the previous release.
 Keep the existing self-hosted `updateJson`

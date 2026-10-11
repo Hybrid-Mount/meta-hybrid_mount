@@ -237,6 +237,7 @@ jobs:
           test -n "$ZIP" && test -s "$ZIP"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum "$ZIP" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog
         id: git-cliff
@@ -249,28 +250,75 @@ jobs:
           OUTPUT: /tmp/changelog.md
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Precheck and publish immutable release
-        id: module-release
-        # Pinned official validator: draft -> upload -> publish -> immutable readback.
+      - name: Precheck release package
+        # The official action normally renames assets. Use it only for validation;
+        # its broad precheck pattern accepts the generated validator filename.
         uses: KernelSU-Modules/tools/actions/module-release@ca1187c92135b3c31e48d37e008d61153120a08b
         if: startsWith(github.ref, 'refs/tags/')
         with:
           zip: ${{ steps.paths.outputs.zip }}
           prerelease: ${{ env.PRERELEASE }}
-          release-notes-file: /tmp/changelog.md
-          require-immutable: true
+          asset-pattern: "*.zip"
+          dry-run: true
+
+      - name: Upload release draft
+        id: release-draft
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          prerelease: ${{ env.PRERELEASE }}
+          files: ${{ steps.paths.outputs.zip }}
+          body_path: /tmp/changelog.md
+          fail_on_unmatched_files: true
+          overwrite_files: false
+
+      - name: Publish and verify immutable release
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_ID: ${{ steps.release-draft.outputs.id }}
+          ZIP_NAME: ${{ steps.paths.outputs.name }}
+          ZIP_SHA256: ${{ steps.paths.outputs.sha256 }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const release_id = Number(process.env.RELEASE_ID);
+            const { data: draft } = await github.rest.repos.getRelease({ owner, repo, release_id });
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id });
+            if (!draft.draft || draft.tag_name !== context.ref.replace('refs/tags/', '')) {
+              throw new Error('Expected a draft for the current release tag; refusing to publish');
+            }
+            if (assets.length !== 1 || assets[0].name !== process.env.ZIP_NAME || assets[0].state !== 'uploaded') {
+              throw new Error('Expected exactly one uploaded module ZIP with its original filename');
+            }
+            if (assets[0].digest !== `sha256:${process.env.ZIP_SHA256}`) {
+              throw new Error('Uploaded ZIP digest differs from the validated package');
+            }
+            await github.rest.repos.updateRelease({ owner, repo, release_id, draft: false });
+            // GitHub can briefly lag when exposing immutable after publication.
+            let published;
+            for (let attempt = 0; attempt < 3; attempt++) {
+              if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+              ({ data: published } = await github.rest.repos.getRelease({ owner, repo, release_id }));
+              if (!published.draft && published.immutable === true) break;
+            }
+            if (published.draft || published.immutable !== true) {
+              throw new Error('Published release is not immutable; check repository settings');
+            }
+            core.info(`Published immutable ${published.tag_name}: ${assets[0].name}`);
 
       - name: Prepare release metadata
         # Needs the tag-derived versionCode, which only exists for a tag: a manual dispatch builds
         # and notifies without publishing, so there is no metadata to prepare.
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          ZIP_NAME: ${{ steps.module-release.outputs.asset-name }}
+          ZIP_NAME: ${{ steps.paths.outputs.name }}
         run: |
           set -euo pipefail
           TAG="${{ github.ref_name }}"
 
-          # The official action normalizes the uploaded filename; use its output.
+          # Use the original package filename, which was verified before publishing.
           # Reuse the xtask serializer so the release metadata and the local
           # `cargo xtask update-json` path cannot drift apart.
           cargo xtask update-json \

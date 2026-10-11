@@ -4,7 +4,7 @@
 
 **Goal:** Prepare Hybrid Mount for KernelSU Modules and publish immutable v6.2.3.
 
-**Architecture:** Preserve the existing module ID and Android build. Add catalog metadata on main and use the official validator and draft/upload/publish action. Generate the update URL from the published asset name.
+**Architecture:** Preserve the existing module ID and Android build. Add catalog metadata on main and use the official validator and draft/upload/publish action. Generate the update URL from the original, verified asset name.
 
 **Tech Stack:** GitHub Actions, Rust xtask, module.yaml, PNG.
 
@@ -20,7 +20,7 @@
 
 ## Review Focus
 
-- Action renames the ZIP; update.json must use its asset-name output.
+- User requires the original Hybrid-Mount-{version}-{commit_count}.zip name; validator runs dry-run only.
 - PNG icon and description must exist on main, not only dev.
 - Existing mutable releases cannot be made immutable retroactively.
 - Tag must contain current VFS binary/source digests and all development fixes.
@@ -37,8 +37,8 @@
 
 **Files:** .github/workflows/release.yml, CLAUDE.md.
 
-- [x] Replace softprops release creation with pinned official module-release action.
-- [x] Generate update.json using the action's normalized asset name; remove obsolete remote-repo instructions.
+- [x] Use pinned official module-release action in dry-run mode, then draft/upload/publish with the original name.
+- [x] Generate update.json using the verified original asset name; remove obsolete remote-repo instructions.
 - [x] Verify YAML, release-version output, xtask tests, diff, and independent review.
 
 ### Task 3: Publish and verify
@@ -56,3 +56,6 @@
 - Independent review found notification failure could block update metadata after an immutable release; moved notification after version sync.
 - Minimum API is 26 overall, but the existing riscv64 binary targets API 35.
 - Independent review completed; notification ordering finding fixed and verified. Windows full tests: 485 passed, 10 Linux/path-specific failures; main Linux CI is the release gate.
+- User correction: preserve Hybrid-Mount-{version}-{commit_count}.zip; use official dry-run validator and separately verify draft assets/name/SHA256 before publication. Portal work uses Edge.
+- Revised workflow reviewed independently; added three bounded immutability readbacks for GitHub propagation delay. Nine publication scenarios passed, including delayed immutable=true.
+- Main Linux lints/tests and four-architecture build passed for 55f43745. Production audit found source-map-js 1.2.1 advisory GHSA-68fv-2mgg-jv7q; updated only that indirect dependency to 1.2.2. Local production audit, 169 WebUI tests/typecheck and WebUI build passed.
