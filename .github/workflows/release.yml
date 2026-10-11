@@ -238,38 +238,6 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
 
-      - name: Notify Telegram
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          set -euo pipefail
-          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
-          rm -rf "$NOTIFY_DIR"
-          mkdir -p "$NOTIFY_DIR"
-          cp "${{ steps.paths.outputs.zip }}" "$NOTIFY_DIR/"
-          cargo xtask notify \
-            --output "$NOTIFY_DIR" \
-            --label "丰收 (Harvest) - ${{ github.ref_name }}" \
-            --topic-id 6
-
-      - name: Prepare release metadata
-        # Needs the tag-derived versionCode, which only exists for a tag: a manual dispatch builds
-        # and notifies without publishing, so there is no metadata to prepare.
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          set -euo pipefail
-          TAG="${{ github.ref_name }}"
-          ZIP_NAME="${{ steps.paths.outputs.name }}"
-
-          # Reuse the xtask serializer so the release metadata and the local
-          # `cargo xtask update-json` path cannot drift apart.
-          cargo xtask update-json \
-            "$TAG" \
-            "$VERSION_CODE" \
-            "https://github.com/${{ github.repository }}/releases/download/$TAG/$ZIP_NAME"
-          cp update.json /tmp/update.json
-
       - name: Generate changelog
         id: git-cliff
         uses: orhun/git-cliff-action@v4
@@ -281,42 +249,35 @@ jobs:
           OUTPUT: /tmp/changelog.md
           GITHUB_REPO: ${{ github.repository }}
 
-      - name: Create local release
-        uses: softprops/action-gh-release@v3
+      - name: Precheck and publish immutable release
+        id: module-release
+        # Pinned official validator: draft -> upload -> publish -> immutable readback.
+        uses: KernelSU-Modules/tools/actions/module-release@ca1187c92135b3c31e48d37e008d61153120a08b
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          draft: false
+          zip: ${{ steps.paths.outputs.zip }}
           prerelease: ${{ env.PRERELEASE }}
-          files: ${{ steps.paths.outputs.zip }}
-          body_path: /tmp/changelog.md
+          release-notes-file: /tmp/changelog.md
+          require-immutable: true
 
-      # Temporarily disabled: the KernelSU module repository is unavailable.
-      # Restore this step when remote publishing is available again.
-      # - name: Create remote release (KernelSU-Modules-Repo)
-      #   if: startsWith(github.ref, 'refs/tags/')
-      #   env:
-      #     GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      #   run: |
-      #     set -euo pipefail
-      #     repo="KernelSU-Modules-Repo/hybrid_mount"
-      #     tag="${{ github.ref_name }}"
-      #
-      #     prerelease_flag=""
-      #     if [[ "$PRERELEASE" == "true" ]]; then
-      #       prerelease_flag="--prerelease"
-      #     fi
-      #
-      #     gh release create "$tag" \
-      #       --repo "$repo" \
-      #       --draft \
-      #       $prerelease_flag \
-      #       --title "$tag" \
-      #       --notes-file /tmp/changelog.md \
-      #       "${{ steps.paths.outputs.zip }}"
-      #
-      #     gh release edit "$tag" \
-      #       --repo "$repo" \
-      #       --draft=false
+      - name: Prepare release metadata
+        # Needs the tag-derived versionCode, which only exists for a tag: a manual dispatch builds
+        # and notifies without publishing, so there is no metadata to prepare.
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ZIP_NAME: ${{ steps.module-release.outputs.asset-name }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.ref_name }}"
+
+          # The official action normalizes the uploaded filename; use its output.
+          # Reuse the xtask serializer so the release metadata and the local
+          # `cargo xtask update-json` path cannot drift apart.
+          cargo xtask update-json \
+            "$TAG" \
+            "$VERSION_CODE" \
+            "https://github.com/${{ github.repository }}/releases/download/$TAG/$ZIP_NAME"
+          cp update.json /tmp/update.json
 
       - name: Sync version back to dev
         if: startsWith(github.ref, 'refs/tags/')
@@ -343,3 +304,18 @@ jobs:
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
             git push origin dev
           fi
+
+      - name: Notify Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
+          rm -rf "$NOTIFY_DIR"
+          mkdir -p "$NOTIFY_DIR"
+          cp "${{ steps.paths.outputs.zip }}" "$NOTIFY_DIR/"
+          cargo xtask notify \
+            --output "$NOTIFY_DIR" \
+            --label "丰收 (Harvest) - ${{ github.ref_name }}" \
+            --topic-id 6

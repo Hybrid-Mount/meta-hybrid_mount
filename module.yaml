@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/KernelSU-Modules/tools/main/schemas/module.schema.json
+schemaVersion: 1
+id: hybrid_mount
+name: Hybrid Mount
+summary: Mix OverlayFS, Magic Mount, and VFS per module and path on KernelSU and APatch.
+description: README.md
+license: GPL-3.0-only
+homepage: https://github.com/Hybrid-Mount/meta-hybrid_mount
+support: https://github.com/Hybrid-Mount/meta-hybrid_mount/issues
+tags: [system, mounting, tools]
+icon: icon.png
+metamodule: true
+authors:
+  - name: Hybrid Mount Developers
+    url: https://github.com/Hybrid-Mount
+compatibility:
+  androidMinApi: 26
+  architectures: [arm64-v8a, armeabi-v7a, x86_64, riscv64]
+release:
+  assetPattern: hybrid_mount-*.zip
