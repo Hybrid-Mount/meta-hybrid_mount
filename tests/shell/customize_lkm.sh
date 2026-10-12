@@ -17,6 +17,19 @@ run_case() {
   mkdir "$case_dir/lkm"
   mkdir -p "$case_dir/vfs/src" "$case_dir/vfs/binaries"
   : > "$case_dir/vfs/src/hybridmount.c"
+  mkdir "$case_dir/binaries"
+  case "$arch_value" in
+    arm64) binary_name=hybrid-mount-arm64 ;;
+    arm) binary_name=hybrid-mount-armv7 ;;
+    riscv64) binary_name=hybrid-mount-riscv64 ;;
+    *) exit 99 ;;
+  esac
+  cat > "$case_dir/binaries/$binary_name" <<'BIN'
+#!/bin/sh
+[ "$*" = check-conflicts ] || exit 99
+exit 0
+BIN
+  chmod +x "$case_dir/binaries/$binary_name"
 
   (
     MODPATH="$case_dir"
@@ -27,9 +40,10 @@ run_case() {
 
     ui_print() { :; }
     abort() { exit 0; }
+    set_perm() { :; }
+    # Stop after the platform-dependent branches, before installing/configuring.
+    cp() { exit 0; }
 
-    # The missing userspace binary stops customize.sh immediately after the
-    # platform-dependent retention branches.
     . "$ROOT_DIR/module/customize.sh"
   )
 
@@ -50,6 +64,7 @@ run_case() {
   test -f "$case_dir/vfs/src/hybridmount.c" ||
     { echo "FAIL: $case_name dropped vfs/src" >&2; exit 1; }
   rm -rf "$case_dir/vfs/src"
+  rm -r "$case_dir/binaries"
   rmdir "$case_dir/vfs"
   rmdir "$case_dir"
   printf '%s installer branch: ok\n' "$case_name"

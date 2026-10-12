@@ -2,6 +2,8 @@
 
 //! Shared utilities: module id validation, directory creation and SELinux context I/O.
 
+pub(crate) mod ksu_next;
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::io;
 use std::path::Path;

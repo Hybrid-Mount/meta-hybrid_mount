@@ -28,6 +28,19 @@ esac
 
 ui_print "- Device Architecture: $ARCH"
 
+BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
+BIN_TARGET="$MODPATH/hybrid-mount"
+if [ ! -f "$BIN_SOURCE" ]; then
+  abort "! Binary not found in this zip!"
+fi
+
+# Use the same detector as every runtime loading entry, before modifying the
+# package or persistent config. Built-in SUSFS does not trigger this check.
+set_perm "$BIN_SOURCE" 0 0 0755
+if ! "$BIN_SOURCE" check-conflicts; then
+  abort "! Hybrid Mount compatibility check failed; installation refused (see error above)"
+fi
+
 if [ "$KSU" = "true" ]; then
   # KernelSU provides the supported nuke-ext4-sysfs ioctl. Do not retain an
   # ABI-dependent compatibility LKM on KernelSU installations.
@@ -46,12 +59,6 @@ if [ "$ARCH" = "arm64" ]; then
 else
   rm -rf "$MODPATH/vfs/binaries"
   ui_print "- $ARCH: omitted aarch64-only VFS modules"
-fi
-
-BIN_SOURCE="$MODPATH/binaries/$BIN_FILE"
-BIN_TARGET="$MODPATH/hybrid-mount"
-if [ ! -f "$BIN_SOURCE" ]; then
-  abort "! Binary not found in this zip!"
 fi
 
 ui_print "- Installing binary..."

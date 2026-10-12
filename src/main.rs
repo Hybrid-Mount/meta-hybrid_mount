@@ -4,6 +4,7 @@
 
 mod cli;
 mod config;
+mod conflicts;
 mod defs;
 mod errors;
 mod logging;
