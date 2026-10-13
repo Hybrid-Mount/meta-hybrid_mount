@@ -1,5 +1,9 @@
 # Hybrid Mount
 
+[AtomGit 仓库](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount) · [GitHub 仓库](https://github.com/Hybrid-Mount/meta-hybrid_mount) · [参与贡献](../CONTRIBUTING.md)
+
+[![AtomGit Star](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/star/badge.svg)](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount)
+
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在启动阶段扫描其他模块，按全局、模块和路径规则，为每一项选择 OverlayFS、Magic Mount、VFS 或忽略，并且始终把模块源目录当作只读输入。
@@ -85,7 +89,11 @@ Provider 不可用时，WebUI 隐藏 VFS 选项和统计，管理器描述也不
 
 ## 反馈
 
-安装和反馈问题前请阅读 [使用须知](../USAGE_NOTICE.md)。反馈时请附上 KernelSU/APatch bugreport、模块版本与可复现步骤，可通过 [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) 或 [Telegram 群组](https://t.me/hybridmountchat) 联系我们。
+安装和反馈问题前请阅读 [使用须知](../USAGE_NOTICE.md)。反馈时请附上 KernelSU/APatch bugreport、模块版本与可复现步骤，可通过 [AtomGit Issues](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/issues)、[GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) 或 [Telegram 群组](https://t.me/hybridmountchat) 联系我们。
+
+## 参与贡献
+
+欢迎参与代码开发、文档完善、翻译和设备兼容性验证，详见[贡献指南](../CONTRIBUTING.md)。源码分支和标签从 GitHub 同步至 [AtomGit](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount)，发行 ZIP 通过 GitHub Releases 下载。同步范围与维护配置见[同步说明](ATOMGIT_SYNC.md)。
 
 ## 语言 / Languages
 
