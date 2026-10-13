@@ -1,5 +1,9 @@
 # Hybrid Mount
 
+[AtomGit](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount) · [GitHub](https://github.com/Hybrid-Mount/meta-hybrid_mount) · [简体中文](docs/README_ZH.md) · [Contributing](CONTRIBUTING.md)
+
+[![AtomGit Star](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/star/badge.svg)](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount)
+
 <img src="icon.png" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, VFS, or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
@@ -79,7 +83,11 @@ Clearing requires `--yes`; manual changes are runtime-only. See the [VFS CLI ref
 
 ## Feedback
 
-Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.md). Include the KernelSU/APatch bugreport, module version, and reproduction steps. Contact us through [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) or the [Telegram group](https://t.me/hybridmountchat).
+Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.md). Include the KernelSU/APatch bugreport, module version, and reproduction steps. Contact us through [AtomGit Issues](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/issues), [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) or the [Telegram group](https://t.me/hybridmountchat).
+
+## Contributing
+
+Code, documentation, translations and compatibility reports are welcome. See the [contribution guide](CONTRIBUTING.md). Source branches and tags are synchronized from GitHub to [AtomGit](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount); release ZIPs remain available from GitHub Releases. Maintainers can find the setup and scope in the [sync guide](docs/ATOMGIT_SYNC.md).
 
 ## Languages
 
