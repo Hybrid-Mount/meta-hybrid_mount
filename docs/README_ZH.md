@@ -1,8 +1,6 @@
 # Hybrid Mount
 
-[AtomGit 仓库](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount) · [GitHub 仓库](https://github.com/Hybrid-Mount/meta-hybrid_mount) · [参与贡献](../CONTRIBUTING.md)
-
-[![AtomGit Star](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/star/badge.svg)](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount)
+[AtomGit 仓库](https://atomgit.com/Hybrid-Mount/meta-hybrid_mount) · [GitHub 仓库](https://github.com/Hybrid-Mount/meta-hybrid_mount) · [参与贡献](../CONTRIBUTING.md)
 
 <img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
