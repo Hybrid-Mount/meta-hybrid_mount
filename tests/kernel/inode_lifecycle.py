@@ -66,7 +66,7 @@ with tempfile.TemporaryDirectory(prefix="hm-inode-test-") as temporary:
     for mode in ["new", "existing", "race", "dying", "race-dying", "retired",
                  "whiteout", "opaque", "deleted", "allocation", "evict",
                  "retired-republish", "orphan", "retire-eviction", "topology",
-                 "real-parent", "hook-failure", "child-allocation", "uids", "info-rcu", "cached-old-flags", "cached-old-path"]:
+                 "real-parent", "parent-uid", "hook-failure", "child-allocation", "uids", "info-rcu", "cached-old-flags", "cached-old-path", "cached-uid-directory"]:
         result = subprocess.run([str(executable), mode], timeout=30)
         if result.returncode:
             failures.append(mode)

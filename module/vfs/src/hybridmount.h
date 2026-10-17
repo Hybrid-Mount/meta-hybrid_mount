@@ -201,11 +201,11 @@ static inline loff_t hm_pack_pos(int id) {
     return (HM_SIG_16 << 48) | (id & 0xFFFFFFFF);
 }
 
-static inline int hm_unpack_pos(loff_t pos) {
+static inline u32 hm_unpack_pos(loff_t pos) {
 #ifdef CONFIG_COMPAT
-    if (in_compat_syscall()) return (int)(pos & 0xFFFF);
+    if (in_compat_syscall()) return (u32)(pos & 0xFFFF);
 #endif
-    return (int)(pos & 0xFFFFFFFF);
+    return (u32)(pos & 0xFFFFFFFF);
 }
 
 /**** Adaptive Radix Tree Protocol ****/

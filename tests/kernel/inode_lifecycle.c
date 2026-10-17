@@ -77,6 +77,7 @@ struct hybridmount_rule {
     struct hybridmount_dir_node *this_dir;
     u16 v_len, flags;
     u32 v_hash;
+    unsigned int target_uid;
     unsigned long v_ino;
     struct list_head list_node, topology_node;
     char paths[128];
@@ -209,7 +210,11 @@ static int kern_path(const char *name, int flags, struct path *path) {
     path_get(path);
     return 0;
 }
-static struct hybridmount_rule *hm_tree_search_path(int len, const char *path) { return NULL; }
+static struct hybridmount_rule *parent_variants;
+static __attribute__((unused)) struct hybridmount_rule *hm_tree_search_path(int len, const char *path) { return parent_variants; }
+static __attribute__((unused)) struct hybridmount_rule *hm_tree_search_exact(int len,const char *path,unsigned int uid) {
+    return parent_variants && parent_variants->target_uid==uid ? parent_variants : NULL;
+}
 static struct hybridmount_dir_node *__hybridmount_alloc_dir_node(void) {
     topology_allocations++;
     return calloc(1, sizeof(struct hybridmount_dir_node));
@@ -323,7 +328,15 @@ static void lookup_case(const char *mode) {
 }
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "new";
-    if (!strcmp(mode, "info-rcu")) {
+    if (!strcmp(mode, "cached-uid-directory")) {
+        struct hybridmount_dir_node first={0},second={0};
+        struct hm_inode_info info={.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR,.dir_node=&first};
+        struct hm_rule_info rule={.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR,.this_dir=&second};
+        assert(!hm_cached_inode_matches(&info,&rule));
+        rule.this_dir=&first;
+        assert(hm_cached_inode_matches(&info,&rule));
+        puts("PASS: cached virtual directory is scoped to its rule topology");
+    } else if (!strcmp(mode, "info-rcu")) {
         reset();
         struct inode inode = {0};
         struct dentry backing = {0};
@@ -394,6 +407,20 @@ int main(int argc, char **argv) {
         hm_free_rule(rule);
         assert(freed_nodes == 1 && node.v_inode == (struct inode *)-1L && !inode.i_private);
         puts("PASS: retirement racing with eviction does not leak orphan topology");
+    } else if (!strcmp(mode, "parent-uid")) {
+        reset();
+        struct hybridmount_dir_node scoped_node={0},native_node={0};
+        struct hm_inode_info info={.dir_node=&native_node};
+        struct inode inode={.i_op=&hm_dir_iops,.i_private=&info};
+        parent_dentry.inode=&inode;
+        struct hybridmount_rule scoped_parent={.target_uid=42,.flags=HM_FLAG_IS_DIR,.this_dir=&scoped_node};
+        parent_variants=&scoped_parent;
+        struct hybridmount_rule child={.v_len=13,.target_uid=43};
+        memcpy(child.paths,"/parent/child",sizeof("/parent/child"));
+        struct list_head generated={0},victims={0};
+        assert(hybridmount_generate_virtual_topology(&child,&generated,&victims)==0);
+        assert(injected_parent==&native_node);
+        puts("PASS: a child does not attach to another UID's directory variant");
     } else if (!strcmp(mode, "child-allocation") || !strcmp(mode, "hook-failure") || !strcmp(mode, "topology") || !strcmp(mode, "real-parent")) {
         reset();
         struct hybridmount_dir_node node = {0};

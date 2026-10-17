@@ -72,6 +72,7 @@ jobs:
           python3 tests/kernel/uid_cursor.py
           python3 tests/kernel/hook_transaction.py
           python3 tests/kernel/reader_lifetime.py
+          python3 tests/kernel/child_rules.py
 
       - name: Gate banned symbols
         run: |

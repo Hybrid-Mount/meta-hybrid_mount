@@ -54,6 +54,7 @@ static unsigned int read_seqcount_begin(int *p) { return 0; }
 static bool read_seqcount_retry(int *p,unsigned int seq) { return false; }
 static void path_get(struct path *p) {}
 static struct hybridmount_rule *hybridmount_bsearch_child(struct hybridmount_child_array *a,const char *n,size_t l,u32 h,int *i) { return NULL; }
+static struct hybridmount_rule *hybridmount_child_for_uid(struct hybridmount_child_array *a,const char *n,size_t l,u32 h,uid_t uid,bool exact,int *i) { return NULL; }
 
 struct hybridmount_proxy_ctx { struct dir_context ctx; struct dir_context *orig_ctx; struct hybridmount_dir_node *dir_node; bool emitted,uid_blocked; uid_t fsuid; };
 static const struct inode_operations hm_dir_iops={0}, hm_file_iops={0};

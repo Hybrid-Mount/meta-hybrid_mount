@@ -12,6 +12,9 @@
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef unsigned int uid_t;
+typedef long long loff_t;
+static bool compat_mode;
+static bool in_compat_syscall(void) { return compat_mode; }
 #define KERNEL_VERSION(a,b,c) (((a)<<16)|((b)<<8)|(c))
 #define HM_FLAG_IS_DIR 1
 #define HM_FLAG_VIRTUAL_DIR 2
@@ -72,7 +75,8 @@ struct xattr_handler {
     int (*__get)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, void *, size_t);
 #endif
 };
-struct super_block { const struct super_operations *s_op; const struct xattr_handler **s_xattr; };
+struct super_block { const struct super_operations *s_op; const struct xattr_handler **s_xattr; int s_active; };
+static void atomic_inc(int *value) { ++*value; }
 struct inode { const struct inode_operations *i_op; const struct file_operations *i_fop; unsigned long i_flags,i_ino; int i_mode; void *i_private; };
 struct dentry { struct inode *inode; };
 struct path { struct dentry *dentry; void *mnt; };
@@ -93,13 +97,15 @@ struct hybridmount_rule {
     struct hybridmount_rule *next_uid;
     char paths[128];
 };
-struct hybridmount_child_array { int count; struct hybridmount_rule *rules[2]; };
+struct hybridmount_child_array { int count; u32 hashes[2]; struct hybridmount_rule *rules[2]; };
+static struct hybridmount_rule *hybridmount_child_for_uid(struct hybridmount_child_array *arr,
+    const char *name,size_t len,u32 hash,uid_t uid,bool exact,int *index) { return NULL; }
 struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; int rcu; };
 struct hm_fop { struct file_operations fake_fop; const struct file_operations *orig_fop; struct hybridmount_dir_node *dir_node; int rcu; };
 struct hm_inode_info { struct path r_path; };
 struct hm_sop { struct super_operations fake_sop; const struct super_operations *orig_sop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
 struct hm_xattr_proxy { struct xattr_handler fake; const struct xattr_handler *orig; };
-struct dir_context { unsigned long pos,ino; };
+struct dir_context { loff_t pos; unsigned long ino; };
 static int hybridmount_srcu,hybridmount_sb_list;
 static void *hybridmount_art_root __attribute__((unused));
 static const struct inode_operations hm_file_iops={1},hm_dir_iops={2},native_iops={3};
@@ -154,9 +160,6 @@ static struct hm_fop *hm_get_hm_fop(const struct file_operations *ops) { return 
 static bool hybridmount_is_uid_blocked(uid_t uid) { return false; }
 struct test_uid { unsigned int val; };
 static struct test_uid current_fsuid(void) { return (struct test_uid){42}; }
-static bool hm_is_virtual_pos(unsigned long pos) { return true; }
-static int hm_unpack_pos(unsigned long pos) { return (int)pos; }
-static unsigned long hm_pack_pos(int pos) { return (unsigned long)pos; }
 static int srcu_read_lock(int *srcu) { return 0; }
 static void srcu_read_unlock(int *srcu,int index) {}
 #define srcu_dereference(p,s) (p)
@@ -181,17 +184,31 @@ int main(int argc,char **argv) {
         fail_at = !strcmp(mode,"hook-alloc-sop") ? 1 : 2;
         assert(hybridmount_hijack_superblock(&sb) == -ENOMEM);
         assert(sb.s_op == &native && sb.s_xattr == handlers && !live_allocations);
+    } else if(!strcmp(mode,"hook-pin")) {
+        struct super_operations native = {0};
+        struct super_block sb = {.s_op=&native, .s_active=1};
+        assert(hybridmount_hijack_superblock(&sb)==0);
+        assert(sb.s_active==2);
     } else if(!strcmp(mode,"source-flags")) {
         source_inode.i_flags=32;
         struct hybridmount_rule *rule=hm_alloc_rule("/parent","/source",7,7,0,42);
         assert(!IS_ERR(rule)); assert(source_inode.i_flags==32);
         path_put(&rule->r_path); free(rule->this_dir); free(rule); assert(!path_refs);
-    } else if(!strcmp(mode,"dirent")) {
+    } else if(!strcmp(mode,"dirent") || !strcmp(mode,"dirent-compat")) {
+        compat_mode=!strcmp(mode,"dirent-compat");
         struct hybridmount_rule rule={.v_ino=900,.v_hash=123,.v_len=7,.child_len=6,.target_uid=42};
         memcpy(rule.paths,"/parent",8);
         struct hybridmount_dir_node node={.children=(void *)((uintptr_t)&rule|1)};
         struct dir_context ctx={0}; hybridmount_emit_virtual_children(&ctx,&node,42);
-        assert(ctx.ino==rule.v_ino && ctx.pos==1);
+        assert(ctx.ino==rule.v_ino && ctx.pos==(compat_mode ? 0x686D0001LL : 0x686D000000000001LL));
+    } else if(!strncmp(mode,"cursor-",7)) {
+        struct hybridmount_rule rule={.v_ino=900,.target_uid=42};
+        struct hybridmount_dir_node node={.children=(void *)((uintptr_t)&rule|1)};
+        struct dir_context ctx={.pos=!strcmp(mode,"cursor-negative") ?
+            0x686D000080000000LL : 0x686D0000FFFFFFFFLL};
+        if(!strcmp(mode,"cursor-compat-max")) { compat_mode=true; ctx.pos=0x686DFFFFLL; }
+        hybridmount_emit_virtual_children(&ctx,&node,42);
+        assert(ctx.ino==0);
     } else if(!strncmp(mode,"parent",6)) {
         struct hybridmount_rule original={.v_len=7,.v_ino=900,.child_len=6,.target_uid=42,.flags=HM_FLAG_IS_DIR,.r_len=7};
         memcpy(original.paths,"/parent\0/source",16);
