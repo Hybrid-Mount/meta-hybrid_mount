@@ -55,7 +55,9 @@ done
 
 actual=$(
     cd "$SRC_DIR" &&
-        sha256sum "$@" | sha256sum | cut -d' ' -f1
+        # Git for Windows defaults to binary-mode output ("*name"), while
+        # Linux defaults to text-mode output (" name"). Pin the manifest form.
+        sha256sum --text "$@" | sha256sum | cut -d' ' -f1
 )
 
 if [ "$recorded" != "$actual" ]; then

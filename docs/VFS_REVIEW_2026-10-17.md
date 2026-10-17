@@ -63,6 +63,14 @@ candidate's SHA256. Do not automatically clear a crash guard to gather these log
 
 ## Verification boundaries
 
+The follow-up boundary fixes keep native directory indices unsigned, retain
+separate child entries per UID, prefer exact UID matches over global fallback,
+and prevent a cached directory from crossing topology identities. Generated
+ancestors use the requested UID; runtime reconciliation accepts those structural
+parents during reload and unload. Every raw seqcount publication disables
+preemption. Superblock hooks own an active reference until operation restoration,
+so filesystem shutdown may be delayed until module unload after mount detachment.
+
 - Native production-function harnesses exercise UID cursor extremes, allocation
   failures, hook ownership, reader snapshots, cached inode generations, source
   identity, parent-rule semantics and old-kernel xattr branches. They use
@@ -73,8 +81,17 @@ candidate's SHA256. Do not automatically clear a crash guard to gather these log
   and three path-separator expectations). The affected VFS control and runtime
   rule suites pass.
 - Installer, boot lock, runtime hook and VFS integration shell regressions pass.
-- No new prebuilt .ko was generated locally. The source/prebuilt digest gate is
-  intentionally preserved and fails until the DDK workflow rebuilds the modules.
-  Do not alter sources.txt by hand or release stale binaries as this fix.
+- The seven Android/GKI DDK targets built successfully in GitHub Actions run
+  39030830209, and its assembled binaries were imported after the automatic
+  branch push was rejected because a follow-up Rust commit had advanced it.
+  The source digest and all seven binary checksums pass locally. Source inputs
+  are pinned to LF and the checker explicitly selects text-mode manifest output
+  so Git for Windows and Linux calculate the same source stamp.
+- Host VFS harnesses cover 124 scenarios, including hostile native/compat
+  directory cursors, UID precedence and whiteouts, scoped directory cache
+  identity, nonpreemptible child publication, and paired superblock references.
+  These fixtures do not establish device KASAN/lockdep behavior.
+- The existing 16-bit compat cursor cannot represent directory positions at or
+  beyond 65,536 children. That separate protocol limit remains outside this fix.
 
 No raw bugreport contents or personal device identifiers are included here.

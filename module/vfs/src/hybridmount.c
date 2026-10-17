@@ -11,6 +11,7 @@
 #include <linux/cred.h>
 #include <linux/xattr.h>
 #include <linux/module.h>
+#include <linux/preempt.h>
 #include "hybridmount.h"
 
 /*** Helpers ***/
@@ -58,6 +59,28 @@ static __always_inline struct hybridmount_rule *hybridmount_bsearch_child(struct
     return NULL;
 }
 
+/* Each name may have a global fallback and one rule per UID. The directory
+ * array owns all variants independently of the writer-only ART UID chain. */
+static struct hybridmount_rule *hybridmount_child_for_uid(struct hybridmount_child_array *arr,
+        const char *name, size_t len, u32 hash, uid_t uid, bool exact, int *index)
+{
+    struct hybridmount_rule *fallback = NULL;
+    struct hybridmount_rule **rules = hm_get_child_rules(arr);
+    int pos;
+
+    if (!hybridmount_bsearch_child(arr, name, len, hash, &pos)) return NULL;
+    for (; pos < READ_ONCE(arr->count) && READ_ONCE(arr->hashes[pos]) == hash; pos++) {
+        struct hybridmount_rule *rule = READ_ONCE(rules[pos]);
+        if (!rule || rule->child_len != len || memcmp(hm_get_child_name(rule), name, len)) continue;
+        if (rule->target_uid == uid) {
+            if (index) *index = pos;
+            return rule;
+        }
+        if (!exact && !rule->target_uid) fallback = rule;
+    }
+    return fallback;
+}
+
 static bool __hybridmount_get_rule_info(struct hybridmount_dir_node *dir_node, const char *name, size_t len, u32 hash, struct hm_rule_info *rule_info, bool get_path, uid_t fsuid)
 {
     void *children;
@@ -72,7 +95,7 @@ static bool __hybridmount_get_rule_info(struct hybridmount_dir_node *dir_node, c
                 rule = hm_children_single_rule(children);
                 if (rule->child_len != len || memcmp(hm_get_child_name(rule), name, len)) rule = NULL;
             } else {
-                rule = hybridmount_bsearch_child(children, name, len, hash, NULL);
+                rule = hybridmount_child_for_uid(children, name, len, hash, fsuid, false, NULL);
             }
             if (rule && (!rule->target_uid || rule->target_uid == fsuid))
                 found_rule = rule;
@@ -236,7 +259,8 @@ static inline void hybridmount_emit_virtual_children(struct dir_context *ctx, st
 {
 	struct hybridmount_child_array *array;
 	void *children;
-	int id, srcu_idx;
+	u32 id;
+	int srcu_idx;
 
 	if (!dir_node || hybridmount_is_uid_blocked(fsuid)) return;
 	if (!hm_is_virtual_pos(ctx->pos)) ctx->pos = hm_pack_pos(0);
@@ -247,10 +271,16 @@ static inline void hybridmount_emit_virtual_children(struct dir_context *ctx, st
 		struct hybridmount_rule **rules;
 		array = single ? NULL : children;
 		rules = array ? hm_get_child_rules(array) : &single;
-		for (id = hm_unpack_pos(ctx->pos); id < (array ? READ_ONCE(array->count) : 1); id++) {
+		for (id = hm_unpack_pos(ctx->pos); id < (u32)(array ? READ_ONCE(array->count) : 1); id++) {
 			struct hybridmount_rule *rule;
 			ctx->pos = hm_pack_pos(id);
 			if ((rule = READ_ONCE(rules[id])) && (rule->target_uid == 0 || rule->target_uid == fsuid)) {
+				/* A UID-specific whiteout must also suppress the global entry. */
+				if (array && hybridmount_child_for_uid(array, hm_get_child_name(rule), rule->child_len,
+						READ_ONCE(array->hashes[id]), fsuid, false, NULL) != rule) {
+					ctx->pos = hm_pack_pos(id + 1);
+					continue;
+				}
 				if (!(rule->flags & HM_FLAG_WHITEOUT) && !dir_emit(ctx, hm_get_child_name(rule), rule->child_len, rule->v_ino,
 						(rule->flags & HM_FLAG_IS_DIR) ? DT_DIR : DT_REG)) break;
 			}
@@ -299,6 +329,7 @@ static void hybridmount_init_prealloc_inode(struct inode *inode, struct hm_inode
 static bool hm_cached_inode_matches(struct hm_inode_info *info, const struct hm_rule_info *rule)
 {
     return info && info->flags == rule->flags &&
+           info->dir_node == rule->this_dir &&
            info->r_path.dentry == rule->backing_path.dentry &&
            info->r_path.mnt == rule->backing_path.mnt;
 }
@@ -1127,6 +1158,9 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
         hm_debug("xattr handlers successfully hijacked for dev: 0x%x\n", sb->s_dev);
     }
 
+    /* The caller's parent path pins an active mount here. Keep an independent
+     * active reference until every installed operation table has been restored. */
+    atomic_inc(&sb->s_active);
     list_add_tail_rcu(&hm_sop->list, &hybridmount_sb_list);
     smp_store_release(&sb->s_op, &hm_sop->fake_sop);
     hm_debug("Superblock successfully hijacked for dev: 0x%x\n", sb->s_dev);
@@ -1270,6 +1304,7 @@ static void hybridmount_restore_superblocks(void)
                 kfree(hm_sop->fake_xattr); 
             }
             hm_debug("Successfully cured superblock for dev: 0x%x\n", hm_sop->sb->s_dev);
+            deactivate_super(hm_sop->sb);
         }
         list_del_rcu(&hm_sop->list);
         kfree_rcu(hm_sop, rcu);
@@ -1303,19 +1338,26 @@ static int __hybridmount_inject_child_locked(struct hybridmount_dir_node *dir_no
     children = rcu_dereference_protected(dir_node->children, lockdep_is_held(&hybridmount_rwsem));
     single = hm_children_is_single(children) ? hm_children_single_rule(children) : NULL;
     old_arr = single ? NULL : children;
-    if (!children || (single && single->child_len == name_len && !memcmp(hm_get_child_name(single), name, name_len))) {
+    if (!children || (single && single->target_uid == rule->target_uid &&
+        single->child_len == name_len && !memcmp(hm_get_child_name(single), name, name_len))) {
+        preempt_disable();
         write_seqcount_begin(&dir_node->seq);
         rcu_assign_pointer(dir_node->children, hm_children_from_single(rule));
         dir_node->bloom_mask |= (1ULL << (target_hash & 63));
         write_seqcount_end(&dir_node->seq);
+        preempt_enable();
         return 0;
     }
-    if (old_arr && hybridmount_bsearch_child(old_arr, name, name_len, target_hash, &pos)) {
+    if (old_arr && hybridmount_child_for_uid(old_arr, name, name_len, target_hash,
+                                           rule->target_uid, true, &pos)) {
+        preempt_disable();
         write_seqcount_begin(&dir_node->seq);
         WRITE_ONCE(hm_get_child_rules(old_arr)[pos], rule);
         write_seqcount_end(&dir_node->seq);
+        preempt_enable();
         return 0;
     }
+    if (old_arr) hybridmount_bsearch_child(old_arr, name, name_len, target_hash, &pos);
     old_count = old_arr ? old_arr->count : 1;
     capacity = old_arr ? old_arr->capacity : 0;
     old_rules = old_arr ? hm_get_child_rules(old_arr) : &single;
@@ -1326,6 +1368,7 @@ static int __hybridmount_inject_child_locked(struct hybridmount_dir_node *dir_no
     old_hashes = old_arr ? old_arr->hashes : &single_hash;
 
     if (old_count < capacity) {
+        preempt_disable();
         write_seqcount_begin(&dir_node->seq);
         if (pos < old_count) {
             for (int i = old_count; i > pos; i--) {
@@ -1338,6 +1381,7 @@ static int __hybridmount_inject_child_locked(struct hybridmount_dir_node *dir_no
         old_arr->count++;
         dir_node->bloom_mask |= (1ULL << (target_hash & 63));
         write_seqcount_end(&dir_node->seq);
+        preempt_enable();
         return 0;
     }
 
@@ -1356,10 +1400,12 @@ static int __hybridmount_inject_child_locked(struct hybridmount_dir_node *dir_no
     new_arr->hashes[pos] = target_hash;
     new_rules[pos] = rule;
 
+    preempt_disable();
     write_seqcount_begin(&dir_node->seq);
     rcu_assign_pointer(dir_node->children, new_arr);
     dir_node->bloom_mask |= (1ULL << (target_hash & 63));
     write_seqcount_end(&dir_node->seq);
+    preempt_enable();
 
     if (old_arr) {
         synchronize_srcu(&hybridmount_srcu);
@@ -1393,6 +1439,7 @@ static struct hybridmount_dir_node *__hybridmount_delete_child_locked(struct hyb
     if (target_idx == -1) return parent;
 
     rcu_read_lock();
+    preempt_disable();
     write_seqcount_begin(&dir_node->seq);
     if (old_count <= 2) {
         if (old_count == 2) {
@@ -1404,6 +1451,7 @@ static struct hybridmount_dir_node *__hybridmount_delete_child_locked(struct hyb
             dir_node->bloom_mask = 0;
         }
         write_seqcount_end(&dir_node->seq);
+        preempt_enable();
         if (old_count == 1 && !parent) {
             smp_mb();
             if (!rcu_access_pointer(dir_node->iop) && !rcu_access_pointer(dir_node->fop) &&
@@ -1430,6 +1478,7 @@ static struct hybridmount_dir_node *__hybridmount_delete_child_locked(struct hyb
     for (int i = 0; i < old_arr->count; i++) mask |= (1ULL << (old_arr->hashes[i] & 63));
     dir_node->bloom_mask = mask;
     write_seqcount_end(&dir_node->seq);
+    preempt_enable();
     rcu_read_unlock();
     return parent;
 }
@@ -1483,7 +1532,10 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
         const char *child_name = v_path + i + 1;
         size_t child_len = p_len - i - 1;
 
-        if ((ex = hm_tree_search_path(parent_len, v_path))) {
+        ex = hm_tree_search_exact(parent_len, v_path, target_rule->target_uid);
+        if (!ex && target_rule->target_uid)
+            ex = hm_tree_search_exact(parent_len, v_path, 0);
+        if (ex) {
             if (!(ex->flags & HM_FLAG_IS_DIR)) { err = -ENOTDIR; break; }
             if (unlikely(!(dir_node = ex->this_dir))) { err = -ENOMEM; break; }
             err = __hybridmount_inject_child_locked(dir_node, current_rule, child_name, child_len);
@@ -1541,6 +1593,7 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
         INIT_LIST_HEAD(&irule->list_node);
         INIT_LIST_HEAD(&irule->topology_node);
         irule->v_len = parent_len;
+        irule->target_uid = target_rule->target_uid;
         irule->v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, v_path, parent_len);
         irule->flags = HM_FLAG_IS_DIR | HM_FLAG_VIRTUAL_DIR;
         irule->v_ino = (unsigned long)irule->v_hash;
@@ -1849,10 +1902,12 @@ static void __hybridmount_clear_all(int clear_flags)
             if (!dir || !(children = rcu_dereference_protected(dir->children, lockdep_is_held(&hybridmount_rwsem))))
                 continue;
 
+            preempt_disable();
             write_seqcount_begin(&dir->seq);
             rcu_assign_pointer(dir->children, NULL);
             dir->bloom_mask = 0;
             write_seqcount_end(&dir->seq);
+            preempt_enable();
 
             if (!hm_children_is_single(children)) {
                 struct hybridmount_child_array *arr = children;
