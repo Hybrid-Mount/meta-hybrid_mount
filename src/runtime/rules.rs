@@ -143,9 +143,9 @@ fn validate_snapshot(
         .collect();
     for actual in &foreign {
         for owned in before.iter().chain(after) {
-            // Directory topology is indexed by child name, not UID. Even
-            // different-UID rules can replace a child or detach its parent.
-            if actual.uid == 0
+            // Generated ancestors may be global or scoped to the owned child.
+            // Keep the conservative foreign-rule guard for explicit mappings.
+            if (actual.uid == 0 || actual.uid == owned.uid)
                 && derived_parent(actual)
                 && ancestor(&actual.virtual_path, &owned.virtual_path)
             {
@@ -597,6 +597,28 @@ mod tests {
             ..Default::default()
         };
         assert!(reconcile(&mut kernel, &[], &[child]).is_ok());
+    }
+
+    #[test]
+    fn allows_same_uid_generated_parent_during_reload_and_unload() {
+        let mut parent = rule("/system/new", "");
+        parent.uid = 1000;
+        parent.flags = 1 | FLAG_VIRTUAL_DIR;
+        let mut child = rule("/system/new/child", "/source");
+        child.uid = 1000;
+        let mut kernel = Kernel {
+            rules: vec![parent, child.clone()],
+            ..Default::default()
+        };
+        assert!(
+            reconcile(
+                &mut kernel,
+                std::slice::from_ref(&child),
+                std::slice::from_ref(&child)
+            )
+            .is_ok()
+        );
+        assert!(reconcile(&mut kernel, &[child], &[]).is_ok());
     }
 
     #[test]
