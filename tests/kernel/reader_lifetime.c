@@ -8,7 +8,7 @@
 #define assert(x) do { if (!(x)) { fprintf(stderr,"FAIL %d: %s\n",__LINE__,#x); exit(1); } } while (0)
 typedef uint32_t u32;
 typedef uint64_t u64;
-typedef long long loff_t;
+#define loff_t int64_t
 typedef unsigned int uid_t;
 #define HM_ACTOR_RET int
 #define HM_ACTOR_CONTINUE 0

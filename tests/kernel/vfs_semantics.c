@@ -12,7 +12,7 @@
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef unsigned int uid_t;
-typedef long long loff_t;
+#define loff_t int64_t
 static bool compat_mode;
 static bool in_compat_syscall(void) { return compat_mode; }
 #define KERNEL_VERSION(a,b,c) (((a)<<16)|((b)<<8)|(c))
