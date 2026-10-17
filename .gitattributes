@@ -5,3 +5,8 @@
 module/*/binaries/list.txt text eol=lf
 module/*/binaries/sources.txt text eol=lf
 *.ko -text
+# These four inputs are hashed as bytes by the Linux DDK build and local gate.
+module/vfs/src/hybridmount.c text eol=lf
+module/vfs/src/hybridmount.h text eol=lf
+module/vfs/src/Kconfig text eol=lf
+module/vfs/src/Makefile text eol=lf

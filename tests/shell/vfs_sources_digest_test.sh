@@ -28,7 +28,7 @@ make_tree() {
     done
     (
         cd "$root/module/vfs/src" &&
-            sha256sum hybridmount.c hybridmount.h Kconfig Makefile |
+            sha256sum --text hybridmount.c hybridmount.h Kconfig Makefile |
             sha256sum | cut -d' ' -f1 > "$root/module/vfs/binaries/sources.txt"
     )
 }
