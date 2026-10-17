@@ -23,10 +23,6 @@ Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot,
 
 Download the ZIP from [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) and install it with the KernelSU or APatch manager. On first installation, use the volume keys to select the default backend. Upgrades preserve `/data/adb/hybrid-mount/config.toml`.
 
-Hybrid Mount refuses installation and loading when [susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm) is detected. The check looks for the loaded `susfs_guard_lkm` module and `susfs_guard_lkm.ko` (including `susfs_guard_lkm-*.ko` release files) under `/data/adb/modules`, `/data/adb/modules_update`, and `/data/adb/loader`. Built-in SUSFS is allowed. Remove the conflicting LKM and reboot before retrying; `hybrid-mount check-conflicts` runs the same check without mounting. Queries and cleanup remain available.
-
-KernelSU Next environments are exempt from this LKM check. Identification requires `/data/adb/ksud --help` to report the Next userspace identity and `/data/adb/ksud debug version` to return a positive live KSU kernel version. Installed manager apps, environment flags and version ranges alone do not grant an exemption; missing or failed queries keep the check enabled. This identifies the Next userspace environment, not the kernel's source lineage.
-
 ## Configuration
 
 Default configuration:

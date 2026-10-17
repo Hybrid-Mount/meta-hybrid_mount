@@ -143,9 +143,6 @@ jobs:
       - name: Test installer platform split
         run: sh tests/shell/customize_lkm.sh
 
-      - name: Test installer rejects conflicting SUSFS LKM
-        run: sh tests/shell/install_conflicts.sh
-
       - name: Test boot lock consistency
         run: sh tests/shell/boot_lock.sh
 

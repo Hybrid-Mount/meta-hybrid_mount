@@ -23,10 +23,6 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 
 从 [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载 ZIP，并在 KernelSU 或 APatch 管理器中安装。首次安装可用音量键选择默认后端；升级时会保留 `/data/adb/hybrid-mount/config.toml`。
 
-检测到 [susfs4ksu-lkm](https://github.com/inforcqb/susfs4ksu-lkm) 时拒绝安装和加载 Hybrid Mount。检查已加载的 `susfs_guard_lkm` 内核模块，以及 `/data/adb/modules`、`/data/adb/modules_update` 和 `/data/adb/loader` 中的 `susfs_guard_lkm.ko`（含 `susfs_guard_lkm-*.ko` 发布文件）。内建 SUSFS 不受限制。移除冲突 LKM 并重启后可重试；`hybrid-mount check-conflicts` 可单独执行检测，不进行挂载。查询和清理操作仍可使用。
-
-KernelSU Next 环境豁免此 LKM 检查：要求 `/data/adb/ksud --help` 的首行明确报告 Next 用户空间身份，并且 `/data/adb/ksud debug version` 返回有效的正数 KSU 内核版本。仅安装 Next 管理器、设置环境标志或命中版本号范围不予豁免；命令缺失、失败或结果无效时保留原检查。这识别的是 Next 用户空间运行环境，不能证明内核源码一定来自 Next。
-
 ## 配置
 
 默认配置：
