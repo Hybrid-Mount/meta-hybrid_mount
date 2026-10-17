@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: GPL-3.0-only
 
 //! Runtime control and read-back verification, with an injectable keyring transport.
 
@@ -212,9 +212,11 @@ impl<T: Transport> Controller<T> {
                 let listed = note_readback(&mut readback_errors, self.list_rules());
                 for path in paths {
                     let confirmed = listed.as_ref().is_some_and(|rows| {
-                        !rows
-                            .iter()
-                            .any(|row| row.uid == *uid && row.virtual_path.as_bytes() == path)
+                        !rows.iter().any(|row| {
+                            row.uid == *uid
+                                && row.virtual_path.as_bytes() == path
+                                && !protocol::is_derived_parent(row.flags, &row.real_path)
+                        })
                     });
                     results.push(VerifiedItem {
                         target: String::from_utf8_lossy(path).into_owned(),

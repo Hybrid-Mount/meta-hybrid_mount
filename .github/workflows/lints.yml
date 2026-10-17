@@ -64,6 +64,15 @@ jobs:
       - name: Test VFS inode lifecycle interleavings
         run: python3 tests/kernel/inode_lifecycle.py
 
+      - name: Test VFS rule and xattr semantics
+        run: python3 tests/kernel/vfs_semantics.py
+
+      - name: Test VFS cursors, hook preparation and sleeping readers
+        run: |
+          python3 tests/kernel/uid_cursor.py
+          python3 tests/kernel/hook_transaction.py
+          python3 tests/kernel/reader_lifetime.py
+
       - name: Gate banned symbols
         run: |
           set -euo pipefail

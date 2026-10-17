@@ -65,9 +65,13 @@ struct qstr { const unsigned char *name; size_t len; };
 struct dentry { struct inode *inode; struct qstr d_name; struct super_block *d_sb; };
 struct path { struct dentry *dentry; void *mnt; };
 struct list_head { int unused; };
-struct hybridmount_dir_node { struct inode *v_inode; uintptr_t tag; int rcu; };
-struct hm_inode_info { struct path r_path; struct hybridmount_dir_node *dir_node; u16 flags; };
-struct hm_rule_info { struct path r_path; struct hybridmount_dir_node *this_dir; u16 flags; };
+typedef int atomic_t;
+static void atomic_inc(atomic_t *n) { ++*n; }
+static void atomic_dec(atomic_t *n) { --*n; }
+static int atomic_read(atomic_t *n) { return *n; }
+struct hybridmount_dir_node { struct inode *v_inode; uintptr_t tag; int rcu; atomic_t inode_users; int refs; };
+struct hm_inode_info { struct path r_path; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; };
+struct hm_rule_info { struct path r_path, backing_path; struct hybridmount_dir_node *this_dir; u16 flags; };
 struct hybridmount_rule {
     struct path parent_path, r_path;
     struct hybridmount_dir_node *this_dir;
@@ -89,6 +93,8 @@ static struct inode winner;
 static int allocations, path_refs, early_publications, exchange_mode;
 static int dropped, spliced, evicted, restored, hook_calls, topology_allocations;
 static int rcu_entries;
+static bool fail_hooks, fail_child;
+static struct hybridmount_dir_node *hooked_node;
 static int freed_nodes;
 static int rule_reads;
 static bool delete_after_lookup, fail_allocation;
@@ -96,6 +102,8 @@ static struct dentry parent_dentry;
 static struct hybridmount_dir_node *injected_parent;
 static struct hm_sop super_hook;
 static struct inode *retiring_inode;
+static void *observed_info, *deferred_info;
+static bool info_freed;
 static inline void hm_destroy_virtual_inode(struct inode *inode);
 
 static void test_dir_set_owner(struct hybridmount_dir_node *node, struct hybridmount_rule *owner) {
@@ -106,6 +114,9 @@ static void test_dir_set_owner(struct hybridmount_dir_node *node, struct hybridm
     node->tag = (uintptr_t)owner | 1;
 }
 #define smp_mb() ((void)0)
+#define smp_mb__after_atomic() ((void)0)
+#define xchg(p, v) ({ __typeof__(*(p)) previous = *(p); *(p) = (v); previous; })
+#define kfree_rcu(p, member) do { deferred_info = (p); } while (0)
 static void hm_detach_dir_node(struct hybridmount_dir_node *node) {}
 
 static uintptr_t test_dir_tag(struct hybridmount_dir_node *node) {
@@ -117,19 +128,24 @@ static uintptr_t test_dir_tag(struct hybridmount_dir_node *node) {
     return node->tag;
 }
 static void hm_dir_rcu_free(int *p) { freed_nodes++; }
-static void call_rcu(int *p, void (*callback)(int *)) { callback(p); }
+static struct hybridmount_dir_node *hm_dir_get(struct hybridmount_dir_node *p) { if(p) { if(!p->refs) p->refs=1; p->refs++; } return p; }
+static void hm_dir_put(struct hybridmount_dir_node *p) { if(p && (!p->refs || !--p->refs)) hm_dir_rcu_free(&p->rcu); }
 static void path_get(struct path *p) { if (p->dentry) path_refs++; }
-static void path_put(struct path *p) { if (p->dentry) path_refs--; }
-static void kfree(void *p) { free(p); }
+static void path_put(struct path *p) {
+    if (observed_info && p->dentry) assert(!retiring_inode->i_private);
+    if (p->dentry) path_refs--;
+}
+static void kfree(void *p) { if (p == observed_info) info_freed = true; free(p); }
 static void *kmalloc(size_t size, int flags) { return calloc(1, size); }
 static void rcu_read_lock(void) { rcu_entries++; }
 static void rcu_read_unlock(void) {}
 struct test_uid { unsigned int val; };
 static struct test_uid current_fsuid(void) { return (struct test_uid){0}; }
 static bool __hybridmount_get_rule_info(struct hybridmount_dir_node *node,
-    const unsigned char *name, size_t len, u32 hash, struct hm_rule_info *info, bool get_path) {
+    const unsigned char *name, size_t len, u32 hash, struct hm_rule_info *info, bool get_path, uid_t fsuid) {
     if (++rule_reads == 2 && delete_after_lookup) return false;
     *info = fixture;
+    info->backing_path = fixture.r_path;
     if (get_path) path_get(&info->r_path);
     else info->r_path = (struct path){0};
     return true;
@@ -145,6 +161,8 @@ static struct inode *new_inode(struct super_block *sb) {
 static void hybridmount_init_prealloc_inode(struct inode *inode,
     struct hm_inode_info *info, struct hm_rule_info *rule) {
     info->dir_node = rule->this_dir;
+    if (info->dir_node) atomic_inc(&info->dir_node->inode_users);
+    info->flags = rule->flags;
     info->r_path = rule->r_path;
     inode->i_private = info;
     inode->i_op = &hm_dir_iops;
@@ -178,6 +196,7 @@ static struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 static struct hm_sop *hm_get_hm_sop(const struct super_operations *ops) { return &super_hook; }
 static __attribute__((unused)) void hm_destroy_hijacked_inode(struct inode *inode, bool restore) {
     restored = restore;
+    if (fail_child && hooked_node) { free(hooked_node); hooked_node = NULL; }
     if (restore) inode->i_op = &native_iops;
 }
 static void truncate_inode_pages_final(struct address_space *mapping) {}
@@ -197,23 +216,25 @@ static struct hybridmount_dir_node *__hybridmount_alloc_dir_node(void) {
 }
 static int __hybridmount_inject_child_locked(struct hybridmount_dir_node *node,
     struct hybridmount_rule *rule, const char *name, size_t len) {
+    if (fail_child) { assert(hook_calls); return -ENOMEM; }
     injected_parent = node;
     return 0;
 }
-static void hybridmount_hijack_dir_ops(struct hybridmount_dir_node *node, struct inode *inode) { hook_calls++; }
-static void hybridmount_hijack_superblock(struct super_block *sb) { hook_calls++; }
+static int hybridmount_hijack_dir_ops(struct hybridmount_dir_node *node, struct inode *inode) { hook_calls++; if(!fail_hooks) hooked_node = node; return fail_hooks ? -ENOMEM : 0; }
+
 static struct dentry *hm_hash_and_lookup(struct dentry *parent, struct qstr *name) { return NULL; }
 static void d_drop(struct dentry *dentry) {}
 static void dput(struct dentry *dentry) {}
 static u32 full_name_hash(const void *salt, const char *name, size_t len) { return 1; }
 static int hm_tree_insert(struct hybridmount_rule *rule) { return 0; }
 static void hm_rollback_generated_topology_locked(struct hybridmount_rule *rule,
-    struct list_head *generated, struct list_head *victims) { assert(false); }
+    struct list_head *generated, struct list_head *victims) { assert(fail_hooks || fail_child); }
 
 #include "production.h"
 
 static void iput(struct inode *inode) {
     if (!inode) return;
+    if (inode == &winner) return; /* An existing open directory still owns it. */
     dropped++;
     if (inode->i_private) hybridmount_hijacked_evict_inode(inode);
     free(inode);
@@ -233,6 +254,8 @@ static void reset(void) {
     memset(&fixture, 0, sizeof(fixture));
     memset(&winner, 0, sizeof(winner));
     super_hook.orig_sop = NULL;
+    observed_info = deferred_info = NULL;
+    info_freed = false;
 }
 static void lookup_case(const char *mode) {
     reset();
@@ -249,13 +272,27 @@ static void lookup_case(const char *mode) {
     }
     delete_after_lookup = !strcmp(mode, "deleted");
     fail_allocation = !strcmp(mode, "allocation");
-    struct hm_inode_info winner_info = {.dir_node = &node};
+    struct hm_inode_info winner_info = {.dir_node = &node, .r_path = fixture.r_path};
     winner.i_private = &winner_info;
     winner.i_op = &hm_dir_iops;
+    if (!strcmp(mode, "cached-old-flags")) {
+        fixture.flags = HM_FLAG_IS_DIR | HM_FLAG_VIRTUAL_DIR;
+        fixture.r_path.dentry = NULL;
+        winner_info.flags = HM_FLAG_IS_DIR | HM_FLAG_VIRTUAL_DIR | HM_FLAG_OPAQUE;
+        node.v_inode = &winner;
+    }
+    struct dentry old_backing = {0};
+    if (!strcmp(mode, "cached-old-path")) {
+        fixture.flags = HM_FLAG_IS_DIR;
+        winner_info.flags = fixture.flags;
+        winner_info.r_path.dentry = &old_backing;
+        node.v_inode = &winner;
+    }
     if (!strcmp(mode, "existing") || !strcmp(mode, "dying")) node.v_inode = &winner;
     if (!strcmp(mode, "dying") || !strcmp(mode, "race-dying")) winner.dying = true;
     if (!strcmp(mode, "race") || !strcmp(mode, "race-dying")) exchange_mode = 2;
     if (!strcmp(mode, "retired")) exchange_mode = 4;
+    if (node.v_inode || exchange_mode == 2) node.inode_users = 1;
     struct dentry *result = hybridmount_resolve_rule_dentry(&dir, &target, &node, 0);
     assert(!early_publications);
     if (!strcmp(mode, "dying") || !strcmp(mode, "race-dying") ||
@@ -268,17 +305,42 @@ static void lookup_case(const char *mode) {
     }
     if (!strcmp(mode, "existing")) assert(allocations == 0);
     if (!strcmp(mode, "race")) assert(node.v_inode == &winner && dropped == 1 && path_refs == 0);
-    if (!strcmp(mode, "new") || !strcmp(mode, "opaque")) {
+    if (!strcmp(mode, "new") || !strcmp(mode, "opaque") || !strcmp(mode, "cached-old-path")) {
         assert(node.v_inode && node.v_inode != &winner);
         assert(path_refs == (!strcmp(mode, "opaque") ? 0 : 1));
         iput(node.v_inode);
         assert(path_refs == 0 && node.v_inode == NULL);
     }
+    if (!strcmp(mode, "cached-old-flags")) {
+        assert(node.v_inode && node.v_inode != &winner && node.inode_users == 2);
+        node.tag = 1;
+        iput(node.v_inode);
+        assert(!freed_nodes && node.inode_users == 1 && !node.v_inode);
+        hm_destroy_virtual_inode(&winner);
+        assert(freed_nodes == 1 && node.inode_users == 0);
+    }
     printf("PASS: inode lookup %s\n", mode);
 }
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "new";
-    if (!strcmp(mode, "evict")) {
+    if (!strcmp(mode, "info-rcu")) {
+        reset();
+        struct inode inode = {0};
+        struct dentry backing = {0};
+        struct hm_inode_info *reader = calloc(1, sizeof(*reader));
+        reader->r_path.dentry = &backing;
+        inode.i_private = reader;
+        retiring_inode = &inode;
+        observed_info = reader;
+        path_refs = 1;
+        hm_destroy_virtual_inode(&inode);
+        assert(!inode.i_private && !path_refs && !info_freed);
+        assert(deferred_info == reader);
+        hm_destroy_virtual_inode(&inode);
+        assert(deferred_info == reader);
+        free(deferred_info);
+        puts("PASS: info unpublished before release and retired after RCU readers");
+    } else if (!strcmp(mode, "evict")) {
         reset();
         struct super_block sb = {0};
         struct inode inode = {.i_sb = &sb};
@@ -302,6 +364,7 @@ int main(int argc, char **argv) {
         info->dir_node = &node;
         inode.i_private = info;
         node.v_inode = &inode;
+        node.inode_users = 1;
         bool orphan = !strcmp(mode, "orphan");
         if (orphan) node.tag = 1;
         else exchange_mode = 3;
@@ -322,6 +385,7 @@ int main(int argc, char **argv) {
         info->dir_node = &node;
         inode.i_private = info;
         node.v_inode = &inode;
+        node.inode_users = 1;
         node.tag = (uintptr_t)rule | 1;
         rule->this_dir = &node;
         rule->flags = HM_FLAG_VIRTUAL_DIR;
@@ -330,20 +394,29 @@ int main(int argc, char **argv) {
         hm_free_rule(rule);
         assert(freed_nodes == 1 && node.v_inode == (struct inode *)-1L && !inode.i_private);
         puts("PASS: retirement racing with eviction does not leak orphan topology");
-    } else if (!strcmp(mode, "topology") || !strcmp(mode, "real-parent")) {
+    } else if (!strcmp(mode, "child-allocation") || !strcmp(mode, "hook-failure") || !strcmp(mode, "topology") || !strcmp(mode, "real-parent")) {
         reset();
         struct hybridmount_dir_node node = {0};
         struct hm_inode_info info = {.dir_node = &node};
         struct inode inode = {.i_op = &hm_dir_iops, .i_private = &info};
-        bool real = !strcmp(mode, "real-parent");
+        bool real = !strcmp(mode, "real-parent") || !strcmp(mode, "hook-failure") || !strcmp(mode, "child-allocation");
+        fail_child = !strcmp(mode, "child-allocation");
+        fail_hooks = !strcmp(mode, "hook-failure");
         if (real) inode.i_op = &native_iops;
         parent_dentry.inode = &inode;
         struct hybridmount_rule rule = {.v_len = 13};
         memcpy(rule.paths, "/parent/child", sizeof("/parent/child"));
         struct list_head generated = {0}, victims = {0};
-        assert(hybridmount_generate_virtual_topology(&rule, &generated, &victims) == 0);
+        int result = hybridmount_generate_virtual_topology(&rule, &generated, &victims);
+        if (fail_hooks || fail_child) {
+            if (fail_child) assert(restored && !hooked_node);
+            assert(result == -ENOMEM && !injected_parent && !path_refs && !rule.parent_path.dentry);
+            puts("PASS: hook failure aborts before child publication");
+            return 0;
+        }
+        assert(result == 0);
         if (real) {
-            assert(hook_calls == 2 && topology_allocations == 1);
+            assert(hook_calls == 1 && topology_allocations == 1);
             assert(path_refs == 1 && rule.parent_path.dentry == &parent_dentry);
             path_put(&rule.parent_path);
             free(injected_parent);

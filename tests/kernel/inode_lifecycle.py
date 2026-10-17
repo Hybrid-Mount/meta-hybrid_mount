@@ -37,6 +37,7 @@ source = parser.parse_args().source.read_text(encoding="utf-8")
 functions = [
     "hybridmount_is_uid_blocked",
     "hm_destroy_virtual_inode",
+    "hm_cached_inode_matches",
     "hybridmount_resolve_rule_dentry",
     "hybridmount_hijacked_evict_inode",
     "hybridmount_generate_virtual_topology",
@@ -48,24 +49,24 @@ with tempfile.TemporaryDirectory(prefix="hm-inode-test-") as temporary:
         "\n\n".join(extract(source, name) for name in functions),
         encoding="utf-8",
     )
-    executable = directory / ("inode-test.exe" if os.name == "nt" else "inode-test")
+    executable = directory / ("inode-test.exe" if os.name == "nt" and "zig" not in os.environ.get("CC", "").lower() else "inode-test")
     compiler = shlex.split(os.environ.get("CC", "cc"))
-    output = directory / "inode-test.obj" if os.name == "nt" else executable
+    output = directory / "inode-test.obj" if os.name == "nt" and "zig" not in os.environ.get("CC", "").lower() else executable
     subprocess.run(
         compiler + ["-std=gnu11", "-Wall", "-Wextra", "-Werror",
                     "-Wno-unused-parameter", "-I", str(directory),
                     str(ROOT / "tests/kernel/inode_lifecycle.c"),
-                    *(["-c"] if os.name == "nt" else []), "-o", str(output)],
+                    *(["-c"] if os.name == "nt" and "zig" not in os.environ.get("CC", "").lower() else []), "-o", str(output)],
         check=True,
     )
-    if os.name == "nt":
+    if os.name == "nt" and "zig" not in os.environ.get("CC", "").lower():
         subprocess.run([os.environ.get("HM_TEST_LINK", "link"), "/nologo",
                         f"/out:{executable}", str(output), "libcmt.lib", "oldnames.lib"], check=True)
     failures = []
     for mode in ["new", "existing", "race", "dying", "race-dying", "retired",
                  "whiteout", "opaque", "deleted", "allocation", "evict",
                  "retired-republish", "orphan", "retire-eviction", "topology",
-                 "real-parent", "uids"]:
+                 "real-parent", "hook-failure", "child-allocation", "uids", "info-rcu", "cached-old-flags", "cached-old-path"]:
         result = subprocess.run([str(executable), mode], timeout=30)
         if result.returncode:
             failures.append(mode)

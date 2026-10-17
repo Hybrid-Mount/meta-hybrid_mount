@@ -212,6 +212,35 @@ fn delete_is_idempotent_and_does_not_match_another_uid() {
 }
 
 #[test]
+fn delete_accepts_only_a_plain_virtual_parent_as_remaining_topology() {
+    for (real, flags, expected) in [
+        ("", protocol::FLAG_VIRTUAL_DIR | 1, true),
+        (
+            "",
+            protocol::FLAG_VIRTUAL_DIR | protocol::FLAG_OPAQUE | 1,
+            false,
+        ),
+        ("/backing", protocol::FLAG_VIRTUAL_DIR | 1, false),
+        ("", protocol::FLAG_WHITEOUT, false),
+        ("", protocol::FLAG_VIRTUAL_DIR | 1 | 128, false),
+    ] {
+        let remaining = rule("/parent", real, flags);
+        let mut controller = Controller::new(Scripted::new(vec![
+            page(NmCommand::DelRule, 0, 13, &[0; 13]),
+            rules_page(&[(&remaining, 42)], 1),
+            rules_page(&[], 1),
+        ]));
+        let report = controller
+            .mutate(&Mutation::Delete {
+                paths: vec![b"/parent".to_vec()],
+                uid: 42,
+            })
+            .unwrap();
+        assert_eq!(report.ok, expected, "flags={flags} real={real} {report:?}");
+    }
+}
+
+#[test]
 fn short_delete_cursor_is_failure_even_when_rule_is_absent() {
     let mut controller = Controller::new(Scripted::new(vec![
         page(NmCommand::DelRule, -2, 0, &[0; 8]),

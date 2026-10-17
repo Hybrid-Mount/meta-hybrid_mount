@@ -35,9 +35,7 @@ fn same_key(left: &SavedRule, right: &SavedRule) -> bool {
 }
 
 pub(crate) fn derived_parent(rule: &SavedRule) -> bool {
-    rule.flags & FLAG_VIRTUAL_DIR != 0
-        && rule.flags & !DERIVED_FLAGS == 0
-        && rule.real_path.is_empty()
+    crate::vfs::protocol::is_derived_parent(rule.flags, &rule.real_path)
 }
 
 fn ancestor(parent: &str, child: &str) -> bool {
