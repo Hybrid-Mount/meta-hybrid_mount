@@ -2,19 +2,21 @@
 
 :root {
   color-scheme: light dark;
-  --status-normal-container: #dffae4;
-  --status-normal-content: #153c21;
-  --status-normal-accent: #36d167;
-  --status-checking-container: #eaf2ff;
-  --status-checking-content: #153254;
-  --status-checking-accent: #3482ff;
-  --status-abnormal-container: #fdf0ed;
-  --status-abnormal-content: #50120c;
-  --status-abnormal-accent: #e94634;
+  /* Radii used by inline notices; miuix only ships --m-radius-md / -full. */
+  --m-radius-sm: 12px;
+  --m-radius-xs: 8px;
 }
 
+/* miuix page rhythm — matches miuix list spacing, not Material's.
+ *
+ * miuix insets cards by 12px and stacks them with a 12px gap; a page must not
+ * add horizontal padding or a flex gap on top of that, or every gutter doubles
+ * to 24px. Only the top inset is the page's own (cards carry margin-top 0), and
+ * section headings (MiuixSmallTitle) already bring their own 8px vertical
+ * padding, so they need no extra margins.
+ */
 .page {
-  padding-bottom: 12px;
+  padding: 12px 0 0;
 }
 
 .card {
@@ -27,22 +29,9 @@
   margin: 0 12px 12px;
 }
 
-.field {
-  margin: 0 12px 12px;
-}
-
 /* Map KernelSU/APatch dynamic colors into Miuix tokens when Monet is enabled. */
 :root.miuix-monet,
 .miuix-monet .m-theme-light {
-  --status-normal-container: var(--secondaryContainer, #e8def8);
-  --status-normal-content: var(--onSecondaryContainer, #1d192b);
-  --status-normal-accent: var(--primary, #6750a4);
-  --status-checking-container: var(--primaryContainer, #eaddff);
-  --status-checking-content: var(--onPrimaryContainer, #4f378b);
-  --status-checking-accent: var(--primary, #6750a4);
-  --status-abnormal-container: var(--errorContainer, #f9dedc);
-  --status-abnormal-content: var(--onErrorContainer, #8c1d18);
-  --status-abnormal-accent: var(--error, #b3261e);
   --m-color-primary: var(--primary, #6750a4);
   --m-color-on-primary: var(--onPrimary, #ffffff);
   --m-color-primary-variant: var(--primary, #6750a4);
@@ -85,29 +74,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --status-normal-container: #1a3825;
-    --status-normal-content: #dffae4;
-    --status-normal-accent: #36d167;
-    --status-checking-container: #182b47;
-    --status-checking-content: #dce9ff;
-    --status-checking-accent: #5d9bff;
-    --status-abnormal-container: #3f1210;
-    --status-abnormal-content: #ffdad6;
-    --status-abnormal-accent: #ff897d;
-  }
-
   :root.miuix-monet,
   .miuix-monet .m-theme-dark {
-    --status-normal-container: var(--secondaryContainer, #4a4458);
-    --status-normal-content: var(--onSecondaryContainer, #e8def8);
-    --status-normal-accent: var(--primary, #d0bcff);
-    --status-checking-container: var(--primaryContainer, #4f378b);
-    --status-checking-content: var(--onPrimaryContainer, #eaddff);
-    --status-checking-accent: var(--primary, #d0bcff);
-    --status-abnormal-container: var(--errorContainer, #8c1d18);
-    --status-abnormal-content: var(--onErrorContainer, #f9dedc);
-    --status-abnormal-accent: var(--error, #f2b8b5);
     --m-color-primary: var(--primary, #d0bcff);
     --m-color-on-primary: var(--onPrimary, #381e72);
     --m-color-primary-variant: var(--primary, #d0bcff);

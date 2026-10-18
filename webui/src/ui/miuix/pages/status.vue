@@ -270,8 +270,7 @@ onMounted(async () => {
       <AnimatePresence :initial="false">
         <Motion
           v-if="activeMountStatus === 'active' && expandMountPath"
-          class="ex-mount-details"
-          style="margin: 0 16px 14px"
+          class="mount-details"
           :initial="{ height: 0, opacity: 0 }"
           :animate="{ height: 'auto', opacity: 1 }"
           :exit="{ height: 0, opacity: 0 }"
@@ -324,142 +323,14 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* The banner is a plain MiuixCard (see components/StatusCard.vue), so it takes
+ * the same 12px list inset as every other card. */
 .status-banner {
   margin: 0 12px 12px;
 }
 
 .status-banner :deep(.m-card) {
   border-radius: var(--m-radius-md, 16px);
-}
-
-.status-banner__content {
-  box-sizing: border-box;
-  min-height: 144px;
-  padding: 14px 16px;
-  position: relative;
-  overflow: hidden;
-  color: var(--m-color-on-surface-container);
-  background: var(--m-color-surface-container-high);
-}
-
-.status-banner--normal {
-  background: var(--status-normal-container);
-  color: var(--status-normal-content);
-}
-
-.status-banner--normal .status-banner__symbol {
-  color: var(--status-normal-accent);
-}
-
-.status-banner--abnormal {
-  background: var(--status-abnormal-container);
-  color: var(--status-abnormal-content);
-}
-
-.status-banner--abnormal .status-banner__symbol {
-  color: var(--status-abnormal-accent);
-}
-
-.status-banner--checking {
-  background: var(--status-checking-container);
-  color: var(--status-checking-content);
-}
-
-.status-banner--checking .status-banner__symbol {
-  color: var(--status-checking-accent);
-}
-
-.status-banner__copy {
-  max-width: calc(100% - 92px);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  position: relative;
-  z-index: 1;
-}
-
-.status-banner__title {
-  font-size: 22px;
-  font-weight: 600;
-}
-
-.status-banner__summary {
-  font-size: 15px;
-  font-weight: 500;
-  opacity: 0.72;
-}
-
-.status-banner__mode {
-  position: absolute;
-  bottom: 10px;
-  left: 16px;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.status-banner__symbol {
-  box-sizing: border-box;
-  width: 110px;
-  height: 110px;
-  border: 8px solid currentColor;
-  border-radius: 50%;
-  position: absolute;
-  right: -27px;
-  bottom: -31px;
-  opacity: 0.8;
-}
-
-.status-banner--normal .status-banner__symbol::before,
-.status-banner--normal .status-banner__symbol::after,
-.status-banner--abnormal .status-banner__symbol::before,
-.status-banner--abnormal .status-banner__symbol::after {
-  content: "";
-  height: 8px;
-  border-radius: 999px;
-  background: currentColor;
-  position: absolute;
-  transform-origin: left center;
-}
-
-.status-banner--normal .status-banner__symbol::before {
-  width: 30px;
-  left: 21px;
-  top: 54px;
-  transform: rotate(45deg);
-}
-
-.status-banner--normal .status-banner__symbol::after {
-  width: 55px;
-  left: 40px;
-  top: 70px;
-  transform: rotate(-45deg);
-}
-
-.status-banner--abnormal .status-banner__symbol::before,
-.status-banner--abnormal .status-banner__symbol::after {
-  width: 58px;
-  left: 50%;
-  top: 50%;
-  transform-origin: center;
-}
-
-.status-banner--abnormal .status-banner__symbol::before {
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.status-banner--abnormal .status-banner__symbol::after {
-  transform: translate(-50%, -50%) rotate(-45deg);
-}
-
-.status-banner--checking .status-banner__symbol {
-  border-top-color: transparent;
-  animation: status-spin 1.4s linear infinite;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  margin: 12px 0;
 }
 
 .guard-dialog-actions {
@@ -495,39 +366,19 @@ onMounted(async () => {
 }
 
 .mount-details {
-  margin: 0 16px 14px;
+  margin: 0 16px 12px;
   color: var(--m-color-on-surface-variant);
-}
-
-.mount-details summary {
-  color: var(--m-color-primary);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .mount-path-list {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   max-height: 180px;
-  margin-top: 10px;
   overflow: auto;
 }
 
 .mount-path-list code {
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-
-@keyframes status-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .status-banner--checking .status-banner__symbol {
-    animation: none;
-  }
 }
 </style>

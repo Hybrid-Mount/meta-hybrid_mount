@@ -291,7 +291,7 @@ onMounted(() =>
 <style scoped>
 .module-header {
   cursor: pointer;
-  border-radius: 18px;
+  border-radius: var(--m-radius-md, 16px);
 }
 
 .module-header :deep(.m-basic-component__row) {
@@ -302,8 +302,9 @@ onMounted(() =>
 .modules-toolbar {
   width: auto;
   margin-inline: 12px;
+  margin-bottom: 12px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(140px, 190px) 44px;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 190px) 40px;
   gap: 8px;
   align-items: center;
 }
@@ -319,10 +320,10 @@ onMounted(() =>
 
 .module-error-notice {
   min-height: 48px;
-  padding: 10px 16px;
+  padding: 8px 8px 8px 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .module-error-copy {
@@ -357,15 +358,18 @@ onMounted(() =>
 .module-blacklist-notice {
   margin: 0 16px 12px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: var(--m-radius-xs, 8px);
   background: var(--m-color-error-container, rgba(186, 26, 26, 0.12));
   color: var(--m-color-on-error-container, #410002);
   font-size: 13px;
   line-height: 1.5;
 }
 
+/* Expanded body sits inside the card. Rows keep their own 16px inset (miuix
+ * BasicComponent inside margin), so this wrapper adds no horizontal padding —
+ * it only draws the separator under the header row. */
 .module-details {
-  padding: 4px 16px 16px;
+  padding: 0;
   border-top: 1px solid var(--m-color-outline-variant, rgba(0, 0, 0, 0.08));
 }
 
@@ -379,18 +383,12 @@ onMounted(() =>
   overflow: hidden;
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin: 12px 0;
-}
-
 .rule-row {
   display: flex;
   gap: 12px;
   align-items: center;
-  min-height: 48px;
+  min-height: 56px;
+  padding: 0 16px;
 }
 
 .rule-row .path {
@@ -407,14 +405,11 @@ onMounted(() =>
 .module-actions {
   display: flex;
   justify-content: flex-end;
-  margin-top: 20px;
-  padding-top: 4px;
+  padding: 0 16px 12px;
 }
 
 .module-icon-action {
-  --m-icon-button-min-width: 44px;
-  --m-icon-button-min-height: 44px;
-  --m-icon-button-radius: 15px;
+  color: var(--m-color-on-surface-variant-summary);
 }
 
 .save-module-button {
@@ -424,7 +419,7 @@ onMounted(() =>
 
 .refresh-modules-button {
   --m-icon-button-bg: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
-  --m-icon-button-radius: 13px;
+  --m-icon-button-radius: var(--m-radius-sm, 12px);
   color: var(--m-color-on-surface-variant-summary);
 }
 
@@ -478,7 +473,7 @@ onMounted(() =>
 
 @media (max-width: 560px) {
   .modules-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(104px, 30vw) 44px;
+    grid-template-columns: minmax(0, 1fr) minmax(104px, 30vw) 40px;
     gap: 8px;
   }
 }

@@ -167,7 +167,7 @@ onMounted(async () => {
 
 <style scoped>
 .about-hero {
-  padding: 20px 20px 10px;
+  padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -176,70 +176,71 @@ onMounted(async () => {
 }
 
 .about-logo {
-  width: 88px;
-  height: 88px;
+  width: 80px;
+  height: 80px;
 }
 
 .about-hero strong {
-  font-size: 24px;
+  font-size: var(--m-text-title3-size, 20px);
+  line-height: 26px;
 }
 
 .about-hero span {
   color: var(--m-color-on-surface-variant, rgba(0, 0, 0, 0.6));
-  font-size: 14px;
+  font-size: var(--m-text-body2-size, 14px);
 }
 
 .about-meta {
-  padding: 8px 16px 4px;
+  padding: 0 16px 8px;
   display: grid;
   grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
-  gap: 10px;
+  gap: 8px;
 }
 
 .about-meta-item {
   min-width: 0;
-  padding: 12px 14px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  border-radius: 16px;
+  gap: 2px;
+  border-radius: var(--m-radius-md, 16px);
   background: var(--m-color-surface-container-low, rgba(0, 0, 0, 0.035));
   text-align: left;
 }
 
 .about-meta-item span {
   color: var(--m-color-on-surface-variant, rgba(0, 0, 0, 0.6));
-  font-size: 12px;
+  font-size: var(--m-text-footnote2-size, 11px);
 }
 
 .about-meta-item strong {
   overflow: hidden;
-  font-size: 14px;
+  font-size: var(--m-text-body2-size, 14px);
   line-height: 20px;
   text-overflow: ellipsis;
 }
 
 .social-links {
   width: 100%;
-  padding: 10px 16px 12px;
+  padding: 0 16px 8px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
   box-sizing: border-box;
 }
 
 .social-link {
   position: relative;
   min-width: 0;
-  min-height: 108px;
+  min-height: 92px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   overflow: hidden;
   border: 0;
-  border-radius: 22px;
+  border-radius: var(--m-radius-md, 16px);
   color: inherit;
   font: inherit;
   text-align: left;
@@ -295,14 +296,14 @@ onMounted(async () => {
 }
 
 .social-icon {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
-  border-radius: 15px;
+  border-radius: var(--m-radius-sm, 12px);
   color: var(--m-color-on-primary, #fff);
   background: var(--m-color-primary, #6750a4);
-  box-shadow: 0 6px 16px rgba(69, 49, 112, 0.2);
+  box-shadow: 0 4px 12px rgba(69, 49, 112, 0.18);
 }
 
 .repository-link .social-icon {
@@ -333,17 +334,17 @@ onMounted(async () => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .social-copy strong {
-  font-size: 17px;
-  line-height: 22px;
+  font-size: var(--m-text-headline2-size, 16px);
+  line-height: 20px;
 }
 
 .social-copy span {
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--m-text-footnote2-size, 11px);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;

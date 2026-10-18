@@ -228,7 +228,7 @@ onMounted(() =>
   min-height: 40px;
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: 13px;
+  border-radius: var(--m-radius-md, 16px);
   padding: 0 12px;
   color: var(--m-color-on-surface, #1d1b20);
   -webkit-text-fill-color: currentColor;
@@ -261,18 +261,18 @@ onMounted(() =>
 }
 
 .config-action-bar {
-  min-height: 64px;
-  padding: 8px 12px 8px 16px;
+  min-height: 56px;
+  padding: 8px 8px 8px 16px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 
 .action-hint {
   min-width: 0;
   flex: 1;
   color: var(--m-color-on-surface-variant-summary, rgba(0, 0, 0, 0.6));
-  font-size: 13px;
+  font-size: var(--m-text-footnote1-size, 13px);
   line-height: 18px;
 }
 
@@ -280,14 +280,7 @@ onMounted(() =>
 .reset-dialog-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-}
-
-.save-action,
-.reset-action {
-  --m-icon-button-min-width: 44px;
-  --m-icon-button-min-height: 44px;
-  --m-icon-button-radius: 15px;
+  gap: 8px;
 }
 
 .save-action {
@@ -319,7 +312,7 @@ onMounted(() =>
   .text-preference :deep(.m-basic-component__row) {
     align-items: stretch;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
 
   .text-preference :deep(.m-basic-component__end),
