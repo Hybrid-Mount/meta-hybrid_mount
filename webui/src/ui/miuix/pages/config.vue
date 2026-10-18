@@ -13,7 +13,7 @@ import {
   MiuixIconButton,
   IconCheck,
 } from "miuix-vue";
-import { Reset } from "miuix-vue/icons";
+import { Refresh } from "miuix-vue/icons";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
 import { sysStore } from "../../../lib/stores/sysStore";
@@ -195,7 +195,7 @@ onMounted(() =>
             :aria-label="t('common.reset')"
             @click="resetRequested = true"
           >
-            <MiuixIcon :icon="Reset" :size="22" />
+            <MiuixIcon :icon="Refresh" :size="22" />
           </MiuixIconButton>
         </div>
       </div>

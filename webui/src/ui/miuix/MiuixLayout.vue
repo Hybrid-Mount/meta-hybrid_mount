@@ -14,7 +14,7 @@ import {
   MiuixButton,
   MiuixDialog,
 } from "miuix-vue";
-import { ScreenMirroring, Settings, Info, Folder, Reset } from "miuix-vue/icons";
+import { ScreenMirroring, Settings, Info, Folder, Refresh } from "miuix-vue/icons";
 import { sysStore } from "../../lib/stores/sysStore";
 import { useSwipePager } from "../useSwipePager";
 
@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
     <MiuixTopAppBar :large="false" :title="t('common.appName')" class="app__top-app-bar">
       <template #actions>
         <MiuixIconButton :aria-label="t('common.reboot')" @click="rebootRequested = true">
-          <MiuixIcon :icon="Reset" :size="24" />
+          <MiuixIcon :icon="Refresh" :size="24" />
         </MiuixIconButton>
       </template>
     </MiuixTopAppBar>
