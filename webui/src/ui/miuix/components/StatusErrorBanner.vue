@@ -71,10 +71,10 @@ const emit = defineEmits<{
   margin: 0 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 8px;
+  padding: 14px 16px;
   border-radius: var(--m-radius-md, 16px);
-  border: 2px solid var(--m-color-error);
+  border: 1px solid var(--m-color-error);
   color: var(--m-color-on-error-container);
   background: var(--m-color-error-container);
 }
@@ -82,8 +82,8 @@ const emit = defineEmits<{
 .error-banner__head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 17px;
+  gap: 8px;
+  font-size: var(--m-text-headline1-size, 17px);
 }
 
 .error-banner__symbol {
@@ -93,14 +93,14 @@ const emit = defineEmits<{
 }
 
 .error-banner__symbol svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 .error-banner__hint {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--m-text-footnote1-size, 13px);
+  line-height: 18px;
   opacity: 0.9;
 }
 
@@ -110,27 +110,27 @@ const emit = defineEmits<{
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .error-banner__list li {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: var(--m-radius-sm, 10px);
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--m-radius-sm, 12px);
   background: color-mix(in srgb, var(--m-color-error) 12%, transparent);
 }
 
 .error-banner__message {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--m-text-body2-size, 14px);
 }
 
 .error-banner__detail {
   margin: 0;
-  padding: 8px 10px;
-  border-radius: var(--m-radius-xs, 6px);
+  padding: 6px 8px;
+  border-radius: var(--m-radius-xs, 8px);
   background: color-mix(in srgb, var(--m-color-error) 18%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -169,7 +169,7 @@ const emit = defineEmits<{
   grid-template-columns: max-content 1fr;
   gap: 4px 12px;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--m-text-footnote1-size, 13px);
 }
 
 .error-banner__rows dt {

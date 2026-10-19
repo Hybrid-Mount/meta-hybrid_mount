@@ -25,12 +25,15 @@ body {
   height: 100vh;
 }
 
-.page {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+/*
+ * Page rhythm is owned by each UI layer, not by this shared sheet:
+ *   - md3   → `.md3-active .page-scroller` (padding 16 / gap 16) and
+ *             `.md3-active .page-scroller > .page { display: contents }`;
+ *   - miuix → `ui/miuix/theme.css` (12px card insets, top inset only), which
+ *             mirrors miuix list spacing.
+ * A shared `.page` padding/gap here would stack on top of both and double every
+ * gutter to 24px.
+ */
 
 .row {
   display: flex;

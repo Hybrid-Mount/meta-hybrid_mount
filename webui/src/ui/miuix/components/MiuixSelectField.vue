@@ -93,29 +93,62 @@ function select(option: MiuixSelectOption): void {
   min-width: 0;
 }
 
+/*
+ * Same row metrics as miuix's MiuixBasicComponent (min-height 56, inside margin
+ * 16, title headline1/medium, summary body2, 8dp action gap) so a select row
+ * lines up with the preference rows around it. Feedback is miuix's additive
+ * onBackground indication, not a filled hover background.
+ */
 .miuix-select-trigger {
+  position: relative;
   width: 100%;
-  min-height: 72px;
-  padding: 12px 16px;
+  min-height: 56px;
+  padding: 16px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   border: 0;
-  border-radius: 16px;
-  color: var(--m-color-on-surface, #1d1b20);
+  border-radius: 0;
+  color: var(--m-color-on-background, #000);
   background: transparent;
   font: inherit;
   text-align: left;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.miuix-select-trigger:hover {
-  background: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
+.miuix-select-trigger::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--m-color-on-background);
+  opacity: 0;
+  transition: opacity 120ms linear;
+  pointer-events: none;
 }
 
 .miuix-select-trigger:focus-visible {
   outline: 2px solid var(--m-color-primary, #6750a4);
   outline-offset: -2px;
+}
+
+.miuix-select-trigger:focus-visible::after {
+  opacity: 0.08;
+}
+
+.miuix-select-trigger:active::after {
+  opacity: 0.1;
+}
+
+@media (hover: hover) {
+  .miuix-select-trigger:hover::after {
+    opacity: 0.06;
+  }
+
+  .miuix-select-trigger:hover:active::after {
+    opacity: 0.16;
+  }
 }
 
 .miuix-select-trigger:disabled {
@@ -128,25 +161,29 @@ function select(option: MiuixSelectOption): void {
   display: flex;
   flex: 1;
   flex-direction: column;
+  align-items: flex-start;
 }
 
 .trigger-copy strong {
-  font-size: 17px;
+  color: var(--m-color-on-background, #000);
+  font-size: var(--m-text-headline1-size, 17px);
+  font-weight: 500;
   line-height: 22px;
 }
 
 .trigger-copy span {
-  margin-top: 2px;
   color: var(--m-color-on-surface-variant-summary, rgba(0, 0, 0, 0.6));
-  font-size: 13px;
-  line-height: 18px;
+  font-size: var(--m-text-body2-size, 14px);
+  line-height: 20px;
 }
 
 .trigger-value {
   min-width: 0;
+  flex: 0 1 auto;
   overflow: hidden;
   color: var(--m-color-on-surface-variant-actions, rgba(0, 0, 0, 0.62));
-  font-size: 14px;
+  font-size: var(--m-text-body2-size, 14px);
+  line-height: 20px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -159,8 +196,9 @@ function select(option: MiuixSelectOption): void {
 
 .compact .miuix-select-trigger {
   min-height: 40px;
-  padding: 0 10px 0 12px;
-  border-radius: 13px;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: var(--m-radius-md, 16px);
   background: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
 }
 
@@ -174,38 +212,13 @@ function select(option: MiuixSelectOption): void {
   max-height: min(56vh, 440px);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   overflow-y: auto;
 }
 
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  padding-top: 12px;
-}
-
-@media (max-width: 420px) {
-  .miuix-select-field:not(.compact) .miuix-select-trigger {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 4px 8px;
-  }
-
-  .miuix-select-field:not(.compact) .trigger-copy {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .miuix-select-field:not(.compact) .trigger-value {
-    grid-column: 1;
-    grid-row: 2;
-    justify-self: start;
-  }
-
-  .miuix-select-field:not(.compact) .miuix-select-trigger > :last-child {
-    grid-column: 2;
-    grid-row: 1 / span 2;
-  }
+  padding-top: 8px;
 }
 </style>

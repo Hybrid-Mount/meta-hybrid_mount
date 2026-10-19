@@ -16,6 +16,11 @@ pub const RULE_HEADER_LEN: usize = 12;
 pub const DEL_HEADER_LEN: usize = 6;
 
 pub const FLAG_VIRTUAL_DIR: u32 = 1 << 1;
+
+/// A directory retained solely to connect surviving child rules.
+pub(crate) fn is_derived_parent(flags: u32, real_path: &str) -> bool {
+    flags & FLAG_VIRTUAL_DIR != 0 && flags & !(1 | FLAG_VIRTUAL_DIR) == 0 && real_path.is_empty()
+}
 pub const FLAG_WHITEOUT: u32 = 1 << 2;
 /// Combined with a directory rule: the directory stays visible, real entries are
 /// hidden and only injected children show through.

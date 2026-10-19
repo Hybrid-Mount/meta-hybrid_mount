@@ -52,9 +52,10 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
 </template>
 
 <style scoped>
+/* Sits inside the expanded module card. The card's rows use a 16px inside
+ * margin, so this block matches it instead of adding its own outer spacing. */
 .runtime-controls {
-  padding: 16px 0 18px;
-  margin-bottom: 8px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--m-color-divider-line, rgba(0, 0, 0, 0.06));
 }
 
@@ -63,13 +64,13 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .runtime-heading h3 {
   margin: 0;
   color: var(--m-color-on-surface);
-  font-size: 16px;
+  font-size: var(--m-text-headline1-size, 17px);
   font-weight: 500;
   line-height: 22px;
 }
@@ -79,8 +80,8 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
   align-items: center;
   gap: 6px;
   color: var(--m-color-on-surface-variant-summary);
-  font-size: 13px;
-  line-height: 20px;
+  font-size: var(--m-text-footnote1-size, 13px);
+  line-height: 18px;
   text-align: right;
 }
 
@@ -105,7 +106,7 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
 .runtime-error {
   margin: 4px 0 0;
   color: var(--m-color-on-surface-variant-summary);
-  font-size: 13px;
+  font-size: var(--m-text-body2-size, 14px);
   line-height: 20px;
   overflow-wrap: anywhere;
 }
@@ -114,30 +115,12 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 14px;
-}
-
-.runtime-buttons :deep(.m-button) {
-  min-height: 44px;
-  border-radius: 14px;
-  padding-inline: 20px;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
-}
-
-.runtime-primary:not(:disabled) {
-  color: var(--m-color-on-secondary-variant);
+  margin-top: 12px;
 }
 
 .runtime-secondary:not(:disabled) {
   color: var(--m-color-on-surface-variant-summary);
   background: transparent;
-}
-
-.runtime-message,
-.runtime-error {
-  margin-top: 10px;
 }
 
 .runtime-error {

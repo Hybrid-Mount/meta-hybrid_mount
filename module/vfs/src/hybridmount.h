@@ -14,6 +14,7 @@
 #include <linux/rwsem.h>
 #include <linux/srcu.h>
 #include <linux/atomic.h>
+#include <linux/refcount.h>
 #include <linux/file.h>
 #include <linux/key-type.h>
 #include <linux/highmem.h>
@@ -44,6 +45,8 @@ static void *hybridmount_art_root = NULL;
 static struct hm_uid_array __rcu *hybridmount_uids = NULL;
 static LIST_HEAD(hybridmount_rules_list);
 static LIST_HEAD(hybridmount_sb_list);
+/* Copies may still be referenced by open FDs after inode operations restore. */
+static LIST_HEAD(hybridmount_fop_list);
 static DECLARE_RWSEM(hybridmount_rwsem);
 DEFINE_STATIC_SRCU(hybridmount_srcu);
 
@@ -75,8 +78,10 @@ struct hm_iop {
 };
 
 struct hm_fop {
+    /* fake_fop must remain first for container_of and VFS dispatch. */
     struct file_operations fake_fop;  /* MUST be exactly at offset 0 */
     const struct file_operations *orig_fop;
+    struct list_head list;
     struct hybridmount_dir_node *dir_node;
     struct rcu_head rcu;
 };
@@ -95,6 +100,7 @@ struct hm_inode_info {
     struct path r_path;
     struct hybridmount_dir_node *dir_node;
     u8 flags;
+    struct rcu_head rcu;
 };
 
 struct hybridmount_child_array {
@@ -109,6 +115,10 @@ struct hybridmount_dir_node {
     void __rcu *children;
     u64 bloom_mask;
     struct inode *v_inode;
+    /* All fabricated inodes, including displaced cache generations, pin this node. */
+    atomic_t inode_users;
+    /* One topology ownership ref plus readers which cross sleeping calls. */
+    refcount_t refs;
     union {
         unsigned long _tag_ptr;
         struct {
@@ -140,6 +150,8 @@ struct hybridmount_rule {
 };
 
 struct hm_rule_info {
+    /* Borrowed identity only; compare under RCU, never path_put this snapshot. */
+    struct path backing_path;
     u16 flags;
     unsigned long v_ino;
     struct path r_path;
@@ -189,11 +201,11 @@ static inline loff_t hm_pack_pos(int id) {
     return (HM_SIG_16 << 48) | (id & 0xFFFFFFFF);
 }
 
-static inline int hm_unpack_pos(loff_t pos) {
+static inline u32 hm_unpack_pos(loff_t pos) {
 #ifdef CONFIG_COMPAT
-    if (in_compat_syscall()) return (int)(pos & 0xFFFF);
+    if (in_compat_syscall()) return (u32)(pos & 0xFFFF);
 #endif
-    return (int)(pos & 0xFFFFFFFF);
+    return (u32)(pos & 0xFFFFFFFF);
 }
 
 /**** Adaptive Radix Tree Protocol ****/

@@ -1,4 +1,24 @@
 
+## v6.2.3
+
+
+### <!-- 2 --> Fixes
+
+- `config` Accept retired partitions during upgrades
+
+- `vfs` Port upstream inode lifecycle hardening
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- `vfs` Refresh the prebuilt hybridmount modules
+
+- `ksu` Replace crate with direct ioctl transport
+
+
+
+
 ## v6.2.3-rc.3
 
 

@@ -192,6 +192,21 @@ CONFIG_HYBRIDMOUNT=y. --cleanup reverts all of it. The script refuses to touch a
 tree that already integrates NoMount, because both implementations hijack inode
 operations and the kernel will not stop them from coexisting.
 
+## Validation
+
+Host regressions extract production C functions and run them with controlled kernel
+primitives: `python3 tests/kernel/inode_lifecycle.py` covers allocation, cache
+generations and node retirement; `python3 tests/kernel/vfs_semantics.py` covers
+parent deletion, directory inode numbers, ops teardown and old-kernel xattr dispatch.
+The version fixtures do not replace compilation against real kernel headers.
+
+On a rooted test device with a freshly rebuilt provider, run
+`sh tests/device/vfs_parent_delete.sh /absolute/hybrid-mount /quiet/native/parent`
+to verify that child rules survive parent deletion while an old directory handle
+stays open. The test injects initially absent paths and cleans up exactly its own
+rules. Also exercise the existing `tests/device/vfs_parent_lifetime.sh` reclaim test
+and verify SELinux enforcing file access before release.
+
 ## Packaging
 
 - xtask ships `module/vfs/src`, `module/vfs/binaries` and `setup.sh` in the release
