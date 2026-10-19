@@ -165,5 +165,6 @@
     "license": "Ліцензія"
   },
   "content": {
-    "welcome": "Hybrid Mount"
+        "welcome": "Hybrid Mount"
   }
+}
