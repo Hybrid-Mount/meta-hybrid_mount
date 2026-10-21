@@ -1,4 +1,74 @@
 
+## v6.2.5
+
+
+### <!-- 1 --> Features
+
+- Guard SUSFS LKM conflicts with KernelSU Next exemption
+
+
+
+### <!-- 2 --> Fixes
+
+- `vfs` Preserve rule topology and reader lifetimes across updates Keep child rules when deleting a parent, snapshot RCU entries and pin directory nodes across sleeping callbacks. Preserve inode source identity, retain active directory operations, prepare hooks before publishing children, bound unsigned UID cursors, and correct inode flags, dirents and legacy xattrs. Add 98 production-function host regression cases and device parent-deletion coverage. Align userspace delete readback with derived parent topology and document validation. Host checks pass; GKI modules must be rebuilt by the existing dev workflow before packaging.
+
+- `vfs` Enforce cursor, UID and hook lifetime boundaries
+
+- `vfs` Accept owned UID structural parents during reconciliation
+
+- `webui` Tighten miuix spacing to native list metrics Drop the md3-oriented `.page` padding/gap that doubled every miuix gutter to 24px, and align select rows, banners and action bars with miuix's own metrics.‘ Assisted-by: LLM chrome-devtools-protocol eslint vue-tsc luyanci: 黑板赔我10元钱！！！当是精神损失费了(bushi
+
+- Enforce issue templates and correct APatch mount ordering
+
+
+
+### <!-- 3 --> Documentation
+
+- Document existing WebView policy controls for issue 497 Trace Hybrid Mount try-umount registration and the existing KernelSU WebView profile. Record the device checks needed to distinguish server recovery from renderer mount visibility; do not change KernelSU or broaden mount exemptions.
+
+- Remove completed review notes and implementation plans
+
+
+
+### <!-- 4 --> Tests
+
+- `vfs` Benchmark child lookup filters against production search Compare fixed64, adaptive Bloom and small-directory matching with a linear result oracle and collision cases. Record userspace-only timing and memory limits; keep the current production filter pending device measurements.
+
+- `vfs` Use portable 64-bit cursor fixture types
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Sync source to AtomGit and add community entry points
+
+- Revert "feat: guard SUSFS LKM conflicts with KernelSU Next exemption" This reverts commit f1ea5c9128c9a8475779a485ac6eb912661188db. Remove the installer and runtime SUSFS object guard, including the KernelSU Next exemption, as requested; disabled loader files must not prevent VFS insertion.
+
+- `vfs` Refresh the prebuilt hybridmount modules
+
+- `vfs` Refresh verified DDK modules and portable source stamps
+
+- Merge branch 'codex/vfs-boundary-fixes' into dev # Conflicts: # module/vfs/binaries/hybridmount-android12-5.10.ko # module/vfs/binaries/hybridmount-android13-5.10.ko # module/vfs/binaries/hybridmount-android13-5.15.ko # module/vfs/binaries/hybridmount-android14-5.15.ko # module/vfs/binaries/hybridmount-android14-6.1.ko # module/vfs/binaries/hybridmount-android15-6.6.ko # module/vfs/binaries/hybridmount-android16-6.12.ko # module/vfs/binaries/list.txt # module/vfs/binaries/sources.txt
+
+- `webui` Refactor info hero in miuix Also adjusted icon
+
+- Update Ukrainian localization strings (#499) @luyanci Full quality Ukrainian 🇺🇦 translate ![Screenshot_20261018-112419_BakaSU.png](https://github.com/user-attachments/assets/ee9f41cd-7a9d-41e7-a844-6c35335924ed) ![Screenshot_20261018-112359_BakaSU.png](https://github.com/user-attachments/assets/32aa2c25-0562-4d17-8a46-1a0dd27f5261) ![Screenshot_20261018-112445_BakaSU.png](https://github.com/user-attachments/assets/97b1ff51-2a40-4997-9067-25a695c48afb) ![markup_1000006265.png](https://github.com/user-attachments/assets/5edb3136-cda9-400f-931e-7587b9911860) ![Screenshot_20261018-112326_BakaSU.png](https://github.com/user-attachments/assets/15b3c6e6-f6de-46d9-b414-a2eb6b06276f) --------- Co-authored-by: 由崎黑板 <94628337+YuzakiKokuban@users.noreply.github.com> Co-authored-by: xiaoyu <116065395+xxiaoyuu625@users.noreply.github.com>
+
+- Trim redundant docs and mandatory documentation rules
+
+- Remove explanatory comments from tests
+
+- 更新AtomGit链接 (#492)
+
+- 删除 sync-atomgit.yml
+
+- 删除 ATOMGIT_SYNC.md
+
+- `webui` Format Ukrainian welcome entry
+
+
+
+
 ## v6.2.3
 
 
