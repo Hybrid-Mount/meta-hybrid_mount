@@ -89,8 +89,6 @@ function hasEvidence(value) {
   const attachment = /\.(?:txt|log|old|logcat|dmesg|dump|crash|trace|bugreport|tar|gz|tgz|bz2|xz|lz4|zst|zip|7z|rar)$/i;
   if (urls(text).some(url => attachment.test(url.pathname)
     || /^(?:gist\.github\.com|gist\.githubusercontent\.com|pastebin\.com|paste\.rs)$/i.test(url.hostname) && url.pathname.split('/').filter(Boolean).length > 0)) return true;
-  // Fences alone do not turn prose into diagnostics. Recognize logcat, kernel,
-  // stack traces, mount tables and Hybrid Mount state without asserting authenticity.
   const blocks = text.matchAll(/^ {0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^ {0,3}\1\s*$/gm);
   for (const block of blocks) if (hasDiagnosticOutput(block[2])) return true;
   const lines = text.split('\n').filter(line => hasContent(line));
@@ -144,8 +142,7 @@ async function ensureLabel(github, repo, name, color) {
 
 async function inspectIssue({ github, context }) {
   const args = { ...context.repo, issue_number: context.issue.number };
-  // Read current state after entering the per-issue workflow queue. Event bodies
-  // may predate an edit or a maintainer closing the issue.
+  // Queued events may predate an edit or maintainer closure.
   const { data: issue } = await github.rest.issues.get(args);
   if (issue.pull_request || issue.locked) return;
   const labels = new Set(issue.labels.map(label => typeof label === 'string' ? label : label.name));

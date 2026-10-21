@@ -8,19 +8,12 @@ Search existing issues before reporting a problem. Include module version, devic
 version, KernelSU/APatch version, reproduction steps, expected behavior and a bugreport.
 Remove credentials and personal information from logs before uploading them.
 
-Use one of the repository issue templates, including its title prefix and required sections.
-All issues are checked, including submissions through the CLI/API without labels. Bug reports
-and blacklist requests must include a log/archive link or pasted diagnostic output in the
-Upload Area; a long explanation or an unrelated website link does not count as a log.
-Incomplete reports receive a `needs-template` label and are closed with a list of missing
-information. Edit the existing issue to complete it; the bot reopens issues it closed once
-the check passes. Passing this check does not confirm the report's technical conclusions.
+Use an issue template with its title prefix and required fields, including for CLI/API submissions.
+Bug reports and blacklist requests need logs in the Upload Area. Incomplete issues are labeled
+`needs-template` and closed; edit the original issue to let the bot reopen it after validation.
 
-请使用仓库提供的 Issue 模板，保留标题前缀并填写必填章节。所有 Issue 均会检查，包括通过
-CLI/API 提交且没有标签的 Issue。错误报告和黑名单申请须在上传区域提供日志或报告附件链接，
-或粘贴日志输出；长篇推测或无关网页链接不能代替日志。不完整的报告会标记 `needs-template`，
-列出缺项并自动关闭。请直接编辑原 Issue 补全，由机器人关闭的 Issue 在检查通过后会自动重新
-打开。检查通过仅代表格式完整，不代表技术结论已经确认。
+通过 CLI/API 提交也须遵循 Issue 模板的标题前缀和必填字段。错误报告和黑名单申请须在上传
+区域提供日志。缺项会标记 `needs-template` 并关闭；编辑原 Issue 补全后，机器人会重新打开。
 
 - [AtomGit Issues](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/issues)
 - [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues)

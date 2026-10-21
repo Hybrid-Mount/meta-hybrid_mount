@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Root-manager boot ordering belongs here; stage scripts only forward their name.
-
 use crate::errors::{Error, Result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -70,7 +68,7 @@ fn notify_kernel_su() {
             .args(["kernel", "notify-module-mounted"])
             .timeout(Duration::from_secs(5));
         if let Err(error) = run_command(&spec) {
-            // Match the previous hook: notification failure does not undo successful mounts.
+            // Notification failure must not undo successful mounts.
             log::warn!("KernelSU mount notification failed: {error}");
         }
     }

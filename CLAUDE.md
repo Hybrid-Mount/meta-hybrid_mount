@@ -1,137 +1,25 @@
-# CLAUDE.md
+# 项目约定
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Hybrid Mount：Rust 核心 + Vue 3 WebUI，面向 KernelSU / APatch。
+目录与挂载不变量见 `.dsh/skills/hybrid-mount-overview/SKILL.md`。
 
-## Project Overview
+计划、排查结论默认在对话中说明；仅在用户要求时另写文档，不为流程单独创建或提交文档。
+注释只解释不明显的原因、约束和安全条件，避免复述代码。
 
-Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它在启动阶段扫描其他模块，按全局、模块和路径规则为每一项选择 OverlayFS、Magic Mount、VFS 或忽略，并且始终把模块源目录当作只读输入。
+## 验证
 
-- **核心语言**: Rust (edition 2024)
-- **目标平台**: Android (aarch64, armv7, x86_64, riscv64)
-- **WebUI**: Vue 3 + TypeScript + Vite
-- **构建系统**: cargo + xtask
-
-## Common Commands
-
-### Rust 开发
-
-```bash
-# 完整构建（WebUI + 二进制 + module zip）
-cargo xtask build
-
-# 发布构建
-cargo xtask build --release
-
-# 运行测试
-cargo test --workspace
-
-# 格式化
-cargo fmt --all
-
-# Clippy 检查
+```sh
+cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-
-# 交叉编译检查（针对 Android 目标）
-rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-# riscv64 无预编译 std，使用 nightly rust-src + build-std 检查
-cargo +nightly check -p hybrid-mount --target riscv64-linux-android -Z build-std=std,panic_abort
+cargo test --workspace
+node .dsh/validate-skills.mjs
+node --test .github/scripts/issue-policy.test.cjs
 cargo check -p hybrid-mount --target aarch64-linux-android
 ```
 
-### WebUI 开发
-
-```bash
-cd webui
-
-# 安装依赖
-pnpm install --frozen-lockfile
-
-# 开发服务器
-pnpm dev
-
-# 构建
-pnpm build
-
-# Lint
-pnpm lint
-
-# 单元测试与类型检查
-pnpm test
-
-# 仅类型检查
-pnpm typecheck
-```
-
-### 模块脚本检查
-
-```bash
-# ShellCheck
-shellcheck module/*.sh tests/shell/*.sh
-```
-
-## Architecture
-
-### 核心流水线
-
-启动流水线（`src/pipeline.rs`）是无参数入口，执行顺序：
-
-1. **config** - 读取 `/data/adb/hybrid-mount/config.toml`
-2. **scan** - 只读扫描 `/data/adb/modules`，构建 `ModuleRecord` 列表
-3. **vfs probe** - 探测内建 key type `hybridmount`；无响应时加载随附的 VFS 内核模块（不论配置是否选择 `vfs`）
-4. **plan** - 根据规则构建 `MountPlan`（统一节点树 + 分后端操作列表）；无后端可用的 `vfs` 规则在此降级为 `ignore`
-5. **storage** - 准备 overlay staging（tmpfs 或 ext4）
-6. **overlay** - 执行 OverlayFS 挂载（直接目录层 + shallow 文件层）
-7. **magic** - 执行 Magic Mount（bind mount + symlink + whiteout）
-8. **vfs** - 应用 VFS 规则（key type `hybridmount`）
-9. **commit** - 提交 KSU unmount 列表，写状态快照
-
-挂载阶段失败时触发事务式回滚，并保留失败状态快照供 WebUI 查询。第 3 步必须在第 4 步之前，原因见「LKM（可选）」一节。
-
-### 规则优先级
-
-```
-路径规则 > 模块 default_mode > 全局 default_mode
-```
-
-同一文件路径只能进入一个后端；普通目录可由两个后端共享作为结构节点；文件、类型与 `.replace` 冲突在启动规划阶段显式报错。
-
-后端 mode 取值为 `overlay | magic | vfs | ignore`。`vfs` 只有在探测或加载成功时才生效，否则规划阶段降级为 `ignore`。
-
-### 模块结构
-
-- `src/config.rs` - TOML 配置解析与验证
-- `src/scanner.rs` - 只读模块扫描，不修改源目录
-- `src/plan/mod.rs` - 混合挂载规划器，构建统一节点树
-- `src/mount_tree.rs` - 跨后端共享的节点树结构
-- `src/pipeline.rs` - 启动流水线与回滚事务
-- `src/overlayfs/` - OverlayFS 挂载逻辑
-- `src/magic_mount/` - Magic Mount 执行逻辑
-- `src/vfs/` - VFS 后端控制面（规则映射、wire protocol、keyring 通信、LKM 选型与加载）
-- `src/runtime/` - 启动与热操作共享的所有权账本、规则事务、挂载身份校验，详见 `docs/RUNTIME.md`
-- `src/storage/` - overlay staging 存储（tmpfs / ext4）
-- `src/sys/` - 系统辅助层（文件系统、挂载、nuke、LKM 加载器）
-- `src/state.rs` - 运行状态快照（供 WebUI 读取）
-
-### WebUI 通信
-
-WebUI 通过管理器提供的 `kernelsu.exec` 桥接调用同一个 Rust 二进制，使用 `show-config`、`save-config`、`modules`、`status` 等命令交换 JSON。后端管理以下持久化文件：
-
-- `/data/adb/hybrid-mount/run/state.json` - 运行状态快照
-- `/data/adb/hybrid-mount/scan.ret` - 模块列表快照
-- `/data/adb/hybrid-mount/config.toml` - 当前配置
-
-写入配置后需重启生效。
-
-### 分区提升
-
-支持动态分区提升（vendor、product、odm 等）。planner 检测 `/system/vendor` 等是否为符号链接，决定是否提升到顶层分区根。提升后 `system/vendor/lib` 映射到 `/vendor/lib`。
-
-### 存储模式
-
-- **tmpfs** - 内存中 staging，速度快但占用 RAM
-- **ext4** - loop 设备 + ext4 文件系统，持久化 staging
-
-ext4 模式在 KernelSU 使用官方 `NukeExt4Sysfs` ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境使用随附 LKM（仅 aarch64）。LKM 加载期间若内核崩溃，遗留的持久熔断标记会阻止下次启动再次尝试。
+WebUI 修改在 `webui/` 运行 `pnpm lint`、`pnpm test`、`pnpm build`；依赖用 `pnpm install --frozen-lockfile`。
+模块脚本修改运行 `shellcheck module/*.sh tests/shell/*.sh`。
+构建入口为 `cargo xtask build [--release]`。
 
 ## Code Conventions
 
@@ -141,14 +29,13 @@ ext4 模式在 KernelSU 使用官方 `NukeExt4Sysfs` ioctl 隐藏 sysfs 节点�
 - **错误处理**: 使用 `Result<T>` 和 `?` 操作符，自定义 `Error` 类型在 `src/errors.rs`
 - **日志**: 使用 `log` crate（`log::info!`, `log::error!` 等）；CLI 的 JSON 输出使用标准输出，不混入诊断日志
 - **平台特定代码**: 用 `#[cfg(any(target_os = "linux", target_os = "android"))]` 隔离
-- **测试**: 单元测试在模块末尾 `#[cfg(test)] mod tests`，集成测试在项目根目录 `tests/` 下
 
 ### 代码审查要点
 
 - 挂载与文件操作必须检查返回值
 - 路径操作使用 `Path` / `PathBuf`，避免字符串拼接
 - 回滚逻辑必须清理所有资源（挂载点、临时目录）
-- 新增配置字段需同步更新 `config.toml` 和文档
+- 新增配置字段需同步更新 `module/config.toml`
 - 跨模块冲突检测在 planner 阶段完成，executor 只执行
 
 ### 禁止的操作
@@ -156,29 +43,6 @@ ext4 模式在 KernelSU 使用官方 `NukeExt4Sysfs` ioctl 隐藏 sysfs 节点�
 - **禁止修改模块源目录** - 所有 staging 写入运行目录
 - **禁止符号 "kasumi"** - 已移除的旧逻辑
 - **禁止 `normalize_symlinked_partition_layout`** - 已移除的布局规范化
-
-## Testing
-
-```bash
-# 运行所有测试
-cargo test --workspace
-
-# 运行特定模块测试
-cargo test -p hybrid-mount
-
-# 运行特定测试
-cargo test test_name
-
-# 显示测试输出
-cargo test -- --nocapture
-```
-
-测试覆盖：
-- planner 规则优先级与冲突检测
-- overlay 路径映射与 staging
-- magic mount 执行逻辑
-- 配置解析与验证
-- 回滚事务正确性
 
 ## Platform-Specific Notes
 
@@ -215,16 +79,6 @@ cargo test -- --nocapture
 
 VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模块加载）由 `src/vfs/boot_guard.rs` 记录写入它的构建（版本 + 可执行文件大小/mtime），LKM 标记再记录候选 `.ko` 的大小/mtime。只有「同一构建写入、且候选集中仍存在同一内核对象」的标记才会阻止下一次自动尝试；其他构建留下的标记、旧版 1 字节标记、以及被新包替换掉的 `.ko` 所留下的标记都会在尝试前自动清除（`prepare_lkm_guard` / `arm_for_mutation`）。`hybrid-mount vfs guard clear --yes`（以及状态页红卡按钮）是唯一的显式清除入口，`vfs guard [--json]` 报告两个标记的判定。
 
-## Important Files
-
-- `Cargo.toml` - workspace 配置与版本
-- `xtask/src/main.rs` - 构建自动化脚本
-- `module/` - KernelSU/APatch 模块脚本
-- `module/lkm/` - ext4 sysfs nuke LKM
-- `webui/` - Vue 3 WebUI 源码
-- `docs/` - 多语言文档
-- `.github/workflows/` - CI/CD 配置
-
 ## Release Process
 
 `cargo xtask build --release` 完成：
@@ -259,8 +113,3 @@ versionCode 为 `major*100000 + minor*1000 + patch` 再乘 1000 加槽位；预�
 - 开发分支: `dev`
 - PR 目标: `dev`
 - 发布时从 `dev` 合并到 `main`，等 `main` 的 Build workflow 通过后再打 tag（见 Release Process：tag 只能复用默认分支已经预热好的缓存）
-
-## Contact
-
-- GitHub Issues: https://github.com/Hybrid-Mount/meta-hybrid_mount/issues
-- Telegram: @hybridmountchat

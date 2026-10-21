@@ -30,7 +30,7 @@ whenToUse: 评审或修改 mount、unmount、文件系统、staging、回滚相�
 
 - [ ] 无 unwrap() / expect() / dbg! / todo! / unimplemented!（workspace lint deny）。
 - [ ] 无 kasumi、无 normalize_symlinked_partition_layout / normalize_module_layout。
-- [ ] 新增配置字段已同步 `module/config.toml` 与文档。
+- [ ] 新增配置字段已同步 `module/config.toml`。
 - [ ] 新增跨模块冲突检测放在 planner，executor 不裁决。
 
 ## 快速自查

@@ -58,7 +58,7 @@ executor 随后会直接提前返回。后端 mode 取值为 `overlay | magic | 
 | `src/cli.rs` | 手工 CLI 参数解析与分派 |
 | `module/` | 安装与启动脚本、LKM、默认 config.toml |
 | `webui/` | Vue 3 + Vite WebUI |
-| `docs/` | 多语言文档 + ARCHITECTURE.md |
+| `docs/` | 用户文档与 CLI / runtime 接口参考 |
 | `xtask/` | 构建 / 发布自动化 |
 
 ## CLI 子命令（`src/cli.rs`）

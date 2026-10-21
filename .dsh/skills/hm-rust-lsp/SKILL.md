@@ -1,11 +1,11 @@
 ---
 name: hm-rust-lsp
-description: （当前不可用）在 DeepSeek Harness 中用 dsh-lsp-actions 与 rust-analyzer 检查 Rust 诊断、符号、类型提示和重命名；用于 Rust 编辑与语义重构。
+description: 在 DeepSeek Harness 中用 dsh-lsp-actions 与 rust-analyzer 检查 Rust 诊断、符号、类型提示和重命名；用于 Rust 编辑与语义重构。
 ---
 
 # DSH Rust LSP
 
-**当前不可用**：`dsh-lsp-actions` 声明 `engines.dsh >=0.1.2-rc.1 <0.2.0`，与本机 DSH 0.2.0-rc.2 不兼容，插件装不上（见 `.dsh/plugins.md`），所以下面的 `lsp_*` 工具在当前会话中并不存在；本机也没有 `web` profile（活动 profile 是 `desktop`）。保留本技能作参考，等上游支持 0.2.x 后再启用。
+使用前检查当前会话是否提供 `lsp_*` 工具，以及插件与 DSH 版本是否兼容；不可用时改用 Cargo 检查。
 
 - lsp_symbols 查看文件符号或查找工作区符号；lsp_inlay_hints 辅助理解推断类型；lsp_signature 查看调用参数。
 - 修改后用 lsp_diagnostics 检查相关文件；首次索引未完成或服务器超时时，不能把空结果解释为无错误。

@@ -27,20 +27,5 @@ git push atomgit HEAD
 git push atomgit --tags
 ```
 
-当前电脑已设置 AtomGit HTTPS 凭据；私有凭据位于 `.git/atomgit/credentials`，
-不受 Git 跟踪。其他电脑需单独配置访问令牌或 SSH 公钥。
-更换电脑、删除 `.git` 或撤销令牌后，需要重新配置凭据。
-
 日常先将提交集成到 GitHub，再由工作流同步。直接推送 AtomGit 的提交也应
 推送回 GitHub，避免两端分叉。不要同时开启另一套会重写同一分支的双向镜像。
-
-## G-Star 申请与文档
-
-- [官方入驻指南](https://atomgit.com/GitCode/G-Star_guiding)
-- [申请入口](https://atomgit.com/g-star/apply)
-- [官方条件说明](https://docs.atomgit.com/docs/help/home/page-intro/homepage/)
-
-README 提供 AtomGit 仓库链接、安装说明、中文文档、反馈及贡献入口，
-并保留各组件的许可证说明。对外介绍项目时可引用上面的 AtomGit 地址。
-同步与完善文档并不代表项目已通过认证；官方条件还涉及持续更新、社区互动和评审。
-取得认证后再添加 G-Star 专属徽章。

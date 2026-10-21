@@ -1,9 +1,5 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-#
-# Exercise tests/shell/vfs_sources_digest.sh: it must accept a matching tree and reject a
-# prebuilt set whose sources have moved on. That drift is the failure it exists to catch, so
-# a checker that only ever printed PASS would be worse than none at all.
 
 set -eu
 
@@ -18,8 +14,6 @@ fail() {
     exit 1
 }
 
-# A miniature tree with the same shape the checker walks, so the test never depends on the
-# real module sources staying byte-identical.
 make_tree() {
     root=$1
     mkdir -p "$root/module/vfs/src" "$root/module/vfs/binaries"
@@ -37,7 +31,6 @@ run() {
     REPO_ROOT=$1 sh "$SCRIPT" 2>&1
 }
 
-# 1. A freshly stamped tree passes.
 tree="$WORK/ok"
 make_tree "$tree"
 out=$(run "$tree") || fail "a matching tree must pass, got: $out"
@@ -46,7 +39,6 @@ case "$out" in
 *) fail "expected PASS, got: $out" ;;
 esac
 
-# 2. Changing a source file must be rejected: this is the shipped-stale-binary case.
 tree="$WORK/drift"
 make_tree "$tree"
 printf 'a later fix\n' >> "$tree/module/vfs/src/hybridmount.c"
@@ -57,13 +49,11 @@ case "$out" in
 *"do not match"*) ;;
 *) fail "expected a mismatch message, got: $out" ;;
 esac
-# The advice must name the documented rebuild path.
 case "$out" in
 *"Build VFS kernel module"*) ;;
 *) fail "the failure should say how to rebuild, got: $out" ;;
 esac
 
-# 3. A missing build input must be reported rather than silently dropped from the digest.
 tree="$WORK/missing"
 make_tree "$tree"
 rm "$tree/module/vfs/src/hybridmount.h"
@@ -75,7 +65,6 @@ case "$out" in
 *) fail "expected a missing-input message, got: $out" ;;
 esac
 
-# 4. A malformed stamp must not be read as a match.
 tree="$WORK/badstamp"
 make_tree "$tree"
 printf 'not-a-digest\n' > "$tree/module/vfs/binaries/sources.txt"
@@ -83,7 +72,7 @@ if out=$(run "$tree"); then
     fail "a malformed stamp must fail, got: $out"
 fi
 
-# 5. With no stamp at all the check skips, so the workflow can run before the first assembly.
+# A missing stamp permits checks before the first prebuilt assembly.
 tree="$WORK/nostamp"
 make_tree "$tree"
 rm "$tree/module/vfs/binaries/sources.txt"
@@ -93,7 +82,6 @@ case "$out" in
 *) fail "expected SKIP, got: $out" ;;
 esac
 
-# 6. The real repository must currently be consistent.
 out=$(run "$REPO_ROOT") || fail "the repository is not self-consistent: $out"
 case "$out" in
 *PASS*) ;;
