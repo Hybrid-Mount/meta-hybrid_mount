@@ -35,6 +35,6 @@ body:
     id: attachments
     attributes:
       label: Upload Area / 上传区域
-      description: Upload the KernelSU/APatch bugreport and relevant logs. / 上传 KernelSU/APatch bugreport 与相关日志。
+      description: Provide a KernelSU/APatch bugreport or log attachment link, or paste diagnostic output in a code block. / 请提供 KernelSU/APatch bugreport 或日志附件链接，或用代码块粘贴日志输出。
     validations:
       required: true

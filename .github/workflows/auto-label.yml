@@ -1,50 +1,32 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-name: Auto Label and Close Invalid Issues
+name: Validate and Label Issues
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, reopened]
+
+concurrency:
+  group: issue-template-${{ github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   label-and-close:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
     steps:
+      # Only execute policy code from the default branch, never an issue-supplied ref.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+
       - uses: actions/github-script@v9
         with:
           script: |
-            const body = context.payload.issue.body || "";
-
-            if (context.payload.issue.state === "open") {
-              const hasBugLabel = context.payload.issue.labels.some(l => l.name === "bug");
-              if (hasBugLabel) {
-                const attachmentsMatch = body.match(/### Upload Area \/ 上传区域\s*\n+([\s\S]*?)(?=\n###|$)/);
-                const attachmentsContent = attachmentsMatch ? attachmentsMatch[1].trim() : "";
-                const hasLogFile = /\.(txt|log|old|logcat|dmesg|dump|crash|trace|bugreport|tar|gz|tgz|bz2|xz|lz4|zst|zip|7z|rar)(\b|[)\s])/i.test(attachmentsContent) || /https?:\/\//i.test(attachmentsContent);
-
-                if (!attachmentsContent || (!hasLogFile && attachmentsContent.length <= 50)) {
-                  const closeMessage = "由于 Issue 中未在 Upload Area / 上传区域 中提供有效的日志或附件（如 KernelSU bugreport），自动关闭此 Issue。请上传 KernelSU 调试报告后再重新创建 Issue。\nThis issue is automatically closed because no valid logs or attachments (e.g., KernelSU bugreport) were provided in the Upload Area. Please upload the KernelSU debug report and create a new issue.";
-                  await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    body: closeMessage
-                  });
-                  await github.rest.issues.update({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    state: "closed",
-                    state_reason: "not_planned"
-                  });
-                  await github.rest.issues.lock({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: context.issue.number,
-                    lock_reason: "resolved"
-                  });
-                }
-              }
-            }
+            const { enforceIssuePolicy } = require('./.github/scripts/issue-policy.cjs');
+            await enforceIssuePolicy({ github, context, core });

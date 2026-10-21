@@ -11,7 +11,7 @@ use crate::{pipeline, state};
 pub fn run(args: &[String]) -> Result<()> {
     match args.first().map(String::as_str) {
         None => pipeline::run_mount_pipeline(),
-        Some("boot") => pipeline::run_boot_pipeline(),
+        Some("boot") => crate::boot_hook::handle(&args[1..]),
         Some("show-config") => handle_show_config(),
         Some("save-config") => handle_save_config(args),
         Some("gen-config") => handle_gen_config(),

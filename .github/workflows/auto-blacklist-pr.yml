@@ -4,7 +4,11 @@ name: Auto Blacklist PR / 自动黑名单 PR
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened, edited, reopened, labeled]
+
+concurrency:
+  group: blacklist-request-${{ github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   create-blacklist-pr:
@@ -15,41 +19,48 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      # Label events produced by GITHUB_TOKEN do not start another workflow.
+      # Validate independently so CLI submissions and later corrections both work,
+      # and an invalid form cannot race the template policy to create a PR.
+      - name: Validate blacklist request
+        id: policy
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { acceptedBlacklistIssue } = require('./.github/scripts/issue-policy.cjs');
+            const issue = await acceptedBlacklistIssue({ github, context });
+            core.setOutput('accepted', Boolean(issue));
+            if (issue) core.setOutput('module-id', issue.validatedModuleId);
 
       - name: Create blacklist PR
+        if: steps.policy.outputs.accepted == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUM: ${{ github.event.issue.number }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
-          EVENT_ACTION: ${{ github.event.action }}
-          EVENT_LABEL: ${{ github.event.label.name }}
+          MODULE_ID: ${{ steps.policy.outputs.module-id }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT_ACTION" = "labeled" ] && [ "$EVENT_LABEL" != "blacklist-request" ]; then
-            echo "Skipping: label '$EVENT_LABEL' is not blacklist-request"
-            exit 0
-          fi
-
-          LABELS=$(gh issue view "$ISSUE_NUM" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
-          if ! echo "$LABELS" | grep -q "blacklist-request"; then
-            echo "Skipping: issue #${ISSUE_NUM} does not have blacklist-request label"
-            exit 0
-          fi
-
-          MODULE_ID=$(echo "$ISSUE_BODY" | sed -n '/### Module ID/,/### /p' | grep -v '### ' | grep -v '^$' | head -1 | xargs)
-
-          if [ -z "$MODULE_ID" ]; then
-            gh issue comment "$ISSUE_NUM" --body "⚠️ Unable to parse module ID from the issue body. Please ensure you filled in the Module ID field. / 无法解析模块 ID，请确保已填写模块 ID 字段。"
-            exit 1
-          fi
-
-          echo "Parsed module ID: $MODULE_ID"
+          echo "Validated module ID: $MODULE_ID"
 
           if ! echo "$MODULE_ID" | grep -qE '^[a-zA-Z0-9][a-zA-Z0-9._-]*$'; then
             gh issue comment "$ISSUE_NUM" --body "⚠️ Module ID \`$MODULE_ID\` has an invalid format. Module IDs may only contain letters, digits, dots, underscores, and hyphens. / 模块 ID 格式无效。"
             exit 1
           fi
+
+          BRANCH="chore/blacklist-${MODULE_ID}-${ISSUE_NUM}"
+          EXISTING_PR=$(gh pr list --head "$BRANCH" --base dev --state all --json url --jq '.[0].url // empty')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Skipping: blacklist PR already exists: $EXISTING_PR"
+            exit 0
+          fi
+
+          # Apply only the blacklist change to the current PR target branch.
+          git fetch origin dev
+          git checkout -b "$BRANCH" origin/dev
 
           if grep -q "\"$MODULE_ID\"" module/module_blacklist.toml; then
             gh issue comment "$ISSUE_NUM" --body "✅ Module \`$MODULE_ID\` is already in the blacklist — no action needed. / 模块已在黑名单中，无需重复添加。"
@@ -65,10 +76,8 @@ jobs:
           echo "Updated module_blacklist.toml:"
           cat module/module_blacklist.toml
 
-          BRANCH="chore/blacklist-${MODULE_ID}-${ISSUE_NUM}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
           git add module/module_blacklist.toml
           git commit -m "chore(blacklist): add ${MODULE_ID}
 

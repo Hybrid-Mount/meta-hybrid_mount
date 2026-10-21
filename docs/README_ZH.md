@@ -23,6 +23,14 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 
 从 [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载 ZIP，并在 KernelSU 或 APatch 管理器中安装。首次安装可用音量键选择默认后端；升级时会保留 `/data/adb/hybrid-mount/config.toml`。
 
+APatch 会在普通模块的 `post-fs-data.sh` 之前调用 `metamount.sh`，因此 Hybrid Mount 将其
+实际挂载延后到模块脚本完成后的 `post-mount` 阶段，防止 MSD 等模块重写生成文件时截断
+系统路径上正在读取的同一文件。KernelSU 继续在 `metamount` 阶段挂载。两个 `.sh` 仅传递
+阶段名称，选择阶段、进程锁、防重复与 KernelSU 通知均由 Rust 处理。
+
+有关 APatch 生成文件、应用卸载模块设置及原生库布局，参见
+[启动与系统应用可见性排查](MOUNT_TROUBLESHOOTING.md)。
+
 ## 配置
 
 默认配置：

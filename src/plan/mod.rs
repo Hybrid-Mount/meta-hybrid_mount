@@ -1807,4 +1807,73 @@ mod tests {
             "unexpected: {err}"
         );
     }
+
+    #[test]
+    fn system_app_module_keeps_all_apks_when_switching_only_its_backend() {
+        let mut entries = vec![
+            ("system".to_owned(), true),
+            ("system/app".to_owned(), true),
+            ("system/priv-app".to_owned(), true),
+            ("system/etc".to_owned(), true),
+            ("system/etc/permissions".to_owned(), true),
+            ("system/etc/permissions/custom.xml".to_owned(), false),
+        ];
+        let mut apks = Vec::new();
+        for (directory, count) in [("app", 30), ("priv-app", 3)] {
+            for index in 0..count {
+                let package = format!("system/{directory}/pkg{index}");
+                let apk = format!("{package}/pkg{index}.apk");
+                entries.push((package, true));
+                entries.push((apk.clone(), false));
+                apks.push(apk);
+            }
+        }
+        let refs: Vec<_> = entries
+            .iter()
+            .map(|(path, dir)| (path.as_str(), *dir))
+            .collect();
+        for backend in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
+            let rules = BTreeMap::from([(
+                "custom_systemapps".to_owned(),
+                crate::config::ModuleRule {
+                    default_mode: Some(backend),
+                    paths: BTreeMap::new(),
+                },
+            )]);
+            let result = plan(
+                &[
+                    record("custom_systemapps", &refs),
+                    record("other_module", &[("system/framework/other.jar", false)]),
+                ],
+                &config(Mode::Overlay, rules),
+                &[],
+            );
+            for relative in apks
+                .iter()
+                .map(String::as_str)
+                .chain(std::iter::once("system/etc/permissions/custom.xml"))
+            {
+                let node = result.tree.find(&format!("/{relative}")).unwrap();
+                let source = node.source_for(backend).unwrap();
+                assert_eq!(source.module_id.as_str(), "custom_systemapps");
+                assert_eq!(source.file_type, NodeFileType::RegularFile);
+                assert_eq!(source.relative, relative);
+            }
+            assert!(
+                result
+                    .tree
+                    .find("/system/framework/other.jar")
+                    .unwrap()
+                    .source_for(Mode::Overlay)
+                    .is_some()
+            );
+            let selected = match backend {
+                Mode::Overlay => &result.overlay_module_ids,
+                Mode::Magic => &result.magic_module_ids,
+                Mode::Vfs => &result.vfs_module_ids,
+                Mode::Ignore => unreachable!(),
+            };
+            assert!(selected.iter().any(|id| id.as_str() == "custom_systemapps"));
+        }
+    }
 }

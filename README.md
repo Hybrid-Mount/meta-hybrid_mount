@@ -21,6 +21,15 @@ Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot,
 
 Download the ZIP from [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) and install it with the KernelSU or APatch manager. On first installation, use the volume keys to select the default backend. Upgrades preserve `/data/adb/hybrid-mount/config.toml`.
 
+On APatch, actual mounting runs in `post-mount.sh`, after ordinary modules have completed
+their `post-fs-data.sh` scripts. Its earlier `metamount.sh` hook only defers the work. This
+prevents generated files such as MSD's `plat_seapp_contexts` from being bound/injected before
+their generating script reads the stock system file and rewrites the module source.
+KernelSU continues to mount from `metamount.sh`, after its module scripts have run.
+
+See [boot and system-app visibility troubleshooting](docs/MOUNT_TROUBLESHOOTING.md) for
+the APatch generated-file ordering fix, per-app unmount checks and native-library packaging.
+
 ## Configuration
 
 Default configuration:

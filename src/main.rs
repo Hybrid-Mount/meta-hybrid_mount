@@ -2,6 +2,7 @@
 
 #![cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]
 
+mod boot_hook;
 mod cli;
 mod config;
 mod defs;

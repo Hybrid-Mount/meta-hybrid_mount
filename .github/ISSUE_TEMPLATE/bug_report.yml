@@ -97,6 +97,6 @@ body:
     id: attachments
     attributes:
       label: Upload Area / 上传区域
-      description: Upload the KernelSU/APatch bugreport, relevant logs, screenshots, and a problematic module sample when possible. Remove private data first. / 请上传 KernelSU/APatch bugreport、相关日志、截图及可公开的问题模块样本，并先移除隐私数据。
+      description: Provide a bugreport/log attachment link or paste diagnostic output in a code block. Screenshots and explanations alone do not replace logs. Include a module sample when possible and remove private data first. / 请提供 bugreport 或日志附件链接，或用代码块粘贴日志；仅有截图或问题描述不能代替日志。尽量附上模块样本，并先移除隐私数据。
     validations:
       required: true
