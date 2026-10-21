@@ -21,22 +21,22 @@
   "dependencies": {
     "@material/web": "^2.5.0",
     "miuix-vue": "^0.1.1",
-    "motion-v": "^2.6.0",
-    "vue": "^3.5.43",
-    "vue-i18n": "^11.4.14"
+    "motion-v": "^2.8.0",
+    "vue": "^3.5.44",
+    "vue-i18n": "^11.4.16"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/tsconfig": "^0.9.1",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "eslint-plugin-vue": "^10.11.1",
     "kernelsu": "^3.0.2",
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.71.1",
+    "typescript-eslint": "^8.71.2",
     "vite": "^8.3.4",
-    "vitest": "^5.0.3",
+    "vitest": "^5.0.5",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.13"
   }
