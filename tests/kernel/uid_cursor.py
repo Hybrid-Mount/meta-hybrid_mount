@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Compile the production GET_UIDS command against hostile wire cursors."""
 import os
 from pathlib import Path
 import shlex

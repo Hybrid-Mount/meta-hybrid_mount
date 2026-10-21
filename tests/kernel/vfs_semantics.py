@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Exercise production VFS rules, directory entries, teardown and xattr dispatch.
-
-Fixtures replace kernel primitives; this does not validate the Linux ABI.
-"""
 import os
 from pathlib import Path
 import re

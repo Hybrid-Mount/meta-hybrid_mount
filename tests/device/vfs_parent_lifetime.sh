@@ -1,25 +1,5 @@
 #!/system/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-#
-# Manual regression for the lifetime of hooked real parent-directory inodes.
-# Run on a rooted test device with the freshly built Hybrid Mount provider:
-#   sh vfs_parent_lifetime.sh /path/to/hybrid-mount /quiet/readonly/parent [rounds]
-#
-# The parent must already exist on a read-only disk filesystem (EROFS preferred),
-# and should have no unrelated open directory/file references or mmap users.
-# In particular, choose a quiet directory with zero mmap users of its children;
-# unrelated references can prevent reclamation and let the old implementation
-# pass. A tmpfs fixture cannot exercise normal disk-inode cache reclamation.
-# This test closes its own file references before each cache drop, then checks
-# actual file contents through fresh opens. A passing run alone does not prove
-# that the old kernel reclaimed this parent; compare against the old provider
-# and, where available, use inode-eviction tracing and KASAN/kmemleak.
-#
-# WARNING: writing 3 to /proc/sys/vm/drop_caches drops caches globally, which can
-# affect device performance. Use a test device. No existing native file is
-# modified: only unique, initially absent child paths are injected. Cleanup
-# deletes precisely these rules; it never clears the provider or unloads it.
-# Exit 77 means an environment prerequisite is missing; usage errors exit 2.
 
 set -eu
 
@@ -86,8 +66,6 @@ cd /
 [ -w /proc/sys/vm/drop_caches ] || skip 'global drop_caches is unavailable or unwritable'
 [ -d /data/local/tmp ] || skip '/data/local/tmp is unavailable'
 
-# Select the deepest mount containing the supplied physical parent. Reject
-# overlay/tmpfs and writable mounts even when their native files are read-only.
 mount_details=$(awk -v target="$parent" '
     {
         point = $5
@@ -137,8 +115,6 @@ cleanup_rule() {
     if "$hm" vfs rule del "$target" --uid 0 >/dev/null 2>"$work/cleanup-error.txt"; then
         return
     fi
-    # A failed ADD_RULE/readback may have installed nothing. Only regard an
-    # unsuccessful delete as clean when a fresh listing confirms absence.
     if "$hm" vfs rule list >"$work/cleanup-rules.txt" 2>>"$work/cleanup-error.txt" &&
         ! grep -F "\"$target\" " "$work/cleanup-rules.txt" >/dev/null; then
         return
@@ -157,7 +133,6 @@ cleanup() {
     [ "$two_attempted" -eq 0 ] || cleanup_rule "$two"
     [ "$one_attempted" -eq 0 ] || cleanup_rule "$one"
     if [ "$cleanup_failed" -eq 0 ]; then
-        # Verify the exact, generated absolute cleanup target before recursion.
         work_name=${work#/data/local/tmp/}
         case "$work:$work_name" in
             /data/local/tmp/hm-vfs-parent.*:hm-vfs-parent.*)
@@ -212,7 +187,6 @@ printf 'deep replacement: %s\n' "$stem" >"$work/source-deep"
 assert_content() {
     target=$1
     source=$2
-    # This cat process exits, closing its target file before the next cache drop.
     cat "$target" >"$work/actual" || fail "fresh open failed: $target"
     cmp -s "$work/actual" "$source" || fail "replacement contents lost: $target"
 }
@@ -228,8 +202,6 @@ drop_caches() {
     printf '3\n' >/proc/sys/vm/drop_caches || skip 'kernel refused the global cache drop'
 }
 
-# Keep the content-pair loop in a subshell so stress retains its positional
-# parameters across rounds; each child exits before the next drop_caches.
 stress() {
     label=$1
     shift

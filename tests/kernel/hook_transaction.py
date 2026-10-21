@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Inject hook allocation failures into extracted production C functions."""
 import argparse
 import os
 from pathlib import Path

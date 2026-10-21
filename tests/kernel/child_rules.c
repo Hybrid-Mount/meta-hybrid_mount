@@ -141,7 +141,6 @@ int main(int argc,char **argv) {
     __hybridmount_delete_child_locked(&growth);
     __hybridmount_delete_child_locked(&other);
     assert(!dir.children && !preempt_depth);
-    // Specific-first insertion must still choose it after a global fallback is added.
     add(&dir,&scoped);
     add(&dir,&global);
     expect(&dir,42,200);

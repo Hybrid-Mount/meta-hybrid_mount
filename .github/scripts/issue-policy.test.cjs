@@ -287,7 +287,7 @@ test('blacklist PR gate handles correction without relying on a bot-triggered ev
   s.issue.body = blacklistBody;
   const output = await s.runBlacklist();
   assert.equal(output.accepted, true);
-  assert.equal(s.issue.state, 'closed'); // The separate policy job will reopen it.
+  assert.equal(s.issue.state, 'closed');
   s.issue.closed_by = { login: 'maintainer', type: 'User' };
   assert.notEqual((await s.runBlacklist()).accepted, true);
 });

@@ -28,8 +28,6 @@ run_case() {
     ui_print() { :; }
     abort() { exit 0; }
 
-    # The missing userspace binary stops customize.sh immediately after the
-    # platform-dependent retention branches.
     . "$ROOT_DIR/module/customize.sh"
   )
 
@@ -45,8 +43,6 @@ run_case() {
   else
     test ! -e "$case_dir/vfs/binaries"
   fi
-  # The kernel sources ship next to the prebuilt modules on every platform, the same
-  # way lkm/src does, so the installed tree stays licence-complete.
   test -f "$case_dir/vfs/src/hybridmount.c" ||
     { echo "FAIL: $case_name dropped vfs/src" >&2; exit 1; }
   rm -rf "$case_dir/vfs/src"

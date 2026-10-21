@@ -8,14 +8,12 @@ use crate::mount_tree::{MountTree, NodeFileType};
 use crate::test_support::mount_source as source;
 use crate::vfs::protocol::{FLAG_WHITEOUT, ListedRule};
 
-/// Kernel double: counts calls, captures the uids sent, and can fail mid-batch.
 #[derive(Default)]
 struct RecordingKernel {
     applied: usize,
     removed: usize,
     uids_added: Vec<u32>,
     fail_apply: bool,
-    /// Reported back by `list_rules`, so a test can simulate a rule the kernel dropped.
     installed: Vec<ListedRule>,
 }
 
@@ -49,7 +47,6 @@ impl VfsKernel for RecordingKernel {
     }
 }
 
-/// A single-module plan; each key is both the in-module path and the target path.
 fn plan_for(entries: &[(&str, NodeFileType)]) -> MountPlan {
     let mut tree = MountTree::default();
     for (relative, file_type) in entries {
@@ -141,8 +138,6 @@ fn apply_rules_skips_uid_call_when_no_isolated_uids() {
     assert!(kernel.uids_added.is_empty());
 }
 
-/// A uid is sent once: the kernel answers -EEXIST for one already isolated, which a
-/// duplicated config entry would otherwise turn into a failed batch.
 #[test]
 fn apply_rules_deduplicates_isolated_uids() {
     let planned = plan_rules(&plan_for(&[(
@@ -172,8 +167,6 @@ fn readback_mismatch_fails_when_strict() {
     assert!(err.to_string().contains("/system/etc/hosts"), "{err}");
 }
 
-/// The batch is not atomic, so the applied prefix must be deleted after a failure.
-/// Non-strict VFS is optional and must not take Overlay / Magic down with it.
 #[test]
 fn non_strict_apply_failure_removes_the_prefix_and_degrades() {
     let planned = plan_rules(&hosts_and_whiteout()).unwrap();
@@ -220,8 +213,6 @@ fn listed(virtual_path: &str) -> ListedRule {
     }
 }
 
-/// The case the read-back exists for: the kernel acknowledged the batch but the rule is not
-/// there, which must surface as a difference rather than a silent success.
 #[test]
 fn a_rule_the_provider_did_not_report_back_is_missing() {
     let planned = plan_rules(&hosts_and_whiteout()).unwrap();
@@ -243,8 +234,6 @@ fn a_fully_reported_batch_reports_nothing_missing() {
     assert!(missing_rules(&planned.rules, &reported).is_empty());
 }
 
-/// Rules from an earlier pipeline run in the same boot stay in the table, so the read-back
-/// must compare only what this batch sent and never treat the table as an exact match.
 #[test]
 fn unrelated_installed_rules_are_not_reported_as_missing() {
     let planned = plan_rules(&plan_for(&[(

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Native userspace microbenchmark of HM's extracted child search, not kernel VFS.
-
-Linux: CC=cc python3 tests/kernel/vfs_lookup_bench.py
-Windows: set CC to 'C:/path/to/zig.exe cc', then run this script.
-All generated headers/executables are temporary. Output is CSV plus provenance.
-"""
 import hashlib
 import os
 from pathlib import Path

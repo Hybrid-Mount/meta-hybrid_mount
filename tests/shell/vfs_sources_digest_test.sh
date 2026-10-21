@@ -72,7 +72,6 @@ if out=$(run "$tree"); then
     fail "a malformed stamp must fail, got: $out"
 fi
 
-# A missing stamp permits checks before the first prebuilt assembly.
 tree="$WORK/nostamp"
 make_tree "$tree"
 rm "$tree/module/vfs/binaries/sources.txt"

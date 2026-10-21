@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Shared mount sources and temporary directories for tests.
-
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -41,7 +39,6 @@ pub fn mount_source_at(
     }
 }
 
-/// Owns a unique temporary directory and removes it even when a test panics.
 pub struct Fixture(PathBuf);
 
 impl Fixture {
@@ -80,12 +77,10 @@ impl Drop for Fixture {
     }
 }
 
-/// Returns false only for an explicitly requested unprivileged test run.
 #[cfg(target_os = "linux")]
 pub fn require_mount_namespace() -> bool {
     use rustix::mount::{MountPropagationFlags, mount_change};
 
-    // SAFETY: only the calling test thread changes namespaces; no shared Rust data is affected.
     let result = unsafe { rustix::thread::unshare_unsafe(rustix::thread::UnshareFlags::NEWNS) }
         .and_then(|()| {
             mount_change(

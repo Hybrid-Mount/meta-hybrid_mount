@@ -638,9 +638,6 @@ fn write_update_json(
 mod tests {
     use super::*;
 
-    /// The release that failed: `v6.2.01` passed the workflow's own pattern, was written into
-    /// `Cargo.toml`, and only then did Cargo reject it as `invalid leading zero in patch version
-    /// number` — after the tag had already been pushed. It has to be refused up front, by name.
     #[test]
     fn a_tag_with_a_leading_zero_patch_is_rejected() {
         let error =
@@ -652,8 +649,6 @@ mod tests {
         );
     }
 
-    /// Tags that are not versions at all, and tags with no `v`, are handled explicitly rather than
-    /// falling through to a build step.
     #[test]
     fn release_tags_are_validated_as_semver() {
         assert!(ReleaseVersion::parse("v6.2.1").is_ok());
@@ -663,8 +658,6 @@ mod tests {
         assert!(ReleaseVersion::parse("v6.2.1+build.5").is_err());
     }
 
-    /// A finished release must carry a higher code than its own candidates, or a device on a
-    /// candidate would never be offered the release it led to.
     #[test]
     fn a_release_outranks_its_own_pre_releases() {
         let finished = ReleaseVersion::parse("v6.2.1").expect("release tag");
@@ -685,8 +678,6 @@ mod tests {
         }
     }
 
-    /// Candidates order against each other by stage and number, never lexically, so `-rc.10` is
-    /// genuinely later than `-rc.2`.
     #[test]
     fn pre_release_slots_order_by_stage_then_number() {
         let code = |tag: &str| ReleaseVersion::parse(tag).expect("tag").version_code;
@@ -706,17 +697,15 @@ mod tests {
         }
     }
 
-    /// Every pre-release shape a `versionCode` cannot order exactly has to be refused with a message
-    /// that says what to write instead, rather than being given an approximate code.
     #[test]
     fn unsupported_pre_release_shapes_are_refused() {
         for tag in [
-            "v6.2.1-rc",        // no number
-            "v6.2.1-rc.0",      // zero reads as "no candidate"
-            "v6.2.1-rc.1.2",    // more than one identifier
-            "v6.2.1-preview.1", // a stage the code cannot place
-            "v6.2.1-RC.1",      // stages are matched exactly
-            "v6.2.1-rc.999",    // past the numbers one stage reserves
+            "v6.2.1-rc",
+            "v6.2.1-rc.0",
+            "v6.2.1-rc.1.2",
+            "v6.2.1-preview.1",
+            "v6.2.1-RC.1",
+            "v6.2.1-rc.999",
         ] {
             let error = ReleaseVersion::parse(tag)
                 .expect_err(&format!("{tag} must be refused, not approximated"));
@@ -728,8 +717,6 @@ mod tests {
         }
     }
 
-    /// A shape that is not valid semver at all is refused by the semver parser before the
-    /// `versionCode` shape is considered. Either way the tag never reaches a build step.
     #[test]
     fn invalid_semver_is_rejected_before_the_code_shape() {
         for tag in ["v6.2.1-rc.01", "v6.2.01", "v6.2.1-", "v6.2.1-rc..1"] {
@@ -743,8 +730,6 @@ mod tests {
         }
     }
 
-    /// A candidate's code must not depend on which other tags happen to exist, so tagging a later
-    /// candidate never rewrites the code of an earlier one.
     #[test]
     fn a_candidate_code_is_independent_of_other_tags() {
         let first = ReleaseVersion::parse("v6.2.1-rc.1").expect("tag");
@@ -755,8 +740,6 @@ mod tests {
         assert!(first.prerelease && second.prerelease);
     }
 
-    /// The code has to keep rising across every kind of release, including the one this repository
-    /// just shipped: a candidate of the next version still has to outrank the finished prior one.
     #[test]
     fn version_codes_increase_across_versions() {
         let ordered = [
@@ -779,8 +762,6 @@ mod tests {
         }
     }
 
-    /// A device already running a published release has to see the next one as an update, which
-    /// only holds while every code this produces is above the whole-number code already published.
     #[test]
     fn new_codes_outrank_the_published_scheme() {
         for (version, published) in [("6.2.0", 602_000), ("6.1.4", 601_004), ("6.0.0", 600_000)] {
@@ -792,10 +773,6 @@ mod tests {
         }
     }
 
-    /// The workflow injects `ReleaseVersion::version` into `Cargo.toml` and the build reads it back
-    /// to stamp `module.prop`, while the workflow separately publishes the tag's code in
-    /// `update.json`. A device compares those two, so if they ever disagreed the updater would
-    /// either offer the same release forever or never offer it at all.
     #[test]
     fn the_injected_version_stamps_the_same_code_as_the_tag() {
         for tag in ["v6.2.1", "v6.2.1-rc.1", "v6.2.1-beta.3", "v7.0.0"] {
@@ -844,8 +821,6 @@ mod tests {
         );
     }
 
-    /// riscv64 is built through the NDK directly, so it must stay out of the cargo-ndk
-    /// invocation and must carry the NDK's API 35 clang prefix.
     #[test]
     fn riscv64_is_built_through_the_ndk_not_cargo_ndk() {
         let riscv = ANDROID_ARCHS
@@ -915,9 +890,6 @@ mod tests {
         }
     }
 
-    /// The staged package must keep the prebuilt modules. `prune_kernel_build_output`
-    /// only strips Kbuild output from `src/`, so a `.ko` that ships deliberately under
-    /// `binaries/` survives staging.
     #[test]
     fn staging_keeps_deliberately_shipped_kernel_modules() {
         let stage = tempfile::tempdir().expect("tempdir");
@@ -942,7 +914,6 @@ mod tests {
         );
     }
 
-    /// Every module the loader can select must be covered by a digest manifest.
     #[test]
     fn every_shipped_kernel_module_is_listed_in_its_manifest() {
         let root = workspace_root().expect("workspace root");
@@ -963,8 +934,6 @@ mod tests {
             let binaries = root.join(dir);
             let manifest = binaries.join("list.txt");
             if !manifest.is_file() {
-                // The hybridmount set is produced by the kernel-module workflow; until it has run
-                // there is nothing to verify. The ext4 set is committed and must be there.
                 assert_eq!(dir, "module/vfs/binaries", "{dir}/list.txt is missing");
                 continue;
             }

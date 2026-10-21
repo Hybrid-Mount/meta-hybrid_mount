@@ -77,7 +77,6 @@ make_kernel_tree "$remote"
 (cd "$remote" && bash < "$SETUP" > /dev/null)
 cmp "$TEST_SOURCE_DIR/hybridmount.c" "$remote/fs/hybridmount/hybridmount.c" ||
     fail "piped setup did not fetch the correct sources"
-# Cleanup must work even if source downloads are unavailable.
 (cd "$remote" && FAIL_DOWNLOAD=1 bash -s -- --cleanup < "$SETUP" > /dev/null)
 [ ! -d "$remote/fs/hybridmount" ] || fail "piped cleanup left sources behind"
 

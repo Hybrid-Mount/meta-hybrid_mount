@@ -201,10 +201,6 @@ mod tests {
 
     #[test]
     fn platform_overlay_on_a_recorded_target_is_reported_and_never_reaches_another_boot() {
-        // Regression: a snapshot that listed the platform's own `/product/overlay` made a cold
-        // boot fail with `untracked mount at /product/overlay`, which stops every module from
-        // mounting. The conflict is now informational, and a ledger from an earlier boot proves
-        // the recorded targets are unreachable.
         let state = RunState {
             overlay_active_mounts: vec!["/product/overlay".into()],
             ..RunState::default()

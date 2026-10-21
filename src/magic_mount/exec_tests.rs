@@ -124,18 +124,10 @@ fn real_file_bind_is_registered_while_a_staging_bind_is_not() {
     let real = Path::new("/system/etc/hosts");
     let staging = Path::new("/mnt/Hb7kQ2wLp9xRt4VdNc3m/system/etc/hosts");
 
-    // A direct file bind lands on the real system path, the only mount point the kernel can
-    // unmount per app, so it must be registered. This used to be dropped whenever the staging
-    // root was under /mnt, which is every Android boot.
     assert_eq!(unmountable_target(true, false, real), Some(real));
-    // With a tmpfs skeleton the bind lands in staging and is carried onto the real path by the
-    // directory mount, which is registered there; the staging entry would name a mount that no
-    // longer exists and the kernel would replay it for the rest of the boot.
     assert_eq!(unmountable_target(true, true, staging), None);
-    // A staging root outside /mnt (the /tmp fallback) must not change either answer.
     let tmp_staging = Path::new("/tmp/hybrid/system/etc/hosts");
     assert_eq!(unmountable_target(true, true, tmp_staging), None);
-    // disable_umount registers nothing at all.
     assert_eq!(unmountable_target(false, false, real), None);
     assert_eq!(unmountable_target(false, true, staging), None);
 }

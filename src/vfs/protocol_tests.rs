@@ -5,8 +5,6 @@ use crate::module_id::ModuleId;
 use crate::vfs::rule::{VfsAction, VfsRule};
 use std::path::PathBuf;
 
-/// A response page as the kernel would write it back: `build_payload` leaves the -1
-/// sentinel, overwritten here with the real status / arg1 / data_size.
 fn response(status: i32, arg1: u32, data_size: u32) -> Vec<u8> {
     let mut page = build_payload(NmCommand::DelRule, 0, &[]).unwrap();
     page[16..20].copy_from_slice(&status.to_le_bytes());
@@ -63,7 +61,6 @@ fn wire_magic_and_version_match_the_kernel_header() {
     );
 }
 
-// Compare with the C header so independently edited Rust and kernel definitions cannot drift.
 #[test]
 fn command_numbers_match_the_kernel_enum() {
     let header = include_str!("../../module/vfs/src/hybridmount.h");
@@ -201,7 +198,6 @@ fn batches_split_when_buffer_is_full() {
 #[test]
 fn parse_version_reads_buffer_and_len() {
     let mut page = build_payload(NmCommand::GetVersion, 0, &[]).unwrap();
-    // Status was written back as success.
     page[16..20].copy_from_slice(&0_i32.to_le_bytes());
     page[28..30].copy_from_slice(b"20");
     page[24..28].copy_from_slice(&2_u32.to_le_bytes());
@@ -276,8 +272,6 @@ fn ensure_status_allow_enoent_rejects_other_negative_status() {
     assert!(!format!("{err}").is_empty());
 }
 
-/// An out-of-range record length leaves status at 0 with the cursor mid-batch; trusting
-/// status alone would read a partial delete as a complete one.
 #[test]
 fn ensure_status_allow_enoent_rejects_truncated_batch() {
     let err = ensure_status_allow_enoent(&response(0, 6, 16)).unwrap_err();
@@ -289,7 +283,6 @@ fn ensure_status_allow_enoent_accepts_full_batch_cursor() {
     assert!(ensure_status_allow_enoent(&response(0, 16, 16)).is_ok());
 }
 
-/// Adding an already-isolated uid is idempotent, not an error.
 #[test]
 fn ensure_status_accepts_already_isolated_uid() {
     assert!(ensure_status_allow_eexist(&response(-17, 0, 0)).is_ok());
@@ -314,7 +307,6 @@ fn ensure_consumed_reports_first_failure_and_its_offset() {
     assert!(text.contains("offset 12"), "error was {text}");
 }
 
-/// A response page carrying real buffer content, as GET_LIST / GET_UIDS return it.
 fn page_with_data(status: i32, cursor: u32, data: &[u8]) -> Vec<u8> {
     let mut page = response(status, cursor, data.len() as u32);
     page[28..28 + data.len()].copy_from_slice(data);
@@ -367,7 +359,6 @@ fn parse_list_rejects_a_truncated_record_header() {
 
 #[test]
 fn parse_list_rejects_paths_that_exceed_the_reported_length() {
-    // Claims 64 bytes of paths but the record body is empty.
     let mut data = vec![0_u8; RULE_HEADER_LEN];
     data[8..10].copy_from_slice(&32_u16.to_le_bytes());
     data[10..12].copy_from_slice(&32_u16.to_le_bytes());
@@ -417,7 +408,6 @@ fn build_list_payload_writes_the_cursor_into_arg1() {
         NmCommand::GetList as u32
     );
     assert_eq!(u32::from_le_bytes(page[20..24].try_into().unwrap()), 7);
-    // A listing request carries no input records.
     assert_eq!(u32::from_le_bytes(page[24..28].try_into().unwrap()), 0);
 }
 
@@ -470,8 +460,6 @@ fn paginate_asks_for_the_next_cursor_the_kernel_reported() {
 
 #[test]
 fn paginate_rejects_a_cursor_that_does_not_advance() {
-    // A kernel that keeps reporting the same cursor would loop forever. The first page
-    // still moves 0 -> 3, so the stall only shows up once the cursor is re-requested.
     let mut calls = 0;
     let err = paginate(
         |_cursor| {

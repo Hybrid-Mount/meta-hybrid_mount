@@ -666,13 +666,9 @@ mod tests {
         let staging = root.join("staging");
         let child = target.join("child");
         std::fs::create_dir_all(&child).unwrap();
-        // The module layer supplies the same relative path, which routes the sub-mount through
-        // the overlay path instead of the bind fallback.
         std::fs::create_dir_all(layer.join("child")).unwrap();
         std::fs::create_dir_all(&staging).unwrap();
 
-        // The rebuild loop resolves the stock path from the working directory, which
-        // `mount_overlay` sets to the root before it rebuilds the sub-mounts.
         let _current_dir = CurrentDirGuard::change_to(&target).unwrap();
 
         crate::sys::faults::enable_next_child_overlay_mount_failure();

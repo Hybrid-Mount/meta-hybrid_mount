@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Exercise production child publication, UID selection and cursor boundaries."""
 import os
 from pathlib import Path
 import re

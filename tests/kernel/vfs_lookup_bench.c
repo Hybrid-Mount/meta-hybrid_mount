@@ -1,10 +1,4 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* See vfs_lookup_bench.py. The search is extracted verbatim from production;
- * the fixed/adaptive gates and tagged-single behavior are userspace models.
- * Seeded synthetic hashes deliberately exclude the cost of full_name_hash.
- * READ_ONCE models one load only, not kernel memory ordering or concurrency.
- * No claim about kernel performance can be made from these hot-cache timings.
- */
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -27,7 +21,6 @@ typedef uint32_t u32;
 #define READ_ONCE(x) (*(volatile __typeof__(x) *)&(x))
 #define likely(x) (x)
 struct hybridmount_rule { size_t child_len; char name[24]; };
-/* Production hashes/capacity/rules layout, omitting the unused rcu_head. */
 struct hybridmount_child_array { int count, capacity; u32 hashes[]; };
 #define hm_get_child_rules(a) ((struct hybridmount_rule **)((a)->hashes + (a)->capacity))
 #define hm_get_child_name(r) ((r)->name)
@@ -153,7 +146,6 @@ int main(void)
                     q->len = (size_t)snprintf(q->name, sizeof(q->name), "absnt-%08x", q->hash);
                 }
             }
-            /* Validate every timed result against an independent linear oracle. */
             for (unsigned i = 0; i < QUERY_COUNT; i++) {
                 struct hybridmount_rule *expected = NULL;
                 for (int j = 0; j < d.arr->count; j++) {
@@ -163,7 +155,6 @@ int main(void)
                 for (int mode = 0; mode < 3; mode++) assert(lookup(&d, &queries[i], mode) == expected);
             }
             double times[3][SAMPLES];
-            /* Rotate mode order to reduce systematic thermal/order bias. */
             for (int sample = 0; sample < SAMPLES; sample++) {
                 for (int order = 0; order < 3; order++) {
                     int mode = (sample + order) % 3;

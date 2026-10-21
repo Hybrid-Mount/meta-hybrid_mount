@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Run deterministic interleavings against the production VFS C functions.
-
-Kernel primitives are replaced by controlled fixtures, so these checks prove
-publication/ownership decisions, not the Linux ABI or device correctness.
-Usage: CC=clang python3 tests/kernel/inode_lifecycle.py
-"""
 import argparse
 import os
 from pathlib import Path

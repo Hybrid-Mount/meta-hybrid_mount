@@ -558,9 +558,6 @@ mod tests {
 
     #[test]
     fn directory_name_mismatch_does_not_reserve_the_declared_id() {
-        // `other_dir` declares `id=shared` but is skipped for the name
-        // mismatch.  It must not poison the id registry: the real `shared`
-        // directory still has to be accepted instead of failing the scan.
         let root = module_dir("duplicate");
         let accepted = root.join("shared");
         let mismatched = root.join("other_dir");

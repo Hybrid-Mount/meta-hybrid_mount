@@ -239,7 +239,7 @@ static void hm_rollback_generated_topology_locked(struct hybridmount_rule *rule,
 
 static void iput(struct inode *inode) {
     if (!inode) return;
-    if (inode == &winner) return; /* An existing open directory still owns it. */
+    if (inode == &winner) return;
     dropped++;
     if (inode->i_private) hybridmount_hijacked_evict_inode(inode);
     free(inode);

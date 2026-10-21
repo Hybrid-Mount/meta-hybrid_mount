@@ -177,7 +177,6 @@ mod tests {
         assert!(description.contains("VFS: 2"));
     }
 
-    /// HM-RUST-014：Magic-only 运行时 storage_mode="none"，不能假装在跑 Ext4。
     #[test]
     fn running_description_with_none_reports_no_storage_backend() {
         let description = running_description("none", 0, 1, 0, true);
@@ -191,7 +190,6 @@ mod tests {
         );
     }
 
-    /// VFS-only 启动既不建 tmpfs 也不建 ext4，描述必须只报 VFS 计数。
     #[test]
     fn running_description_without_overlay_storage_reports_vfs_only() {
         let description = running_description("none", 0, 0, 3, true);
@@ -209,7 +207,6 @@ mod tests {
         );
     }
 
-    /// 空字符串是旧快照的遗留值，同样不能回落到 Ext4。
     #[test]
     fn running_description_with_empty_mode_reports_no_storage_backend() {
         let description = running_description("", 0, 0, 2, true);

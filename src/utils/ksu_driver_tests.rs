@@ -29,7 +29,6 @@ fn duplicate_is_owned_without_closing_or_modifying_inherited_fd() {
     let original = fs::File::open("/dev/null").unwrap();
     let duplicate = duplicate_driver(original.as_raw_fd()).unwrap();
     assert_ne!(duplicate.as_raw_fd(), original.as_raw_fd());
-    // SAFETY: both descriptors are live during these fcntl calls.
     unsafe {
         assert_ne!(
             libc::fcntl(duplicate.as_raw_fd(), libc::F_GETFD) & libc::FD_CLOEXEC,

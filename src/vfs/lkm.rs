@@ -160,8 +160,6 @@ fn module_responds() -> bool {
 mod tests {
     use super::*;
 
-    /// The module name must match `MODULE_NAME := hybridmount` in the kernel Makefile, since
-    /// `rmmod` is keyed on it after a failed probe.
     #[test]
     fn module_name_matches_the_kernel_object() {
         let makefile = include_str!("../../module/vfs/src/Makefile");
@@ -171,7 +169,6 @@ mod tests {
         );
     }
 
-    /// The packaged directory must be where the loader looks for the prebuilt modules.
     #[test]
     fn loader_path_matches_the_packaged_location() {
         assert_eq!(

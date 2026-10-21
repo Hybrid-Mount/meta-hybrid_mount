@@ -189,7 +189,6 @@ mod tests {
     fn nuke_keeps_the_exact_c_path_alive_during_ioctl() {
         nuke_with(b"/mnt/staging", |request, cmd| {
             assert_eq!(request, NUKE_EXT4_SYSFS);
-            // SAFETY: nuke_with keeps its CString alive until the callback returns.
             let path = unsafe { CStr::from_ptr(cmd.arg as *const std::ffi::c_char) };
             assert_eq!(path.to_bytes(), b"/mnt/staging");
             Ok(())

@@ -1,9 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Tests for the shared subprocess runner that run on the host.
-//!
-//! Platform commands only exercise the runner itself; production code never accepts a user-assembled shell string.
-
 use std::sync::mpsc;
 use std::time::Duration;
 

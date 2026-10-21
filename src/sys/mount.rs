@@ -202,7 +202,6 @@ mod tests {
         let parent = root.join("parent");
         let child = parent.join("child");
         let _parent_mount = TmpfsMount::new(&parent).unwrap();
-        // Create the child after mounting its parent, or the parent hides it.
         let _child_mount = TmpfsMount::new(&child).unwrap();
 
         assert!(rollback_mount_target(&parent).is_ok());

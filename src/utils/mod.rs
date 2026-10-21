@@ -169,7 +169,6 @@ mod tests {
         assert!(is_same_or_below("/system/etc", "/system"));
         assert!(is_same_or_below("/system/etc/hosts", "/system"));
 
-        // A shared string prefix is not a path prefix.
         assert!(!is_same_or_below("/system_ext", "/system"));
         assert!(!is_same_or_below("/systemd", "/system"));
         assert!(!is_same_or_below("/systematic/etc", "/system"));
@@ -216,8 +215,6 @@ mod linux_tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
 
-        // A missing destination makes the real xattr syscall fail regardless of
-        // privileges or SELinux policy (CI can accept even invalid labels).
         let path = dir.join("missing");
         let context = "u:object_r:rootfs:s0";
         let err = write_xattr(&path, defs::SELINUX_XATTR, context.as_bytes()).unwrap_err();

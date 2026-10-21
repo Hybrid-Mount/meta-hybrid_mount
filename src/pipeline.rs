@@ -2174,12 +2174,10 @@ mod tests {
         );
     }
 
-    /// HM-RUST-013: Magic Mount 目录挂载（Move/Replace）必须进入 total_mounts。
     #[test]
     fn pipeline_stats_counts_magic_directory_mounts_in_total() {
         let stats = pipeline_stats(1, 0, 2, 0, 0, 3);
 
-        // 1 overlay-dir + 2 magic files + 3 magic dirs = 6
         assert_eq!(stats.total_mounts, 6);
         assert_eq!(stats.successful_mounts, 6);
         assert_eq!(stats.files_mounted, 2);
@@ -2207,8 +2205,6 @@ mod tests {
         );
     }
 
-    /// A VFS-only boot reports its injection points as active mount points even though
-    /// the kernel never confirms them through mountinfo.
     #[test]
     fn vfs_targets_join_active_mounts_without_overlay_or_magic() {
         let vfs = vec![

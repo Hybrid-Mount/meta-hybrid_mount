@@ -298,7 +298,6 @@ fn guard_reports_without_arguments_and_requires_yes_to_clear() {
             json: true,
         }
     );
-    // Clearing re-injects VFS rules, so it must stay behind the same confirmation as clear.
     assert_eq!(command(&["guard", "clear"]).unwrap_err().exit_code(), 2);
     assert_eq!(
         command(&["guard", "clear", "--yes", "extra"])
@@ -312,8 +311,6 @@ fn guard_reports_without_arguments_and_requires_yes_to_clear() {
 
 #[test]
 fn guard_usage_never_reaches_the_provider() {
-    // A misparsed guard request must not touch the kernel keyring: handle() only ever sees the
-    // Operation built here, and every rejected form returns before that.
     for args in [
         vec!["guard", "clear"],
         vec!["guard", "clear", "--yes", "extra"],

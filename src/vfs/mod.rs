@@ -90,9 +90,6 @@ mod tests {
     use super::*;
     use std::cell::Cell;
 
-    /// The regression this guards: a probe-only plan gate makes the load step unreachable, so
-    /// a device whose kernel lacks hybridmount never loads the module bundled for exactly that
-    /// case. Asking for vfs must reach the loader.
     #[test]
     fn a_wanted_vfs_loads_the_bundled_module_when_the_probe_is_silent() {
         let available = Cell::new(false);
@@ -113,7 +110,6 @@ mod tests {
         assert_eq!(loads.get(), 1, "the bundled module must be loaded once");
     }
 
-    /// A kernel that already carries the module must not be asked to load anything.
     #[test]
     fn an_answering_provider_is_never_reloaded() {
         let loads = Cell::new(0);
@@ -132,7 +128,6 @@ mod tests {
         assert_eq!(loads.get(), 0, "an answering key type needs no insmod");
     }
 
-    /// Probe the bundled backend even before the user has selected VFS.
     #[test]
     fn vfs_is_attempted_even_when_no_rule_asks_for_it() {
         let loads = Cell::new(0);
@@ -155,7 +150,6 @@ mod tests {
         );
     }
 
-    /// A failed load degrades instead of aborting the boot, which is what `vfs_strict` is for.
     #[test]
     fn a_failed_load_reports_unavailable_without_aborting() {
         let ready = ensure_loaded_for_plan_with_guard(false, false, || false, || Ok(()));
@@ -195,15 +189,11 @@ mod tests {
         assert_eq!(loads.get(), 0, "a foreign provider must block insmod");
     }
 
-    /// `vfs_strict` must actually fail the boot when a requested backend is missing. The plan
-    /// rewrites vfs to `ignore` before the executor runs, so this predicate is the only guard.
     #[test]
     fn strict_fails_the_boot_when_a_requested_provider_is_missing() {
         assert!(unavailable_is_fatal(true, true, false));
     }
 
-    /// The option is about a backend the config uses: leaving it on must not break a device
-    /// that never selects vfs, nor one whose provider is present.
     #[test]
     fn strict_is_inert_without_a_vfs_rule_or_without_a_problem() {
         assert!(!unavailable_is_fatal(false, true, false), "no vfs rule");
@@ -211,10 +201,6 @@ mod tests {
         assert!(!unavailable_is_fatal(true, false, false), "strict off");
     }
 
-    /// The deadlock this module guards against is an ordering property of the boot pipeline, and
-    /// reordering it is a one-line edit that no other test would notice: moving the load back
-    /// below `build_plan` silently restores the unreachable-load bug while every behaviour unit
-    /// test above still passes. This pins the order and the value the plan is handed.
     #[test]
     fn the_boot_pipeline_loads_before_it_plans() {
         let pipeline = include_str!("../pipeline.rs");
@@ -231,8 +217,6 @@ mod tests {
              key type is silent, so a load after it can never be reached"
         );
 
-        // The plan has to receive that decision instead of re-probing, which would discard the
-        // module just loaded and degrade every vfs rule anyway.
         let planned = &pipeline[plan..];
         let input = &planned[..planned.find("})").expect("the PlanInput call must close")];
         assert!(

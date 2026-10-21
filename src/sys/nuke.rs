@@ -302,8 +302,6 @@ mod tests {
         assert!(!crate::sys::lkm::bundled_lkm_arch_supported("x86_64"));
     }
 
-    /// Every filename the selector can return must be one the package actually ships.
-    /// A stale arm here would silently lose ext4 sysfs concealment on APatch.
     #[test]
     fn selection_matrix_matches_the_shipped_manifest() {
         let manifest = include_str!("../../module/lkm/binaries/list.txt");
@@ -341,8 +339,6 @@ mod tests {
         );
     }
 
-    /// The nuke module is not retained (`module_init` returns -EAGAIN), so the object
-    /// name must keep matching what the Makefile builds.
     #[test]
     fn the_module_object_name_is_stable() {
         let makefile = include_str!("../../module/lkm/src/Makefile");

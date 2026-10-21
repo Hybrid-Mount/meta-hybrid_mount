@@ -7,8 +7,6 @@ use super::*;
 use crate::errors::Error;
 use crate::vfs::protocol::EncodedRule;
 
-/// The version lives behind a handle so a load closure can make the provider start
-/// answering without holding a second mutable borrow of the kernel itself.
 struct MockKernel {
     version: Rc<Cell<Option<&'static str>>>,
     applied: usize,
@@ -72,8 +70,6 @@ fn existing_k2_is_adopted() {
     assert_eq!(selected, Some(VfsProvider::Hm));
 }
 
-/// The bundled module is the only reason a device without a built-in provider gets the backend,
-/// so a silent probe must trigger exactly one load attempt.
 #[test]
 fn a_silent_probe_loads_the_bundled_module_once() {
     let mut kernel = MockKernel::absent();
@@ -91,7 +87,6 @@ fn a_silent_probe_loads_the_bundled_module_once() {
     assert_eq!(loads, 1);
 }
 
-/// A provider that already answers must not be disturbed by an insmod.
 #[test]
 fn an_answering_provider_is_never_reloaded() {
     let mut kernel = MockKernel::answering("hm1");
@@ -102,7 +97,6 @@ fn an_answering_provider_is_never_reloaded() {
     .unwrap();
 }
 
-/// An unsupported version is a deliberate refusal, not a reason to load another module.
 #[test]
 fn an_unsupported_version_does_not_trigger_a_load() {
     let mut kernel = MockKernel::answering("20");

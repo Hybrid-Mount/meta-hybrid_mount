@@ -275,7 +275,6 @@ mod tests {
         assert_eq!(session.cleanup_state(), Cleanup::Remove);
         session.remove_now().unwrap();
         assert!(!root.exists());
-        // Drop used to report a directory it had just deleted as retained.
         assert_eq!(session.cleanup_state(), Cleanup::Removed);
         drop(session);
 

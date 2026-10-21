@@ -65,7 +65,7 @@ fn malformed_and_wrong_architecture_images_are_rejected() {
         assert!(ModuleImage::parse(MODULE[..length].to_vec()).is_err());
     }
     let mut wrong_arch = MODULE.to_vec();
-    wrong_arch[18..20].copy_from_slice(&62_u16.to_le_bytes()); // x86_64
+    wrong_arch[18..20].copy_from_slice(&62_u16.to_le_bytes());
     assert!(ModuleImage::parse(wrong_arch).is_err());
     let mut overflow = MODULE.to_vec();
     overflow[40..48].copy_from_slice(&u64::MAX.to_le_bytes());

@@ -17,8 +17,6 @@ fn a_loaded_module_is_listed_in_proc_modules() {
     assert_eq!(classify_presence(true, true), ModulePresence::Loadable);
 }
 
-/// The discriminator: `/proc/modules` only lists loadable modules, so an answering key
-/// type with a `/sys/module` entry but no `/proc/modules` entry is compiled in.
 #[test]
 fn a_key_type_with_only_a_sys_module_entry_is_built_in() {
     assert_eq!(classify_presence(false, true), ModulePresence::BuiltIn);
@@ -47,8 +45,6 @@ fn proc_modules_matching_ignores_an_unrelated_table() {
     assert!(!listed_in_proc_modules(""));
 }
 
-/// The question the user actually asks: with hybridmount compiled in, is another
-/// provider required? It is not, and an `insmod` could only fail on the name.
 #[test]
 fn a_built_in_kernel_needs_no_provider_install() {
     assert!(!provider_install_required(ModulePresence::BuiltIn, true));
@@ -87,7 +83,6 @@ fn a_missing_key_type_points_at_an_independent_provider() {
     );
 }
 
-/// The magic mismatch signature: the key type is there but did not answer.
 #[test]
 fn a_silent_key_type_points_at_the_magic() {
     let built_in = diagnose(ModulePresence::BuiltIn, None, false);
@@ -121,7 +116,6 @@ fn summarize_carries_both_tables_when_listing_succeeded() {
     assert!(report.list_error.is_none());
 }
 
-/// A listing failure must not hide the binding result, which is the more useful half.
 #[test]
 fn summarize_reports_a_listing_failure_without_losing_the_probe() {
     let report = summarize(

@@ -1,14 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Process-level checks never issue a valid kernel mutation or load request.
-
 use std::io;
 use std::process::{Command, Output};
 
-/// Runs the binary and hands the spawn failure to `?`.
-///
-/// The workspace denies `expect`/`unwrap`, and this helper is not itself reachable from a
-/// `#[test]` in clippy's eyes, so it propagates instead of relying on the lint's test allowance.
 fn run(args: &[&str]) -> io::Result<Output> {
     Command::new(env!("CARGO_BIN_EXE_hybrid-mount"))
         .args(args)

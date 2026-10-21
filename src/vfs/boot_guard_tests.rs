@@ -3,7 +3,6 @@
 use super::*;
 use crate::test_support::Fixture;
 
-/// An identity that is never the running build's, so markers written with it stay foreign.
 fn other_identity() -> GuardIdentity {
     GuardIdentity {
         version: "9.9.9".to_owned(),
@@ -12,7 +11,6 @@ fn other_identity() -> GuardIdentity {
     }
 }
 
-/// This build's identity, narrowed to a kernel object it does not necessarily ship.
 fn identity_for_object(object: Option<&str>) -> GuardIdentity {
     GuardIdentity::for_object(object.map(str::to_owned))
 }

@@ -119,10 +119,6 @@ mod tests {
         assert_ne!(VFS_BOOT_GUARD_PATH, LKM_BOOT_GUARD_PATH);
     }
 
-    /// `metainstall.sh` advertises this module's id to the module being installed. KernelSU
-    /// never reads the variable itself, but a module that does compares it against the
-    /// directory under `/data/adb/modules`, so it has to be the `module.prop` id — not the
-    /// binary name and not the `/data/adb/hybrid-mount` runtime directory.
     #[test]
     fn installer_advertises_the_module_prop_id() {
         let metainstall = include_str!("../module/metainstall.sh");

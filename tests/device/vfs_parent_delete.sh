@@ -1,9 +1,5 @@
 #!/system/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# Manual regression on a rooted test device with a freshly built provider.
-# sh vfs_parent_delete.sh /absolute/hybrid-mount /quiet/native/parent
-# The target parent must exist; only initially absent children are injected.
-# No provider-wide clear, native file writes, or module unload are performed.
 set -eu
 
 if [ "$#" = 1 ] && [ "$1" = --help ]; then
@@ -55,6 +51,5 @@ exec 3<"$target"
 [ ! -e "$target/native" ]
 "$hm" vfs rule del "$target/child"
 [ ! -e "$target" ]
-# Closing the displaced inode after its last child is removed must be safe.
 exec 3<&-
 echo 'PASS: deleting a parent preserves children and retires an open old inode safely'

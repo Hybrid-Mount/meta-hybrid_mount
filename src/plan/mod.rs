@@ -1062,7 +1062,6 @@ mod tests {
             vec![PathBuf::from("/data/adb/modules/m/system/etc")]
         );
         assert!(result.overlay_files.is_empty());
-        // The rest stay magic; the backend choice is stored on the shared tree itself.
         assert!(
             result
                 .tree
@@ -1672,8 +1671,6 @@ mod tests {
         assert!(result.magic_module_ids.is_empty());
     }
 
-    /// A kernel without the module has nothing to send rules to: a global `vfs` default must
-    /// degrade to `ignore` rather than plan work the executor cannot run.
     #[test]
     fn vfs_default_degrades_to_ignore_without_a_kernel_backend() {
         let module = record("vfs_mod", &[("system/etc/hosts", false)]);
@@ -1701,7 +1698,6 @@ mod tests {
         assert!(result.magic_module_ids.is_empty());
     }
 
-    /// The capability must gate VFS only: a magic plan stays intact on the same device.
     #[test]
     fn missing_vfs_backend_keeps_other_backends() {
         let module = record("magic_mod", &[("system/etc/hosts", false)]);

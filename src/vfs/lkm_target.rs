@@ -195,8 +195,6 @@ mod tests {
         assert_eq!(select_lkm_filename("not-a-release", None), None);
     }
 
-    /// The selector's matrix must match the DDK targets the CI workflow builds, and every
-    /// target must resolve to a module the packaging step actually ships.
     #[test]
     fn every_ci_ddk_target_is_selectable_and_packaged() {
         let workflow = include_str!("../../.github/workflows/kernel-module.yml");
@@ -219,7 +217,6 @@ mod tests {
                 })
                 .unwrap_or_else(|| panic!("unparsable DDK target {target}"));
 
-            // GKI releases read like "5.10.198-android12-8-gki".
             let release = format!("{kernel}.198-android{android}-8-gki");
             let file_name = select_lkm_filename(&release, None)
                 .unwrap_or_else(|| panic!("{target} is built by CI but not selectable"));

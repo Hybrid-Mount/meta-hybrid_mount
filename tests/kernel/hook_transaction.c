@@ -85,8 +85,6 @@ int main(int argc,char **argv) {
         assert(sb.s_active==2);
         assert(hybridmount_hijack_superblock(&sb)==0 && sb.s_active==2);
         if(mode==6) {
-            // The final mount reference disappears after rule removal. The hook
-            // must keep the superblock alive until operations are restored.
             --sb.s_active;
             assert(sb.s_active==1);
             expected_sop=&sop;

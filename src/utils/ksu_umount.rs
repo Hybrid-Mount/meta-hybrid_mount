@@ -113,7 +113,6 @@ mod tests {
     impl Kernel {
         fn apply(&mut self, command: &UmountCommand) -> std::io::Result<()> {
             self.calls += 1;
-            // SAFETY: issue() keeps the path's CString alive throughout the call.
             let path = unsafe { CStr::from_ptr(command.arg as *const std::ffi::c_char) }
                 .to_str()
                 .unwrap()

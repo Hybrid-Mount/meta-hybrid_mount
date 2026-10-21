@@ -136,7 +136,6 @@ default_mode = "ignore"
 
     assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
 
-    // Per-module/per-path ignore stays legal.
     let config = Config::from_toml(
         r#"
 default_mode = "overlay"
@@ -197,7 +196,6 @@ custom_mounts = []
 fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
     let dir = Fixture::new("legacy-daemon-mode");
     let path = dir.join("config.toml");
-    // This obsolete key previously caused strict boot loading to abort.
     let original = r#"moduledir = "/data/adb/modules"
 overlay_mode = "tmpfs"
 disable_umount = true
@@ -303,8 +301,6 @@ default_mode = "ignore"
         let json = loaded.to_webui_json(false).unwrap();
         assert!(!json.contains("partitions"));
 
-        // A WebUI save must load the old config, preserve the other settings,
-        // and remove the retired key only when the user actually saves.
         save_config_payload(&path, &hex::encode(r#"{"disable_umount":false}"#)).unwrap();
         let saved = Config::load_for_boot(&path).unwrap();
         assert_eq!(
@@ -720,7 +716,6 @@ fn load_for_boot_rejects_dangling_config_symlink() {
 #[test]
 fn load_wraps_read_errors_with_path_context() {
     let dir = Fixture::new("load-read-error");
-    // A directory is not a readable TOML file, so `read_to_string` fails on every platform.
     let path = dir.join("unreadable.toml");
     fs::create_dir_all(&path).unwrap();
 
@@ -803,7 +798,6 @@ fn missing_main_config_loads_blacklist_but_corrupt_blacklist_fails_closed() {
         "{err}"
     );
 
-    // A corrupt blacklist is fail-closed even when the config exists.
     fs::write(&path, "default_mode = \"magic\"\n").unwrap();
     assert!(Config::load_or_default(&path).is_err());
 }
@@ -848,7 +842,6 @@ fn patch_rejects_ignore_as_global_default_without_partial_update() {
     let err = config.apply_patch(patch).unwrap_err();
 
     assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
-    // A failed validation must not leave half a patch behind.
     assert_eq!(config.default_mode, Mode::Magic);
     assert!(!config.disable_umount);
 }
@@ -1006,9 +999,6 @@ fn vfs_fields_default_off() {
     assert!(config.vfs_isolate_uids.is_empty());
 }
 
-/// The boot pipeline loads the bundled kernel module only when the config actually asks for
-/// vfs, so this predicate decides whether an `insmod` is attempted at all. A false negative
-/// means the module is never loaded and every vfs rule silently degrades to `ignore`.
 #[test]
 fn wants_vfs_detects_every_place_a_rule_can_select_vfs() {
     let global = crate::config::Config::from_toml("default_mode = \"vfs\"\n").unwrap();
@@ -1024,7 +1014,6 @@ fn wants_vfs_detects_every_place_a_rule_can_select_vfs() {
     assert!(path_rule.wants_vfs(), "a path-level vfs must count");
 }
 
-/// A device configured for the real mount backends must not try to load a kernel module.
 #[test]
 fn wants_vfs_is_false_when_no_rule_selects_it() {
     let defaults = crate::config::Config::from_toml("").unwrap();
@@ -1041,8 +1030,6 @@ fn wants_vfs_is_false_when_no_rule_selects_it() {
     assert!(!overlay_and_magic.wants_vfs());
 }
 
-/// `vfs_isolate_uids` is only sent once a provider is bound, so on its own it must not
-/// trigger a load attempt.
 #[test]
 fn wants_vfs_ignores_isolate_uids_alone() {
     let config =

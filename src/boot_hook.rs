@@ -119,14 +119,12 @@ mod tests {
         fs::write(&system, stock).unwrap();
         fs::write(&module, "isSystemServer=true domain=old_system_server\n").unwrap();
         let expose_source = || {
-            // A hard link models bind/VFS aliasing without privileged mounts.
             fs::remove_file(&system)?;
             fs::hard_link(&module, &system)?;
             Ok(())
         };
         dispatch(Stage::Metamount, true, expose_source, || {}).unwrap();
 
-        // MSD's shell redirection opens O_TRUNC before paste reads the system file.
         let mut generated = fs::File::create(&module).unwrap();
         let original = fs::read_to_string(&system).unwrap();
         writeln!(

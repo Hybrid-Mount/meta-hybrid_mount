@@ -273,7 +273,6 @@ mod tests {
         assert_eq!(shared.master, None);
         assert_eq!(shared.propagation(), "shared:7");
 
-        // A slave carries `master:` without a peer group of its own.
         let slave = MountEntry::from_mount_info(
             &MountInfo::from_line("37 36 0:32 / /system/etc rw master:7 - ext4 /dev/block/sda1 rw")
                 .unwrap(),
@@ -282,7 +281,6 @@ mod tests {
         assert_eq!(slave.master, Some(7));
         assert_eq!(slave.propagation(), "slave:7");
 
-        // Ordinary mounts and unbindable ones carry no propagation id at all.
         for line in [
             "38 1 0:33 / /data rw,relatime - ext4 /dev/block/sda2 rw",
             "39 1 0:34 / /mnt rw,relatime unbindable - tmpfs tmpfs rw",

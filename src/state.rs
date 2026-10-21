@@ -1027,8 +1027,6 @@ mod tests {
         assert!(!merged[0].enabled);
         assert_eq!(merged[0].mode, "vfs");
 
-        // A physical boot drops mount ownership, so the same cached snapshot must stop listing a
-        // source the device no longer has installed.
         let merged = merge_module_snapshot(cached, &[], &Config::default(), &BTreeSet::new());
         assert!(merged.is_empty());
     }
@@ -1397,8 +1395,6 @@ mod tests {
         assert_eq!(state.skip_mount_modules, vec!["skipped_mod".to_owned()]);
         assert!(state.mount_point.as_os_str().is_empty());
         assert!(state.active_mounts.is_empty());
-        // The planned snapshot never claims an overlay storage backend before the
-        // storage phase actually creates one.
         assert_eq!(state.storage_mode, crate::defs::NO_STORAGE_MODE);
         assert_eq!(state.mount_stats, MountStatistics::default());
         assert_eq!(state.mode_stats.overlayfs, 1);
@@ -1587,8 +1583,6 @@ mod tests {
         let json = serde_json::to_string_pretty(&state).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
 
-        // Old WebUI normalization only reads the existing fields; new diagnostic
-        // fields are additive and must not rename or remove old keys.
         assert_eq!(value["timestamp"], 12);
         assert_eq!(value["active_mounts"][0], "/system");
         assert_eq!(value["confirmed_active_mounts"][0], "/system");
@@ -1687,8 +1681,6 @@ mod tests {
         assert!(state.vfs_supported);
     }
 
-    /// The UI offers "LKM" or "Built-in" from this label, so the mapping has to follow
-    /// `/proc/modules` (loadable) versus a `/sys/module` entry alone (built into the kernel).
     #[test]
     fn install_state_vfs_type_labels_follow_the_module_tables() {
         use crate::vfs::doctor::ModulePresence;
