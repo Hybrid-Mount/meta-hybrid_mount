@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: GPL-3.0-only
+
+name: Prepare notification tool
+
+on:
+  workflow_call:
+    outputs:
+      artifact-id:
+        value: ${{ jobs.resolve.outputs.artifact-id || jobs.build.outputs.artifact-id }}
+      run-id:
+        value: ${{ jobs.resolve.outputs.run-id || github.run_id }}
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      source-hash: ${{ steps.source.outputs.hash }}
+      artifact-id: ${{ steps.artifact.outputs.id }}
+      run-id: ${{ steps.artifact.outputs.run-id }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Identify notifier sources and dependencies
+        id: source
+        run: |
+          set -euo pipefail
+          SOURCE_HASH=$(python3 .github/scripts/notify_source.py)
+          echo "hash=$SOURCE_HASH" >> "$GITHUB_OUTPUT"
+      - name: Find a matching prebuilt artifact
+        id: artifact
+        uses: actions/github-script@v9
+        env:
+          NOTIFY_SOURCE_HASH: ${{ steps.source.outputs.hash }}
+        with:
+          script: |
+            const { findArtifact } = require('./.github/scripts/notify-artifact.cjs');
+            const artifact = await findArtifact({ github, context, sourceHash: process.env.NOTIFY_SOURCE_HASH });
+            if (artifact) {
+              core.setOutput('id', artifact.id);
+              core.setOutput('run-id', artifact.runId);
+              core.info(`Reusing notifier artifact ${artifact.id} from run ${artifact.runId}`);
+            }
+
+  build:
+    needs: resolve
+    if: needs.resolve.outputs.artifact-id == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prepare the static Linux target
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y musl-tools
+          rustup toolchain install stable --profile minimal
+          rustup target add --toolchain stable x86_64-unknown-linux-musl
+      - name: Test and precompile the notifier
+        run: |
+          set -euo pipefail
+          cargo +stable test --locked -p notify
+          cargo +stable build --locked --release -p notify --bin hybrid-mount-notify --target x86_64-unknown-linux-musl
+          mkdir notify-tool
+          cp target/x86_64-unknown-linux-musl/release/hybrid-mount-notify notify-tool/
+          file notify-tool/hybrid-mount-notify
+          env -u TELEGRAM_BOT_TOKEN -u TELEGRAM_CHAT_ID notify-tool/hybrid-mount-notify --label smoke-test --topic-id 37
+          (cd notify-tool && sha256sum hybrid-mount-notify > SHA256SUMS)
+      - uses: actions/upload-artifact@v7
+        id: upload
+        with:
+          name: notify-linux-x86_64-${{ needs.resolve.outputs.source-hash }}
+          path: notify-tool/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90

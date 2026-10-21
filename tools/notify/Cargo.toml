@@ -11,8 +11,13 @@ license = "GPL-3.0-only"
 [lints]
 workspace = true
 
+[[bin]]
+name = "hybrid-mount-notify"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.102"
+clap = { version = "4.6", features = ["derive"] }
 # Pinned, not a caret range: 0.47 and 0.48 JSON-quote flattened multipart strings, so a
 # single-file upload sends parse_mode as '"HTML"' and Telegram rejects it with
 # `400 unsupported parse_mode`. Media groups nest the value in JSON and are unaffected,

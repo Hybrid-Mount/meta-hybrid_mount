@@ -1038,6 +1038,7 @@ name = "notify"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "reqwest",
  "serde_json",
  "tgbot",
@@ -2243,9 +2244,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fs_extra",
- "notify",
  "semver",
- "serde",
  "serde_json",
  "tempfile",
  "toml",

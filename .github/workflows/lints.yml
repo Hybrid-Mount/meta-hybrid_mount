@@ -29,7 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Test issue template enforcement
-        run: node --test .github/scripts/issue-policy.test.cjs
+        run: node --test .github/scripts/*.test.cjs
+      - name: Test notifier source identity
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
   rust-lints:
     runs-on: ubuntu-latest

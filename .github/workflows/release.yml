@@ -22,6 +22,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  notify-tool:
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/notify-tool.yml
+
   build:
     name: Build package
     runs-on: ubuntu-latest
@@ -181,11 +187,12 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: [build, notify-tool]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       packages: read
+      actions: read
     container:
       image: ghcr.io/hybrid-mount/meta-hybrid_mount-ci:latest
       credentials:
@@ -210,17 +217,21 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Cache Rust dependencies
-        # `notify` and `update-json` are Rust commands, and this job is a fresh container: without
-        # a cache the whole xtask dependency tree is compiled a second time here (~50 s of the
-        # release). Unlike the build job, this one only needs host artifacts, so it keeps aliasing
-        # lints.yml's smaller `rust-lints` entry on the default branch rather than pulling in the
-        # build job's four-architecture cache. Restore-only for the same reason as above; a save
-        # here would only fill the budget with an entry nothing can ever read.
+        # update-json still uses the host xtask cache; notifications use a prebuilt binary.
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-lints
           cache-all-crates: true
           save-if: "false"
+
+      - name: Download prebuilt notification tool
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.notify-tool.outputs.artifact-id }}
+          run-id: ${{ needs.notify-tool.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/notify-tool
+          merge-multiple: true
 
       - name: Download package artifact
         uses: actions/download-artifact@v8
@@ -359,11 +370,13 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
+          (cd "$RUNNER_TEMP/notify-tool" && sha256sum -c SHA256SUMS)
+          chmod +x "$RUNNER_TEMP/notify-tool/hybrid-mount-notify"
           NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
           rm -rf "$NOTIFY_DIR"
           mkdir -p "$NOTIFY_DIR"
           cp "${{ steps.paths.outputs.zip }}" "$NOTIFY_DIR/"
-          cargo xtask notify \
+          "$RUNNER_TEMP/notify-tool/hybrid-mount-notify" \
             --output "$NOTIFY_DIR" \
             --label "丰收 (Harvest) - ${{ github.ref_name }}" \
             --topic-id 6

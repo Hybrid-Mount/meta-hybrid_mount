@@ -606,9 +606,28 @@ fn build(release: bool) -> Result<()> {
 }
 
 fn notify(output: &Path, label: &str, topic_id: Option<i64>) -> Result<()> {
-    let request = hybrid_mount_notify::NotifyRequest::new(output, label).with_topic_id(topic_id);
-    if hybrid_mount_notify::maybe_send_output_dir_notification(&request)? {
-        println!("notification sent");
+    if !["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]
+        .iter()
+        .all(|name| env::var(name).is_ok_and(|value| !value.trim().is_empty()))
+    {
+        println!("Telegram secrets not configured, skipping notification.");
+        return Ok(());
+    }
+    let binary = env::var_os("HYBRID_MOUNT_NOTIFY").unwrap_or_else(|| "hybrid-mount-notify".into());
+    let mut command = Command::new(binary);
+    command
+        .arg("--output")
+        .arg(output)
+        .arg("--label")
+        .arg(label);
+    if let Some(topic_id) = topic_id {
+        command.arg("--topic-id").arg(topic_id.to_string());
+    }
+    let status = command
+        .status()
+        .context("install the prebuilt hybrid-mount-notify or set HYBRID_MOUNT_NOTIFY")?;
+    if !status.success() {
+        bail!("notification helper failed: {status}");
     }
     Ok(())
 }

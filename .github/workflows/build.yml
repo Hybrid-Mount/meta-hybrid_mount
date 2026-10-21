@@ -22,6 +22,8 @@ on:
       - "xtask/**"
       - "tools/notify/**"
       - ".github/workflows/build.yml"
+      - ".github/workflows/notify-tool.yml"
+      - ".github/scripts/notify*"
   pull_request:
     branches: ["dev"]
     paths:
@@ -33,7 +35,14 @@ on:
       - "xtask/**"
       - "tools/notify/**"
       - ".github/workflows/build.yml"
+      - ".github/workflows/notify-tool.yml"
+      - ".github/scripts/notify*"
   workflow_dispatch:
+    inputs:
+      notify_only:
+        description: "仅准备通知工具，不构建模块或发送通知"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,6 +51,7 @@ concurrency:
 permissions:
   contents: read
   packages: read
+  actions: read
 
 env:
   # lints.yml and release.yml set this as well, and Swatinem/rust-cache folds every matching
@@ -51,7 +61,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  notify-tool:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/notify-tool.yml
+
   build:
+    needs: notify-tool
+    if: ${{ !cancelled() && !inputs.notify_only && (needs.notify-tool.result == 'success' || needs.notify-tool.result == 'skipped') }}
     name: Build package
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -171,6 +187,16 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+      - name: Download prebuilt notification tool
+        if: github.event_name != 'pull_request' && github.ref != 'refs/heads/main'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.notify-tool.outputs.artifact-id }}
+          run-id: ${{ needs.notify-tool.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/notify-tool
+          merge-multiple: true
+
       - name: Notify Telegram
         # dev builds announce themselves; a `main` run exists only to warm the release cache, and a
         # "Daily Tilling - main" message on the same channel would just be noise.
@@ -180,10 +206,12 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
+          (cd "$RUNNER_TEMP/notify-tool" && sha256sum -c SHA256SUMS)
+          chmod +x "$RUNNER_TEMP/notify-tool/hybrid-mount-notify"
           rm -rf notify-output
           mkdir notify-output
           cp "$ARTIFACT_ZIP" notify-output/
-          cargo xtask notify \
+          "$RUNNER_TEMP/notify-tool/hybrid-mount-notify" \
             --output notify-output \
             --label "日常耕作 🌱 (Daily Tilling) - ${{ github.ref_name }}" \
             --topic-id 37
