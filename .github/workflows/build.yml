@@ -65,6 +65,25 @@ jobs:
     if: github.event_name != 'pull_request'
     uses: ./.github/workflows/notify-tool.yml
 
+  verify-notify:
+    if: github.event_name == 'workflow_dispatch' && inputs.notify_only
+    needs: notify-tool
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.notify-tool.outputs.artifact-id }}
+          run-id: ${{ needs.notify-tool.outputs.run-id }}
+          github-token: ${{ github.token }}
+          path: notify-tool
+          merge-multiple: true
+      - name: Verify the downloaded notifier without sending messages
+        working-directory: notify-tool
+        run: |
+          sha256sum -c SHA256SUMS
+          chmod +x hybrid-mount-notify
+          env -u TELEGRAM_BOT_TOKEN -u TELEGRAM_CHAT_ID ./hybrid-mount-notify --label smoke-test --topic-id 37
+
   build:
     needs: notify-tool
     if: ${{ !cancelled() && !inputs.notify_only && (needs.notify-tool.result == 'success' || needs.notify-tool.result == 'skipped') }}
