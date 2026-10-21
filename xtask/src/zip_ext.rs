@@ -120,7 +120,7 @@ mod tests {
         let file = File::open(&archive).unwrap();
         let mut zip = ZipArchive::new(file).unwrap();
         let names: Vec<String> = (0..zip.len())
-            .map(|index| zip.by_index(index).unwrap().name().to_string())
+            .map(|index| zip.by_index(index).unwrap().name().unwrap().into_owned())
             .collect();
 
         assert!(names.contains(&"a.txt".to_string()));
