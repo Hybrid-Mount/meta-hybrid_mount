@@ -13,6 +13,7 @@ import {
   IconCheck,
 } from "miuix-vue";
 import { Delete, ExpandLess, ExpandMore, Refresh } from "miuix-vue/icons";
+
 import MiuixRuntimeControls from "../components/MiuixRuntimeControls.vue";
 import { runtimeStore } from "../../../lib/stores/runtimeStore";
 import { moduleStore } from "../../../lib/stores/moduleStore";
@@ -120,6 +121,64 @@ function disableModuleDetails(element: Element): void {
   element.setAttribute("inert", "");
 }
 
+/* Pull to refresh. One slot in the toolbar's old loading position serves both
+ * states: it tracks the finger while dragging, then holds the spinner at its
+ * resting height until the refresh finishes, so nothing second pops in on release. */
+const PULL_MAX = 96;
+const PULL_TRIGGER = 56;
+const PULL_RATIO = 0.5;
+const REFRESH_SLOT = 44;
+
+const pageRef = ref<HTMLElement | null>(null);
+const pullDistance = ref(0);
+const pullDragging = ref(false);
+const pullReady = computed(() => pullDistance.value >= PULL_TRIGGER);
+const refreshSlot = computed(() =>
+  moduleStore.loading ? Math.max(REFRESH_SLOT, pullDistance.value) : pullDistance.value,
+);
+const spinnerOpacity = computed(() =>
+  moduleStore.loading ? 1 : Math.min(1, pullDistance.value / PULL_TRIGGER),
+);
+
+let pullStartX = 0;
+let pullStartY = 0;
+
+function scrollViewport(): HTMLElement | null {
+  return pageRef.value?.closest<HTMLElement>(".m-scroll-area__viewport") ?? null;
+}
+
+function onPullStart(event: TouchEvent): void {
+  if (event.touches.length !== 1 || runtimeStore.loading || runtimeStore.busy) return;
+  const viewport = scrollViewport();
+  if (viewport && viewport.scrollTop > 0) return;
+  pullStartX = event.touches[0].clientX;
+  pullStartY = event.touches[0].clientY;
+  pullDragging.value = true;
+}
+
+function onPullMove(event: TouchEvent): void {
+  if (!pullDragging.value || event.touches.length !== 1) return;
+  const deltaX = event.touches[0].clientX - pullStartX;
+  const deltaY = event.touches[0].clientY - pullStartY;
+  if (deltaY <= 0 || Math.abs(deltaX) > Math.abs(deltaY)) {
+    // Upward, or sideways enough that the pager should own it.
+    pullDragging.value = false;
+    pullDistance.value = 0;
+    return;
+  }
+  // Own the gesture so the WebView neither scrolls nor rubber-bands behind it.
+  if (event.cancelable) event.preventDefault();
+  pullDistance.value = Math.min(PULL_MAX, deltaY * PULL_RATIO);
+}
+
+function onPullEnd(): void {
+  if (!pullDragging.value) return;
+  pullDragging.value = false;
+  const triggered = pullDistance.value >= PULL_TRIGGER;
+  pullDistance.value = 0;
+  if (triggered) void runtimeStore.refresh();
+}
+
 onMounted(() =>
   Promise.all([
     sysStore.ensureStatusLoaded(),
@@ -130,7 +189,14 @@ onMounted(() =>
 </script>
 
 <template>
-  <div class="page">
+  <div
+    ref="pageRef"
+    class="page"
+    @touchstart.passive="onPullStart"
+    @touchmove="onPullMove"
+    @touchend="onPullEnd"
+    @touchcancel="onPullEnd"
+  >
     <div class="modules-toolbar">
       <MiuixSearchBar
         v-model="searchQuery"
@@ -155,12 +221,31 @@ onMounted(() =>
         <MiuixIcon :icon="Refresh" :size="22" />
       </MiuixIconButton>
     </div>
-    <div v-if="moduleStore.loading" align="center">
-      <MiuixProgressIndicator
-        type="infinite"
-        color="var(--m-color-on-background-variant)"
-        style="padding: 12px 0"
-      />
+    <div
+      class="modules-refresh"
+      :class="{ 'modules-refresh--dragging': pullDragging }"
+      :style="{ height: `${refreshSlot}px` }"
+      role="status"
+      :aria-busy="moduleStore.loading"
+    >
+      <span class="modules-refresh__spinner" :style="{ opacity: spinnerOpacity }">
+        <MiuixProgressIndicator
+		  v-if="!moduleStore.loading"
+          type="infinite"
+          :size="20"
+          :color="
+            pullReady
+              ? 'var(--m-color-primary)'
+              : 'var(--m-color-on-background-variant)'
+          "
+        />
+		<MiuixProgressIndicator
+		  v-else
+		  type="infinite"
+		  :size="20"
+		  color="var(--m-color-on-background-variant)"
+		/>
+      </span>
     </div>
 
     <MiuixCard v-if="mountErrorCount" class="card module-error-card">
@@ -295,6 +380,28 @@ onMounted(() =>
 </template>
 
 <style scoped>
+/* Pull to refresh. The spinner is pinned to the top of the slot, so it stays put
+ * right under the toolbar while the cards slide away from it; the drag drives the
+ * height directly and only the release settles. */
+.modules-refresh {
+  height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 300ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.modules-refresh--dragging {
+  transition: none;
+}
+
+.modules-refresh__spinner {
+  display: flex;
+  /* Same 12px band the loading row used before it became a pull slot. */
+  padding-top: 12px;
+}
+
 .module-header {
   cursor: pointer;
   border-radius: var(--m-radius-md, 16px);
