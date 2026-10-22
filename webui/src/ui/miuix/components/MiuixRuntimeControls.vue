@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
 import { useI18n } from "vue-i18n";
-import { MiuixButton } from "miuix-vue";
+import { MiuixButton, MiuixProgressIndicator, MiuixSurface, MiuixText } from "miuix-vue";
 import { useRuntimeModule } from "../../../lib/useRuntimeModule";
 
 const props = defineProps<{ moduleId: string }>();
@@ -9,26 +9,43 @@ const { t } = useI18n();
 const { module, reason, disabled, actionError, working, run } = useRuntimeModule(
   () => props.moduleId,
 );
+
+const MUTED = "var(--m-color-on-surface-variant-summary)";
 </script>
 
 <template>
-  <section class="runtime-controls" :aria-label="t('runtime.title')" :aria-busy="working">
+  <MiuixSurface
+    class="runtime-controls"
+    :radius="16"
+    color="var(--m-color-surface-container-highest)"
+    :aria-label="t('runtime.title')"
+    :aria-busy="working"
+  >
     <div class="runtime-heading">
-      <h3>{{ t("runtime.title") }}</h3>
+      <MiuixText type="headline1" weight="medium">{{ t("runtime.title") }}</MiuixText>
       <span
         v-if="module"
         class="runtime-state"
-        :class="{ active: module.active }"
+        :class="{ 'runtime-state--active': module.active }"
         role="status"
       >
         <span class="runtime-state-dot" aria-hidden="true" />
-        {{ t(module.active ? "runtime.active" : "runtime.inactive") }}
+        <MiuixText
+          type="footnote1"
+          :color="module.active ? 'var(--m-color-primary)' : MUTED"
+        >
+          {{ t(module.active ? "runtime.active" : "runtime.inactive") }}
+        </MiuixText>
       </span>
     </div>
-    <p class="runtime-description">{{ t("runtime.description") }}</p>
+
+    <MiuixText as="p" type="body2" :color="MUTED" class="runtime-copy">
+      {{ t("runtime.description") }}
+    </MiuixText>
+
     <div class="runtime-buttons">
       <MiuixButton
-        class="runtime-primary"
+        type="primary"
         :disabled="disabled"
         :title="reason ?? undefined"
         @click="run(module?.active ? 'reload' : 'load')"
@@ -37,7 +54,6 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
       </MiuixButton>
       <MiuixButton
         v-if="module?.active"
-        class="runtime-secondary"
         :disabled="disabled"
         :title="reason ?? undefined"
         @click="run('unload')"
@@ -45,18 +61,43 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
         {{ t("runtime.unload") }}
       </MiuixButton>
     </div>
-    <p v-if="working" class="runtime-message" role="status">{{ t("runtime.busy") }}</p>
-    <p v-if="reason" class="runtime-message">{{ reason }}</p>
-    <p v-if="actionError" class="runtime-error" role="alert">{{ actionError }}</p>
-  </section>
+
+    <MiuixText
+      v-if="working"
+      as="p"
+      type="footnote1"
+      :color="MUTED"
+      class="runtime-copy runtime-busy"
+      role="status"
+    >
+      <MiuixProgressIndicator type="infinite" :size="14" color="var(--m-color-primary)" />
+      {{ t("runtime.busy") }}
+    </MiuixText>
+    <MiuixText v-if="reason" as="p" type="footnote1" :color="MUTED" class="runtime-copy">
+      {{ reason }}
+    </MiuixText>
+    <MiuixText
+      v-if="actionError"
+      as="p"
+      type="body2"
+      color="var(--m-color-error)"
+      class="runtime-copy"
+      role="alert"
+    >
+      {{ actionError }}
+    </MiuixText>
+  </MiuixSurface>
 </template>
 
 <style scoped>
-/* Sits inside the expanded module card. The card's rows use a 16px inside
- * margin, so this block matches it instead of adding its own outer spacing. */
+/* Nested panel inside the expanded module card: the card's rows sit on a 16px
+ * inside margin, so the panel keeps the same inset on both sides. */
 .runtime-controls {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--m-color-divider-line, rgba(0, 0, 0, 0.06));
+  margin: 12px 16px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .runtime-heading {
@@ -67,26 +108,11 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
   gap: 8px;
 }
 
-.runtime-heading h3 {
-  margin: 0;
-  color: var(--m-color-on-surface);
-  font-size: var(--m-text-headline1-size, 17px);
-  font-weight: 500;
-  line-height: 22px;
-}
-
 .runtime-state {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--m-color-on-surface-variant-summary);
-  font-size: var(--m-text-footnote1-size, 13px);
-  line-height: 18px;
   text-align: right;
-}
-
-.runtime-state.active {
-  color: var(--m-color-on-surface-secondary);
 }
 
 .runtime-state-dot {
@@ -94,36 +120,28 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
   height: 5px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--m-color-on-surface-variant-summary);
 }
 
-.runtime-state.active .runtime-state-dot {
+.runtime-state--active .runtime-state-dot {
   background: var(--m-color-primary);
 }
 
-.runtime-description,
-.runtime-message,
-.runtime-error {
-  margin: 4px 0 0;
-  color: var(--m-color-on-surface-variant-summary);
-  font-size: var(--m-text-body2-size, 14px);
-  line-height: 20px;
+.runtime-copy {
+  margin: 0;
   overflow-wrap: anywhere;
+}
+
+.runtime-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .runtime-buttons {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 12px;
-}
-
-.runtime-secondary:not(:disabled) {
-  color: var(--m-color-on-surface-variant-summary);
-  background: transparent;
-}
-
-.runtime-error {
-  color: var(--m-color-error);
+  margin-top: 6px;
 }
 </style>

@@ -1,6 +1,14 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import { MiuixButton } from "miuix-vue";
+import {
+  MiuixBasicComponent,
+  MiuixButton,
+  MiuixCard,
+  MiuixDivider,
+  MiuixIcon,
+  MiuixText,
+} from "miuix-vue";
+import { Close } from "miuix-vue/icons"
 
 import type { BannerAction, StatusError } from "../../../lib/statusMounts";
 
@@ -18,120 +26,79 @@ defineProps<{
 const emit = defineEmits<{
   (event: "action"): void;
 }>();
+
+const cardStyle = {
+  "--m-card-color": "var(--m-color-error-container)",
+};
 </script>
 
 <template>
-  <section
+  <MiuixCard
     v-if="errors.length > 0"
-    class="error-banner"
+    class="card"
     role="alert"
     aria-live="assertive"
+    :style="cardStyle"
   >
-    <header class="error-banner__head">
-      <span class="error-banner__symbol" aria-hidden="true">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 -960 960 960"
-          fill="currentColor"
-        >
-          <path
-            d="m480-438 129 129q9 9 21 9t21-9q9-9 9-21t-9-21L522-480l129-129q9-9 9-21t-9-21q-9-9-21-9t-21 9L480-522 351-651q-9-9-21-9t-21 9q-9 9-9 21t9 21l129 129-129 129q-9 9-9 21t9 21q9 9 21 9t21-9l129-129Zm0 358q-82 0-155-31.5t-127.5-86Q143-252 111.5-325T80-480q0-83 31.5-156t86-127Q252-817 325-848.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 82-31.5 155T763-197.5q-54 54.5-127 86T480-80Zm0-60q142 0 241-99.5T820-480q0-142-99-241t-241-99q-141 0-240.5 99T140-480q0 141 99.5 240.5T480-140Zm0-340Z"
-          />
-        </svg>
-      </span>
-      <strong>{{ title }}</strong>
-    </header>
-    <p v-if="hint" class="error-banner__hint">{{ hint }}</p>
-    <ul class="error-banner__list">
-      <li v-for="(error, index) in errors" :key="`${error.code}-${index}`">
-        <span class="error-banner__message">{{ $t(error.code) }}</span>
+    <MiuixBasicComponent
+      :title="title"
+      :summary="hint || undefined"
+      title-color="currentColor"
+    >
+      <template #start>
+        <MiuixIcon :icon="Close" :size="22" color="var(--m-color-error)" />
+      </template>
+    </MiuixBasicComponent>
+
+    <MiuixBasicComponent
+      v-for="(error, index) in errors"
+      :key="`${error.code}-${index}`"
+      :title="$t(error.code)"
+      title-color="currentColor"
+    >
+      <template #bottom>
         <pre v-if="error.detail" class="error-banner__detail">{{ error.detail }}</pre>
         <div v-if="error.items.length" class="error-banner__items">
-          <span class="error-banner__items-label">{{ itemsLabel }}</span>
+          <MiuixText type="footnote2" class="error-banner__items-label">
+            {{ itemsLabel }}
+          </MiuixText>
           <code v-for="item in error.items" :key="item">{{ item }}</code>
         </div>
-      </li>
-    </ul>
+      </template>
+    </MiuixBasicComponent>
+
+    <!-- MiuixDivider is width:100%, so the inset comes from the wrapper. -->
+    <div v-if="details.length" class="error-banner__rule">
+      <MiuixDivider color="color-mix(in srgb, var(--m-color-error) 30%, transparent)" />
+    </div>
+
+    <!-- Compact metadata: BasicComponent rows would cost 56px each, and these
+         are secondary to the problems above. -->
+    <dl v-if="details.length" class="error-banner__rows">
+      <template v-for="row in details" :key="row.label">
+        <dt>
+          <MiuixText type="footnote1">{{ row.label }}</MiuixText>
+        </dt>
+        <dd>
+          <MiuixText type="footnote1">{{ row.value }}</MiuixText>
+        </dd>
+      </template>
+    </dl>
+
     <div v-if="action" class="error-banner__action">
       <MiuixButton :disabled="action.busy" @click="emit('action')">
         {{ action.label }}
       </MiuixButton>
     </div>
-    <dl v-if="details.length" class="error-banner__rows">
-      <template v-for="row in details" :key="row.label">
-        <dt>{{ row.label }}</dt>
-        <dd>{{ row.value }}</dd>
-      </template>
-    </dl>
-  </section>
+  </MiuixCard>
 </template>
 
 <style scoped>
-.error-banner {
-  margin: 0 12px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px 16px;
-  border-radius: var(--m-radius-md, 16px);
-  border: 1px solid var(--m-color-error);
-  color: var(--m-color-on-error-container);
-  background: var(--m-color-error-container);
-}
-
-.error-banner__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--m-text-headline1-size, 17px);
-}
-
-.error-banner__symbol {
-  flex-shrink: 0;
-  display: inline-flex;
-  color: var(--m-color-error);
-}
-
-.error-banner__symbol svg {
-  width: 20px;
-  height: 20px;
-}
-
-.error-banner__hint {
-  margin: 0;
-  font-size: var(--m-text-footnote1-size, 13px);
-  line-height: 18px;
-  opacity: 0.9;
-}
-
-.error-banner__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.error-banner__list li {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  border-radius: var(--m-radius-sm, 12px);
-  background: color-mix(in srgb, var(--m-color-error) 12%, transparent);
-}
-
-.error-banner__message {
-  font-weight: 600;
-  font-size: var(--m-text-body2-size, 14px);
-}
-
 .error-banner__detail {
   margin: 0;
   padding: 6px 8px;
   border-radius: var(--m-radius-xs, 8px);
-  background: color-mix(in srgb, var(--m-color-error) 18%, transparent);
+  background: color-mix(in srgb, var(--m-color-error) 14%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.5;
@@ -144,40 +111,45 @@ const emit = defineEmits<{
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  margin-top: 6px;
 }
 
 .error-banner__items-label {
-  font-size: 12px;
   opacity: 0.85;
 }
 
 .error-banner__items code {
-  padding: 2px 8px;
+  padding: 1px 8px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--m-color-error) 22%, transparent);
+  background: color-mix(in srgb, var(--m-color-error) 18%, transparent);
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.error-banner__rule {
+  padding: 4px 16px 8px;
+}
+
+.error-banner__rows {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0 16px 8px;
+}
+
+.error-banner__rows dt {
+  opacity: 0.8;
+}
+
+.error-banner__rows dd {
+  margin: 0;
   overflow-wrap: anywhere;
 }
 
 .error-banner__action {
   display: flex;
   justify-content: flex-end;
-}
-
-.error-banner__rows {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 12px;
-  margin: 0;
-  font-size: var(--m-text-footnote1-size, 13px);
-}
-
-.error-banner__rows dt {
-  opacity: 0.85;
-}
-
-.error-banner__rows dd {
-  margin: 0;
-  overflow-wrap: anywhere;
+  padding: 0 16px 16px;
 }
 </style>

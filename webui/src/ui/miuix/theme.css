@@ -71,6 +71,24 @@
   --m-color-slider-background: var(--surfaceContainerHigh, #ece6f0);
   --m-color-slider-key-point-foreground: var(--primary, #6750a4);
   --m-color-tertiary: var(--tertiary, #7d5260);
+
+  /* Disabled states are the ambient on-surface at low alpha in M3, so derive
+   * them from the palette — otherwise miuix's static blues are the one place
+   * that ignores monet. */
+  --m-dim-8: color-mix(in srgb, var(--m-color-on-surface) 8%, transparent);
+  --m-dim-12: color-mix(in srgb, var(--m-color-on-surface) 12%, transparent);
+  --m-dim-24: color-mix(in srgb, var(--m-color-on-surface) 24%, transparent);
+  --m-dim-38: color-mix(in srgb, var(--m-color-on-surface) 38%, transparent);
+  --m-color-disabled-primary: var(--m-dim-12);
+  --m-color-disabled-on-primary: var(--m-dim-38);
+  --m-color-disabled-primary-button: var(--m-dim-12);
+  --m-color-disabled-on-primary-button: var(--m-dim-38);
+  --m-color-disabled-primary-slider: var(--m-dim-24);
+  --m-color-disabled-secondary: var(--m-dim-8);
+  --m-color-disabled-on-secondary: var(--m-dim-38);
+  --m-color-disabled-secondary-variant: var(--m-dim-12);
+  --m-color-disabled-on-secondary-variant: var(--m-dim-38);
+  --m-color-disabled-on-surface: var(--m-dim-38);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -115,5 +133,23 @@
     --m-color-slider-background: var(--surfaceContainerHigh, #2b2930);
     --m-color-slider-key-point-foreground: var(--primary, #d0bcff);
     --m-color-tertiary: var(--tertiary, #efb8c8);
+
+    /* Disabled states are the ambient on-surface at low alpha in M3, so derive
+     * them from the palette — otherwise miuix's static blues are the one place
+     * that ignores monet. */
+    --m-dim-8: color-mix(in srgb, var(--m-color-on-surface) 8%, transparent);
+    --m-dim-12: color-mix(in srgb, var(--m-color-on-surface) 12%, transparent);
+    --m-dim-24: color-mix(in srgb, var(--m-color-on-surface) 24%, transparent);
+    --m-dim-38: color-mix(in srgb, var(--m-color-on-surface) 38%, transparent);
+    --m-color-disabled-primary: var(--m-dim-12);
+    --m-color-disabled-on-primary: var(--m-dim-38);
+    --m-color-disabled-primary-button: var(--m-dim-12);
+    --m-color-disabled-on-primary-button: var(--m-dim-38);
+    --m-color-disabled-primary-slider: var(--m-dim-24);
+    --m-color-disabled-secondary: var(--m-dim-8);
+    --m-color-disabled-on-secondary: var(--m-dim-38);
+    --m-color-disabled-secondary-variant: var(--m-dim-12);
+    --m-color-disabled-on-secondary-variant: var(--m-dim-38);
+    --m-color-disabled-on-surface: var(--m-dim-38);
   }
 }

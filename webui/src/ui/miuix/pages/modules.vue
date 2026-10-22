@@ -155,7 +155,13 @@ onMounted(() =>
         <MiuixIcon :icon="Refresh" :size="22" />
       </MiuixIconButton>
     </div>
-    <MiuixProgressIndicator v-if="moduleStore.loading" indeterminate />
+    <div v-if="moduleStore.loading" align="center">
+      <MiuixProgressIndicator
+        type="infinite"
+        color="var(--m-color-on-background-variant)"
+        style="padding: 12px 0"
+      />
+    </div>
 
     <MiuixCard v-if="mountErrorCount" class="card module-error-card">
       <div class="module-error-notice">

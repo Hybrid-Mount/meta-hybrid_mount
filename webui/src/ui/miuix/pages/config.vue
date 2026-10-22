@@ -7,13 +7,22 @@ import {
   MiuixSmallTitle,
   MiuixSwitch,
   MiuixButton,
+  MiuixInput,
   MiuixBasicComponent,
   MiuixDialog,
   MiuixIcon,
   MiuixIconButton,
   IconCheck,
 } from "miuix-vue";
-import { Refresh } from "miuix-vue/icons";
+import {
+  Refresh,
+  Translate,
+  Theme,
+  FolderFill,
+  Delete,
+  Photos,
+  Settings,
+} from "miuix-vue/icons";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
 import { sysStore } from "../../../lib/stores/sysStore";
@@ -120,18 +129,30 @@ onMounted(() =>
 
 <template>
   <div class="page">
+    <MiuixSmallTitle text="WebUI" />
     <MiuixCard class="card">
       <MiuixSelectField
         v-model="languageValue"
         :label="t('common.language')"
         :options="languageOptions"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Translate" />
+        </template>
+      </MiuixSelectField>
       <MiuixSelectField
         v-model="uiStyleValue"
         :label="t('common.uiStyle')"
         :options="styleOptions"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Theme" />
+        </template>
+      </MiuixSelectField>
       <MiuixBasicComponent :title="t('config.monetTheme')">
+        <template #start>
+          <MiuixIcon :icon="Photos" />
+        </template>
         <template #end>
           <MiuixSwitch v-model="monetTheme" />
         </template>
@@ -141,18 +162,14 @@ onMounted(() =>
     <MiuixSmallTitle :text="t('config.title')" />
     <MiuixCard class="card">
       <MiuixBasicComponent
-        class="text-preference"
         :title="t('config.moduledir')"
         :summary="t('config.moduledirDesc')"
       >
-        <template #end>
-          <input
-            v-model="moduledir"
-            class="preference-input"
-            :aria-label="t('config.moduledir')"
-            autocomplete="off"
-            spellcheck="false"
-          />
+        <template #start>
+          <MiuixIcon :icon="FolderFill" />
+        </template>
+        <template #bottom>
+          <MiuixInput v-model="moduledir" :aria-label="t('config.moduledir')" />
         </template>
       </MiuixBasicComponent>
       <MiuixSelectField
@@ -160,17 +177,28 @@ onMounted(() =>
         :label="t('config.overlayMode')"
         :summary="t('config.overlayModeDesc')"
         :options="overlayOptions"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Settings" />
+        </template>
+      </MiuixSelectField>
       <MiuixSelectField
         v-model="defaultModeValue"
         :label="t('config.defaultMode')"
         :summary="t('config.defaultModeDesc')"
         :options="modeSelectOptions"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Settings" />
+        </template>
+      </MiuixSelectField>
       <MiuixBasicComponent
         :title="t('config.disableUmount')"
         :summary="t('config.disableUmountDesc')"
       >
+        <template #start>
+          <MiuixIcon :icon="Delete" />
+        </template>
         <template #end>
           <MiuixSwitch v-model="disableUmount" />
         </template>

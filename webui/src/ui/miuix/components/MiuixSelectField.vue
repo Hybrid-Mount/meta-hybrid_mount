@@ -61,9 +61,9 @@ function select(option: MiuixSelectOption): void {
         <slot name="start" />
       </template>
       <template #end>
-        <MiuixText type="body2" weight="thin">{{
-          selectedOption?.label ?? "-"
-        }}</MiuixText>
+        <MiuixText type="body2" weight="thin">
+          {{ selectedOption?.label ?? "-" }}
+        </MiuixText>
       </template>
     </MiuixArrowPreference>
 

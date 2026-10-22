@@ -59,12 +59,12 @@ onMounted(async () => {
     <div class="about-hero">
       <DynamicLogo class="about-logo" />
       <h1>{{ t("content.welcome") }}</h1>
-      <MiuixText color="var(--m-color-on-background)" type="subtitle">{{
-        sysStore.version
-      }}</MiuixText>
-      <MiuixText color="var(--m-color-on-background)" type="body2"
-        >GPL-3.0-only · Apache-2.0</MiuixText
-      >
+      <MiuixText color="var(--m-color-on-background)" type="subtitle">
+        {{ sysStore.version }}
+      </MiuixText>
+      <MiuixText color="var(--m-color-on-background)" type="body2">
+        GPL-3.0-only · Apache-2.0
+      </MiuixText>
     </div>
 
     <MiuixCard class="card" style="padding-top: 12px">
