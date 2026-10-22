@@ -20,6 +20,7 @@
 #include <linux/highmem.h>
 #include <linux/version.h>
 #include <linux/compat.h>
+#include <linux/exportfs.h>
 
 #define HYBRIDMOUNT_VERSION "hm1"
 /* HM-exclusive wire magic: ASCII "HYBRIDMO" read big-endian. Upstream uses "NOMOUNT"
@@ -89,6 +90,8 @@ struct hm_fop {
 struct hm_sop {
     struct super_operations fake_sop; /* MUST be exactly at offset 0 */
     const struct super_operations *orig_sop;
+    struct export_operations fake_eop;
+    const struct export_operations *orig_eop;
     const struct xattr_handler **orig_xattr;
     const struct xattr_handler **fake_xattr;
     struct super_block *sb;

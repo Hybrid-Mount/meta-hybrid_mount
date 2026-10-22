@@ -25,6 +25,7 @@ static bool in_compat_syscall(void) { return compat_mode; }
 #define GFP_KERNEL 0
 #define LOOKUP_FOLLOW 0
 #define ENOMEM 12
+#define ENODEV 19
 #define ENOENT 2
 #ifndef ENODATA
 #define ENODATA 61
@@ -75,7 +76,8 @@ struct xattr_handler {
     int (*__get)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, void *, size_t);
 #endif
 };
-struct super_block { const struct super_operations *s_op; const struct xattr_handler **s_xattr; int s_active; };
+struct export_operations { int (*encode_fh)(struct inode *,u32 *,int *,struct inode *); };
+struct super_block { const struct super_operations *s_op; const struct export_operations *s_export_op; const struct xattr_handler **s_xattr; int s_active; };
 static void atomic_inc(int *value) { ++*value; }
 struct inode { const struct inode_operations *i_op; const struct file_operations *i_fop; unsigned long i_flags,i_ino; int i_mode; void *i_private; };
 struct dentry { struct inode *inode; };
@@ -103,7 +105,7 @@ static struct hybridmount_rule *hybridmount_child_for_uid(struct hybridmount_chi
 struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; int rcu; };
 struct hm_fop { struct file_operations fake_fop; const struct file_operations *orig_fop; struct hybridmount_dir_node *dir_node; int rcu; };
 struct hm_inode_info { struct path r_path; };
-struct hm_sop { struct super_operations fake_sop; const struct super_operations *orig_sop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
+struct hm_sop { struct super_operations fake_sop; const struct super_operations *orig_sop; struct export_operations fake_eop; const struct export_operations *orig_eop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
 struct hm_xattr_proxy { struct xattr_handler fake; const struct xattr_handler *orig; };
 struct dir_context { loff_t pos; unsigned long ino; };
 static int hybridmount_srcu,hybridmount_sb_list;
@@ -171,6 +173,9 @@ static void hm_xattr_set(void) {}
 static int hybridmount_hijacked_drop_inode(struct inode *i) { return 0; }
 static void hybridmount_hijacked_evict_inode(struct inode *i) {}
 static struct hm_sop *hm_get_hm_sop(const struct super_operations *ops) { return NULL; }
+static int hm_encode_fh(struct inode *i,u32 *fh,int *len,struct inode *parent) { return 255; }
+#define THIS_MODULE NULL
+static int try_module_get(void *module) { return 1; }
 
 #include "production.h"
 

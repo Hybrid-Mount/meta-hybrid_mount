@@ -1115,6 +1115,33 @@ static const struct inode_operations hm_dir_iops = {
 
 /* --- Hijacking Management --- */
 
+static int hm_encode_fh(struct inode *inode, u32 *fh, int *max_len, struct inode *parent)
+{
+    const struct inode_operations *iop = READ_ONCE(inode->i_op);
+    struct hm_sop *hm_sop;
+    int (*encode_fh)(struct inode *, u32 *, int *, struct inode *) = NULL;
+
+    /* Fabricated inodes have no filesystem-private backing state. Inotify
+     * fdinfo also reaches this callback, even without an NFS export mount. */
+    if (iop == &hm_dir_iops || iop == &hm_file_iops)
+        return FILEID_INVALID;
+    if (parent) {
+        iop = READ_ONCE(parent->i_op);
+        if (iop == &hm_dir_iops || iop == &hm_file_iops)
+            return FILEID_INVALID;
+    }
+
+    rcu_read_lock();
+    hm_sop = hm_get_hm_sop(smp_load_acquire(&inode->i_sb->s_op));
+    if (hm_sop && hm_sop->orig_eop)
+        encode_fh = hm_sop->orig_eop->encode_fh;
+    rcu_read_unlock();
+
+    /* The original table belongs to the live filesystem, unlike hm_sop.
+     * Its encoder may sleep, so invoke it outside the RCU read section. */
+    return encode_fh ? encode_fh(inode, fh, max_len, parent) : FILEID_INVALID;
+}
+
 static inline int hybridmount_hijack_superblock(struct super_block *sb)
 {
     struct hm_sop *hm_sop;
@@ -1126,6 +1153,11 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
 
     hm_sop->fake_sop = *(sb->s_op);
     hm_sop->orig_sop = sb->s_op;
+    hm_sop->orig_eop = READ_ONCE(sb->s_export_op);
+    if (hm_sop->orig_eop && hm_sop->orig_eop->encode_fh) {
+        hm_sop->fake_eop = *hm_sop->orig_eop;
+        hm_sop->fake_eop.encode_fh = hm_encode_fh;
+    }
     hm_sop->orig_xattr = hm_sop->fake_xattr = NULL;
     hm_sop->sb = sb;
     hm_sop->fake_sop.drop_inode = hybridmount_hijacked_drop_inode;
@@ -1154,8 +1186,15 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
         }
         hm_sop->orig_xattr = (const struct xattr_handler **)sb->s_xattr;
         hm_sop->fake_xattr = new_array;
-        smp_store_release((const struct xattr_handler ***)&sb->s_xattr, new_array);
-        hm_debug("xattr handlers successfully hijacked for dev: 0x%x\n", sb->s_dev);
+    }
+
+    /* VFS caches s_export_op outside RCU, even across sleeping decode calls.
+     * Keep this module and its installed tables resident until reboot rather
+     * than freeing a table which a native caller may still be using. */
+    if (hm_sop->orig_eop && hm_sop->orig_eop->encode_fh && !try_module_get(THIS_MODULE)) {
+        kfree(hm_sop->fake_xattr);
+        kfree(hm_sop);
+        return -ENODEV;
     }
 
     /* The caller's parent path pins an active mount here. Keep an independent
@@ -1163,6 +1202,10 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
     atomic_inc(&sb->s_active);
     list_add_tail_rcu(&hm_sop->list, &hybridmount_sb_list);
     smp_store_release(&sb->s_op, &hm_sop->fake_sop);
+    if (hm_sop->fake_xattr)
+        smp_store_release((const struct xattr_handler ***)&sb->s_xattr, hm_sop->fake_xattr);
+    if (hm_sop->orig_eop && hm_sop->orig_eop->encode_fh)
+        smp_store_release(&sb->s_export_op, &hm_sop->fake_eop);
     hm_debug("Superblock successfully hijacked for dev: 0x%x\n", sb->s_dev);
     return 0;
 }
@@ -1298,6 +1341,8 @@ static void hybridmount_restore_superblocks(void)
                 hm_destroy_hijacked_inode(inode, true);
             }
             spin_unlock(&hm_sop->sb->s_inode_list_lock);
+            if (hm_sop->orig_eop && hm_sop->orig_eop->encode_fh)
+                smp_store_release(&hm_sop->sb->s_export_op, hm_sop->orig_eop);
             smp_store_release(&hm_sop->sb->s_op, hm_sop->orig_sop);
             if (hm_sop->fake_xattr) {
                 smp_store_release((const struct xattr_handler ***)&hm_sop->sb->s_xattr, hm_sop->orig_xattr);

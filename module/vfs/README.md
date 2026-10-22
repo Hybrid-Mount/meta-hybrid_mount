@@ -19,6 +19,15 @@ Changes are verified by reading the kernel tables back and are not persisted.
 Only explicit `vfs load` invokes the bundled loader; normal queries and rule/UID operations do not.
 See [VFS CLI](../../docs/VFS_CLI.md) for arguments, aliases and batch failure semantics.
 
+Fabricated inodes reject filesystem-specific file-handle encoding, including the
+encoding requested by inotify fdinfo. Native inodes retain their original encoder.
+Once a custom export encoder is guarded, the kernel module stays resident until
+reboot: clearing rules does not make hot unload available. Native VFS callers can
+retain an export table across sleeping callbacks without RCU protection, so this
+temporary mitigation deliberately retains the table and its module together.
+Some kernels warn once when fdinfo cannot encode a handle; this guard does not
+override the kernel's `panic_on_warn` policy.
+
 ## Rule lifetime
 
 A rule attached to a real directory holds a reference to that parent's path, keeping

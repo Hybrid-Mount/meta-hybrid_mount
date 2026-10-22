@@ -163,6 +163,19 @@ The host fixtures now exercise these boundaries and paired teardown references.
 The 16-bit compat cursor still limits representable child positions; enumerating
 65,536 or more children needs a separate cursor protocol change.
 
+Local temporary mitigation for the 2026-10-22 inotify fdinfo panic:
+- Proxy custom export encoders on hooked superblocks. HM fabricated files,
+  directories and parents return FILEID_INVALID before filesystem-private
+  state is accessed; native inode encoding and other export callbacks remain
+  delegated to the original filesystem. Generic encoders remain untouched.
+- Exportfs callers may retain the copied table across sleeping native callbacks
+  without RCU protection. Each installed custom encoder therefore pins this
+  module until reboot; hot unload is unavailable after installing such a hook,
+  even after rules are cleared. Pin failure rolls back before publication.
+- The hook transaction harness exercises rejection, native output/error
+  forwarding, missing export operations, allocation rollback and restoration.
+  Prebuilt objects must be rebuilt before this mitigation reaches a device.
+
 1. Fetch the upstream revision you want to compare against.
 2. Diff it against the commit recorded above and review every upstream change.
 3. Re-apply the Hybrid Mount divergences on top; never overwrite them blindly.
