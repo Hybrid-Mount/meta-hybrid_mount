@@ -230,21 +230,19 @@ onMounted(() =>
     >
       <span class="modules-refresh__spinner" :style="{ opacity: spinnerOpacity }">
         <MiuixProgressIndicator
-		  v-if="!moduleStore.loading"
+          v-if="!moduleStore.loading"
           type="infinite"
           :size="20"
           :color="
-            pullReady
-              ? 'var(--m-color-primary)'
-              : 'var(--m-color-on-background-variant)'
+            pullReady ? 'var(--m-color-primary)' : 'var(--m-color-on-background-variant)'
           "
         />
-		<MiuixProgressIndicator
-		  v-else
-		  type="infinite"
-		  :size="20"
-		  color="var(--m-color-on-background-variant)"
-		/>
+        <MiuixProgressIndicator
+          v-else
+          type="infinite"
+          :size="20"
+          color="var(--m-color-on-background-variant)"
+        />
       </span>
     </div>
 

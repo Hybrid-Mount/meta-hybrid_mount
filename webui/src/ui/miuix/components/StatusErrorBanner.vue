@@ -8,7 +8,7 @@ import {
   MiuixIcon,
   MiuixText,
 } from "miuix-vue";
-import { Close } from "miuix-vue/icons"
+import { Close } from "miuix-vue/icons";
 
 import type { BannerAction, StatusError } from "../../../lib/statusMounts";
 
