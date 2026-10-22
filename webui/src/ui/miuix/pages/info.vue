@@ -8,6 +8,7 @@ import {
   MiuixBasicComponent,
   MiuixText,
   MiuixProgressIndicator,
+  MiuixArrowPreference,
 } from "miuix-vue";
 import DynamicLogo from "../../../components/DynamicLogo.vue";
 import { REPOSITORY_URL, TELEGRAM_URL } from "../../../lib/constants";
@@ -58,18 +59,21 @@ onMounted(async () => {
     <div class="about-hero">
       <DynamicLogo class="about-logo" />
       <h1>{{ t("content.welcome") }}</h1>
-      <MiuixText type="subtitle">{{ sysStore.version }}</MiuixText>
-      <MiuixText type="body2">GPL-3.0-only · Apache-2.0</MiuixText>
+      <MiuixText color="var(--m-color-on-background)" type="subtitle">{{
+        sysStore.version
+      }}</MiuixText>
+      <MiuixText color="var(--m-color-on-background)" type="body2"
+        >GPL-3.0-only · Apache-2.0</MiuixText
+      >
     </div>
 
-    <MiuixCard class="card">
-      <MiuixBasicComponent
+    <MiuixCard class="card" style="padding-top: 12px">
+      <MiuixArrowPreference
         :title="t('info.projectLink')"
         summary="github.com/Hybrid-Mount"
-        clickable
         @click="API.openLink(REPOSITORY_URL)"
       />
-      <MiuixBasicComponent
+      <MiuixArrowPreference
         title="Telegram"
         summary="@hybridmountchat"
         clickable
@@ -86,9 +90,9 @@ onMounted(async () => {
       </MiuixBasicComponent>
       <MiuixBasicComponent :title="t('info.overlaySupported')">
         <template #end>
-          <MiuixText>{{
-            statusText(sysStore.installState?.overlay_supported)
-          }}</MiuixText>
+          <MiuixText>
+            {{ statusText(sysStore.installState?.overlay_supported) }}
+          </MiuixText>
         </template>
       </MiuixBasicComponent>
       <MiuixBasicComponent :title="t('info.tmpfsSupported')">
@@ -135,6 +139,7 @@ onMounted(async () => {
     <MiuixCard class="card" v-else>
       <MiuixBasicComponent v-if="loadFailed" :title="t('info.loadFail')" />
       <MiuixBasicComponent
+        v-else
         v-for="contributor in contributors"
         :key="contributor.login"
         :title="contributor.name || contributor.login"

@@ -3,6 +3,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
+  MiuixIcon,
   MiuixCard,
   MiuixSmallTitle,
   MiuixBasicComponent,
@@ -10,7 +11,12 @@ import {
   MiuixButton,
   MiuixDialog,
 } from "miuix-vue";
+import { Settings } from "miuix-vue/icons";
 import { Motion, AnimatePresence } from "motion-v";
+import Android from "vue-material-design-icons/Android.vue";
+import Security from "vue-material-design-icons/Security.vue";
+import DeveloperBoard from "vue-material-design-icons/DeveloperBoard.vue";
+import Cellphone from "vue-material-design-icons/Cellphone.vue";
 
 import StatusCard from "../components/StatusCard.vue";
 import StatusErrorBanner from "../components/StatusErrorBanner.vue";
@@ -223,7 +229,11 @@ onMounted(async () => {
 
     <MiuixSmallTitle :text="t('status.backendTitle')" />
     <MiuixCard class="card backend-card">
-      <MiuixBasicComponent :title="t('status.storageMode')" :summary="storageModeLabel" />
+      <MiuixBasicComponent :title="t('status.storageMode')" :summary="storageModeLabel">
+        <template #start>
+          <MiuixIcon :icon="Settings" weight="medium" />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         class="backend-row"
         :title="t('status.overlayModules')"
@@ -234,7 +244,11 @@ onMounted(async () => {
         "
         clickable
         @click="showoverlaymodule = !showoverlaymodule"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Settings" weight="medium" />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         class="backend-row"
         :title="t('status.magicModules')"
@@ -248,7 +262,11 @@ onMounted(async () => {
         "
         clickable
         @click="showmagicmodule = !showmagicmodule"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Settings" weight="medium" />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         v-if="sysStore.vfsSupported"
         class="backend-row"
@@ -260,13 +278,21 @@ onMounted(async () => {
         "
         clickable
         @click="showvfsmodule = !showvfsmodule"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Settings" weight="medium" />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.activeMounts')"
         :summary="activeMountSummary"
         clickable
         @click="expandMountPath = !expandMountPath"
-      />
+      >
+        <template #start>
+          <MiuixIcon :icon="Settings" weight="medium" />
+        </template>
+      </MiuixBasicComponent>
       <AnimatePresence :initial="false">
         <Motion
           v-if="activeMountStatus === 'active' && expandMountPath"
@@ -288,19 +314,35 @@ onMounted(async () => {
       <MiuixBasicComponent
         :title="t('status.modelLabel')"
         :summary="sysStore.device.model || '-'"
-      />
+      >
+        <template #start>
+          <Cellphone />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.kernelLabel')"
         :summary="sysStore.systemInfo.kernel"
-      />
+      >
+        <template #start>
+          <DeveloperBoard />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.selinuxLabel')"
         :summary="sysStore.systemInfo.selinux"
-      />
+      >
+        <template #start>
+          <Security />
+        </template>
+      </MiuixBasicComponent>
       <MiuixBasicComponent
         :title="t('status.androidLabel')"
         :summary="sysStore.device.android"
-      />
+      >
+        <template #start>
+          <Android />
+        </template>
+      </MiuixBasicComponent>
     </MiuixCard>
     <MiuixDialog
       v-model="guardOpen"

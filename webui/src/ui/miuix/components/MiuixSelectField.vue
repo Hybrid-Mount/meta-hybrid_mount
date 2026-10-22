@@ -1,7 +1,13 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { MiuixButton, MiuixDialog, MiuixRadioButtonPreference } from "miuix-vue";
+import {
+  MiuixButton,
+  MiuixText,
+  MiuixDialog,
+  MiuixRadioButtonPreference,
+  MiuixArrowPreference,
+} from "miuix-vue";
 
 export interface MiuixSelectOption {
   value: string;
@@ -44,29 +50,29 @@ function select(option: MiuixSelectOption): void {
 
 <template>
   <div class="miuix-select-field" :class="{ compact }">
-    <button
-      type="button"
-      class="miuix-select-trigger"
+    <MiuixArrowPreference
+      v-if="!compact"
       :disabled="disabled"
-      aria-haspopup="dialog"
-      :aria-label="label"
+      :title="label"
+      :summary="summary"
       @click="open = true"
     >
-      <span v-if="!compact" class="trigger-copy">
-        <strong>{{ label }}</strong>
-        <span v-if="summary">{{ summary }}</span>
-      </span>
-      <span class="trigger-value">{{ selectedOption?.label ?? "-" }}</span>
-      <span>
-        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
-          <path
-            fill-rule="evenodd"
-            clip-rule="evenodd"
-            d="M1.65 1.469 C1.929 1.19 2.381 1.19 2.66 1.469 L8.721 7.53 C9 7.809 9 8.261 8.721 8.54 L2.66 14.601 C2.381 14.88 1.929 14.88 1.65 14.601 C1.371 14.322 1.371 13.87 1.65 13.591 L7.205 8.035 L1.65 2.479 C1.371 2.2 1.371 1.748 1.65 1.469 Z"
-          />
-        </svg>
-      </span>
-    </button>
+      <template v-if="$slots.start" #start>
+        <slot name="start" />
+      </template>
+      <template #end>
+        <MiuixText type="body2" weight="thin">{{
+          selectedOption?.label ?? "-"
+        }}</MiuixText>
+      </template>
+    </MiuixArrowPreference>
+
+    <MiuixArrowPreference
+      v-else
+      :disabled="disabled"
+      :title="selectedOption?.label ?? '-'"
+      @click="open = true"
+    />
 
     <MiuixDialog v-model="open" :title="label" @close="open = false">
       <div class="select-options">
@@ -93,119 +99,10 @@ function select(option: MiuixSelectOption): void {
   min-width: 0;
 }
 
-/*
- * Same row metrics as miuix's MiuixBasicComponent (min-height 56, inside margin
- * 16, title headline1/medium, summary body2, 8dp action gap) so a select row
- * lines up with the preference rows around it. Feedback is miuix's additive
- * onBackground indication, not a filled hover background.
- */
-.miuix-select-trigger {
-  position: relative;
-  width: 100%;
-  min-height: 56px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 0;
-  color: var(--m-color-on-background, #000);
-  background: transparent;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.miuix-select-trigger::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--m-color-on-background);
-  opacity: 0;
-  transition: opacity 120ms linear;
-  pointer-events: none;
-}
-
-.miuix-select-trigger:focus-visible {
-  outline: 2px solid var(--m-color-primary, #6750a4);
-  outline-offset: -2px;
-}
-
-.miuix-select-trigger:focus-visible::after {
-  opacity: 0.08;
-}
-
-.miuix-select-trigger:active::after {
-  opacity: 0.1;
-}
-
-@media (hover: hover) {
-  .miuix-select-trigger:hover::after {
-    opacity: 0.06;
-  }
-
-  .miuix-select-trigger:hover:active::after {
-    opacity: 0.16;
-  }
-}
-
-.miuix-select-trigger:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-.trigger-copy {
-  min-width: 0;
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-.trigger-copy strong {
-  color: var(--m-color-on-background, #000);
-  font-size: var(--m-text-headline1-size, 17px);
-  font-weight: 500;
-  line-height: 22px;
-}
-
-.trigger-copy span {
-  color: var(--m-color-on-surface-variant-summary, rgba(0, 0, 0, 0.6));
-  font-size: var(--m-text-body2-size, 14px);
-  line-height: 20px;
-}
-
-.trigger-value {
-  min-width: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  color: var(--m-color-on-surface-variant-actions, rgba(0, 0, 0, 0.62));
-  font-size: var(--m-text-body2-size, 14px);
-  line-height: 20px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .compact {
   width: min(190px, 100%);
   max-width: 100%;
   flex: 0 1 190px;
-}
-
-.compact .miuix-select-trigger {
-  min-height: 40px;
-  padding: 0 12px;
-  gap: 6px;
-  border-radius: var(--m-radius-md, 16px);
-  background: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
-}
-
-.compact .trigger-value {
-  flex: 1;
-  color: var(--m-color-on-surface, #1d1b20);
-  text-align: left;
 }
 
 .select-options {
