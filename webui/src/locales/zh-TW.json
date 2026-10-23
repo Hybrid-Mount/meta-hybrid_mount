@@ -125,6 +125,7 @@
     "scanError": "掃描失敗",
     "saveSuccess": "模式已儲存",
     "saveFailed": "儲存失敗",
+    "removePath": "刪除路徑規則",
     "searchPlaceholder": "搜尋模組...",
     "filterLabel": "篩選:",
     "filterActive": "非忽略",

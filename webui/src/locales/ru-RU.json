@@ -117,6 +117,7 @@
     "scanError": "Ошибка сканирования модулей",
     "saveSuccess": "Режимы сохранены",
     "saveFailed": "Ошибка сохранения режимов",
+    "removePath": "Удалить правило пути",
     "searchPlaceholder": "Поиск модулей...",
     "filterLabel": "Фильтр:",
     "filterActive": "Активные",

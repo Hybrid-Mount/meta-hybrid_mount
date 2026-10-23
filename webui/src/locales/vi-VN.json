@@ -117,6 +117,7 @@
     "scanError": "Thất bại khi quét các mô-đun",
     "saveSuccess": "Các chế độ đã được lưu",
     "saveFailed": "Thất bại khi lưu các chế độ",
+    "removePath": "Xóa quy tắc đường dẫn",
     "searchPlaceholder": "Tìm kiếm các mô-đun...",
     "filterLabel": "Bộ lọc:",
     "filterActive": "Đang hoạt động",

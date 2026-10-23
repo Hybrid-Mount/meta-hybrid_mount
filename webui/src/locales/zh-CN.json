@@ -128,6 +128,7 @@
     "scanError": "扫描模块失败",
     "saveSuccess": "模块规则已保存",
     "saveFailed": "保存模块规则失败",
+    "removePath": "删除路径规则",
     "searchPlaceholder": "搜索模块...",
     "filterLabel": "筛选：",
     "filterActive": "非忽略",

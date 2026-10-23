@@ -128,6 +128,7 @@
     "scanError": "Échec de l'analyse des modules",
     "saveSuccess": "Règles du module enregistrées",
     "saveFailed": "Échec de l'enregistrement des règles du module",
+    "removePath": "Supprimer la règle de chemin",
     "searchPlaceholder": "Recherche de modules...",
     "filterLabel": "Filtre",
     "filterActive": "Actifs",

@@ -128,6 +128,7 @@
     "scanError": "Modüller taranamadı",
     "saveSuccess": "Modül kuralları kaydedildi",
     "saveFailed": "Modül kuralları kaydedilemedi",
+    "removePath": "Yol kuralını kaldır",
     "searchPlaceholder": "Modülleri ara...",
     "filterLabel": "Filtrele:",
     "filterActive": "Aktif",

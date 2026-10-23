@@ -117,6 +117,7 @@
     "scanError": "Error al escanear módulos",
     "saveSuccess": "Modos guardados",
     "saveFailed": "Error al guardar modos",
+    "removePath": "Eliminar regla de ruta",
     "searchPlaceholder": "Buscar módulos...",
     "filterLabel": "Filtro:",
     "filterActive": "Activos",

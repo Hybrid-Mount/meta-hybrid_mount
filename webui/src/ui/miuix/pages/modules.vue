@@ -7,12 +7,16 @@ import {
   MiuixCard,
   MiuixText,
   MiuixBasicComponent,
+  MiuixButton,
+  MiuixDialog,
+  MiuixDropdownPreference,
+  MiuixInput,
   MiuixProgressIndicator,
   MiuixIcon,
   MiuixIconButton,
   IconCheck,
 } from "miuix-vue";
-import { Delete, ExpandLess, ExpandMore, Refresh } from "miuix-vue/icons";
+import { Delete, ExpandLess, ExpandMore, Refresh, Add } from "miuix-vue/icons";
 
 import MiuixRuntimeControls from "../components/MiuixRuntimeControls.vue";
 import { runtimeStore } from "../../../lib/stores/runtimeStore";
@@ -74,6 +78,43 @@ const expanded = ref<Record<string, boolean>>({});
 const editingRules = ref<Record<string, ModuleRule>>({});
 const savingModule = ref("");
 
+/* One dialog serves every card, so the new-path draft is keyed by the module it
+ * was opened for rather than living inside the v-for. */
+const addPathModuleId = ref<string | null>(null);
+const newPath = ref("");
+const newMode = ref<MountMode>("overlay");
+const addPathOpen = computed({
+  get: () => addPathModuleId.value !== null,
+  set: (open: boolean) => {
+    if (!open) addPathModuleId.value = null;
+  },
+});
+const addPathModule = computed(
+  () => moduleStore.modules.find((item) => item.id === addPathModuleId.value) ?? null,
+);
+/* Held separately from addPathModuleId so the dialog keeps its subtitle while it
+ * animates out, after the id has already been cleared. */
+const addPathModuleLabel = ref("");
+
+/* The dialog's mode picker is a dropdown popup, not a MiuixSelectField: that one
+ * is itself a MiuixDialog, and a dialog nested in a dialog fights over the same
+ * overlay layer. MiuixDropdownPreference is index-based, so the draft mode is
+ * mapped through the option list instead of held as a raw MountMode. */
+const ruleModeItems = computed(() =>
+  ruleModeOptions.value.map((option) => ({ text: option.label })),
+);
+const newModeIndex = computed(() => {
+  const index = ruleModeOptions.value.findIndex(
+    (option) => option.value === newMode.value,
+  );
+  return index < 0 ? 0 : index;
+});
+
+function selectNewMode(index: number): void {
+  const option = ruleModeOptions.value[index];
+  if (option) newMode.value = option.value as MountMode;
+}
+
 function ruleFor(module: Module): ModuleRule {
   if (!editingRules.value[module.id]) {
     const rule = module.rules;
@@ -91,9 +132,33 @@ function ruleFor(module: Module): ModuleRule {
   return editingRules.value[module.id];
 }
 
+function openAddPath(module: Module): void {
+  addPathModuleId.value = module.id;
+  addPathModuleLabel.value = module.name || module.id;
+  newPath.value = "";
+  newMode.value = "overlay";
+}
+
+function addPath(): void {
+  const module = addPathModule.value;
+  if (!module) {
+    addPathModuleId.value = null;
+    return;
+  }
+  const path = newPath.value.trim().replace(/^\/+/, "");
+  if (!path) return;
+  ruleFor(module).paths[path] = newMode.value;
+  addPathModuleId.value = null;
+}
+
+function removePath(module: Module, path: string): void {
+  delete ruleFor(module).paths[path];
+}
+
 async function saveModuleRules(module: Module): Promise<void> {
   savingModule.value = module.id;
-  const ok = await moduleStore.saveModuleRules(module.id, ruleFor(module));
+  const rule = JSON.parse(JSON.stringify(ruleFor(module))) as ModuleRule;
+  const ok = await moduleStore.saveModuleRules(module.id, rule);
   savingModule.value = "";
   uiStore.showToast(ok ? t("modules.saveSuccess") : t("modules.saveFailed"));
 }
@@ -201,7 +266,7 @@ onMounted(() =>
       <MiuixSearchBar
         v-model="searchQuery"
         class="module-search"
-        :placeholder="t('modules.searchPlaceholder')"
+        :label="t('modules.searchPlaceholder')"
       />
       <MiuixSelectField
         compact
@@ -250,7 +315,9 @@ onMounted(() =>
       <div class="module-error-notice">
         <span class="module-error-copy">
           <strong>{{ t("modules.mountError") }}</strong>
-          <span>{{ t("modules.mountErrorSummary", { count: mountErrorCount }) }}</span>
+          <MiuixText>{{
+            t("modules.mountErrorSummary", { count: mountErrorCount })
+          }}</MiuixText>
         </span>
         <MiuixIconButton
           class="module-icon-action clear-errors-button"
@@ -323,7 +390,7 @@ onMounted(() =>
                   :title="t('modules.suggestIgnore')"
                 />
                 <div class="rule-row">
-                  <span>{{ t("config.moduleDefault") }}</span>
+                  <MiuixText>{{ t("config.moduleDefault") }}</MiuixText>
                   <MiuixSelectField
                     compact
                     class="rule-mode-select"
@@ -340,7 +407,7 @@ onMounted(() =>
                   :key="path"
                   class="rule-row"
                 >
-                  <span class="path">{{ path }}</span>
+                  <MiuixText class="path">{{ path }}</MiuixText>
                   <MiuixSelectField
                     compact
                     class="rule-mode-select"
@@ -351,8 +418,25 @@ onMounted(() =>
                       ruleFor(module).paths[path] = $event as MountMode
                     "
                   />
+                  <MiuixIconButton
+                    class="module-icon-action remove-path-button"
+                    :title="t('modules.removePath')"
+                    :aria-label="t('modules.removePath')"
+                    @click="removePath(module, String(path))"
+                  >
+                    <MiuixIcon :icon="Delete" :size="20" />
+                  </MiuixIconButton>
                 </div>
                 <div class="module-actions">
+                  <MiuixIconButton
+                    class="module-icon-action add-module-button"
+                    :title="t('config.addPathRule')"
+                    :aria-label="t('config.addPathRule')"
+                    :disabled="savingModule === module.id"
+                    @click="openAddPath(module)"
+                  >
+                    <MiuixIcon :icon="Add" :size="22" />
+                  </MiuixIconButton>
                   <MiuixIconButton
                     class="module-icon-action save-module-button"
                     :title="t('modules.save')"
@@ -374,6 +458,40 @@ onMounted(() =>
       v-if="!moduleStore.loading && filteredModules.length === 0"
       :title="t('modules.empty')"
     />
+
+    <MiuixDialog
+      v-model="addPathOpen"
+      :title="t('config.addPathRule')"
+      :summary="addPathModuleLabel"
+      @close="addPathOpen = false"
+    >
+      <div class="add-path-form">
+        <MiuixInput
+          v-model="newPath"
+          :placeholder="t('config.pathPlaceholder')"
+          @keydown.enter="addPath"
+        />
+        <MiuixDropdownPreference
+          :title="t('config.mode')"
+          :model-value="newModeIndex"
+          :items="ruleModeItems"
+          @update:model-value="selectNewMode"
+        />
+      </div>
+      <div class="add-path-actions">
+        <MiuixButton class="grow" @click="addPathOpen = false">
+          {{ t("common.cancel") }}
+        </MiuixButton>
+        <MiuixButton
+          class="grow"
+          type="primary"
+          :disabled="!newPath.trim()"
+          @click="addPath"
+        >
+          {{ t("common.save") }}
+        </MiuixButton>
+      </div>
+    </MiuixDialog>
   </div>
 </template>
 
@@ -509,13 +627,25 @@ onMounted(() =>
   white-space: nowrap;
 }
 
-.rule-mode-select {
+/* Beats MiuixSelectField's own `.compact` width so the row keeps space for the
+ * path label and the delete button. */
+.rule-row .rule-mode-select {
   margin-left: auto;
+  flex: 0 1 150px;
+  width: min(150px, 40vw);
+}
+
+.remove-path-button {
+  --m-icon-button-min-width: 36px;
+  --m-icon-button-min-height: 36px;
+  flex: 0 0 auto;
 }
 
 .module-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   padding: 0 16px 12px;
 }
 
@@ -523,14 +653,41 @@ onMounted(() =>
   color: var(--m-color-on-surface-variant-summary);
 }
 
+.add-module-button {
+  --m-icon-button-bg: var(--m-color-secondary-container);
+  color: var(--m-color-on-secondary-container);
+}
+
+.add-module-button:disabled {
+  opacity: 0.45;
+}
+
+.add-path-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* The dialog's preference row carries its own 16px inset; the text field above
+ * sits flush, so drop the horizontal padding to line both edges up. */
+.add-path-form :deep(.m-basic-component) {
+  padding-inline: 0;
+}
+
+.add-path-actions {
+  display: flex;
+  gap: 12px;
+}
+
 .save-module-button {
-  --m-icon-button-bg: var(--m-color-primary, #6750a4);
-  color: var(--m-color-on-primary, #fff);
+  --m-icon-button-bg: var(--m-color-primary);
+  color: var(--m-color-on-primary);
 }
 
 .refresh-modules-button {
   --m-icon-button-bg: var(--m-color-surface-container-high, rgba(0, 0, 0, 0.06));
-  --m-icon-button-radius: var(--m-radius-sm, 12px);
+  --m-icon-button-radius: var(--m-radius-sm);
   color: var(--m-color-on-surface-variant-summary);
 }
 

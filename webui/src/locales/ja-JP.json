@@ -117,6 +117,7 @@
     "scanError": "モジュールのスキャンに失敗しました",
     "saveSuccess": "モードを保存しました",
     "saveFailed": "モードの保存に失敗しました",
+    "removePath": "パスルールを削除",
     "searchPlaceholder": "モジュールを検索...",
     "filterLabel": "フィルター:",
     "filterActive": "有効",

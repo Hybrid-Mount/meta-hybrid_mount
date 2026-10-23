@@ -128,6 +128,7 @@
     "scanError": "Failed to scan modules",
     "saveSuccess": "Module rules saved",
     "saveFailed": "Failed to save module rules",
+    "removePath": "Remove path rule",
     "searchPlaceholder": "Search modules...",
     "filterLabel": "Filter:",
     "filterActive": "Active",

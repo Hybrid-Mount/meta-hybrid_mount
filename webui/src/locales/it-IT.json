@@ -117,6 +117,7 @@
     "scanError": "Impossibile analizzare i moduli",
     "saveSuccess": "Modalita salvate",
     "saveFailed": "Impossibile salvare le modalita",
+    "removePath": "Rimuovi regola percorso",
     "searchPlaceholder": "Cerca moduli...",
     "filterLabel": "Filtro:",
     "filterActive": "Attivi",

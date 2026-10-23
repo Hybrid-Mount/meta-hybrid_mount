@@ -117,6 +117,7 @@
     "scanError": "Gagal memindai modul",
     "saveSuccess": "Mode berhasil disimpan",
     "saveFailed": "Gagal menyimpan mode",
+    "removePath": "Hapus aturan jalur",
     "searchPlaceholder": "Cari modul...",
     "filterLabel": "Filter:",
     "filterActive": "Aktif",
