@@ -20,6 +20,8 @@ obj-m += $(MODULE_NAME).o
 # Kernels before 5.18 default to gnu89, which rejects the C99 declarations used
 # throughout the sources; the upstream build always set -std=gnu11.
 ccflags-y += -std=gnu11 -Wno-declaration-after-statement
+# Android backports the VMA flag helpers to kernels with older version numbers.
+ccflags-y += $(shell grep -qs 'static inline void vm_flags_clear' "$(srctree)/include/linux/mm.h" && echo -DHM_HAVE_VM_FLAGS_CLEAR)
 
 KDIR ?= /lib/modules/$(shell uname -r)/build
 MDIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))

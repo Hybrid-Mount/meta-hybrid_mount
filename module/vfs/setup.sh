@@ -134,7 +134,10 @@ do_setup() {
     # shellcheck disable=SC2016
     # -std=gnu11 matters: kernels before 5.18 default to gnu89 and the sources use
     # C99 declarations.
-    printf 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount.o\nccflags-y += -std=gnu11 -Wno-declaration-after-statement\n' \
+    printf '%s\n' \
+        'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount.o' \
+        'ccflags-y += -std=gnu11 -Wno-declaration-after-statement' \
+        'ccflags-y += $(shell grep -qs "static inline void vm_flags_clear" "$(srctree)/include/linux/mm.h" && echo -DHM_HAVE_VM_FLAGS_CLEAR)' \
         > "$FS_DIR/$DIR_NAME/Makefile"
     echo "[+] copied sources into fs/$DIR_NAME"
 

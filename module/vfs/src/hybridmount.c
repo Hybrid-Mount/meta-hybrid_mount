@@ -675,7 +675,7 @@ static int hm_mmap(struct file *file, struct vm_area_struct *vma)
 {
     if (hm_backing_noexec(file_inode(file)->i_private)) {
         if (vma->vm_flags & VM_EXEC) return -EPERM;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+#if defined(HM_HAVE_VM_FLAGS_CLEAR) || LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
         vm_flags_clear(vma, VM_MAYEXEC);
 #else
         vma->vm_flags &= ~VM_MAYEXEC;
