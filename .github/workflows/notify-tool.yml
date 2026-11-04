@@ -32,7 +32,7 @@ jobs:
           echo "hash=$SOURCE_HASH" >> "$GITHUB_OUTPUT"
       - name: Find a matching prebuilt artifact
         id: artifact
-        uses: actions/github-script@v9
+        uses: actions/github-script@v9.0.0
         env:
           NOTIFY_SOURCE_HASH: ${{ steps.source.outputs.hash }}
         with:

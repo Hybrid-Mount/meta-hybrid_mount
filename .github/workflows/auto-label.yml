@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: .github/scripts
 
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@v9.0.0
         with:
           script: |
             const { enforceIssuePolicy } = require('./.github/scripts/issue-policy.cjs');
