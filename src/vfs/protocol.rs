@@ -9,6 +9,32 @@ use crate::vfs::rule::{VfsAction, VfsRule};
 /// Must match `HYBRIDMOUNT_MAGIC_SIG` in `module/vfs/src/hybridmount.h`; the kernel
 /// rejects the page with `-EFAULT` before parsing if it does not.
 pub const MAGIC: u64 = 0x4859_4252_4944_4D4F;
+pub const NOMOUNT_MAGIC: u64 = 0x004E_4F4D_4F55_4E54;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RuleFormat {
+    #[default]
+    HybridMount,
+    NomountLegacy,
+    Nomount22,
+}
+
+impl RuleFormat {
+    const fn extra_bytes(self) -> usize {
+        match self {
+            Self::Nomount22 => 12,
+            _ => 0,
+        }
+    }
+
+    fn write_uid_range(self, out: &mut Vec<u8>, uid: u32) {
+        if self == Self::Nomount22 {
+            out.extend_from_slice(&uid.to_le_bytes());
+            out.extend_from_slice(&[0; 8]);
+        }
+    }
+}
+
 pub const PAYLOAD_LEN: usize = 4096;
 pub const BUFFER_LEN: usize = 4068;
 pub const RULE_HEADER_LEN: usize = 12;
@@ -59,10 +85,16 @@ impl EncodedRule {
         RULE_HEADER_LEN + self.virtual_path.len() + self.real_path.len()
     }
 
+    #[cfg(test)]
     pub fn write_into(&self, out: &mut Vec<u8>, uid: u32) {
+        self.write_record(out, uid, RuleFormat::HybridMount);
+    }
+
+    fn write_record(&self, out: &mut Vec<u8>, uid: u32, format: RuleFormat) {
         out.extend_from_slice(&self.flags.to_le_bytes());
         // ADD_RULE reads each record's uid, not the payload's target_uid.
         out.extend_from_slice(&uid.to_le_bytes());
+        format.write_uid_range(out, uid);
         out.extend_from_slice(&(self.virtual_path.len() as u16).to_le_bytes());
         out.extend_from_slice(&(self.real_path.len() as u16).to_le_bytes());
         out.extend_from_slice(&self.virtual_path);
@@ -110,20 +142,36 @@ pub fn build_payload(cmd: NmCommand, target_uid: u32, buffer: &[u8]) -> Result<V
     Ok(page)
 }
 
+#[cfg(test)]
 pub fn build_add_rule_payloads(rules: &[EncodedRule], uid: u32) -> Result<Vec<Vec<u8>>> {
+    build_add_rule_payloads_for(rules, uid, RuleFormat::HybridMount)
+}
+
+pub fn build_add_rule_payloads_for(
+    rules: &[EncodedRule],
+    uid: u32,
+    format: RuleFormat,
+) -> Result<Vec<Vec<u8>>> {
     let mut payloads = Vec::new();
     let mut buffer: Vec<u8> = Vec::new();
     for rule in rules {
-        if rule.record_len() > BUFFER_LEN {
+        if format != RuleFormat::HybridMount && rule.flags & FLAG_OPAQUE != 0 {
             return Err(Error::VfsProtocol {
-                detail: format!("single rule needs {} bytes", rule.record_len()),
+                detail: "Hybrid Mount opaque directory rules require the hybridmount provider"
+                    .into(),
             });
         }
-        if buffer.len() + rule.record_len() > BUFFER_LEN {
+        let record_len = rule.record_len() + format.extra_bytes();
+        if record_len > BUFFER_LEN {
+            return Err(Error::VfsProtocol {
+                detail: format!("single rule needs {record_len} bytes"),
+            });
+        }
+        if buffer.len() + record_len > BUFFER_LEN {
             payloads.push(build_payload(NmCommand::AddRule, uid, &buffer)?);
             buffer.clear();
         }
-        rule.write_into(&mut buffer, uid);
+        rule.write_record(&mut buffer, uid, format);
     }
     if !buffer.is_empty() {
         payloads.push(build_payload(NmCommand::AddRule, uid, &buffer)?);
@@ -131,11 +179,20 @@ pub fn build_add_rule_payloads(rules: &[EncodedRule], uid: u32) -> Result<Vec<Ve
     Ok(payloads)
 }
 
+#[cfg(test)]
 pub fn build_del_rule_payloads(paths: &[Vec<u8>], uid: u32) -> Result<Vec<Vec<u8>>> {
+    build_del_rule_payloads_for(paths, uid, RuleFormat::HybridMount)
+}
+
+pub fn build_del_rule_payloads_for(
+    paths: &[Vec<u8>],
+    uid: u32,
+    format: RuleFormat,
+) -> Result<Vec<Vec<u8>>> {
     let mut payloads = Vec::new();
     let mut buffer: Vec<u8> = Vec::new();
     for path in paths {
-        let record_len = DEL_HEADER_LEN + path.len();
+        let record_len = DEL_HEADER_LEN + format.extra_bytes() + path.len();
         if record_len > BUFFER_LEN {
             return Err(Error::VfsProtocol {
                 detail: format!("single del rule needs {record_len} bytes"),
@@ -146,6 +203,7 @@ pub fn build_del_rule_payloads(paths: &[Vec<u8>], uid: u32) -> Result<Vec<Vec<u8
             buffer.clear();
         }
         buffer.extend_from_slice(&uid.to_le_bytes());
+        format.write_uid_range(&mut buffer, uid);
         buffer.extend_from_slice(&(path.len() as u16).to_le_bytes());
         buffer.extend_from_slice(path);
     }
@@ -292,7 +350,14 @@ fn response_body(payload: &[u8]) -> Result<&[u8]> {
 
 /// `GET_LIST` records plus the index of the next rule. Unlike the batch commands, `arg1`
 /// is a rule index rather than a byte offset, so `ensure_full_cursor` does not apply.
+#[cfg(test)]
 pub fn parse_list(payload: &[u8]) -> Result<(Vec<ListedRule>, u32)> {
+    parse_list_for(payload, RuleFormat::HybridMount)
+}
+
+pub fn parse_list_for(payload: &[u8], format: RuleFormat) -> Result<(Vec<ListedRule>, u32)> {
+    let extra = format.extra_bytes();
+    let header_len = RULE_HEADER_LEN + extra;
     ensure_status(payload)?;
     let body = response_body(payload)?;
     let mut rules = Vec::new();
@@ -300,15 +365,15 @@ pub fn parse_list(payload: &[u8]) -> Result<(Vec<ListedRule>, u32)> {
 
     while pos < body.len() {
         let header = body
-            .get(pos..pos + RULE_HEADER_LEN)
+            .get(pos..pos + header_len)
             .ok_or_else(|| Error::VfsProtocol {
                 detail: format!("truncated rule header at offset {pos}"),
             })?;
         let flags = u32::from_le_bytes(field(header, 0, "rule flags")?);
         let uid = u32::from_le_bytes(field(header, 4, "rule uid")?);
-        let v_len = u16::from_le_bytes(field(header, 8, "rule v_len")?) as usize;
-        let r_len = u16::from_le_bytes(field(header, 10, "rule r_len")?) as usize;
-        pos += RULE_HEADER_LEN;
+        let v_len = u16::from_le_bytes(field(header, 8 + extra, "rule v_len")?) as usize;
+        let r_len = u16::from_le_bytes(field(header, 10 + extra, "rule r_len")?) as usize;
+        pos += header_len;
 
         let paths = body
             .get(pos..pos + v_len + r_len)
@@ -319,6 +384,15 @@ pub fn parse_list(payload: &[u8]) -> Result<(Vec<ListedRule>, u32)> {
                 ),
             })?;
         let (virtual_path, real_path) = paths.split_at(v_len);
+        // Our rule identity is one UID (or global), so ranged/exclusion rules
+        // cannot participate in readback, ownership or rollback.
+        if format == RuleFormat::Nomount22
+            && (u32::from_le_bytes(field(header, 8, "rule uid_end")?) != uid
+                || header[12..20] != [0; 8])
+        {
+            pos += v_len + r_len;
+            continue;
+        }
         rules.push(ListedRule {
             flags,
             uid,
@@ -365,7 +439,7 @@ where
     loop {
         let payload = fetch(cursor)?;
         let (mut batch, next) = parse(&payload)?;
-        if batch.is_empty() {
+        if batch.is_empty() && read_data_size(&payload)? == 0 {
             return Ok(all);
         }
         // A non-empty batch that does not move the cursor would loop forever.

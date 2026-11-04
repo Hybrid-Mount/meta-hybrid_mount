@@ -52,8 +52,12 @@ pub fn load_explicit() -> Result<String> {
             reason: format!("foreign-provider guard failed: {detail}"),
         });
     }
+    if foreign.present {
+        return super::backend::open_active()?.require_supported();
+    }
+
     let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
-    let provider = select_provider(&mut kernel, SUPPORTED_VERSIONS, foreign.present, || {
+    let provider = select_provider(&mut kernel, SUPPORTED_VERSIONS, false, || {
         load().map_err(|reason| Error::VfsUnavailable { reason })
     })?;
     if provider.is_none() {
@@ -72,6 +76,12 @@ pub fn load_explicit() -> Result<String> {
 }
 
 fn load() -> std::result::Result<(), String> {
+    let nomount = super::guard::detect_foreign_nomount();
+    if nomount.blocked() {
+        return Err(nomount
+            .error
+            .unwrap_or_else(|| "NoMount is present; refusing to load hybridmount".into()));
+    }
     crate::vfs::doctor::ensure_provider_absent(crate::vfs::doctor::presence_on_device())?;
     let candidates = bundled_candidates()?;
     // A crash leaves the exact failing candidate in the persistent boot guard. A marker this
@@ -113,6 +123,12 @@ fn load() -> std::result::Result<(), String> {
                         RMMOD_TIMEOUT,
                     );
                 }
+                let nomount = super::guard::detect_foreign_nomount();
+                if nomount.blocked() {
+                    return Err(nomount.error.unwrap_or_else(|| {
+                        "NoMount is present; refusing to load hybridmount".into()
+                    }));
+                }
                 crate::vfs::doctor::ensure_provider_absent(crate::vfs::doctor::presence_on_device())
                     .map_err(|err| format!("stop VFS candidate fallback: {err}; {}", failures.join("; ")))?;
             }
@@ -153,7 +169,7 @@ fn bundled_candidates() -> std::result::Result<Vec<PathBuf>, String> {
 
 /// Whether the module answers, decided by the key type rather than the insmod exit code.
 fn module_responds() -> bool {
-    crate::vfs::available()
+    crate::vfs::doctor::hybridmount_responds()
 }
 
 #[cfg(test)]

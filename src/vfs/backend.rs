@@ -1,24 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! VFS kernel provider binding. Only `hybridmount` is supported; a device running a
-//! foreign NoMount implementation is refused. The binding is fixed for the boot.
+//! VFS kernel provider binding and per-channel protocol negotiation.
 
 use crate::errors::{Error, Result};
-use crate::vfs::protocol::{self, EncodedRule, NmCommand};
+use crate::vfs::protocol::{self, EncodedRule, NmCommand, RuleFormat};
 use crate::vfs::sys::{self, KeyringChannel, PageBuffer};
 
-/// Protocol versions the module accepts. Upstream NoMount's "20" is not one of them.
+/// Hybrid Mount protocol versions.
 pub const SUPPORTED_VERSIONS: &[&str] = &["hm1"];
+pub const NOMOUNT_VERSIONS: &[&str] = &["20", "21", "22"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VfsProvider {
     Hm,
+    Nomount,
 }
 
 impl VfsProvider {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Hm => "hm",
+            Self::Nomount => "nomount",
         }
     }
 }
@@ -36,22 +38,38 @@ pub trait VfsKernel {
 pub struct KeyringKernel {
     page: PageBuffer,
     channel: KeyringChannel,
+    format: RuleFormat,
 }
 
 impl KeyringKernel {
     pub fn new(channel: KeyringChannel) -> Result<Self> {
         let page = PageBuffer::new().map_err(Error::Io)?;
-        Ok(Self { page, channel })
+        Ok(Self {
+            page,
+            channel,
+            format: RuleFormat::HybridMount,
+        })
     }
 
-    /// Probes the key type, returning its version when it answers.
-    ///
-    /// `None` covers both "no such key type" and "the page was rejected"; the caller
-    /// distinguishes those from the device's module tables rather than from the errno.
-    pub fn probe_version(&mut self) -> Option<String> {
-        self.version()
-            .inspect_err(|err| log::warn!("vfs {:?} version probe failed: {err}", self.channel))
-            .ok()
+    pub fn channel(&self) -> KeyringChannel {
+        self.channel
+    }
+
+    pub fn provider(&self) -> VfsProvider {
+        match self.channel {
+            KeyringChannel::Hybridmount => VfsProvider::Hm,
+            KeyringChannel::Nomount => VfsProvider::Nomount,
+        }
+    }
+
+    pub fn format(&self) -> RuleFormat {
+        self.format
+    }
+
+    pub fn require_supported(&mut self) -> Result<String> {
+        let version = self.version()?;
+        self.format = rule_format(self.channel, &version)?;
+        Ok(version)
     }
 
     /// Reads every page of one listing command through this channel.
@@ -86,6 +104,9 @@ impl KeyringKernel {
             });
         }
         page.copy_from_slice(request);
+        if self.channel == KeyringChannel::Nomount {
+            page[..8].copy_from_slice(&protocol::NOMOUNT_MAGIC.to_le_bytes());
+        }
         sys::add_key(&mut self.page, self.channel).map_err(Error::Io)?;
         Ok(self.page.as_mut_slice().to_vec())
     }
@@ -111,11 +132,14 @@ impl VfsKernel for KeyringKernel {
     fn version(&mut self) -> Result<String> {
         let request = protocol::build_payload(NmCommand::GetVersion, 0, &[])?;
         let response = self.exchange(&request)?;
-        parse_version_response(&response)
+        match self.channel {
+            KeyringChannel::Hybridmount => parse_version_response(&response),
+            KeyringChannel::Nomount => protocol::parse_version(&response),
+        }
     }
 
     fn apply_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
-        for page in protocol::build_add_rule_payloads(rules, 0)? {
+        for page in protocol::build_add_rule_payloads_for(rules, 0, self.format)? {
             let response = self.exchange(&page)?;
             // ADD_RULE must consume the whole batch; GET_VERSION leaves arg1 unset.
             protocol::ensure_consumed(&response)?;
@@ -140,7 +164,7 @@ impl VfsKernel for KeyringKernel {
             .iter()
             .map(|rule| rule.virtual_path.clone())
             .collect::<Vec<_>>();
-        for page in protocol::build_del_rule_payloads(&paths, 0)? {
+        for page in protocol::build_del_rule_payloads_for(&paths, 0, self.format)? {
             let response = self.exchange(&page)?;
             // The rule may be gone or never have taken effect.
             protocol::ensure_status_allow_enoent(&response)?;
@@ -149,8 +173,40 @@ impl VfsKernel for KeyringKernel {
     }
 
     fn list_rules(&mut self) -> Result<Vec<protocol::ListedRule>> {
-        self.list(NmCommand::GetList, protocol::parse_list)
+        let format = self.format;
+        self.list(NmCommand::GetList, |page| {
+            protocol::parse_list_for(page, format)
+        })
     }
+}
+
+pub(super) fn rule_format(channel: KeyringChannel, version: &str) -> Result<RuleFormat> {
+    let supported = match channel {
+        KeyringChannel::Hybridmount => SUPPORTED_VERSIONS,
+        KeyringChannel::Nomount => NOMOUNT_VERSIONS,
+    };
+    let base = match channel {
+        KeyringChannel::Hybridmount => version,
+        KeyringChannel::Nomount => version.split_ascii_whitespace().next().unwrap_or(""),
+    };
+    if !supported.contains(&base) {
+        return Err(Error::VfsUnsupportedVersion {
+            found: version.to_owned(),
+            supported: supported.join(","),
+        });
+    }
+    Ok(match channel {
+        KeyringChannel::Hybridmount => RuleFormat::HybridMount,
+        KeyringChannel::Nomount if base == "22" => RuleFormat::Nomount22,
+        KeyringChannel::Nomount => RuleFormat::NomountLegacy,
+    })
+}
+
+/// Opens the provider selected by the same read-only probe used by boot and status.
+pub fn open_active() -> Result<KeyringKernel> {
+    let mut kernel = KeyringKernel::new(super::doctor::active_channel()?)?;
+    kernel.require_supported()?;
+    Ok(kernel)
 }
 
 /// Binds the single active VFS kernel provider (`hybridmount` only).

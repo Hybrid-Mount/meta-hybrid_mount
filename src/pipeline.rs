@@ -40,7 +40,7 @@ use crate::timing::PhaseTimer;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::utils;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::vfs::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel, select_provider};
+use crate::vfs::backend::{KeyringKernel, VfsKernel};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::vfs::exec::{VfsApplied, VfsExecStats};
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -496,8 +496,8 @@ fn execute_mount_phases(
     magic_phase.finish();
 
     let vfs_phase = PhaseTimer::start("vfs");
-    let foreign_nomount = state.vfs_foreign_nomount;
-    let vfs_stats = apply_vfs_phase(config, plan, state, foreign_nomount, transaction)?;
+    let use_nomount = state.vfs_provider.as_deref() == Some("nomount");
+    let vfs_stats = apply_vfs_phase(config, plan, state, use_nomount, transaction)?;
     vfs_phase.finish();
 
     crate::utils::ksu::commit_unmount_list()?;
@@ -795,7 +795,9 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     // a plan built while the module is unloaded carries no VFS work, while loading next to a
     // foreign provider would let two inode-hooking implementations coexist.
     let nomount_probe = crate::vfs::guard::detect_foreign_nomount();
-    let vfs_available = if nomount_probe.blocked() {
+    let vfs_available = if nomount_probe.present {
+        crate::vfs::available()
+    } else if nomount_probe.blocked() {
         crate::vfs::ensure_loaded_for_plan_with_guard(
             config.wants_vfs(),
             true,
@@ -823,7 +825,8 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     // this the option would be silently ineffective for exactly the case it exists to catch.
     if crate::vfs::unavailable_is_fatal(config.wants_vfs(), config.vfs_strict, vfs_available) {
         let reason = if nomount_probe.present {
-            "foreign NoMount VFS provider detected; refusing to load hybridmount".to_owned()
+            "NoMount is present but no compatible, conflict-free VFS provider is available"
+                .to_owned()
         } else if let Some(error) = &nomount_probe.error {
             format!("VFS provider guard failed closed: {error}")
         } else {
@@ -885,7 +888,7 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
         }
     }
     plan_phase.finish();
-    crate::runtime::boot::stage_plan(&plan, &config.vfs_isolate_uids)?;
+    crate::runtime::boot::stage_plan(&plan, &config.vfs_isolate_uids, nomount_probe.present)?;
 
     // `modules` is a boot-time snapshot, not a proof that every mount already
     // succeeded.  Persist it before entering the fallible mount phases so the
@@ -910,7 +913,10 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     // before any fallible mount operation so `status` and the WebUI can still
     // report the selected backends when the device rejects a later mount.
     let mut state = RunState::from_plan(&config, &modules, &plan, initial_mount_errors);
-    state.vfs_foreign_nomount = nomount_probe.present;
+    state.vfs_foreign_nomount = nomount_probe.present && !vfs_available;
+    if nomount_probe.present && vfs_available {
+        state.vfs_provider = Some("nomount".into());
+    }
     if config.wants_vfs() && !vfs_available {
         state.vfs_error = Some(nomount_probe.error.as_ref().map_or_else(
             || "VFS provider unavailable; configured VFS rules were skipped".to_owned(),
@@ -1797,7 +1803,7 @@ fn apply_vfs_phase(
     config: &Config,
     plan: &MountPlan,
     state: &mut RunState,
-    foreign_nomount: bool,
+    use_nomount: bool,
     transaction: &mut crate::sys::transaction::MountTransaction<'_>,
 ) -> Result<VfsExecStats> {
     if plan.vfs_module_ids.is_empty() {
@@ -1860,47 +1866,29 @@ fn apply_vfs_phase(
         }
     };
 
-    let mut kernel = match KeyringKernel::new(KeyringChannel::Hybridmount) {
+    let channel = if use_nomount {
+        KeyringChannel::Nomount
+    } else {
+        KeyringChannel::Hybridmount
+    };
+    let attached = crate::vfs::backend::open_active().and_then(|kernel| {
+        if kernel.channel() != channel {
+            return Err(Error::msg("VFS provider changed after planning"));
+        }
+        Ok(kernel)
+    });
+    let mut kernel = match attached {
         Ok(kernel) => kernel,
         Err(err) => {
-            record_vfs_failure(state, plan, err.to_string());
-            return Err(err);
-        }
-    };
-    state.vfs_foreign_nomount = foreign_nomount;
-    let provider = match select_provider(
-        &mut kernel,
-        SUPPORTED_VERSIONS,
-        foreign_nomount,
-        crate::vfs::lkm::load_hm_vfs,
-    ) {
-        Ok(Some(provider)) => provider,
-        Ok(None) => {
-            let detail = "VFS provider unavailable; configured VFS rules were skipped";
-            record_vfs_failure(state, plan, detail);
-            log::warn!("{detail}");
-            if config.vfs_strict {
-                return Err(Error::VfsUnavailable {
-                    reason: detail.to_owned(),
-                });
-            }
-            return Ok(vfs_failure_stats(detail));
-        }
-        // Unsupported version or a foreign NoMount: degrade unless vfs_strict.
-        Err(err @ (Error::VfsUnsupportedVersion { .. } | Error::VfsForeignNomount { .. })) => {
             let detail = err.to_string();
             record_vfs_failure(state, plan, &detail);
-            log::warn!("vfs backend is not attached, treating it as unavailable: {err}");
             if config.vfs_strict {
                 return Err(err);
             }
             return Ok(vfs_failure_stats(detail));
         }
-        Err(err) => {
-            record_vfs_failure(state, plan, err.to_string());
-            return Err(err);
-        }
     };
+    let provider = kernel.provider();
 
     // Build the full batch and register it for rollback before applying: the kernel
     // applies non-atomically, so a mid-batch failure leaves an applied prefix to undo.
@@ -1912,6 +1900,34 @@ fn apply_vfs_phase(
             return Err(err);
         }
     };
+    if use_nomount {
+        let preflight = (|| {
+            crate::vfs::protocol::build_add_rule_payloads_for(&planned.rules, 0, kernel.format())?;
+            let existing = kernel.list_rules()?;
+            if let Some(rule) = existing.iter().find(|rule| {
+                rule.uid == 0
+                    && !crate::vfs::protocol::is_derived_parent(rule.flags, &rule.real_path)
+                    && planned
+                        .rules
+                        .iter()
+                        .any(|planned| planned.virtual_path == rule.virtual_path.as_bytes())
+            }) {
+                return Err(Error::msg(format!(
+                    "NoMount already has a rule for {}",
+                    rule.virtual_path
+                )));
+            }
+            Ok(())
+        })();
+        if let Err(err) = preflight {
+            let detail = err.to_string();
+            record_vfs_failure(state, plan, &detail);
+            if config.vfs_strict {
+                return Err(err);
+            }
+            return Ok(vfs_failure_stats(detail));
+        }
+    }
     let planned_rule_count = planned.rules.len();
     log::info!(
         "vfs batch planned: rules={}, targets={}",

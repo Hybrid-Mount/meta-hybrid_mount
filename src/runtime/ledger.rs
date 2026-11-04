@@ -23,6 +23,8 @@ pub struct Ledger {
     pub namespace: String,
     pub generation: u64,
     pub phase: String,
+    #[serde(default)]
+    pub vfs_provider: Option<String>,
     pub rules: Vec<SavedRule>,
     pub pending_rules: Vec<SavedRule>,
     pub mounts: Vec<OwnedMount>,

@@ -280,7 +280,9 @@ export function normalizeInstallState(payload: Record<string, unknown>): Install
     vfs_supported: payload.vfs_supported === true,
     // Only the two kinds the UI knows how to name survive; anything else stays unverified.
     vfs_type:
-      payload.vfs_type === "lkm" || payload.vfs_type === "builtin"
+      payload.vfs_type === "lkm" ||
+      payload.vfs_type === "builtin" ||
+      payload.vfs_type === "nomount"
         ? payload.vfs_type
         : "unknown",
     mount_source: String(payload.mount_source ?? "unknown"),

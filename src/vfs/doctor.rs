@@ -9,8 +9,11 @@
 use serde::Serialize;
 
 use crate::errors::Result;
-use crate::vfs::backend::{SUPPORTED_VERSIONS, VfsProvider};
+use crate::vfs::backend::{
+    KeyringKernel, NOMOUNT_VERSIONS, SUPPORTED_VERSIONS, VfsProvider, rule_format,
+};
 use crate::vfs::protocol::ListedRule;
+use crate::vfs::sys::KeyringChannel;
 
 /// How hybridmount is present on the device.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -92,28 +95,57 @@ pub fn diagnose(presence: ModulePresence, version: Option<&str>, responds: bool)
 pub type ListedTables = (Vec<ListedRule>, Vec<u32>);
 
 /// Builds the report from an observed probe plus the two optional tables.
+#[cfg(test)]
 pub fn summarize(
+    version: Option<String>,
+    presence: ModulePresence,
+    listed: Result<ListedTables>,
+) -> VfsDoctorReport {
+    summarize_channel(KeyringChannel::Hybridmount, version, presence, listed)
+}
+
+fn summarize_channel(
+    channel: KeyringChannel,
     version: Option<String>,
     presence: ModulePresence,
     listed: Result<ListedTables>,
 ) -> VfsDoctorReport {
     let responds = version
         .as_deref()
-        .is_some_and(|found| SUPPORTED_VERSIONS.contains(&found));
+        .is_some_and(|found| rule_format(channel, found).is_ok());
     let (rules, uids, list_error) = match listed {
         Ok((rules, uids)) => (rules, uids, None),
         Err(err) => (Vec::new(), Vec::new(), Some(err.to_string())),
     };
 
+    let (key_type, provider, versions, diagnosis) = match channel {
+        KeyringChannel::Hybridmount => (
+            "hybridmount",
+            VfsProvider::Hm,
+            SUPPORTED_VERSIONS,
+            diagnose(presence, version.as_deref(), responds),
+        ),
+        KeyringChannel::Nomount => (
+            "nomount",
+            VfsProvider::Nomount,
+            NOMOUNT_VERSIONS,
+            if responds {
+                "NoMount is available as the VFS provider"
+            } else {
+                "NoMount is present but its VFS protocol is unavailable or unsupported"
+            },
+        ),
+    };
     VfsDoctorReport {
-        key_type: "hybridmount",
-        provider: VfsProvider::Hm.as_str(),
+        key_type,
+        provider: provider.as_str(),
         presence,
         responds,
-        provider_install_required: provider_install_required(presence, responds),
-        diagnosis: diagnose(presence, version.as_deref(), responds),
+        provider_install_required: channel == KeyringChannel::Hybridmount
+            && provider_install_required(presence, responds),
+        diagnosis,
         version,
-        supported_versions: SUPPORTED_VERSIONS.iter().map(|v| (*v).to_owned()).collect(),
+        supported_versions: versions.iter().map(|v| (*v).to_owned()).collect(),
         rules,
         uids,
         list_error,
@@ -122,34 +154,62 @@ pub fn summarize(
 }
 
 const PROC_MODULES: &str = "/proc/modules";
-const SYS_MODULE_DIR: &str = "/sys/module/hybridmount";
-
-/// Whether `hybridmount` is the first field of any `/proc/modules` line.
-fn listed_in_proc_modules(text: &str) -> bool {
+fn listed_in_proc_modules(text: &str, name: &str) -> bool {
     text.lines()
-        .filter_map(|line| line.split_whitespace().next())
-        .any(|name| name == "hybridmount")
+        .any(|line| line.split_whitespace().next() == Some(name))
+}
+
+fn presence_of(name: &str) -> ModulePresence {
+    let in_proc =
+        std::fs::read_to_string(PROC_MODULES).is_ok_and(|text| listed_in_proc_modules(&text, name));
+    let in_sys = std::path::Path::new("/sys/module").join(name).exists();
+    classify_presence(in_proc, in_sys)
 }
 
 pub(crate) fn presence_on_device() -> ModulePresence {
-    let in_proc = std::fs::read_to_string(PROC_MODULES)
-        .map(|text| listed_in_proc_modules(&text))
-        .unwrap_or(false);
-    classify_presence(in_proc, std::path::Path::new(SYS_MODULE_DIR).exists())
+    presence_of("hybridmount")
+}
+
+pub(crate) fn active_channel() -> Result<KeyringChannel> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let probe = super::guard::detect_foreign_nomount();
+        if let Some(reason) = probe.error {
+            return Err(crate::errors::Error::VfsUnavailable { reason });
+        }
+        if probe.present {
+            if presence_on_device() != ModulePresence::NotPresent || hybridmount_responds() {
+                return Err(crate::errors::Error::VfsUnavailable {
+                    reason: "both NoMount and hybridmount are present".into(),
+                });
+            }
+            return Ok(KeyringChannel::Nomount);
+        }
+    }
+    Ok(KeyringChannel::Hybridmount)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn hybridmount_responds() -> bool {
+    KeyringKernel::new(KeyringChannel::Hybridmount)
+        .and_then(|mut kernel| kernel.require_supported())
+        .is_ok()
 }
 
 /// Probes the key type and, when it answers, reads both tables. Never loads anything.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn observe() -> (Option<String>, Result<ListedTables>, Option<String>) {
-    use crate::vfs::backend::{KeyringKernel, VfsKernel};
-    use crate::vfs::sys::KeyringChannel;
+fn observe(channel: KeyringChannel) -> (Option<String>, Result<ListedTables>, Option<String>) {
+    use crate::vfs::backend::VfsKernel;
 
-    let mut kernel = match KeyringKernel::new(KeyringChannel::Hybridmount) {
+    let mut kernel = match KeyringKernel::new(channel) {
         Ok(kernel) => kernel,
         Err(err) => return (None, Ok((Vec::new(), Vec::new())), Some(err.to_string())),
     };
-    let version = match kernel.version() {
+    let version = match kernel.require_supported() {
         Ok(version) => version,
+        Err(crate::errors::Error::VfsUnsupportedVersion { found, .. }) => {
+            return (Some(found), Ok((Vec::new(), Vec::new())), None);
+        }
         Err(err) => return (None, Ok((Vec::new(), Vec::new())), Some(err.to_string())),
     };
 
@@ -163,41 +223,35 @@ fn observe() -> (Option<String>, Result<ListedTables>, Option<String>) {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn observe() -> (Option<String>, Result<ListedTables>, Option<String>) {
+fn observe(_channel: KeyringChannel) -> (Option<String>, Result<ListedTables>, Option<String>) {
     (None, Ok((Vec::new(), Vec::new())), None)
 }
 
-/// Whether the kernel answers as a supported hybridmount provider this boot.
-///
-/// The single authority for advertising VFS anywhere: pages, counts and the dynamic module
-/// description all read this. A device whose kernel does not carry the module and whose
-/// bundled module is absent or cannot load reports `false`, and the front ends hide the
-/// backend entirely.
-///
-/// Read-only with respect to module loading: it probes the key type only, so a status or
-/// doctor query never turns into an `insmod`.
-#[cfg(any(target_os = "linux", target_os = "android"))]
+/// Read-only availability probe shared by boot, CLI and WebUI.
 pub fn responds_now() -> bool {
-    use crate::vfs::backend::KeyringKernel;
-    use crate::vfs::sys::KeyringChannel;
-
-    let Ok(mut kernel) = KeyringKernel::new(KeyringChannel::Hybridmount) else {
-        return false;
-    };
-    kernel
-        .probe_version()
-        .is_some_and(|found| SUPPORTED_VERSIONS.contains(&found.as_str()))
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn responds_now() -> bool {
-    false
+    super::backend::open_active().is_ok()
 }
 
 /// Collects the live report without loading or unloading a provider.
 pub fn report() -> VfsDoctorReport {
-    let (version, listed, probe_error) = observe();
-    let mut report = summarize(version, presence_on_device(), listed);
+    let (channel, presence, version, listed, probe_error) = match active_channel() {
+        Ok(channel) => {
+            let presence = match channel {
+                KeyringChannel::Hybridmount => presence_on_device(),
+                KeyringChannel::Nomount => presence_of("nomount"),
+            };
+            let (version, listed, probe_error) = observe(channel);
+            (channel, presence, version, listed, probe_error)
+        }
+        Err(err) => (
+            KeyringChannel::Hybridmount,
+            presence_on_device(),
+            None,
+            Ok((Vec::new(), Vec::new())),
+            Some(err.to_string()),
+        ),
+    };
+    let mut report = summarize_channel(channel, version, presence, listed);
     report.probe_error = probe_error;
     report
 }

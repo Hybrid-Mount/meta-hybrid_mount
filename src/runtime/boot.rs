@@ -57,9 +57,11 @@ pub fn planned_rules(plan: &MountPlan) -> Result<Vec<SavedRule>> {
         .collect()
 }
 
-pub fn stage_plan(plan: &MountPlan, requested_uids: &[u32]) -> Result<()> {
+pub fn stage_plan(plan: &MountPlan, requested_uids: &[u32], nomount: bool) -> Result<()> {
     let mut saved = device::load()?;
     saved.pending_rules = planned_rules(plan)?;
+    saved.vfs_provider =
+        (!saved.pending_rules.is_empty()).then(|| if nomount { "nomount" } else { "hm" }.into());
     saved.isolated_uids = requested_uids.to_vec();
     saved.non_vfs_modules = plan
         .magic_module_ids
@@ -77,8 +79,17 @@ pub fn finish(session: BootSession, successful: bool, effect_targets: &[String])
     saved.mounts = mounts::capture(&targets, &session.baseline)?;
     saved.ksu_unmounts = Some(crate::utils::ksu::committed_unmounts());
     let mut verification = Ok(());
+    // A rejected NoMount batch may have collided with an identical external rule.
+    if saved.vfs_provider.as_deref() == Some("nomount") && state.vfs_active_mounts.is_empty() {
+        saved.pending_rules.clear();
+        saved.isolated_uids.clear();
+    }
     if !saved.pending_rules.is_empty() || crate::vfs::available() {
-        let mut kernel = device::Kernel::inspect()?;
+        let mut kernel = if saved.vfs_provider.is_some() {
+            device::Kernel::open(&saved)?
+        } else {
+            device::Kernel::inspect()?
+        };
         let current = kernel.list()?;
         verification =
             lifecycle::confirm_boot_rules(&saved.pending_rules, &state.vfs_active_mounts, &current);
@@ -153,6 +164,7 @@ pub fn cleanup() -> Result<()> {
     saved.error = None;
     saved.non_vfs_modules.clear();
     saved.pending_rules.clear();
+    saved.vfs_provider = None;
     saved.modules.iter_mut().for_each(|m| m.is_mounted = false);
     ledger::save(&saved)?;
     super::hot::refresh_snapshots(&saved)?;
@@ -161,7 +173,7 @@ pub fn cleanup() -> Result<()> {
 
 fn cleanup_owned(saved: &mut Ledger) -> Result<()> {
     if !saved.rules.is_empty() || !saved.isolated_uids.is_empty() {
-        let mut kernel = device::Kernel::open()?;
+        let mut kernel = device::Kernel::open(saved)?;
         let current = kernel.list()?;
         // Missing records may have been removed by an earlier cleanup attempt. Drift is refused.
         let mut remaining = Vec::new();

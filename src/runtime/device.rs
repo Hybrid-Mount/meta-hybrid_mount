@@ -4,9 +4,8 @@
 use super::ledger::{self, Ledger};
 use super::rules::{RuleKernel, SavedRule};
 use crate::errors::{Error, Result};
-use crate::vfs::backend::{KeyringKernel, SUPPORTED_VERSIONS, VfsKernel};
+use crate::vfs::backend::{KeyringKernel, VfsKernel, open_active};
 use crate::vfs::protocol::{self, EncodedRule, NmCommand};
-use crate::vfs::sys::KeyringChannel;
 use std::fs;
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::MetadataExt;
@@ -48,22 +47,19 @@ pub fn load() -> Result<Ledger> {
 
 pub struct Kernel(pub KeyringKernel);
 impl Kernel {
-    pub fn open() -> Result<Self> {
-        if crate::vfs::guard::detect_foreign_nomount().blocked() {
-            return Err(Error::msg("foreign NoMount provider detected"));
-        }
-        Self::inspect()
-    }
-
-    /// Read-only inspection must not block an ordinary Magic/Overlay boot just
-    /// because an external NoMount installation disabled HM VFS planning.
-    pub fn inspect() -> Result<Self> {
-        let mut kernel = KeyringKernel::new(KeyringChannel::Hybridmount)?;
-        let version = kernel.version()?;
-        if !SUPPORTED_VERSIONS.contains(&version.as_str()) {
-            return Err(Error::msg("unsupported VFS provider"));
+    pub fn open(saved: &Ledger) -> Result<Self> {
+        let kernel = open_active()?;
+        if let Some(expected) = saved.vfs_provider.as_deref().or_else(|| {
+            (!saved.rules.is_empty() || !saved.isolated_uids.is_empty()).then_some("hm")
+        }) && kernel.provider().as_str() != expected
+        {
+            return Err(Error::msg("VFS provider changed during this boot"));
         }
         Ok(Self(kernel))
+    }
+
+    pub fn inspect() -> Result<Self> {
+        Ok(Self(open_active()?))
     }
 
     pub fn uids(&mut self) -> Result<Vec<u32>> {
@@ -113,13 +109,14 @@ impl RuleKernel for Kernel {
         let pages = rules
             .iter()
             .map(|r| {
-                protocol::build_add_rule_payloads(
+                protocol::build_add_rule_payloads_for(
                     &[EncodedRule {
                         flags: r.flags,
                         virtual_path: r.virtual_path.as_bytes().to_vec(),
                         real_path: r.real_path.as_bytes().to_vec(),
                     }],
                     r.uid,
+                    self.0.format(),
                 )
             })
             .collect::<Result<Vec<_>>>()?;
@@ -134,7 +131,11 @@ impl RuleKernel for Kernel {
         let pages = rules
             .iter()
             .map(|r| {
-                protocol::build_del_rule_payloads(&[r.virtual_path.as_bytes().to_vec()], r.uid)
+                protocol::build_del_rule_payloads_for(
+                    &[r.virtual_path.as_bytes().to_vec()],
+                    r.uid,
+                    self.0.format(),
+                )
             })
             .collect::<Result<Vec<_>>>()?;
         for group in pages {

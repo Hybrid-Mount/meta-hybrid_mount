@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Userspace backend for Hybrid Mount's own VFS kernel subsystem, the `hybridmount` module.
+//! Userspace backend for hybridmount and compatible NoMount kernels.
 
 pub mod backend;
 pub mod boot_guard;

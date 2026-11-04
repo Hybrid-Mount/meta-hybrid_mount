@@ -13,7 +13,7 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 - OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
 - ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
 - Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- VFS 通过 keyring 把注入规则下发给 HM 自有的 VFS 内核子系统（`hybridmount` 模块）。它是独立实现，不与 NoMount 内核或其 nm CLI 互操作。发布包同时提供源码与每个受支持 Android/GKI 目标的 arm64 预编译模块，内核未内建时由启动流程自动加载；仍不可用时按 `vfs_strict` 降级。VFS 不是真实挂载。
+- VFS 通过 keyring 把注入规则下发给 `hybridmount` 或已有的兼容 NoMount 内核后端。发布包同时提供源码与每个受支持 Android/GKI 目标的 arm64 预编译模块，内核未内建时由启动流程自动加载；仍不可用时按 `vfs_strict` 降级。VFS 不是真实挂载。
 - WebUI 提供 MD3（默认）与 Miuix 两套界面。
 - 支持 arm64、armv7、x86_64 与 riscv64，安装脚本会自动选择对应二进制。riscv64 构建需要 Android NDK r27 或更新版本。
 
@@ -57,7 +57,7 @@ default_mode = "magic"
 
 ## VFS 后端
 
-VFS 是 Hybrid Mount 自有的内核侧注入路径，由 `hybridmount` 模块经 keyring 驱动。它是独立实现，不与 NoMount 互操作。
+VFS 支持内置或以 LKM 加载的 `hybridmount`，也支持已存在的 NoMount 内核后端（协议 20、21、22）。检测到 NoMount 时，启动流程会跳过 `hybridmount` 的自动加载。Hybrid Mount 无源路径的 opaque 目录规则（含 `.replace`）需要 `hybridmount`。
 
 **如何识别 Provider。** 启动决策只看对内核 key type `hybridmount` 的一次只读探测：只要它返回受支持的版本，Provider 即可用。`vfs-doctor` 另外负责判断它以何种方式存在——出现在 `/proc/modules` 中，说明由可加载模块注册；有 `/sys/module/hybridmount` 目录但没有上述条目，说明已编译进内核镜像；两者都没有，说明本机没有 Provider。探测是只读的，因此 `status` 与 `vfs-doctor` 都不会触发 `insmod`。
 

@@ -147,7 +147,7 @@ pub struct RunState {
     /// VFS modules whose planned rules were not applied or confirmed.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub vfs_error_modules: Vec<String>,
-    /// One-way guard result: whether a foreign NoMount implementation exists on the device.
+    /// Whether a detected NoMount implementation could not be used.
     #[serde(default)]
     pub vfs_foreign_nomount: bool,
     /// Final confirmed targets: mountinfo-confirmed for OverlayFS and Magic Mount,
@@ -374,12 +374,9 @@ pub struct InstallState {
     pub nuke_supported: Option<bool>,
     /// Nuke backend used by this installation: `ksud` for KernelSU, or APatch for non-KSU.
     pub nuke_type: String,
-    /// Live protocol probe: includes built-in providers and excludes failed LKM loads.
+    /// Live protocol probe for hybridmount or NoMount.
     pub vfs_supported: bool,
-    /// How the provider is present on the device: `lkm` while `/proc/modules` lists
-    /// `hybridmount`, `builtin` while it lives in the kernel image, and `unknown` when neither
-    /// table entry exists. Independent of [`Self::vfs_supported`], which additionally requires
-    /// the key type to answer this boot.
+    /// NoMount when usable, otherwise the hybridmount module-table classification.
     pub vfs_type: String,
     pub mount_source: String,
     pub compatible: bool,
@@ -689,19 +686,28 @@ pub fn handle_install_state() -> Result<()> {
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     let (overlay_supported, mount_source) = (false, "unknown".to_owned());
 
+    let vfs = crate::vfs::backend::open_active().ok();
     let mut state = build_install_state(
         self_module,
         binary,
         config_exists,
         overlay_supported,
-        crate::vfs::available(),
+        vfs.is_some(),
         &mount_source,
     );
     state.tmpfs_supported = crate::sys::fs::is_overlay_xattr_supported().unwrap_or(false);
     // Read-only module-table classification; never triggers an insmod.
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        state.vfs_type = vfs_type_label(crate::vfs::doctor::presence_on_device()).to_owned();
+        state.vfs_type = if vfs
+            .as_ref()
+            .is_some_and(|kernel| kernel.provider() == crate::vfs::backend::VfsProvider::Nomount)
+        {
+            "nomount"
+        } else {
+            vfs_type_label(crate::vfs::doctor::presence_on_device())
+        }
+        .to_owned();
     }
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {

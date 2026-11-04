@@ -30,19 +30,22 @@ fn neither_table_entry_means_the_module_is_absent() {
 #[test]
 fn proc_modules_matching_reads_the_first_field_only() {
     let text = "ext4 100 0 - Live 0x0\nhybridmount 16384 0 - Live 0x0 (O)\n";
-    assert!(listed_in_proc_modules(text));
+    assert!(listed_in_proc_modules(text, "hybridmount"));
 }
 
 #[test]
 fn proc_modules_matching_does_not_match_a_longer_name() {
     let text = "hybridmount_extra 16384 0 - Live 0x0 (O)\n";
-    assert!(!listed_in_proc_modules(text));
+    assert!(!listed_in_proc_modules(text, "hybridmount"));
 }
 
 #[test]
 fn proc_modules_matching_ignores_an_unrelated_table() {
-    assert!(!listed_in_proc_modules("ext4 100 0 - Live 0x0\n"));
-    assert!(!listed_in_proc_modules(""));
+    assert!(!listed_in_proc_modules(
+        "ext4 100 0 - Live 0x0\n",
+        "hybridmount"
+    ));
+    assert!(!listed_in_proc_modules("", "hybridmount"));
 }
 
 #[test]
@@ -168,4 +171,17 @@ fn existing_providers_block_loading_even_when_the_probe_is_silent() {
         assert!(err.contains("refusing duplicate insmod/unload"));
     }
     assert!(ensure_provider_absent(ModulePresence::NotPresent).is_ok());
+}
+
+#[test]
+fn nomount_22_is_available_without_hybridmount() {
+    let report = summarize_channel(
+        KeyringChannel::Nomount,
+        Some("22 (123)".into()),
+        ModulePresence::BuiltIn,
+        Ok((Vec::new(), Vec::new())),
+    );
+    assert_eq!(report.provider, "nomount");
+    assert!(report.responds);
+    assert!(!report.provider_install_required);
 }

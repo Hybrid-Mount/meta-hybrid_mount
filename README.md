@@ -13,7 +13,7 @@ Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot,
 - OverlayFS supports both tmpfs and ext4 storage modes.
 - For ext4 staging, KernelSU uses the official ioctl to hide sysfs nodes; APatch and other non-KSU environments use the bundled LKM compatibility fallback by default.
 - Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
-- VFS sends injection rules to Hybrid Mount's own VFS kernel subsystem, the `hybridmount` module, through the keyring. It is an independent implementation and does not interoperate with NoMount's kernel or its nm CLI. Releases ship the sources and a prebuilt aarch64 module per supported Android/GKI target, which the boot pipeline loads when the kernel does not already carry one; if that fails it falls back according to `vfs_strict`. VFS is not a real mount.
+- VFS sends injection rules through the keyring to `hybridmount` or an existing compatible NoMount kernel provider. Releases ship the sources and a prebuilt aarch64 module per supported Android/GKI target, which the boot pipeline loads when the kernel does not already carry one; if that fails it falls back according to `vfs_strict`. VFS is not a real mount.
 - The WebUI provides MD3 (default) and Miuix interfaces.
 - arm64, armv7, x86_64, and riscv64 are supported; the installer automatically selects the matching binary. The riscv64 build requires the Android NDK r27 or newer.
 
@@ -51,7 +51,7 @@ Upgrades accept the retired `partitions` key in its former array or comma-separa
 
 ## VFS backend
 
-VFS is Hybrid Mount's own kernel-side injection path, driven over the keyring by the `hybridmount` module. It is an independent implementation and does not interoperate with NoMount.
+Hybrid Mount can use built-in or loadable `hybridmount`, or an existing NoMount kernel provider that reports protocol 20, 21, or 22. When NoMount is detected, the boot pipeline skips loading `hybridmount`. Hybrid Mount's path-only opaque directory rules (including `.replace`) require `hybridmount`.
 
 **How the provider is identified.** The boot decision keys on a read-only probe of the kernel key type `hybridmount`: if it answers with a supported version, the provider is usable. Separately, `vfs-doctor` classifies how it is present — an entry in `/proc/modules` means a loadable module registered it, a `/sys/module/hybridmount` directory without that entry means it is compiled into the kernel image, and if neither exists then no provider is present. Probing is read-only, so `status` and `vfs-doctor` never trigger an `insmod`.
 

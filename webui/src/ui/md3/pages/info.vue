@@ -35,10 +35,11 @@ function statusText(value: boolean | null | undefined): string {
   return value == null ? t("info.unverified") : value ? "✓" : "✗";
 }
 
-/** How the kernel provides VFS: a loaded module or the kernel image itself. */
+/** How the kernel provides VFS: a loaded module, the kernel image, or NoMount. */
 function vfsTypeText(value: string | undefined): string {
   if (value === "lkm") return "LKM";
   if (value === "builtin") return "Built-in";
+  if (value === "nomount") return "NoMount";
   return t("info.unverified");
 }
 

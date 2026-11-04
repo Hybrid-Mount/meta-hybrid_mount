@@ -447,7 +447,7 @@ describe("installation capability status", () => {
     for (const value of [undefined, null, 1, "true"]) {
       expect(normalizeInstallState({ vfs_type: value }).vfs_type).toBe("unknown");
     }
-    for (const value of ["lkm", "builtin"]) {
+    for (const value of ["lkm", "builtin", "nomount"]) {
       expect(normalizeInstallState({ vfs_type: value }).vfs_type).toBe(value);
     }
   });

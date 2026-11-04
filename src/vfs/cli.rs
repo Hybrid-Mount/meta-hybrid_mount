@@ -13,7 +13,6 @@ use super::boot_guard::{self, VfsGuardState};
 use super::control::{ClearScope, Controller, Mutation, MutationReport};
 use super::doctor::{self, VfsDoctorReport};
 use super::protocol::{self, EncodedRule, ListedRule};
-use super::sys::KeyringChannel;
 use crate::errors::{Error, Result};
 
 const HELP: &str = "Hybrid Mount VFS runtime control
@@ -586,7 +585,8 @@ pub fn handle(args: &[String]) -> Result<()> {
             })
         }
         operation => {
-            let mut controller = Controller::new(KeyringKernel::new(KeyringChannel::Hybridmount)?);
+            let mut controller =
+                Controller::new(KeyringKernel::new(super::doctor::active_channel()?)?);
             if operation == Operation::Version {
                 let version = controller.version()?;
                 return emit(&if command.json {

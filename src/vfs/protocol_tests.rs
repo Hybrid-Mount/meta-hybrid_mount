@@ -474,3 +474,40 @@ fn paginate_rejects_a_cursor_that_does_not_advance() {
     assert!(text.contains("cursor"), "error was {text}");
     assert_eq!(calls, 2, "gives up as soon as the cursor stops moving");
 }
+#[test]
+fn nomount_22_rule_records_include_uid_range_fields() {
+    let rule = EncodedRule {
+        flags: FLAG_WHITEOUT,
+        virtual_path: b"/system/example".to_vec(),
+        real_path: Vec::new(),
+    };
+    let pages = build_add_rule_payloads_for(&[rule], 123, RuleFormat::Nomount22).unwrap();
+    let page = &pages[0];
+    assert_eq!(&page[32..40], &[123, 0, 0, 0, 123, 0, 0, 0]);
+    assert_eq!(&page[48..52], &[15, 0, 0, 0]);
+    assert_eq!(&page[52..67], b"/system/example");
+}
+
+#[test]
+fn nomount_22_lists_and_deletes_single_uid_records() {
+    let path = b"/system/example";
+    let rule = EncodedRule {
+        flags: FLAG_WHITEOUT,
+        virtual_path: path.to_vec(),
+        real_path: Vec::new(),
+    };
+    let mut page = build_add_rule_payloads_for(&[rule], 123, RuleFormat::Nomount22)
+        .unwrap()
+        .remove(0);
+    page[16..20].copy_from_slice(&0_i32.to_le_bytes());
+    page[20..24].copy_from_slice(&1_u32.to_le_bytes());
+    let (rules, cursor) = parse_list_for(&page, RuleFormat::Nomount22).unwrap();
+    assert_eq!(rules[0].virtual_path, "/system/example");
+    assert_eq!(rules[0].uid, 123);
+    assert_eq!(cursor, 1);
+
+    let pages = build_del_rule_payloads_for(&[path.to_vec()], 123, RuleFormat::Nomount22).unwrap();
+    assert_eq!(&pages[0][28..36], &[123, 0, 0, 0, 123, 0, 0, 0]);
+    assert_eq!(&pages[0][44..46], &[15, 0]);
+    assert_eq!(&pages[0][46..61], path);
+}

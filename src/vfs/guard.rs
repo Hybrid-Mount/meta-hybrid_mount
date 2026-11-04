@@ -47,8 +47,8 @@ pub(crate) fn detect_foreign_nomount() -> ForeignNomountProbe {
         .any(|name| name == "nomount");
     let listed_in_sys = Path::new(SYS_MODULE_DIR).exists();
     if listed_in_proc || listed_in_sys {
-        log::warn!(
-            "foreign NoMount VFS implementation detected: proc_modules={}, sys_module={}",
+        log::debug!(
+            "NoMount VFS implementation detected: proc_modules={}, sys_module={}",
             listed_in_proc,
             listed_in_sys
         );
@@ -61,7 +61,7 @@ pub(crate) fn detect_foreign_nomount() -> ForeignNomountProbe {
     match KeyringKernel::new(KeyringChannel::Nomount) {
         Ok(mut probe) => match probe.version() {
             Ok(version) => {
-                log::warn!("foreign NoMount VFS implementation detected (version {version})");
+                log::debug!("NoMount VFS implementation detected (version {version})");
                 ForeignNomountProbe {
                     present: true,
                     error: None,

@@ -57,7 +57,7 @@ fn status() -> Result<Status> {
     let saved = device::load()?;
     saved.require_ready()?;
     guard()?;
-    let mut kernel = device::Kernel::open()?;
+    let mut kernel = device::Kernel::open(&saved)?;
     rules::verify_owned(&mut kernel, &saved.rules)?;
     let (config, modules) = config_and_modules()?;
     let promoted = crate::pipeline::detect_promoted_partitions();
@@ -136,7 +136,8 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
     let mut saved = device::load()?;
     saved.require_ready()?;
     guard()?;
-    let mut kernel = device::Kernel::open()?;
+    let mut kernel = device::Kernel::open(&saved)?;
+    saved.vfs_provider = Some(kernel.0.provider().as_str().into());
     rules::verify_owned(&mut kernel, &saved.rules)?;
     if saved.non_vfs_modules.contains(module_id) {
         return Err(Error::msg(
@@ -254,7 +255,8 @@ pub fn refresh_snapshots(saved: &Ledger) -> Result<()> {
         .into_iter()
         .collect();
     state.mode_stats.vfs = state.vfs_modules.len();
-    state.vfs_provider = (!saved.rules.is_empty()).then(|| "hm".into());
+    state.vfs_provider = (!saved.rules.is_empty())
+        .then(|| saved.vfs_provider.clone().unwrap_or_else(|| "hm".into()));
     state.active_mounts = state
         .overlay_active_mounts
         .iter()

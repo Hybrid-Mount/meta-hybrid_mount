@@ -1,8 +1,6 @@
 # VFS CLI
 
-`hybrid-mount vfs` 管理当前内核中的 Hybrid Mount VFS Provider。内核内置版和
-LKM 共用 `hybridmount` keyring / `hm1` 协议。命令参考 NoMount `nm` 的操作方式，
-但不操作 NoMount Provider。
+`hybrid-mount vfs` 管理当前可用的 VFS 后端。内置和 LKM 版 Hybrid Mount 共用 `hybridmount` keyring 和 `hm1` 协议。检测到兼容的 NoMount 内核后端时，命令会使用 `nomount` keyring 和相应版本的协议。NoMount 22 的 UID 范围和排除规则由上游工具管理。
 
 在设备 root shell 中设置：
 

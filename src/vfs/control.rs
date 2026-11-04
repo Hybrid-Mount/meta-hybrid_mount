@@ -6,17 +6,26 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use super::backend::{KeyringKernel, SUPPORTED_VERSIONS, parse_version_response};
-use super::protocol::{self, EncodedRule, ListedRule, NmCommand};
+use super::backend::{KeyringKernel, parse_version_response, rule_format};
+use super::protocol::{self, EncodedRule, ListedRule, NmCommand, RuleFormat};
+use super::sys::KeyringChannel;
 use crate::errors::{Error, Result};
 
 pub(super) trait Transport {
     fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>>;
+
+    fn channel(&self) -> KeyringChannel {
+        KeyringChannel::Hybridmount
+    }
 }
 
 impl Transport for KeyringKernel {
     fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>> {
         KeyringKernel::exchange(self, request)
+    }
+
+    fn channel(&self) -> KeyringChannel {
+        self.channel()
     }
 }
 
@@ -50,10 +59,12 @@ impl Mutation {
     }
 
     /// Encode every page before issuing any mutation, including later batches.
-    fn pages(&self) -> Result<Vec<Vec<u8>>> {
+    fn pages(&self, format: RuleFormat) -> Result<Vec<Vec<u8>>> {
         match self {
-            Self::Add { rules, uid } => protocol::build_add_rule_payloads(rules, *uid),
-            Self::Delete { paths, uid } => protocol::build_del_rule_payloads(paths, *uid),
+            Self::Add { rules, uid } => protocol::build_add_rule_payloads_for(rules, *uid, format),
+            Self::Delete { paths, uid } => {
+                protocol::build_del_rule_payloads_for(paths, *uid, format)
+            }
             Self::AddUids(uids) | Self::DeleteUids(uids) => {
                 let cmd = if matches!(self, Self::AddUids(_)) {
                     NmCommand::AddUid
@@ -106,16 +117,24 @@ pub(super) struct MutationReport {
 
 pub(super) struct Controller<T> {
     transport: T,
+    format: RuleFormat,
 }
 
 impl<T: Transport> Controller<T> {
     pub fn new(transport: T) -> Self {
-        Self { transport }
+        Self {
+            transport,
+            format: RuleFormat::HybridMount,
+        }
     }
 
     pub fn version(&mut self) -> Result<String> {
         let request = protocol::build_payload(NmCommand::GetVersion, 0, &[])?;
-        parse_version_response(&self.transport.exchange(&request)?)
+        let response = self.transport.exchange(&request)?;
+        match self.transport.channel() {
+            KeyringChannel::Hybridmount => parse_version_response(&response),
+            KeyringChannel::Nomount => protocol::parse_version(&response),
+        }
     }
 
     /// Ordinary CLI operations never load a provider as a side effect.
@@ -123,12 +142,7 @@ impl<T: Transport> Controller<T> {
         let found = self.version().map_err(|err| Error::VfsUnavailable {
             reason: format!("{err}; use 'hybrid-mount vfs doctor' to diagnose or 'hybrid-mount vfs load' to load explicitly"),
         })?;
-        if !SUPPORTED_VERSIONS.contains(&found.as_str()) {
-            return Err(Error::VfsUnsupportedVersion {
-                found,
-                supported: SUPPORTED_VERSIONS.join(","),
-            });
-        }
+        self.format = rule_format(self.transport.channel(), &found)?;
         Ok(found)
     }
 
@@ -147,7 +161,10 @@ impl<T: Transport> Controller<T> {
     }
 
     pub fn list_rules(&mut self) -> Result<Vec<ListedRule>> {
-        self.list(NmCommand::GetList, protocol::parse_list)
+        let format = self.format;
+        self.list(NmCommand::GetList, |page| {
+            protocol::parse_list_for(page, format)
+        })
     }
 
     pub fn list_uids(&mut self) -> Result<Vec<u32>> {
@@ -155,7 +172,7 @@ impl<T: Transport> Controller<T> {
     }
 
     pub fn mutate(&mut self, mutation: &Mutation) -> Result<MutationReport> {
-        let pages = mutation.pages()?;
+        let pages = mutation.pages(self.format)?;
         let mut error = None;
         for (index, page) in pages.iter().enumerate() {
             let result = self
