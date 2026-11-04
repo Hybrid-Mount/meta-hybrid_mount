@@ -185,3 +185,26 @@ fn nomount_22_is_available_without_hybridmount() {
     assert!(report.responds);
     assert!(!report.provider_install_required);
 }
+
+#[test]
+fn unrecognized_provider_requires_presence_or_a_protocol_reply() {
+    use crate::errors::Error;
+
+    assert!(!is_unrecognized_provider(false, Ok("hm1".into())));
+    assert!(!is_unrecognized_provider(true, Ok("22".into())));
+    assert!(!is_unrecognized_provider(
+        false,
+        Err(Error::msg("probe unavailable"))
+    ));
+    assert!(is_unrecognized_provider(
+        true,
+        Err(Error::msg("no version response"))
+    ));
+    assert!(is_unrecognized_provider(
+        false,
+        Err(Error::VfsUnsupportedVersion {
+            found: "23".into(),
+            supported: "20,21,22".into(),
+        }),
+    ));
+}

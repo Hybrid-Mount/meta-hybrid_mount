@@ -913,7 +913,6 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     // before any fallible mount operation so `status` and the WebUI can still
     // report the selected backends when the device rejects a later mount.
     let mut state = RunState::from_plan(&config, &modules, &plan, initial_mount_errors);
-    state.vfs_foreign_nomount = nomount_probe.present && !vfs_available;
     if nomount_probe.present && vfs_available {
         state.vfs_provider = Some("nomount".into());
     }

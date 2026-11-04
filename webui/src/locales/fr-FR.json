@@ -73,7 +73,7 @@
     "mountDetails": "Afficher {count} cible de montage | Afficher {count} cible de montage | Afficher {count} cibles de montage",
     "errorLoad": "Échec de la lecture de l'état du système",
     "errorBootFailure": "Échec du pipeline de démarrage",
-    "errorVfsForeign": "Un fournisseur VFS étranger est installé",
+    "errorVfsForeign": "Un fournisseur VFS non pris en charge a été détecté",
     "errorVfsProvider": "Échec du fournisseur VFS",
     "errorMountError": "Échec du montage d'un module",
     "errorStateLoad": "L'instantané de démarrage est illisible",

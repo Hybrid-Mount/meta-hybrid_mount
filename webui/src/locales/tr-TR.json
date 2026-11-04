@@ -73,7 +73,7 @@
     "mountDetails": "{count} bağlama noktasını görüntüle",
     "errorLoad": "Sistem durumu okunamadı",
     "errorBootFailure": "Başlangıç işlem hattı başarısız",
-    "errorVfsForeign": "Yabancı bir VFS sağlayıcısı algılandı",
+    "errorVfsForeign": "Desteklenmeyen bir VFS sağlayıcısı algılandı",
     "errorVfsProvider": "VFS sağlayıcısı başarısız oldu",
     "errorMountError": "Bir modül bağlanamadı",
     "errorStateLoad": "Başlangıç anlık görüntüsü okunamıyor",

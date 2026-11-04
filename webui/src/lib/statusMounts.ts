@@ -145,8 +145,7 @@ export function collectStatusErrors(
     });
   }
 
-  // Ungated, unlike the status summary: a foreign provider must be visible even when this
-  // build cannot use VFS itself.
+  // Show unrecognized kernel providers even when VFS is unavailable.
   if (state.vfs_foreign_nomount) {
     errors.push({ code: VFS_FOREIGN_CODE, detail: "", items: [] });
   } else if (state.vfs_error) {

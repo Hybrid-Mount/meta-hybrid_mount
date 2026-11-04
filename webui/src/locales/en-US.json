@@ -73,7 +73,7 @@
     "mountDetails": "View {count} mount target | View {count} mount targets",
     "errorLoad": "Failed to read the system status",
     "errorBootFailure": "Startup pipeline failed",
-    "errorVfsForeign": "A foreign VFS provider is installed",
+    "errorVfsForeign": "An unsupported VFS provider was detected",
     "errorVfsProvider": "The VFS provider failed",
     "errorMountError": "A module failed to mount",
     "errorStateLoad": "The startup snapshot cannot be read",

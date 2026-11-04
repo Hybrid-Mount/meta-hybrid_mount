@@ -147,7 +147,7 @@ pub struct RunState {
     /// VFS modules whose planned rules were not applied or confirmed.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub vfs_error_modules: Vec<String>,
-    /// Whether a detected NoMount implementation could not be used.
+    /// Legacy wire field for the live unrecognized VFS provider warning.
     #[serde(default)]
     pub vfs_foreign_nomount: bool,
     /// Final confirmed targets: mountinfo-confirmed for OverlayFS and Magic Mount,
@@ -660,9 +660,10 @@ fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppMod
     app_modules(modules, config, &plan, &mount_errors, &BTreeSet::new())
 }
 
-/// `status`: outputs `run/state.json`, or the default snapshot when absent.
+/// `status`: outputs the boot snapshot with the current VFS protocol warning.
 pub fn handle_status() -> Result<()> {
-    let state = RunState::load_or_default();
+    let mut state = RunState::load_or_default();
+    state.vfs_foreign_nomount = crate::vfs::doctor::has_unrecognized_provider();
     println!("{}", serde_json::to_string_pretty(&state)?);
     Ok(())
 }

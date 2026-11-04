@@ -232,6 +232,36 @@ pub fn responds_now() -> bool {
     super::backend::open_active().is_ok()
 }
 
+/// Detects an installed provider whose protocol this build cannot recognize.
+pub(crate) fn has_unrecognized_provider() -> bool {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        [
+            (KeyringChannel::Hybridmount, "hybridmount"),
+            (KeyringChannel::Nomount, "nomount"),
+        ]
+        .into_iter()
+        .any(|(channel, name)| {
+            let version =
+                KeyringKernel::new(channel).and_then(|mut kernel| kernel.require_supported());
+            is_unrecognized_provider(presence_of(name) != ModulePresence::NotPresent, version)
+        })
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    false
+}
+
+#[cfg(any(test, target_os = "linux", target_os = "android"))]
+fn is_unrecognized_provider(present: bool, version: Result<String>) -> bool {
+    use crate::errors::Error;
+
+    match version {
+        Ok(_) => false,
+        Err(Error::VfsProtocol { .. } | Error::VfsUnsupportedVersion { .. }) => true,
+        Err(_) => present,
+    }
+}
+
 /// Collects the live report without loading or unloading a provider.
 pub fn report() -> VfsDoctorReport {
     let (channel, presence, version, listed, probe_error) = match active_channel() {

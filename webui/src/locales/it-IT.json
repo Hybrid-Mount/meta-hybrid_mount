@@ -66,7 +66,7 @@
     "mountDetails": "Visualizza {count} destinazione di montaggio | Visualizza {count} destinazioni di montaggio",
     "errorLoad": "Impossibile leggere lo stato del sistema",
     "errorBootFailure": "Pipeline di avvio non riuscita",
-    "errorVfsForeign": "Rilevato un provider VFS esterno",
+    "errorVfsForeign": "Rilevato un provider VFS non supportato",
     "errorVfsProvider": "Il provider VFS ha fallito",
     "errorMountError": "Montaggio di un modulo non riuscito",
     "errorStateLoad": "Impossibile leggere l'istantanea di avvio",

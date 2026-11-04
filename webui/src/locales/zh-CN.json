@@ -73,7 +73,7 @@
     "mountDetails": "查看 {count} 个挂载点",
     "errorLoad": "读取系统状态失败",
     "errorBootFailure": "启动流水线失败",
-    "errorVfsForeign": "检测到外来 VFS 实现",
+    "errorVfsForeign": "检测到不支持的 VFS 实现",
     "errorVfsProvider": "VFS Provider 出错",
     "errorMountError": "模块挂载失败",
     "errorStateLoad": "启动快照无法读取",

@@ -73,7 +73,7 @@
     "mountDetails": "檢視 {count} 個掛載點",
     "errorLoad": "讀取系統狀態失敗",
     "errorBootFailure": "啟動流程失敗",
-    "errorVfsForeign": "偵測到外來 VFS 實作",
+    "errorVfsForeign": "偵測到不支援的 VFS 實作",
     "errorVfsProvider": "VFS Provider 發生錯誤",
     "errorMountError": "模組掛載失敗",
     "errorStateLoad": "啟動快照無法讀取",
