@@ -72,10 +72,6 @@ struct hm_iop {
     const struct inode_operations *orig_iop;
     struct hybridmount_dir_node *dir_node;
     struct rcu_head rcu;
-
-    /* Dentry Operations Hijacking */
-    struct dentry_operations fake_dops;
-    const struct dentry_operations *orig_dops;
 };
 
 struct hm_fop {
@@ -103,6 +99,7 @@ struct hm_inode_info {
     struct path r_path;
     struct hybridmount_dir_node *dir_node;
     u8 flags;
+    bool backing_child;
     struct rcu_head rcu;
 };
 
@@ -763,13 +760,5 @@ static inline struct hm_sop *hm_get_hm_sop(const struct super_operations *sop) {
     return NULL;
 }
 
-#define HM_DOP_INITIALIZING ((const struct dentry_operations *)1L)
-static inline const struct dentry_operations *hm_get_orig_dops(struct hm_iop *iop)
-{
-    const struct dentry_operations *dops;
-    if (!iop) return NULL;
-    dops = smp_load_acquire(&iop->orig_dops);
-    return (dops == HM_DOP_INITIALIZING) ? NULL : dops;
-}
 
 #endif /* _LINUX_HYBRIDMOUNT_H */

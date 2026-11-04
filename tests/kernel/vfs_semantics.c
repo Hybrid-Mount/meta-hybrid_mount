@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#define XATTR_NAME_CAPS "security.capability"
 
 #undef assert
 #define assert(x) do { if (!(x)) { fprintf(stderr, "FAIL %d: %s\n", __LINE__, #x); exit(1); } } while (0)
@@ -257,13 +258,15 @@ int main(int argc,char **argv) {
         struct inode inode={.i_op=&hm_file_iops,.i_private=&info}; struct dentry d={&inode};
         if(!strcmp(mode,"xattr-native")) inode.i_op=&native_iops;
         if(!strcmp(mode,"xattr-virtual")) info.r_path.dentry=NULL;
+        bool caps = !strcmp(mode,"xattr-capability");
+        const char *name = caps ? XATTR_NAME_CAPS : "security.selinux";
         int result;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
-        result=sb.s_xattr[0]->__get(sb.s_xattr[0],&d,&inode,"security.selinux",NULL,0);
+        result=sb.s_xattr[0]->__get(sb.s_xattr[0],&d,&inode,name,NULL,0);
 #else
-        result=sb.s_xattr[0]->get(sb.s_xattr[0],&d,&inode,"security.selinux",NULL,0);
+        result=sb.s_xattr[0]->get(sb.s_xattr[0],&d,&inode,name,NULL,0);
 #endif
-        assert(result==(!strcmp(mode,"xattr-virtual") ? -ENODATA : 71));
+        assert(result==((caps || !strcmp(mode,"xattr-virtual")) ? -ENODATA : 71));
         free((void *)sb.s_xattr); free(container_of(sb.s_op,struct hm_sop,fake_sop));
     }
     printf("PASS: VFS semantics %s\n",mode); return 0;

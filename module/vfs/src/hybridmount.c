@@ -11,6 +11,7 @@
 #include <linux/cred.h>
 #include <linux/xattr.h>
 #include <linux/module.h>
+#include <linux/mount.h>
 #include <linux/preempt.h>
 #include "hybridmount.h"
 
@@ -294,6 +295,7 @@ static void hybridmount_init_prealloc_inode(struct inode *inode, struct hm_inode
 {
     struct inode *r_inode = NULL;
     info->flags = rule_info->flags;
+    info->backing_child = false;
     info->dir_node = rule_info->this_dir;
     if (info->dir_node) atomic_inc(&info->dir_node->inode_users);
     if (rule_info->flags & HM_FLAG_VIRTUAL_DIR) {
@@ -305,7 +307,8 @@ static void hybridmount_init_prealloc_inode(struct inode *inode, struct hm_inode
 
     inode->i_ino = rule_info->v_ino;
     inode->i_private = info;
-    inode->i_mode   = r_inode ? r_inode->i_mode    : (S_IFDIR | 0755);
+    /* Exec must never grant credentials from a cached proxy inode. */
+    inode->i_mode   = r_inode ? r_inode->i_mode & ~(S_ISUID | S_ISGID) : (S_IFDIR | 0755);
     inode->i_size   = r_inode ? i_size_read(r_inode) : 4096;
     inode->i_blocks = r_inode ? r_inode->i_blocks  : 8;
     inode->i_uid    = r_inode ? r_inode->i_uid     : GLOBAL_ROOT_UID;
@@ -431,8 +434,9 @@ resolve_rule:
 
         rcu_read_unlock();
 do_splice:
-        if (!IS_ERR((res = d_splice_alias(splice_inode, dentry))))
-            hybridmount_hijack_dentry_ops(dir, res ? res : dentry, true);
+        /* Parallel lookup can use the alias as soon as splice publishes it. */
+        hybridmount_hijack_dentry_ops(dir, dentry, true);
+        res = d_splice_alias(splice_inode, dentry);
             
         goto cleanup_out;
     }
@@ -566,10 +570,38 @@ generic_fn:
 
 /*** file / inode / superblock operations ***/
 
+static bool hm_backing_noexec(const struct hm_inode_info *info)
+{
+    return info && info->r_path.mnt &&
+           ((info->r_path.mnt->mnt_flags & MNT_NOEXEC) ||
+            (info->r_path.mnt->mnt_sb->s_iflags & SB_I_NOEXEC));
+}
+
+static int hm_permission(IDMAP_ARG struct inode *inode, int mask)
+{
+    struct hm_inode_info *info;
+
+    /* An RCU walk does not pin the backing path across proxy eviction. */
+    if (mask & MAY_NOT_BLOCK) return -ECHILD;
+    info = READ_ONCE(inode->i_private);
+    if (unlikely(!info)) return -EACCES;
+    /* Native rename may dispatch through the other parent. A fabricated
+     * directory must never be used as a writable native parent. */
+    if ((mask & MAY_WRITE) && S_ISDIR(inode->i_mode)) return -EACCES;
+    if (info->flags & HM_FLAG_VIRTUAL_DIR)
+        return generic_permission(IDMAP_CALL inode, mask);
+    if (unlikely(!info->r_path.dentry)) return -EACCES;
+    if ((mask & MAY_EXEC) && S_ISREG(inode->i_mode) && hm_backing_noexec(info))
+        return -EACCES;
+
+    return inode_permission(IDMAP_PATH(info->r_path) d_inode(info->r_path.dentry), mask);
+}
+
 static int hm_open(struct inode *inode, struct file *file)
 {
     struct hm_inode_info *info = inode->i_private;
     struct file *real_file;
+    umode_t mode;
 
     if (unlikely(!info)) return -ENODEV;
     if (unlikely(info->flags & HM_FLAG_VIRTUAL_DIR)) {
@@ -577,6 +609,12 @@ static int hm_open(struct inode *inode, struct file *file)
         return 0;
     }
     if (unlikely(!info->r_path.dentry)) return -ENODEV;
+
+    mode = d_inode(info->r_path.dentry)->i_mode;
+    if ((S_ISCHR(mode) || S_ISBLK(mode)) &&
+        ((info->r_path.mnt->mnt_flags & MNT_NODEV) ||
+         (info->r_path.mnt->mnt_sb->s_iflags & SB_I_NODEV)))
+        return -EACCES;
 
     real_file = dentry_open(&info->r_path, (file->f_flags & ~(O_CREAT | O_EXCL | O_NOCTTY)), file->f_cred);
     if (IS_ERR(real_file)) return PTR_ERR(real_file);
@@ -635,6 +673,14 @@ static ssize_t hm_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 static int hm_mmap(struct file *file, struct vm_area_struct *vma)
 {
+    if (hm_backing_noexec(file_inode(file)->i_private)) {
+        if (vma->vm_flags & VM_EXEC) return -EPERM;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+        vm_flags_clear(vma, VM_MAYEXEC);
+#else
+        vma->vm_flags &= ~VM_MAYEXEC;
+#endif
+    }
     int ret = generic_file_mmap(file, vma);
     return ret ? ret : (file_inode(file)->i_flags &= ~S_PRIVATE, 0);
 }
@@ -642,6 +688,10 @@ static int hm_mmap(struct file *file, struct vm_area_struct *vma)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
 static int hm_mmap_prepare(struct vm_area_desc *desc)
 {
+    if (hm_backing_noexec(file_inode(desc->file)->i_private)) {
+        if (desc->vm_flags & VM_EXEC) return -EPERM;
+        desc->vm_flags &= ~VM_MAYEXEC;
+    }
     int ret = generic_file_mmap_prepare(desc);
     return ret ? ret : (file_inode(desc->file)->i_flags &= ~S_PRIVATE, 0);
 }
@@ -730,6 +780,7 @@ static int hm_getattr(IDMAP_ARG const struct path *path, struct kstat *stat, u32
     if (likely(res == 0)) {
         stat->ino = v_inode->i_ino;
         stat->dev = v_inode->i_sb->s_dev;
+        stat->mode &= ~(S_ISUID | S_ISGID);
     }
     
     return res;
@@ -747,12 +798,12 @@ static int hm_setattr(IDMAP_ARG struct dentry *dentry, struct iattr *attr)
 
     r_inode = d_backing_inode(info->r_path.dentry);
     inode_lock(r_inode);
-    err = notify_change(IDMAP_CALL info->r_path.dentry, attr, NULL);
+    err = notify_change(IDMAP_PATH(info->r_path) info->r_path.dentry, attr, NULL);
     inode_unlock(r_inode);
 
     if (likely(!err)) {
         if (attr->ia_valid & ATTR_SIZE) i_size_write(v_inode, i_size_read(r_inode));
-        if (attr->ia_valid & ATTR_MODE) v_inode->i_mode = r_inode->i_mode;
+        if (attr->ia_valid & ATTR_MODE) v_inode->i_mode = r_inode->i_mode & ~(S_ISUID | S_ISGID);
         if (attr->ia_valid & ATTR_UID)  v_inode->i_uid = r_inode->i_uid;
         if (attr->ia_valid & ATTR_GID)  v_inode->i_gid = r_inode->i_gid;
         hm_sync_inode_times(v_inode, r_inode);
@@ -762,18 +813,16 @@ static int hm_setattr(IDMAP_ARG struct dentry *dentry, struct iattr *attr)
 
 static const char *hm_get_link(struct dentry *dentry, struct inode *inode, struct delayed_call *done)
 {
-    struct hm_inode_info *info = inode->i_private;
-    struct inode *real_inode;
-    struct dentry *target_dentry;
-    if (unlikely(!info || !info->r_path.dentry)) return ERR_PTR(-ECHILD);
+    struct hm_inode_info *info;
 
-    real_inode = d_backing_inode(info->r_path.dentry);
-    target_dentry = dentry ? info->r_path.dentry : NULL;
-    if (real_inode && real_inode->i_op && real_inode->i_op->get_link) {
-        return real_inode->i_op->get_link(target_dentry, real_inode, done);
-    }
-
-    return ERR_PTR(-EINVAL);
+    if (!dentry) return ERR_PTR(-ECHILD);
+    info = inode->i_private;
+    if (!info || !info->r_path.dentry) return ERR_PTR(-EINVAL);
+#ifdef MNT_NOSYMFOLLOW
+    if (info->r_path.mnt->mnt_flags & MNT_NOSYMFOLLOW)
+        return ERR_PTR(-ELOOP);
+#endif
+    return vfs_get_link(info->r_path.dentry, done);
 }
 
 static int hm_dir_iterate_dir(struct file *file, struct dir_context *ctx)
@@ -806,9 +855,38 @@ emit_virtual:
     return res;
 }
 
+static struct dentry *hm_lookup_backing_child(const struct path *parent, const struct qstr *name)
+{
+    struct inode *dir;
+    struct dentry *child;
+
+    if (!parent->dentry) return ERR_PTR(-EOPNOTSUPP);
+    dir = d_inode(parent->dentry);
+    if (dir->i_op == &hm_dir_iops)
+        return ERR_PTR(-EOPNOTSUPP);
+
+    /* Rename can hold both the proxy and the native parent locked before
+     * looking up a child. Never wait on the native directory from here. */
+    if (!inode_trylock(dir)) return ERR_PTR(-EAGAIN);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+    struct qstr component = *name;
+    child = lookup_one(IDMAP_PATH(*parent) &component, parent->dentry);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
+    child = lookup_one(IDMAP_PATH(*parent) name->name, parent->dentry, name->len);
+#else
+    child = lookup_one_len(name->name, parent->dentry, name->len);
+#endif
+    inode_unlock(dir);
+    return child;
+}
+
 static struct dentry *hm_dir_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
     struct hm_inode_info *info = dir->i_private; 
+    struct hm_rule_info child = {};
+    struct hm_inode_info *child_info;
+    struct dentry *backing;
+    struct inode *inode;
     struct dentry *res;
 
     if (info->dir_node) {
@@ -821,15 +899,37 @@ static struct dentry *hm_dir_lookup(struct inode *dir, struct dentry *dentry, un
     if (info->flags & HM_FLAG_VIRTUAL_DIR)
         goto negative_dentry;
 
-    if (info->r_path.dentry) {
-        struct inode *r_dir = d_backing_inode(info->r_path.dentry);
-        if (r_dir->i_op->lookup) {
-            res = r_dir->i_op->lookup(r_dir, dentry, flags);
-            if (!IS_ERR(res ? res : dentry)) hybridmount_hijack_dentry_ops(dir, res ? res : dentry, false);
-            return res;
-        }
+    /* Look up a real child of the backing directory. Native lookup must
+     * never see a dentry allocated by the destination filesystem. */
+    backing = hm_lookup_backing_child(&info->r_path, &dentry->d_name);
+    if (IS_ERR(backing)) return backing;
+    if (d_is_negative(backing)) {
+        dput(backing);
+        goto negative_dentry;
     }
-    return ERR_PTR(-EOPNOTSUPP);
+    if (d_inode(backing)->i_op == &hm_file_iops || d_inode(backing)->i_op == &hm_dir_iops) {
+        dput(backing);
+        return ERR_PTR(-ELOOP);
+    }
+
+    inode = new_inode(dir->i_sb);
+    if (!inode) {
+        dput(backing);
+        return ERR_PTR(-ENOMEM);
+    }
+    child_info = kmalloc(sizeof(*child_info), GFP_NOFS);
+    if (!child_info) {
+        iput(inode);
+        dput(backing);
+        return ERR_PTR(-ENOMEM);
+    }
+    child.r_path.dentry = backing;
+    child.r_path.mnt = mntget(info->r_path.mnt);
+    child.v_ino = d_inode(backing)->i_ino;
+    hybridmount_init_prealloc_inode(inode, child_info, &child);
+    child_info->backing_child = true;
+    hybridmount_hijack_dentry_ops(dir, dentry, true);
+    return d_splice_alias(inode, dentry);
 
 negative_dentry:
     hybridmount_hijack_dentry_ops(dir, dentry, true);
@@ -847,8 +947,10 @@ static int hm_xattr_get(const struct xattr_handler *handler, struct dentry *dent
     struct hm_xattr_proxy *proxy = container_of(handler, struct hm_xattr_proxy, fake);
     if (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops) {
         struct hm_inode_info *info = inode->i_private;
+        const char *full_name = xattr_full_name(handler, name);
         if (unlikely(!info || !info->r_path.dentry)) return -ENODATA;
-        return __vfs_getxattr(info->r_path.dentry, d_inode(info->r_path.dentry), xattr_full_name(handler, name), buffer, size FLAGS_VAL);
+        if (!strcmp(full_name, XATTR_NAME_CAPS)) return -ENODATA;
+        return __vfs_getxattr(info->r_path.dentry, d_inode(info->r_path.dentry), full_name, buffer, size FLAGS_VAL);
     }
 
     return proxy->orig->get(proxy->orig, dentry, inode, name, buffer, size FLAGS_VAL);
@@ -861,9 +963,11 @@ static int hm_xattr__get(const struct xattr_handler *handler, struct dentry *den
     struct hm_xattr_proxy *proxy = container_of(handler, struct hm_xattr_proxy, fake);
     if (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops) {
         struct hm_inode_info *info = READ_ONCE(inode->i_private);
+        const char *full_name = xattr_full_name(handler, name);
         if (unlikely(!info || !info->r_path.dentry)) return -ENODATA;
+        if (!strcmp(full_name, XATTR_NAME_CAPS)) return -ENODATA;
         return __vfs_getxattr(info->r_path.dentry, d_inode(info->r_path.dentry),
-                              xattr_full_name(handler, name), buffer, size);
+                              full_name, buffer, size);
     }
     if (proxy->orig->__get)
         return proxy->orig->__get(proxy->orig, dentry, inode, name, buffer, size);
@@ -906,6 +1010,23 @@ static const struct dentry_operations hm_owned_dops;
  * injected" paths of hm_d_revalidate_common().
  */
 static const struct dentry_operations hm_dops;
+static const struct dentry_operations *hm_native_dops(struct dentry *dentry);
+
+static int hm_revalidate_backing_child(struct inode *parent, const struct qstr *name,
+                                       const struct hm_inode_info *info)
+{
+    const struct hm_inode_info *parent_info = parent->i_private;
+    struct dentry *backing;
+    bool valid;
+
+    if (!parent_info || parent_info->r_path.mnt != info->r_path.mnt)
+        return 0;
+    backing = hm_lookup_backing_child(&parent_info->r_path, name);
+    if (IS_ERR(backing)) return PTR_ERR(backing);
+    valid = backing == info->r_path.dentry && d_is_positive(backing);
+    dput(backing);
+    return valid;
+}
 
 static int hm_d_revalidate_common(struct inode *parent_inode, const struct qstr *name,
                                   struct dentry *dentry, unsigned int flags, bool weak)
@@ -962,6 +1083,17 @@ static int hm_d_revalidate_common(struct inode *parent_inode, const struct qstr 
         goto drop_it;
     }
 
+    if (owned && parent_inode->i_op == &hm_dir_iops && inode &&
+        (inode->i_op == &hm_dir_iops || inode->i_op == &hm_file_iops)) {
+        const struct hm_inode_info *info = READ_ONCE(inode->i_private);
+
+        if (info && info->backing_child) {
+            rcu_read_unlock();
+            if (flags & LOOKUP_RCU) return -ECHILD;
+            return hm_revalidate_backing_child(parent_inode, name, info);
+        }
+    }
+
     if (owned)
         goto drop_it;
 
@@ -974,7 +1106,7 @@ orig_dops:
      * latter under a parent with orig_dops; those are not this dentry's ops,
      * and a weak check must not invoke that parent's strong revalidation. */
     if (weak) goto out;
-    if ((orig_dops = hm_get_orig_dops(iop)) && orig_dops->d_revalidate) {
+    if ((orig_dops = hm_native_dops(dentry)) && orig_dops->d_revalidate) {
         rcu_read_unlock();
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 0)
         return orig_dops->d_revalidate(parent_inode, name, dentry, flags);
@@ -1015,7 +1147,12 @@ static int hm_d_revalidate_ref(struct dentry *dentry, unsigned int flags, bool w
         cond_resched();
     }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+    struct qstr component = QSTR_INIT(name.name, strlen(name.name));
+    ret = hm_d_revalidate_common(d_inode(parent), &component, dentry, flags, weak);
+#else
     ret = hm_d_revalidate_common(d_inode(parent), &name.name, dentry, flags, weak);
+#endif
     release_dentry_name_snapshot(&name);
     dput(parent);
     return ret;
@@ -1041,9 +1178,61 @@ static int hm_d_revalidate(struct dentry *dentry, unsigned int flags)
 }
 #endif
 
+struct hm_dop {
+    struct dentry_operations ops;
+    const struct dentry_operations *original;
+    struct list_head list;
+};
+
+static LIST_HEAD(hm_native_dop_list);
+static DEFINE_SPINLOCK(hm_native_dop_lock);
+
+static const struct dentry_operations *hm_native_dops(struct dentry *dentry)
+{
+    const struct dentry_operations *ops = READ_ONCE(dentry->d_op);
+
+    if (!ops || ops == &hm_dops || ops == &hm_owned_dops ||
+        ops->d_revalidate != hm_d_revalidate)
+        return NULL;
+    return container_of(ops, struct hm_dop, ops)->original;
+}
+
+static const struct dentry_operations *hm_wrap_native_dops(const struct dentry_operations *original)
+{
+    struct hm_dop *wrapper;
+
+    /* A renamed dentry can outlive its original parent. The hooked
+     * superblock and this module pin both operation tables. */
+    spin_lock(&hm_native_dop_lock);
+    list_for_each_entry(wrapper, &hm_native_dop_list, list) {
+        if (wrapper->original == original)
+            goto out;
+    }
+    wrapper = kmalloc(sizeof(*wrapper), GFP_ATOMIC);
+    if (wrapper) {
+        wrapper->original = original;
+        wrapper->ops = *original;
+        wrapper->ops.d_revalidate = hm_d_revalidate;
+        list_add_tail(&wrapper->list, &hm_native_dop_list);
+    }
+out:
+    spin_unlock(&hm_native_dop_lock);
+    return wrapper ? &wrapper->ops : NULL;
+}
+
+static void hm_owned_release(struct dentry *dentry)
+{
+    const struct dentry_operations *ops = dentry->d_sb->s_d_op;
+
+    /* d_alloc may have initialized native dentry state before our lookup. */
+    if (ops && ops->d_init && ops->d_release)
+        ops->d_release(dentry);
+}
+
 static const struct dentry_operations hm_owned_dops = {
     .d_revalidate = hm_d_revalidate,
     .d_weak_revalidate = hm_d_weak_revalidate,
+    .d_release = hm_owned_release,
 };
 
 static const struct dentry_operations hm_dops = {
@@ -1088,6 +1277,7 @@ static const struct file_operations hm_file_fops = {
 };
 
 static const struct inode_operations hm_file_iops = {
+    .permission = hm_permission,
     .getattr = hm_getattr,
     .setattr = hm_setattr,
     .listxattr = hm_listxattr,
@@ -1107,6 +1297,7 @@ static const struct file_operations hm_dir_fops = {
 };
 
 static const struct inode_operations hm_dir_iops = {
+    .permission = hm_permission,
     .lookup = hm_dir_lookup,
     .getattr = hm_getattr,
     .setattr = hm_setattr,
@@ -1188,10 +1379,9 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
         hm_sop->fake_xattr = new_array;
     }
 
-    /* VFS caches s_export_op outside RCU, even across sleeping decode calls.
-     * Keep this module and its installed tables resident until reboot rather
-     * than freeing a table which a native caller may still be using. */
-    if (hm_sop->orig_eop && hm_sop->orig_eop->encode_fh && !try_module_get(THIS_MODULE)) {
+    /* Dentries and VFS callers can retain operation tables after the last
+     * rule is removed. Keep their callbacks resident until reboot. */
+    if (!try_module_get(THIS_MODULE)) {
         kfree(hm_sop->fake_xattr);
         kfree(hm_sop);
         return -ENODEV;
@@ -1233,7 +1423,6 @@ static inline int hybridmount_hijack_dir_ops(struct hybridmount_dir_node *dir_no
     hm_iop->fake_iop = *inode->i_op;
     hm_iop->orig_iop = inode->i_op;
     hm_iop->dir_node = dir_node;
-    hm_iop->orig_dops = NULL;
     hm_iop->fake_iop.lookup = hybridmount_hijacked_lookup;
     hm_fop->fake_fop = *inode->i_fop;
     hm_fop->orig_fop = inode->i_fop;
@@ -1265,18 +1454,14 @@ static inline int hybridmount_hijack_dir_ops(struct hybridmount_dir_node *dir_no
 
 static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dentry, bool injected)
 {
-    const struct dentry_operations *orig, *current_orig;
-    struct hm_iop *iop;
+    const struct dentry_operations *orig, *wrapped;
+    bool drop = false;
 
     if (!dentry || !dir) return;
-    rcu_read_lock();
-    iop = hm_get_hm_iop(smp_load_acquire(&dir->i_op));
-    if ((orig = READ_ONCE(dentry->d_op)) == &hm_owned_dops || orig == &hm_dops ||
-        (iop && orig == &iop->fake_dops)) goto out;
-
     spin_lock(&dentry->d_lock);
-    if ((orig = dentry->d_op) == &hm_owned_dops || orig == &hm_dops ||
-        (iop && orig == &iop->fake_dops)) { spin_unlock(&dentry->d_lock); goto out; }
+    orig = dentry->d_op;
+    if (orig == &hm_owned_dops || orig == &hm_dops || hm_native_dops(dentry))
+        goto out;
 
     if (injected) {
         /*
@@ -1290,22 +1475,16 @@ static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dent
         dentry->d_flags &= ~(DCACHE_OP_HASH | DCACHE_OP_COMPARE | DCACHE_OP_DELETE |
                              DCACHE_OP_PRUNE | DCACHE_OP_REAL);
         dentry->d_flags |= (DCACHE_OP_REVALIDATE | DCACHE_OP_WEAK_REVALIDATE | DCACHE_DONTCACHE);
-    } else if (orig && iop) {
-        if (unlikely((current_orig = smp_load_acquire(&iop->orig_dops)) != orig)) {
-            if (current_orig == NULL) {
-                if (cmpxchg(&iop->orig_dops, NULL, HM_DOP_INITIALIZING) == NULL) {
-                    iop->fake_dops = *orig;
-                    iop->fake_dops.d_revalidate = hm_d_revalidate;
-                    smp_store_release(&iop->orig_dops, orig);
-                } else {
-                    while (smp_load_acquire(&iop->orig_dops) == HM_DOP_INITIALIZING) cpu_relax();
-                }
-            } else if (current_orig == HM_DOP_INITIALIZING) {
-                while (smp_load_acquire(&iop->orig_dops) == HM_DOP_INITIALIZING) cpu_relax();
-            }
+    } else if (orig) {
+        wrapped = hm_wrap_native_dops(orig);
+        if (wrapped) {
+            WRITE_ONCE(dentry->d_op, wrapped);
+            smp_wmb();
+            dentry->d_flags |= DCACHE_OP_REVALIDATE;
+        } else {
+            drop = true;
         }
-        dentry->d_op = &iop->fake_dops;
-    } else if (!orig) {
+    } else {
         /*
          * Adopted from a real ->lookup() on a filesystem which installs no
          * dentry_operations, so there is nothing of its own to preserve.
@@ -1315,17 +1494,10 @@ static void hybridmount_hijack_dentry_ops(struct inode *dir, struct dentry *dent
                              DCACHE_OP_PRUNE | DCACHE_OP_REAL);
         dentry->d_flags |= (DCACHE_OP_REVALIDATE | DCACHE_OP_WEAK_REVALIDATE);
     }
-    /*
-     * Otherwise the dentry was adopted from a real ->lookup() of a filesystem
-     * which has its own dentry_operations, and there is no hm_iop to cache a
-     * copy in.  Leave its table and flags untouched: replacing the table would
-     * drop the d_release/d_real/d_hash callbacks that its DCACHE_OP_* flags
-     * still select.
-     */
-
-    spin_unlock(&dentry->d_lock);
 out:
-    rcu_read_unlock();
+    spin_unlock(&dentry->d_lock);
+    if (drop)
+        d_drop(dentry);
 }
 
 static void hybridmount_restore_superblocks(void)

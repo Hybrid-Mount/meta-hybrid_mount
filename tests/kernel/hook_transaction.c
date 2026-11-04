@@ -42,7 +42,7 @@ static void atomic_inc(int *value) { ++*value; }
 struct inode { const struct inode_operations *i_op; const struct file_operations *i_fop; struct super_block *i_sb; };
 struct list_head { int dummy; };
 struct hybridmount_dir_node { struct hm_iop *iop; struct hm_fop *fop; };
-struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; const void *orig_dops; };
+struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; };
 struct hm_fop { struct file_operations fake_fop; const struct file_operations *orig_fop; struct hybridmount_dir_node *dir_node; struct list_head list; };
 struct hm_sop { struct super_operations fake_sop; const struct super_operations *orig_sop; struct export_operations fake_eop; const struct export_operations *orig_eop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
 struct hm_xattr_proxy { const struct xattr_handler *orig; struct xattr_handler fake; };
@@ -115,7 +115,7 @@ int main(int argc,char **argv) {
         if(mode==11) eop.encode_fh=NULL;
         if(mode==12) sb.s_export_op=NULL;
         assert(hybridmount_hijack_superblock(&sb)==0);
-        assert(ours.refs==((mode==11 || mode==12) ? 0 : 1));
+        assert(ours.refs==1);
         if(mode==11 || mode==12) {
             assert(sb.s_export_op==(mode==11 ? &eop : NULL));
         } else {

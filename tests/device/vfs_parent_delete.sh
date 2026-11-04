@@ -44,6 +44,8 @@ echo native > "$work/backing/native"
 echo surviving-child > "$work/child"
 
 "$hm" vfs rule add "$target" "$work/backing"
+[ "$(cat "$target/native")" = native ]
+[ ! -e "$target/missing" ]
 "$hm" vfs rule add "$target/child" "$work/child"
 exec 3<"$target"
 "$hm" vfs rule del "$target"

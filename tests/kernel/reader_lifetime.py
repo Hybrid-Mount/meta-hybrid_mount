@@ -15,6 +15,7 @@ for name in [
     "hybridmount_get_rule_info_uid", "hybridmount_get_rule_info",
     "hybridmount_actor_proxy", "hm_cached_inode_matches", "hybridmount_hijacked_lookup",
     "hybridmount_hijacked_iterate_dir", "hm_d_revalidate_common",
+    "hm_native_dops",
 ]:
     match = re.search(rf"^static[^;\n]*\b{name}\([^;]*?\)\s*\{{", source, re.MULTILINE)
     end, depth = match.end(), 1

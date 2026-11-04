@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #undef assert
 #define assert(x) do { if (!(x)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #x); exit(1); } } while (0)
@@ -20,7 +21,21 @@ typedef unsigned int uid_t;
 #define HM_FLAG_WHITEOUT 4
 #define HM_FLAG_OPAQUE 8
 #define GFP_KERNEL 0
+#define GFP_NOFS 0
 #define LOOKUP_FOLLOW 0
+#define IDMAP_ARG void *idmap,
+#define IDMAP_CALL idmap,
+#define IDMAP_PATH(path) (path).mnt,
+#define EACCES 13
+#define ECHILD 10
+#define ELOOP 40
+#define MAY_NOT_BLOCK 128
+#define MAY_EXEC 1
+#define MAY_WRITE 2
+#define EAGAIN 11
+#define EOPNOTSUPP 95
+#define LINUX_VERSION_CODE 0
+#define KERNEL_VERSION(a,b,c) 1
 #ifndef ENODATA
 #define ENODATA 61
 #endif
@@ -60,6 +75,10 @@ struct inode {
     struct super_block *i_sb;
     struct address_space i_data, *i_mapping;
     bool dying;
+    int permission;
+    unsigned long i_ino;
+    unsigned int i_mode;
+    bool locked;
 };
 struct qstr { const unsigned char *name; size_t len; };
 struct dentry { struct inode *inode; struct qstr d_name; struct super_block *d_sb; };
@@ -69,9 +88,9 @@ typedef int atomic_t;
 static void atomic_inc(atomic_t *n) { ++*n; }
 static void atomic_dec(atomic_t *n) { --*n; }
 static int atomic_read(atomic_t *n) { return *n; }
-struct hybridmount_dir_node { struct inode *v_inode; uintptr_t tag; int rcu; atomic_t inode_users; int refs; };
-struct hm_inode_info { struct path r_path; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; };
-struct hm_rule_info { struct path r_path, backing_path; struct hybridmount_dir_node *this_dir; u16 flags; };
+struct hybridmount_dir_node { struct inode *v_inode; uintptr_t tag; int rcu; atomic_t inode_users; int refs; unsigned long long bloom_mask; };
+struct hm_inode_info { struct path r_path; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; bool backing_child; };
+struct hm_rule_info { struct path r_path, backing_path; struct hybridmount_dir_node *this_dir; u16 flags; unsigned long v_ino; };
 struct hybridmount_rule {
     struct path parent_path, r_path;
     struct hybridmount_dir_node *this_dir;
@@ -187,10 +206,16 @@ static struct inode *test_cmpxchg(struct inode **slot, struct inode *expected, s
 }
 #define cmpxchg(p, old, value) test_cmpxchg(p, old, value)
 static void iput(struct inode *inode);
-static void hybridmount_hijack_dentry_ops(struct inode *inode, struct dentry *dentry, bool injected) {}
+static struct dentry *protected_dentry;
+static struct inode *spliced_inode;
+static void hybridmount_hijack_dentry_ops(struct inode *inode, struct dentry *dentry, bool injected) {
+    if (injected) protected_dentry = dentry;
+}
 static void d_add(struct dentry *dentry, struct inode *inode) { dentry->inode = inode; }
 static struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry) {
     assert(inode && inode->i_private);
+    assert(protected_dentry == dentry);
+    spliced_inode = inode;
     spliced++;
     return NULL;
 }
@@ -203,6 +228,16 @@ static __attribute__((unused)) void hm_destroy_hijacked_inode(struct inode *inod
 static void truncate_inode_pages_final(struct address_space *mapping) {}
 static void clear_inode(struct inode *inode) { evicted++; }
 static struct inode *d_backing_inode(struct dentry *dentry) { return dentry->inode; }
+static struct inode *d_inode(struct dentry *dentry) { return dentry->inode; }
+static bool hm_backing_noexec(const struct hm_inode_info *info) { return false; }
+static int inode_permission(void *idmap, struct inode *inode, int mask) {
+    assert(idmap == inode && mask == 4);
+    return inode->permission;
+}
+static int generic_permission(void *idmap, struct inode *inode, int mask) {
+    assert(idmap == inode && mask == 4);
+    return inode->permission;
+}
 static struct hm_iop *hm_get_hm_iop(const void *ops) { return NULL; }
 static struct hm_fop *hm_get_hm_fop(const void *ops) { return NULL; }
 static int kern_path(const char *name, int flags, struct path *path) {
@@ -230,7 +265,20 @@ static int hybridmount_hijack_dir_ops(struct hybridmount_dir_node *node, struct 
 static struct dentry *hm_hash_and_lookup(struct dentry *parent, struct qstr *name) { return NULL; }
 static void d_drop(struct dentry *dentry) {}
 static void dput(struct dentry *dentry) {}
-static u32 full_name_hash(const void *salt, const char *name, size_t len) { return 1; }
+static bool d_is_negative(struct dentry *dentry) { return !d_inode(dentry); }
+static void *mntget(void *mount) { return mount; }
+static struct dentry *expected_backing_parent, *backing_result;
+static bool inode_trylock(struct inode *inode) {
+    if (inode->locked) return false;
+    inode->locked = true;
+    return true;
+}
+static void inode_unlock(struct inode *inode) { inode->locked = false; }
+static struct dentry *lookup_one_len(const unsigned char *name, struct dentry *parent, int len) {
+    assert(parent == expected_backing_parent && len == 5 && parent->inode->locked);
+    return backing_result;
+}
+static u32 full_name_hash(const void *salt, const void *name, size_t len) { return 1; }
 static int hm_tree_insert(struct hybridmount_rule *rule) { return 0; }
 static void hm_rollback_generated_topology_locked(struct hybridmount_rule *rule,
     struct list_head *generated, struct list_head *victims) { assert(fail_hooks || fail_child); }
@@ -328,7 +376,49 @@ static void lookup_case(const char *mode) {
 }
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "new";
-    if (!strcmp(mode, "cached-uid-directory")) {
+    if (!strcmp(mode, "permissions")) {
+        struct inode real = {0};
+        struct dentry backing = {.inode = &real};
+        struct hm_inode_info info = {.r_path = {.dentry = &backing, .mnt = &real}};
+        struct inode proxy = {.i_private = &info};
+        assert(hm_permission(&proxy, &proxy, 4 | MAY_NOT_BLOCK) == -ECHILD);
+        assert(hm_permission(&proxy, &proxy, 4) == 0);
+        real.permission = -EACCES;
+        assert(hm_permission(&proxy, &proxy, 4) == -EACCES);
+        info.r_path.dentry = NULL;
+        assert(hm_permission(&proxy, &proxy, 4) == -EACCES);
+        info.flags = HM_FLAG_VIRTUAL_DIR;
+        assert(hm_permission(&proxy, &proxy, 4) == 0);
+        proxy.i_mode = S_IFDIR | 0777;
+        assert(hm_permission(&proxy, &proxy, MAY_WRITE) == -EACCES);
+        puts("PASS: proxy checks current backing permissions and its mount idmap");
+    } else if (!strcmp(mode, "backing-lookup")) {
+        struct super_block destination = {0}, source = {0};
+        struct inode real_dir = {.i_op = &native_iops, .i_sb = &source};
+        struct inode real = {.i_op = &native_iops, .i_sb = &source, .i_ino = 71};
+        struct dentry parent = {.d_sb = &source, .inode = &real_dir};
+        struct dentry child = {.d_sb = &source, .inode = &real};
+        struct hm_inode_info info = {.r_path = {.dentry = &parent, .mnt = &source}};
+        struct inode proxy = {.i_private = &info, .i_sb = &destination};
+        struct dentry target = {.d_sb = &destination, .d_name = QSTR_INIT("child", 5)};
+        expected_backing_parent = &parent;
+        backing_result = &child;
+        real_dir.locked = true;
+        assert(hm_dir_lookup(&proxy, &target, 0) == ERR_PTR(-EAGAIN));
+        real_dir.locked = false;
+        assert(hm_dir_lookup(&proxy, &target, 0) == NULL);
+        assert(!real_dir.locked);
+        struct hm_inode_info *child_info = spliced_inode->i_private;
+        assert(spliced_inode->i_sb == &destination);
+        assert(child_info->backing_child && child_info->r_path.dentry == &child);
+        assert(child_info->r_path.mnt == &source);
+        iput(spliced_inode);
+        real.i_op = &hm_dir_iops;
+        assert(hm_dir_lookup(&proxy, &target, 0) == ERR_PTR(-ELOOP));
+        child.inode = NULL;
+        assert(hm_dir_lookup(&proxy, &target, 0) == NULL && !target.inode);
+        puts("PASS: backing lookup publishes a destination proxy and rejects nested proxies");
+    } else if (!strcmp(mode, "cached-uid-directory")) {
         struct hybridmount_dir_node first={0},second={0};
         struct hm_inode_info info={.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR,.dir_node=&first};
         struct hm_rule_info rule={.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR,.this_dir=&second};

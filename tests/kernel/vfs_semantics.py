@@ -59,7 +59,7 @@ with tempfile.TemporaryDirectory(prefix="hm-semantics-") as temporary:
                             f"/out:{executable}", str(output), "libcmt.lib", "oldnames.lib"], check=True)
         for mode in ["hook-alloc-sop", "hook-alloc-xattr", "hook-pin", "source-flags", "dirent", "cursor-negative", "cursor-max", "cursor-compat-max", "dirent-compat", "parent", "parent-opaque",
                      "parent-empty", "parent-allocation", "parent-repeat",
-                     "teardown", "xattr", "xattr-native", "xattr-virtual"]:
+                     "teardown", "xattr", "xattr-native", "xattr-virtual", "xattr-capability"]:
             result = subprocess.run([str(executable), mode], timeout=30)
             if result.returncode:
                 failures.append(f"{version}: {mode}")
