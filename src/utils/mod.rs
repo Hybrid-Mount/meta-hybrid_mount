@@ -9,7 +9,7 @@ use std::path::Path;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::buffer::spare_capacity;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use rustix::fs::{XattrFlags, getxattr, lgetxattr, lsetxattr};
+use rustix::fs::{XattrFlags, getxattr, getxattr_query, lgetxattr, lgetxattr_query, lsetxattr};
 
 use crate::defs;
 use crate::errors::{Error, Result};
@@ -32,11 +32,10 @@ pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
 /// `true` resolves it first.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn read_xattr_with(path: &Path, name: &str, follow: bool) -> io::Result<Vec<u8>> {
-    let mut empty = [0_u8; 0];
     let size = if follow {
-        getxattr(path, name, &mut empty)?
+        getxattr_query(path, name)?
     } else {
-        lgetxattr(path, name, &mut empty)?
+        lgetxattr_query(path, name)?
     };
     if size == 0 {
         return Ok(Vec::new());
