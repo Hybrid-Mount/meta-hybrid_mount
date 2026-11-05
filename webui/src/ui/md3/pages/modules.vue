@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
+import { moduleDiagnosticSummary } from "../../../lib/mountDiagnostics";
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import Md3RuntimeControls from "../components/Md3RuntimeControls.vue";
@@ -46,7 +47,10 @@ const filtered = computed(() =>
   }),
 );
 const mountErrorCount = computed(
-  () => moduleStore.modules.filter((module) => module.mount_error).length,
+  () =>
+    moduleStore.modules.filter(
+      (module) => module.mount_error || moduleDiagnosticSummary(module),
+    ).length,
 );
 
 function ruleFor(module: Module): ModuleRule {
@@ -157,7 +161,7 @@ onMounted(() =>
           expanded: expanded[module.id],
           unmounted: !module.is_mounted,
           blacklisted: module.blacklisted,
-          'has-error': Boolean(module.mount_error),
+          'has-error': Boolean(module.mount_error || moduleDiagnosticSummary(module)),
         }"
       >
         <button
@@ -200,9 +204,23 @@ onMounted(() =>
               <div class="module-body-content">
                 <Md3RuntimeControls :module-id="module.id" />
                 <section
-                  v-if="module.mount_error || module.suggest_ignore"
+                  v-if="
+                    module.mount_error ||
+                    module.suggest_ignore ||
+                    moduleDiagnosticSummary(module)
+                  "
                   class="body-section"
                 >
+                  <p v-if="moduleDiagnosticSummary(module)" class="status-warning">
+                    {{
+                      t(
+                        module.is_mounted
+                          ? "modules.partialMount"
+                          : "modules.skippedMount",
+                      )
+                    }}:
+                    {{ moduleDiagnosticSummary(module) }}
+                  </p>
                   <p v-if="module.mount_error" class="status-warning">
                     {{ t("modules.mountError") }}: {{ module.mount_error }}
                   </p>

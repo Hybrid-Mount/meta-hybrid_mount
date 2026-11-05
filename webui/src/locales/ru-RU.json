@@ -74,7 +74,8 @@
     "detailStage": "Этап",
     "detailRollback": "Откат",
     "detailVersion": "Версия поставщика",
-    "errorItems": "Затронутые модули"
+    "errorItems": "Затронутые модули",
+    "errorPartialMount": "Некоторые запросы монтирования пропущены"
   },
   "config": {
     "moduledir": "Путь модулей",
@@ -144,7 +145,9 @@
     "noDescriptionLabel": "No description",
     "rulesLabel": "Rules",
     "expandRules": "Expand",
-    "collapseRules": "Collapse"
+    "collapseRules": "Collapse",
+    "partialMount": "Частичное монтирование",
+    "skippedMount": "Монтирование пропущено"
   },
   "info": {
     "projectLink": "Репозиторий",

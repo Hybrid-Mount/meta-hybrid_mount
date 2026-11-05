@@ -81,7 +81,8 @@
     "detailStage": "Étape",
     "detailRollback": "Retour arrière",
     "detailVersion": "Version du fournisseur",
-    "errorItems": "Modules concernés"
+    "errorItems": "Modules concernés",
+    "errorPartialMount": "Certaines demandes de montage ont été ignorées"
   },
   "config": {
     "title": "Configuration",
@@ -153,7 +154,9 @@
     "noDescriptionLabel": "Aucune description",
     "rulesLabel": "Règles",
     "expandRules": "Développer",
-    "collapseRules": "Réduire"
+    "collapseRules": "Réduire",
+    "partialMount": "Montage partiel",
+    "skippedMount": "Montage ignoré"
   },
   "info": {
     "title": "À propos",

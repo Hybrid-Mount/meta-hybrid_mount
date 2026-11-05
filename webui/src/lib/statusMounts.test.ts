@@ -17,6 +17,26 @@ import {
 } from "./statusMounts";
 import type { RunState } from "./types";
 
+it("surfaces skipped partitions alongside successful mounts", () => {
+  const snapshot = state(12);
+  snapshot.active_mounts = ["/system/etc"];
+  snapshot.degraded = true;
+  snapshot.partition_errors = [
+    {
+      partition: "vendor",
+      code: "conflict",
+      reason: "different trees",
+      modules: ["demo"],
+    },
+  ];
+  expect(collectStatusErrors(snapshot)).toContainEqual({
+    code: "status.errorPartialMount",
+    detail: "vendor: different trees",
+    items: ["demo"],
+  });
+  expect(snapshot.active_mounts).toEqual(["/system/etc"]);
+});
+
 const state = (timestamp: number): RunState => ({
   timestamp,
   pid: 1,

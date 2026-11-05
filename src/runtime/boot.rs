@@ -15,7 +15,7 @@ use std::fs;
 use std::path::Path;
 
 pub struct BootSession {
-    baseline: Vec<MountEntry>,
+    pub(crate) baseline: Vec<MountEntry>,
     original_uids: Vec<u32>,
 }
 
@@ -59,6 +59,7 @@ pub fn planned_rules(plan: &MountPlan) -> Result<Vec<SavedRule>> {
 
 pub fn stage_plan(plan: &MountPlan, requested_uids: &[u32], nomount: bool) -> Result<()> {
     let mut saved = device::load()?;
+    saved.partition_layout = Some(plan.partition_layout.clone());
     saved.pending_rules = planned_rules(plan)?;
     saved.vfs_provider =
         (!saved.pending_rules.is_empty()).then(|| if nomount { "nomount" } else { "hm" }.into());

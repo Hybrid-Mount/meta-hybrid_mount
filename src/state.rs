@@ -16,6 +16,7 @@ use crate::config::{Config, Mode};
 use crate::defs;
 use crate::errors::{CausalError, ContextError, Error, Result};
 use crate::module_id::ModuleId;
+use crate::partitions::{OperationDiagnostic, PartitionDiagnostic};
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::{ModuleRecord, list_modules};
 
@@ -39,6 +40,10 @@ pub struct AppModule {
     pub mount_error: Option<String>,
     pub suggest_ignore: bool,
     pub rules: AppModuleRules,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub partition_errors: Vec<PartitionDiagnostic>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub operation_errors: Vec<OperationDiagnostic>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -154,6 +159,9 @@ pub struct RunState {
     /// provider read-back confirmed for VFS. Executor attempts stay in `mount_stats`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub confirmed_active_mounts: Vec<String>,
+    pub degraded: bool,
+    pub partition_errors: Vec<PartitionDiagnostic>,
+    pub operation_errors: Vec<OperationDiagnostic>,
     pub mount_error_modules: Vec<String>,
     pub mount_error_reasons: BTreeMap<String, String>,
     pub mount_stats: MountStatistics,
@@ -279,6 +287,9 @@ impl RunState {
             vfs_error_modules: Vec::new(),
             vfs_foreign_nomount: false,
             confirmed_active_mounts: Vec::new(),
+            degraded: false,
+            partition_errors: Vec::new(),
+            operation_errors: Vec::new(),
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
             mount_stats,
@@ -334,6 +345,9 @@ impl RunState {
             },
         );
         state.vfs_modules = plan.vfs_module_id_strings();
+        state.partition_errors = plan.partition_errors.clone();
+        state.operation_errors = plan.operation_errors.clone();
+        state.degraded = !state.partition_errors.is_empty() || !state.operation_errors.is_empty();
         state.mount_error_modules = mount_error_modules;
         state.mount_error_reasons = mount_error_reasons;
         state
@@ -466,6 +480,18 @@ pub fn app_modules(
                 suggest_ignore: mount_error.is_some(),
                 mount_error,
                 rules: app_module_rules(config, &module.id),
+                partition_errors: plan
+                    .partition_errors
+                    .iter()
+                    .filter(|e| e.modules.contains(&module.id.to_string()))
+                    .cloned()
+                    .collect(),
+                operation_errors: plan
+                    .operation_errors
+                    .iter()
+                    .filter(|e| e.module_id == module.id.as_str())
+                    .cloned()
+                    .collect(),
             }
         })
         .collect()
@@ -569,20 +595,27 @@ pub(crate) fn write_scan_ret_to(modules: &[AppModule], path: &Path) -> Result<()
 /// A removed source stays listed only while `boot_owned` proves that this kernel boot still owns a
 /// live mount or VFS rule for it: `scan.ret` outlives the boot that wrote it, so keeping every
 /// removed `is_mounted` entry listed a module the device had already lost on a physical reboot.
-fn merge_module_snapshot(
+fn merge_module_snapshot_with_layout(
     cached: Vec<AppModule>,
     installed: &[ModuleRecord],
     config: &Config,
     boot_owned: &BTreeSet<String>,
-) -> Vec<AppModule> {
+    layout: &crate::partitions::PartitionLayout,
+) -> Result<Vec<AppModule>> {
     let mut cached: BTreeMap<_, _> = cached
         .into_iter()
         .map(|module| (module.id.clone(), module))
         .collect();
-    let mut merged = fallback_app_modules(installed, config);
+    let mut merged = fallback_app_modules_with_layout(installed, config, layout)?;
     for module in &mut merged {
         if let Some(previous) = cached.remove(&module.id) {
             module.mode = previous.mode;
+            if !previous.partition_errors.is_empty() {
+                module.partition_errors = previous.partition_errors;
+            }
+            if !previous.operation_errors.is_empty() {
+                module.operation_errors = previous.operation_errors;
+            }
             module.is_mounted = previous.is_mounted;
         }
     }
@@ -596,16 +629,17 @@ fn merge_module_snapshot(
         merged.push(removed);
     }
     sync_app_module_rules(&mut merged, config);
-    merged
+    Ok(merged)
 }
 
-fn query_module_snapshot(
+fn query_module_snapshot_with_layout(
     path: &Path,
     installed: &[ModuleRecord],
     config: &Config,
     boot_owned: &BTreeSet<String>,
-) -> Vec<AppModule> {
-    let cached = match fs::read_to_string(path) {
+    layout: &crate::partitions::PartitionLayout,
+) -> Result<Vec<AppModule>> {
+    let mut cached: Vec<AppModule> = match fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str::<Vec<AppModule>>(&text) {
             Ok(modules) => modules,
             Err(err) => {
@@ -624,40 +658,97 @@ fn query_module_snapshot(
             Vec::new()
         }
     };
-    merge_module_snapshot(cached, installed, config, boot_owned)
+    for module in &mut cached {
+        module.partition_errors.clear();
+        module.operation_errors.clear();
+    }
+    merge_module_snapshot_with_layout(cached, installed, config, boot_owned, layout)
 }
 
 /// `modules`: combine committed runtime ownership with current installed metadata.
 /// A query never rewrites the cache: a concurrent hot operation owns that snapshot.
 pub fn handle_modules() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
-    let managed_partitions = config.scan_partition_names(Path::new("/"));
+    let (layout, cached) = crate::runtime::module_query_context(&config)?;
+    let managed_partitions = layout.scan_names();
     let installed = list_modules(&config.moduledir, &managed_partitions)?;
     let boot_owned = crate::runtime::boot_owned_module_ids();
-    let modules = query_module_snapshot(
-        Path::new(defs::SCAN_RET_PATH),
-        &installed,
-        &config,
-        &boot_owned,
-    );
+    let modules = if let Some(cached) = cached {
+        merge_module_snapshot_with_layout(cached, &installed, &config, &boot_owned, &layout)?
+    } else {
+        query_module_snapshot_with_layout(
+            Path::new(defs::SCAN_RET_PATH),
+            &installed,
+            &config,
+            &boot_owned,
+            &layout,
+        )?
+    };
     println!("{}", serde_json::to_string_pretty(&modules)?);
     Ok(())
 }
 
-fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
-    let layout = crate::partitions::PartitionLayout::default();
+fn fallback_app_modules_with_layout(
+    modules: &[ModuleRecord],
+    config: &Config,
+    layout: &crate::partitions::PartitionLayout,
+) -> Result<Vec<AppModule>> {
     let plan = build_plan(&PlanInput {
         modules,
         config,
-        layout: &layout,
+        layout,
         vfs_available: crate::vfs::available(),
-    })
-    .unwrap_or_else(|err| {
-        log::warn!("fallback module plan failed, returning raw module list: {err}");
-        MountPlan::default()
-    });
+    })?;
     let mount_errors = collect_mount_error_modules(&config.moduledir);
-    app_modules(modules, config, &plan, &mount_errors, &BTreeSet::new())
+    Ok(app_modules(
+        modules,
+        config,
+        &plan,
+        &mount_errors,
+        &BTreeSet::new(),
+    ))
+}
+
+#[cfg(test)]
+fn merge_module_snapshot(
+    cached: Vec<AppModule>,
+    installed: &[ModuleRecord],
+    config: &Config,
+    owned: &BTreeSet<String>,
+) -> Vec<AppModule> {
+    merge_module_snapshot_with_layout(
+        cached,
+        installed,
+        config,
+        owned,
+        &crate::partitions::PartitionLayout::default(),
+    )
+    .unwrap()
+}
+#[cfg(test)]
+fn query_module_snapshot(
+    path: &Path,
+    installed: &[ModuleRecord],
+    config: &Config,
+    owned: &BTreeSet<String>,
+) -> Vec<AppModule> {
+    query_module_snapshot_with_layout(
+        path,
+        installed,
+        config,
+        owned,
+        &crate::partitions::PartitionLayout::default(),
+    )
+    .unwrap()
+}
+#[cfg(test)]
+fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
+    fallback_app_modules_with_layout(
+        modules,
+        config,
+        &crate::partitions::PartitionLayout::default(),
+    )
+    .unwrap()
 }
 
 /// `status`: outputs the boot snapshot with the current VFS protocol warning.
@@ -871,6 +962,36 @@ mod tests {
             magic_module_ids: vec![ModuleId::try_from("magic_mod").unwrap()],
             ..MountPlan::default()
         }
+    }
+
+    #[test]
+    fn partition_errors_preserve_partial_ownership_without_ignore_suggestions() {
+        let modules = [record("overlay_mod")];
+        let mut plan = test_plan();
+        plan.partition_errors
+            .push(crate::partitions::PartitionDiagnostic {
+                partition: "vendor".into(),
+                code: "conflict".into(),
+                reason: "different trees".into(),
+                modules: vec!["overlay_mod".into()],
+            });
+        let config = Config::default();
+        let list = app_modules(
+            &modules,
+            &config,
+            &plan,
+            &[],
+            &BTreeSet::from(["overlay_mod".to_owned()]),
+        );
+        assert!(list[0].is_mounted);
+        assert!(!list[0].suggest_ignore);
+        assert!(list[0].mount_error.is_none());
+        assert_eq!(list[0].partition_errors.len(), 1);
+        let state = RunState::from_plan(&config, &modules, &plan, vec![]);
+        assert!(state.degraded);
+        assert_eq!(state.partition_errors.len(), 1);
+        let empty: RunState = serde_json::from_str("{}").unwrap();
+        assert!(!empty.degraded);
     }
 
     #[test]
@@ -1303,6 +1424,8 @@ mod tests {
                 default_mode: None,
                 paths: BTreeMap::new(),
             },
+            partition_errors: Vec::new(),
+            operation_errors: Vec::new(),
         })
         .unwrap();
         assert!(json.contains(r#""id":"hosts""#), "{json}");
@@ -1570,6 +1693,9 @@ mod tests {
             vfs_error_modules: Vec::new(),
             vfs_foreign_nomount: false,
             confirmed_active_mounts: vec!["/system".to_owned()],
+            degraded: false,
+            partition_errors: Vec::new(),
+            operation_errors: Vec::new(),
             mount_error_modules: Vec::new(),
             mount_error_reasons: BTreeMap::new(),
             mount_stats: MountStatistics {
@@ -1650,6 +1776,8 @@ mod tests {
                 default_mode: Some("magic".to_owned()),
                 paths: BTreeMap::from([("system/etc/hosts".to_owned(), "overlay".to_owned())]),
             },
+            partition_errors: Vec::new(),
+            operation_errors: Vec::new(),
         };
 
         assert_eq!(

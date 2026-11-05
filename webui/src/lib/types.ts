@@ -20,6 +20,21 @@ export interface AppConfig {
   rules: Record<string, ModuleRule>;
 }
 
+export interface PartitionDiagnostic {
+  partition: string;
+  code: string;
+  reason: string;
+  modules: string[];
+}
+
+export interface OperationDiagnostic {
+  module_id: string;
+  logical_path: string;
+  target: string | null;
+  code: string;
+  reason: string;
+}
+
 export interface Module {
   id: string;
   name: string;
@@ -33,6 +48,8 @@ export interface Module {
   source_path: string;
   mount_error: string | null;
   suggest_ignore: boolean;
+  partition_errors?: PartitionDiagnostic[];
+  operation_errors?: OperationDiagnostic[];
   rules: ModuleRule;
 }
 
@@ -58,6 +75,9 @@ export interface StateLoadInfo {
 }
 
 export interface RunState {
+  degraded?: boolean;
+  partition_errors?: PartitionDiagnostic[];
+  operation_errors?: OperationDiagnostic[];
   timestamp: number;
   pid: number;
   storage_mode: string;

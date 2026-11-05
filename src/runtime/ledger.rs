@@ -25,6 +25,8 @@ pub struct Ledger {
     pub phase: String,
     #[serde(default)]
     pub vfs_provider: Option<String>,
+    #[serde(default)]
+    pub partition_layout: Option<crate::partitions::PartitionLayout>,
     pub rules: Vec<SavedRule>,
     pub pending_rules: Vec<SavedRule>,
     pub mounts: Vec<OwnedMount>,
@@ -167,6 +169,8 @@ mod tests {
                     default_mode: None,
                     paths: std::collections::BTreeMap::new(),
                 },
+                partition_errors: Vec::new(),
+                operation_errors: Vec::new(),
             }],
             ..Ledger::default()
         };

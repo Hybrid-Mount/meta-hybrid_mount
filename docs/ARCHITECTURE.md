@@ -40,3 +40,10 @@ WebUI 使用同一 CLI；状态快照由启动或成功的热操作更新，详�
 `status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（只有 `hm`，即 HM 自有的 `hybridmount` 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
 
 `storage_mode` 记录本次启动实际创建的 overlay staging 后端，取值为 `tmpfs`、`ext4` 或哨兵值 `none`。只使用 VFS 或 Magic Mount 的启动不会创建 staging，此时写入 `none`：动态模块描述与 WebUI 都据此显示实际运行的挂载后端（例如 VFS），不会假报 Tmpfs 或 Ext4。
+# 分区布局诊断
+
+`status` 的 `degraded` 表示存在已跳过的分区或操作；`partition_errors` 记录分区、原因及受影响模块，`operation_errors` 记录被拒绝的具体模块路径。正常分区仍可成功提交。
+模块列表中的同名诊断字段仅在非空时输出，旧快照缺失字段按空列表读取。`is_mounted` 仍表示至少一个真实效果已确认，部分挂载会同时展示错误，不自动设置 `suggest_ignore`。
+
+启动账本保存名单内全部分区的路径和身份。热加载核对相关分区；只有身份验证通过的本模块挂载可解释预期变化，未知覆盖不会被忽略。无布局基线的旧账本拒绝 load/reload，unload 仍按保存的规则与目标清理。
+

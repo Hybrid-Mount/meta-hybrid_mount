@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
+import { moduleDiagnosticSummary } from "../../../lib/mountDiagnostics";
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import {
@@ -71,7 +72,10 @@ const filteredModules = computed(() => {
   });
 });
 const mountErrorCount = computed(
-  () => moduleStore.modules.filter((module) => module.mount_error).length,
+  () =>
+    moduleStore.modules.filter(
+      (module) => module.mount_error || moduleDiagnosticSummary(module),
+    ).length,
 );
 
 const expanded = ref<Record<string, boolean>>({});
@@ -380,6 +384,13 @@ onMounted(() =>
             <div class="module-details-inner">
               <div class="module-details">
                 <MiuixRuntimeControls :module-id="module.id" />
+                <MiuixBasicComponent
+                  v-if="moduleDiagnosticSummary(module)"
+                  :title="
+                    t(module.is_mounted ? 'modules.partialMount' : 'modules.skippedMount')
+                  "
+                  :summary="moduleDiagnosticSummary(module)"
+                />
                 <MiuixBasicComponent
                   v-if="module.mount_error"
                   :title="t('modules.mountError')"

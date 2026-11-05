@@ -74,7 +74,8 @@
     "detailStage": "Etapa",
     "detailRollback": "Reversión",
     "detailVersion": "Versión del proveedor",
-    "errorItems": "Módulos afectados"
+    "errorItems": "Módulos afectados",
+    "errorPartialMount": "Se omitieron algunas solicitudes de montaje"
   },
   "config": {
     "moduledir": "Dir. Módulos",
@@ -144,7 +145,9 @@
     "noDescriptionLabel": "No description",
     "rulesLabel": "Rules",
     "expandRules": "Expand",
-    "collapseRules": "Collapse"
+    "collapseRules": "Collapse",
+    "partialMount": "Montaje parcial",
+    "skippedMount": "Montaje omitido"
   },
   "info": {
     "projectLink": "Repositorio",

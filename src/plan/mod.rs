@@ -92,14 +92,14 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     Ok(plan)
 }
 
-struct ModuleRulesView {
+pub(crate) struct ModuleRulesView {
     default_mode: Mode,
     /// `(normalized_key, mode)`, sorted by key length descending so the longest prefix wins.
     path_rules: Vec<(String, Mode)>,
 }
 
 impl ModuleRulesView {
-    fn new(module_id: &ModuleId, config: &Config, vfs_available: bool) -> Self {
+    pub(crate) fn new(module_id: &ModuleId, config: &Config, vfs_available: bool) -> Self {
         let module_rule = config.rules.get(module_id);
         let default_mode = module_rule
             .and_then(|rule| rule.default_mode)
@@ -140,7 +140,7 @@ impl ModuleRulesView {
         }
     }
 
-    fn resolve_mode(&self, relative: &str) -> Mode {
+    pub(crate) fn resolve_mode(&self, relative: &str) -> Mode {
         self.path_rules
             .iter()
             .find(|(key, _)| crate::utils::is_same_or_below(relative, key))

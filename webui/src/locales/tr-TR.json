@@ -81,7 +81,8 @@
     "detailStage": "Aşama",
     "detailRollback": "Geri alma",
     "detailVersion": "Sağlayıcı sürümü",
-    "errorItems": "Etkilenen modüller"
+    "errorItems": "Etkilenen modüller",
+    "errorPartialMount": "Bazı bağlama istekleri atlandı"
   },
   "config": {
     "title": "Yapılandırma",
@@ -153,7 +154,9 @@
     "noDescriptionLabel": "Açıklama yok",
     "rulesLabel": "Kurallar",
     "expandRules": "Genişlet",
-    "collapseRules": "Daralt"
+    "collapseRules": "Daralt",
+    "partialMount": "Kısmi bağlama",
+    "skippedMount": "Bağlama atlandı"
   },
   "info": {
     "title": "Hakkında",

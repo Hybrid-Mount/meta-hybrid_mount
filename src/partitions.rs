@@ -456,14 +456,22 @@ pub fn capture_layout_snapshot(names: &[String], mounts: &[MountEntry]) -> Resul
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn detect(config: &crate::config::Config) -> Result<PartitionLayout> {
+    let mounts = crate::sys::mountinfo::mount_entries()?;
+    detect_with_mounts(config, &mounts)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn detect_with_mounts(
+    config: &crate::config::Config,
+    mounts: &[MountEntry],
+) -> Result<PartitionLayout> {
     let managed = crate::defs::MANAGED_PARTITIONS
         .iter()
         .map(|n| (*n).to_owned())
         .collect::<Vec<_>>();
     let extras = config.extra_mount_partitions(Path::new("/"));
     let names = managed.iter().chain(&extras).cloned().collect::<Vec<_>>();
-    let mounts = crate::sys::mountinfo::mount_entries()?;
-    let snapshot = capture_layout_snapshot(&names, &mounts)?;
+    let snapshot = capture_layout_snapshot(&names, mounts)?;
     Ok(discover_layout(&snapshot, &managed, &extras))
 }
 

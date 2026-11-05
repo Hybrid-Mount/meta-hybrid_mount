@@ -40,6 +40,14 @@ export function statusFailureSummary(
       : state.vfs_error;
   }
   if (state.failed_stage) return `${labels.abnormal}: ${state.failed_stage}`;
+  if (state.degraded) {
+    return (
+      [
+        ...(state.partition_errors ?? []).map((e) => `${e.partition}: ${e.reason}`),
+        ...(state.operation_errors ?? []).map((e) => `${e.logical_path}: ${e.reason}`),
+      ].join("; ") || labels.abnormal
+    );
+  }
   if (state.mount_stats.failed_mounts > 0) {
     return labels.mountFailures(state.mount_stats.failed_mounts);
   }
@@ -136,6 +144,26 @@ export function collectStatusErrors(
   }
 
   if (!state) return errors;
+
+  if (
+    state.degraded ||
+    state.partition_errors?.length ||
+    state.operation_errors?.length
+  ) {
+    errors.push({
+      code: "status.errorPartialMount",
+      detail: unique([
+        ...(state.partition_errors ?? []).map((e) => `${e.partition}: ${e.reason}`),
+        ...(state.operation_errors ?? []).map(
+          (e) => `${e.module_id}/${e.logical_path}: ${e.reason}`,
+        ),
+      ]).join("\n"),
+      items: unique([
+        ...(state.partition_errors ?? []).flatMap((e) => e.modules),
+        ...(state.operation_errors ?? []).map((e) => e.module_id),
+      ]),
+    });
+  }
 
   if (state.failure_reason) {
     errors.push({

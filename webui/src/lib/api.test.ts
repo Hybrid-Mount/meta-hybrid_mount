@@ -281,6 +281,27 @@ describe("WebUI configuration contract", () => {
     expect(module.rules.paths).toEqual({ "system/etc/hosts": "overlay" });
   });
 
+  it("preserves partial mount diagnostics without suggesting a permanent ignore", () => {
+    const error = {
+      partition: "vendor",
+      code: "conflict",
+      reason: "different trees",
+      modules: ["demo"],
+    };
+    const module = normalizeModule({
+      id: "demo",
+      is_mounted: true,
+      partition_errors: [error],
+    });
+    expect(module.is_mounted).toBe(true);
+    expect(module.suggest_ignore).toBe(false);
+    expect(module.partition_errors).toEqual([error]);
+    expect(normalizeModule({ id: "old" }).partition_errors).toEqual([]);
+    const state = normalizeStatus({ degraded: true, partition_errors: [error] });
+    expect(state.degraded).toBe(true);
+    expect(state.partition_errors).toEqual([error]);
+  });
+
   it("recognizes blacklisted modules and legacy blacklist markers", () => {
     expect(normalizeModule({ id: "blocked", blacklisted: true }).blacklisted).toBe(true);
     const legacyModule = normalizeModule({

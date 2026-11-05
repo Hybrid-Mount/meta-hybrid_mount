@@ -81,7 +81,8 @@
     "detailStage": "階段",
     "detailRollback": "回滾",
     "detailVersion": "Provider 版本",
-    "errorItems": "受影響模組"
+    "errorItems": "受影響模組",
+    "errorPartialMount": "已略過部分掛載請求"
   },
   "config": {
     "moduledir": "模組路徑",
@@ -153,7 +154,9 @@
     "noDescriptionLabel": "No description",
     "rulesLabel": "Rules",
     "expandRules": "Expand",
-    "collapseRules": "Collapse"
+    "collapseRules": "Collapse",
+    "partialMount": "部分掛載",
+    "skippedMount": "已略過掛載"
   },
   "info": {
     "projectLink": "專案地址",

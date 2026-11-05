@@ -78,7 +78,7 @@ fn run_pipeline(boot_hook: bool) -> Result<()> {
         }
         let session = crate::runtime::boot::start()?;
         let mut mounted = MountedTargets::default();
-        let outcome = run_mount_pipeline_impl(&mut mounted);
+        let outcome = run_mount_pipeline_impl(&mut mounted, &session.baseline);
         let recorded = crate::runtime::boot::finish(session, outcome.is_ok(), &mounted.paths);
         match (outcome, recorded) {
             (Err(error), _) => Err(error),
@@ -729,7 +729,10 @@ fn startup_phase<T>(stage: &'static str, result: Result<T>) -> Result<T> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
+fn run_mount_pipeline_impl(
+    mounted: &mut MountedTargets,
+    baseline_mounts: &[crate::sys::mountinfo::MountEntry],
+) -> Result<()> {
     let startup = PhaseTimer::start("startup");
     utils::ksu::init();
 
@@ -765,7 +768,10 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     config_phase.finish();
 
     let scan_phase = PhaseTimer::start("scan");
-    let layout = startup_phase("partition_layout", crate::partitions::detect(&config))?;
+    let layout = startup_phase(
+        "partition_layout",
+        crate::partitions::detect_with_mounts(&config, baseline_mounts),
+    )?;
     let managed_partitions = layout.scan_names();
     let modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
     log::info!("scanned modules: {}", modules.len());
@@ -846,6 +852,12 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
             vfs_available,
         }),
     )?;
+    for error in &plan.partition_errors {
+        log::error!("partition skipped: {}: {}; modules={:?}", error.partition, error.reason, error.modules);
+    }
+    for error in &plan.operation_errors {
+        log::error!("operation skipped: {}:{}: {}", error.module_id, error.logical_path, error.reason);
+    }
     log::info!(
         "plan: overlay_ops={}, overlay_modules={}, magic_modules={}, vfs_modules={}",
         plan.overlay_ops.len(),

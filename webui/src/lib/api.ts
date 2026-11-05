@@ -16,6 +16,7 @@ import type {
 import { DEFAULT_CONFIG, PATHS } from "./constants";
 import { createRuntimeApi } from "./runtimeApi";
 import { normalizeGuardReport } from "./bootGuard";
+import { normalizePartitionErrors, normalizeOperationErrors } from "./mountDiagnostics";
 import { shellEscapeDoubleQuoted } from "./shell";
 import { isKernelPatchVersionResponse, parseLateLoad, parseRootManager } from "./reboot";
 
@@ -161,6 +162,8 @@ export function normalizeModule(raw: Record<string, unknown>): Module {
         ? raw.mount_error
         : null,
     suggest_ignore: Boolean(raw.suggest_ignore),
+    partition_errors: normalizePartitionErrors(raw.partition_errors),
+    operation_errors: normalizeOperationErrors(raw.operation_errors),
     rules: {
       default_mode: isMountMode(rawRules.default_mode) ? rawRules.default_mode : null,
       paths,
@@ -214,6 +217,9 @@ export function normalizeStatus(payload: Record<string, unknown>): RunState {
     vfs_error_modules: normalizeStringArray(payload.vfs_error_modules),
     vfs_foreign_nomount: payload.vfs_foreign_nomount === true,
     confirmed_active_mounts: normalizeStringArray(payload.confirmed_active_mounts),
+    degraded: payload.degraded === true,
+    partition_errors: normalizePartitionErrors(payload.partition_errors),
+    operation_errors: normalizeOperationErrors(payload.operation_errors),
     mount_error_modules: Array.isArray(payload.mount_error_modules)
       ? payload.mount_error_modules.map(String)
       : [],

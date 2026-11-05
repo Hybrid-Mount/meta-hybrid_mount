@@ -81,7 +81,8 @@
     "detailStage": "Stage",
     "detailRollback": "Rollback",
     "detailVersion": "Provider version",
-    "errorItems": "Affected modules"
+    "errorItems": "Affected modules",
+    "errorPartialMount": "Some mount requests were skipped"
   },
   "config": {
     "title": "Configuration",
@@ -153,7 +154,9 @@
     "noDescriptionLabel": "No description",
     "rulesLabel": "Rules",
     "expandRules": "Expand",
-    "collapseRules": "Collapse"
+    "collapseRules": "Collapse",
+    "partialMount": "Partial mount",
+    "skippedMount": "Mount skipped"
   },
   "info": {
     "title": "About",

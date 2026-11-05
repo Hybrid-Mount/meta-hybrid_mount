@@ -59,6 +59,7 @@ fn status() -> Result<Status> {
     guard()?;
     let mut kernel = device::Kernel::open(&saved)?;
     rules::verify_owned(&mut kernel, &saved.rules)?;
+    super::mounts::validate(&saved.mounts)?;
     let (config, modules) = config_and_modules()?;
     let layout = crate::partitions::detect(&config)?;
     let mut rows = Vec::new();
@@ -123,7 +124,21 @@ pub fn handle(args: &[String]) -> Result<()> {
             device::enter_init_namespace()?;
             let _lock = OperationLock::acquire()?;
             let generation = apply(action, module_id.as_str())?;
-            println!("{}", serde_json::json!({"ok":true,"generation":generation}));
+            let saved = device::load()?;
+            let errors = saved
+                .modules
+                .iter()
+                .flat_map(|m| m.partition_errors.iter())
+                .collect::<Vec<_>>();
+            let operations = saved
+                .modules
+                .iter()
+                .flat_map(|m| m.operation_errors.iter())
+                .collect::<Vec<_>>();
+            println!(
+                "{}",
+                serde_json::json!({"ok":true,"generation":generation,"degraded":!errors.is_empty() || !operations.is_empty(),"partition_errors":errors,"operation_errors":operations})
+            );
             Ok(())
         }
         _ => Err(Error::msg(
@@ -139,6 +154,7 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
     let mut kernel = device::Kernel::open(&saved)?;
     saved.vfs_provider = Some(kernel.0.provider().as_str().into());
     rules::verify_owned(&mut kernel, &saved.rules)?;
+    super::mounts::validate(&saved.mounts)?;
     if saved.non_vfs_modules.contains(module_id) {
         return Err(Error::msg(
             "module has active Magic/Overlay ownership; reboot required",
@@ -267,6 +283,17 @@ pub fn refresh_snapshots(saved: &Ledger) -> Result<()> {
         .into_iter()
         .collect();
     state.confirmed_active_mounts = state.active_mounts.clone();
+    state.partition_errors = saved
+        .modules
+        .iter()
+        .flat_map(|m| m.partition_errors.iter().cloned())
+        .collect();
+    state.operation_errors = saved
+        .modules
+        .iter()
+        .flat_map(|m| m.operation_errors.iter().cloned())
+        .collect();
+    state.degraded = !state.partition_errors.is_empty() || !state.operation_errors.is_empty();
     state
         .vfs_error_modules
         .retain(|m| !state.vfs_modules.contains(m));

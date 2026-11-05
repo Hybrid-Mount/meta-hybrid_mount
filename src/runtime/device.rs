@@ -17,7 +17,7 @@ pub fn namespace_at(path: &str) -> Result<String> {
 }
 
 pub fn enter_init_namespace() -> Result<()> {
-    if namespace_at("/proc/self/ns/mnt")? != namespace_at("/proc/1/ns/mnt")? {
+    if namespace_at("/proc/thread-self/ns/mnt")? != namespace_at("/proc/1/ns/mnt")? {
         let ns = fs::File::open("/proc/1/ns/mnt")?;
         // SAFETY: ns is a live mount namespace descriptor; CLI mutators are single-threaded.
         if unsafe { libc::setns(ns.as_raw_fd(), libc::CLONE_NEWNS) } != 0 {

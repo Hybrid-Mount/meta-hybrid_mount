@@ -81,7 +81,8 @@
     "detailStage": "阶段",
     "detailRollback": "回滚",
     "detailVersion": "Provider 版本",
-    "errorItems": "受影响模块"
+    "errorItems": "受影响模块",
+    "errorPartialMount": "部分挂载请求已跳过"
   },
   "config": {
     "title": "配置",
@@ -153,7 +154,9 @@
     "noDescriptionLabel": "没有描述",
     "rulesLabel": "规则",
     "expandRules": "展开",
-    "collapseRules": "收起"
+    "collapseRules": "收起",
+    "partialMount": "部分挂载",
+    "skippedMount": "挂载已跳过"
   },
   "info": {
     "title": "关于",
