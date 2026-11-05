@@ -5,12 +5,13 @@ use crate::config::Config;
 use crate::errors::{Error, Result};
 use crate::plan::{MountPlan, PlanInput, build_plan};
 use crate::scanner::ModuleRecord;
+#[cfg(test)]
 use std::collections::BTreeSet;
 
 pub fn plan_hot_module(
     module: &ModuleRecord,
     config: &Config,
-    promoted: &BTreeSet<String>,
+    layout: &crate::partitions::PartitionLayout,
     saved: &Ledger,
 ) -> Result<MountPlan> {
     if saved.non_vfs_modules.contains(module.id.as_str()) {
@@ -32,7 +33,7 @@ pub fn plan_hot_module(
     let plan = build_plan(&PlanInput {
         modules: &[requested],
         config,
-        promoted_partitions: promoted,
+        layout,
         vfs_available: true,
     })?;
     if !plan.magic_module_ids.is_empty()
@@ -88,6 +89,7 @@ mod tests {
                 relative: "system/etc/demo".into(),
                 file_type: NodeFileType::RegularFile,
                 replace: false,
+                link_target: None,
             }],
         }
     }
@@ -98,7 +100,15 @@ mod tests {
             ..Config::default()
         };
         let module = module();
-        assert!(plan_hot_module(&module, &config, &BTreeSet::new(), &Ledger::default()).is_ok());
+        assert!(
+            plan_hot_module(
+                &module,
+                &config,
+                &crate::partitions::PartitionLayout::default(),
+                &Ledger::default()
+            )
+            .is_ok()
+        );
     }
     #[test]
     fn rejects_mixed_module_before_any_kernel_work() {
@@ -113,7 +123,15 @@ mod tests {
                 paths: BTreeMap::new(),
             },
         );
-        assert!(plan_hot_module(&module(), &config, &BTreeSet::new(), &Ledger::default()).is_err());
+        assert!(
+            plan_hot_module(
+                &module(),
+                &config,
+                &crate::partitions::PartitionLayout::default(),
+                &Ledger::default()
+            )
+            .is_err()
+        );
     }
     #[test]
     fn saved_non_vfs_ownership_blocks_switching_backend_live() {
@@ -125,7 +143,15 @@ mod tests {
             non_vfs_modules: BTreeSet::from(["demo".into()]),
             ..Ledger::default()
         };
-        assert!(plan_hot_module(&module(), &config, &BTreeSet::new(), &saved).is_err());
+        assert!(
+            plan_hot_module(
+                &module(),
+                &config,
+                &crate::partitions::PartitionLayout::default(),
+                &saved
+            )
+            .is_err()
+        );
     }
     #[test]
     fn overlap_respects_path_boundaries() {

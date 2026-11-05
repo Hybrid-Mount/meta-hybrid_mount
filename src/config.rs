@@ -206,7 +206,6 @@ impl Config {
     pub(crate) fn scan_partition_names(&self, root: &Path) -> Vec<String> {
         let mut partitions = defs::MANAGED_PARTITIONS
             .iter()
-            .filter(|name| root.join(name).is_dir())
             .map(|name| (*name).to_owned())
             .collect::<BTreeSet<_>>();
         partitions.extend(self.extra_mount_partitions(root));

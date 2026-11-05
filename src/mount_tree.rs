@@ -14,14 +14,6 @@ use std::path::{Path, PathBuf};
 use crate::config::Mode;
 use crate::module_id::ModuleId;
 
-/// Built-in partition promotion rules: `(partition, requires /system/<partition> to be a symlink)`.
-pub const BUILTIN_PARTITIONS: [(&str, bool); 4] = [
-    ("vendor", true),
-    ("system_ext", true),
-    ("product", true),
-    ("odm", false),
-];
-
 /// Node types recorded by the scanner and consumed by each backend.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum NodeFileType {

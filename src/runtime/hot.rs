@@ -60,7 +60,7 @@ fn status() -> Result<Status> {
     let mut kernel = device::Kernel::open(&saved)?;
     rules::verify_owned(&mut kernel, &saved.rules)?;
     let (config, modules) = config_and_modules()?;
-    let promoted = crate::pipeline::detect_promoted_partitions();
+    let layout = crate::partitions::detect(&config)?;
     let mut rows = Vec::new();
     for module in modules {
         let active = saved
@@ -71,7 +71,7 @@ fn status() -> Result<Status> {
         let reason = if active && !saved.non_vfs_modules.contains(module.id.as_str()) {
             None
         } else {
-            policy::plan_hot_module(&module, &config, &promoted, &saved)
+            policy::plan_hot_module(&module, &config, &layout, &saved)
                 .err()
                 .map(|e| e.to_string())
         };
@@ -171,14 +171,14 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
         if let Some(requested) = configured.iter_mut().find(|m| m.id.as_str() == module_id) {
             requested.disabled = false;
         }
-        let promoted = crate::pipeline::detect_promoted_partitions();
+        let layout = crate::partitions::detect(&config)?;
         crate::plan::build_plan(&crate::plan::PlanInput {
             modules: &configured,
             config: &config,
-            promoted_partitions: &promoted,
+            layout: &layout,
             vfs_available: true,
         })?;
-        let plan = policy::plan_hot_module(module, &config, &promoted, &saved)?;
+        let plan = policy::plan_hot_module(module, &config, &layout, &saved)?;
         requested_uids = config.vfs_isolate_uids.clone();
         updated_module = state::app_modules(
             std::slice::from_ref(module),

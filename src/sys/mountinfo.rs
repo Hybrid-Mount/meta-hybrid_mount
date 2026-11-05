@@ -12,9 +12,10 @@ use crate::errors::{Error, Result};
 /// One mount as `/proc/self/mountinfo` reports it, reduced to the fields Hybrid Mount
 /// reads. Every mountinfo consumer goes through [`mount_entries`] so the fault-injection
 /// switch reaches all of them, not just the snapshot path.
-#[cfg(any(target_os = "linux", target_os = "android"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MountEntry {
+    pub root: PathBuf,
+    pub parent_id: i32,
     pub mount_point: PathBuf,
     pub fs_type: String,
     pub mount_source: Option<String>,
@@ -46,6 +47,8 @@ impl MountEntry {
         }
 
         Self {
+            root: info.root.clone().into(),
+            parent_id: info.pid,
             mount_point: info.mount_point.clone(),
             fs_type: info.fs_type.clone(),
             mount_source: info.mount_source.clone(),
@@ -269,6 +272,8 @@ mod tests {
             .unwrap(),
         );
         assert_eq!(shared.mount_point, PathBuf::from("/system"));
+        assert_eq!(shared.root, PathBuf::from("/"));
+        assert_eq!(shared.parent_id, 1);
         assert_eq!(shared.shared, Some(7));
         assert_eq!(shared.master, None);
         assert_eq!(shared.propagation(), "shared:7");

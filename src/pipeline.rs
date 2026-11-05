@@ -765,7 +765,8 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     config_phase.finish();
 
     let scan_phase = PhaseTimer::start("scan");
-    let managed_partitions = config.scan_partition_names(Path::new("/"));
+    let layout = startup_phase("partition_layout", crate::partitions::detect(&config))?;
+    let managed_partitions = layout.scan_names();
     let modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {
@@ -836,18 +837,12 @@ fn run_mount_pipeline_impl(mounted: &mut MountedTargets) -> Result<()> {
     }
 
     let plan_phase = PhaseTimer::start("plan");
-    let promoted = detect_promoted_partitions();
-    log::info!(
-        "partition detection: managed={}, promoted={}",
-        managed_partitions.join(","),
-        promoted.iter().cloned().collect::<Vec<_>>().join(",")
-    );
     let mut plan = startup_phase(
         "plan",
         build_plan(&PlanInput {
             modules: &modules,
             config: &config,
-            promoted_partitions: &promoted,
+            layout: &layout,
             vfs_available,
         }),
     )?;
@@ -1213,37 +1208,6 @@ fn cleanup_tmp_root_best_effort(tmp_root: &Path) -> Result<()> {
         log::info!("magic staging unmounted: target={}", tmp_root.display());
     }
     Ok(())
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) fn detect_promoted_partitions() -> BTreeSet<String> {
-    use crate::mount_tree::BUILTIN_PARTITIONS;
-
-    let builtin_requirements = BUILTIN_PARTITIONS
-        .iter()
-        .copied()
-        .collect::<BTreeMap<_, _>>();
-
-    managed_partition_names()
-        .into_iter()
-        .filter(|partition| {
-            let system_partition = Path::new("/system").join(partition);
-            let require_symlink = builtin_requirements
-                .get(partition.as_str())
-                .copied()
-                .unwrap_or(true);
-            !require_symlink || system_partition.is_symlink()
-        })
-        .collect()
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub(crate) fn managed_partition_names() -> Vec<String> {
-    crate::defs::MANAGED_PARTITIONS
-        .iter()
-        .filter(|partition| Path::new("/").join(partition).is_dir())
-        .map(|partition| (*partition).to_owned())
-        .collect()
 }
 
 #[cfg(unix)]

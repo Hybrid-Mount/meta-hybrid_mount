@@ -16,6 +16,7 @@ use crate::config::{Config, Mode};
 use crate::errors::{Error, Result};
 use crate::module_id::ModuleId;
 use crate::mount_tree::{MountNode, MountSource, MountTree, NodeFileType};
+use crate::partitions::{OperationDiagnostic, PartitionDiagnostic, PartitionLayout};
 use crate::scanner::{ModuleEntry, ModuleRecord};
 
 /// One overlay mount operation, structured like v4.2.0's `OverlayOperation`.
@@ -37,6 +38,9 @@ pub struct MountPlan {
     pub overlay_module_ids: Vec<ModuleId>,
     pub magic_module_ids: Vec<ModuleId>,
     pub vfs_module_ids: Vec<ModuleId>,
+    pub partition_errors: Vec<PartitionDiagnostic>,
+    pub operation_errors: Vec<OperationDiagnostic>,
+    pub partition_layout: PartitionLayout,
 }
 
 impl MountPlan {
@@ -53,7 +57,7 @@ pub struct PlanInput<'a> {
     pub modules: &'a [ModuleRecord],
     pub config: &'a Config,
     /// Promoted partitions discovered by the executor from the built-in promotion rules.
-    pub promoted_partitions: &'a BTreeSet<String>,
+    pub layout: &'a PartitionLayout,
     /// Whether the kernel provides the VFS backend this boot. When false, every `vfs`
     /// rule degrades to `ignore` so no plan, count or page can advertise a backend the
     /// executor cannot use.
@@ -75,13 +79,15 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
             continue;
         }
         let rules = ModuleRulesView::new(&module.id, input.config, input.vfs_available);
-        process_module(module, &rules, input.promoted_partitions, &mut builder)?;
+        process_module(module, &rules, input.layout, &mut builder)?;
     }
 
     ensure_replace_backend_consistency(&builder.tree.root, "")?;
     ensure_vfs_not_shadowed(&builder.tree.root, "", None)?;
     ensure_vfs_opaque_exclusive(&builder.tree.root, "", None)?;
-    Ok(builder.finish())
+    let mut plan = builder.finish();
+    plan.partition_layout = input.layout.clone();
+    Ok(plan)
 }
 
 struct ModuleRulesView {
@@ -161,6 +167,7 @@ struct PlanBuilder {
     vfs_module_ids: BTreeSet<ModuleId>,
     /// Cross-module allocation table from target to already-assigned node, used for conflict detection.
     assignments: BTreeMap<String, Vec<TargetAssignment>>,
+    partition_errors: BTreeMap<String, PartitionDiagnostic>,
 }
 
 struct TargetAssignment {
@@ -255,6 +262,9 @@ impl PlanBuilder {
             .collect();
 
         MountPlan {
+            partition_errors: self.partition_errors.into_values().collect(),
+            operation_errors: Vec::new(),
+            partition_layout: PartitionLayout::default(),
             tree: self.tree,
             overlay_ops,
             overlay_files,
@@ -274,25 +284,36 @@ struct EntryDecision<'a> {
 fn process_module(
     module: &ModuleRecord,
     rules: &ModuleRulesView,
-    promoted: &BTreeSet<String>,
+    layout: &PartitionLayout,
     builder: &mut PlanBuilder,
 ) -> Result<()> {
-    let decisions: Vec<EntryDecision> = module
-        .entries
-        .iter()
-        .filter(|entry| {
-            !is_promoted_partition_alias(entry, promoted)
-                && !is_redundant_partition_self_alias(entry, promoted)
-        })
-        .map(|entry| EntryDecision {
-            entry,
-            mode: rules.resolve_mode(&entry.relative),
-        })
-        .collect();
+    let mut decisions = Vec::new();
+    for entry in &module.entries {
+        let mode = rules.resolve_mode(&entry.relative);
+        let partition = layout.logical_partition(&entry.relative);
+        if let Some(error) = layout.errors.get(partition) {
+            if mode != Mode::Ignore {
+                let diagnostic = builder
+                    .partition_errors
+                    .entry(partition.to_owned())
+                    .or_insert_with(|| error.clone());
+                if !diagnostic.modules.contains(&module.id.to_string()) {
+                    diagnostic.modules.push(module.id.to_string());
+                }
+            }
+            continue;
+        }
+        if is_promoted_partition_alias(entry, layout)
+            || is_redundant_partition_self_alias(entry, layout)
+        {
+            continue;
+        }
+        decisions.push(EntryDecision { entry, mode });
+    }
 
     // 1. Cross-module conflicts: plain directories may be shared, while files, types and `.replace` must be unique.
     for decision in &decisions {
-        let (_, target) = map_target(&decision.entry.relative, promoted);
+        let (_, target) = map_target(&decision.entry.relative, layout)?;
         builder.tree.insert(
             &target,
             MountSource {
@@ -333,7 +354,7 @@ fn process_module(
         && (rules.default_mode == Mode::Overlay || rules.has_whole_system_overlay_rule());
 
     if whole_overlay {
-        add_whole_overlay_layers(module, &decisions, promoted, builder);
+        add_whole_overlay_layers(module, &decisions, layout, builder)?;
         return Ok(());
     }
 
@@ -355,7 +376,7 @@ fn process_module(
         .collect();
 
     for root in &overlay_dir_roots {
-        let (partition, target) = map_target(&root.relative, promoted);
+        let (partition, target) = map_target(&root.relative, layout)?;
         builder.add_overlay_layer(
             &partition,
             &target,
@@ -376,7 +397,7 @@ fn process_module(
         let Some((parent, _)) = decision.entry.relative.rsplit_once('/') else {
             continue;
         };
-        let (_, parent_target) = map_target(parent, promoted);
+        let (_, parent_target) = map_target(parent, layout)?;
         builder.add_overlay_file(
             &parent_target,
             &module.id,
@@ -392,19 +413,19 @@ fn process_module(
 /// Preserve the v4.2 planner's split-at-partition-root behavior.  Mounting a
 /// regular module as one overlay directly on `/system` is both unnecessarily
 /// broad and rejected with EINVAL by kernels seen in the field.  The legacy
-/// planner descended through `/system` (and promoted partition roots such as
+/// planner descended through `/system` (and layout partition roots such as
 /// `/vendor`) and queued the first real directory below that root instead.
 fn add_whole_overlay_layers(
     module: &ModuleRecord,
     decisions: &[EntryDecision<'_>],
-    promoted: &BTreeSet<String>,
+    layout: &PartitionLayout,
     builder: &mut PlanBuilder,
-) {
+) -> Result<()> {
     let replaced_roots = decisions
         .iter()
         .filter(|decision| {
             let components = decision.entry.relative.split('/').collect::<Vec<_>>();
-            decision.entry.replace && components.len() == partition_root_len(&components, promoted)
+            decision.entry.replace && components.len() == partition_root_len(&components, layout)
         })
         .map(|decision| decision.entry.relative.as_str())
         .collect::<BTreeSet<_>>();
@@ -414,10 +435,10 @@ fn add_whole_overlay_layers(
             continue;
         }
         let components = relative.split('/').collect::<Vec<_>>();
-        let root_len = partition_root_len(&components, promoted);
+        let root_len = partition_root_len(&components, layout);
 
         if components.len() == root_len && decision.entry.replace {
-            let (partition, target) = map_target(relative, promoted);
+            let (partition, target) = map_target(relative, layout)?;
             builder.add_overlay_layer(
                 &partition,
                 &target,
@@ -432,7 +453,7 @@ fn add_whole_overlay_layers(
                 && components.len() == root_len + 1)
         {
             let layer_relative = components[..root_len + 1].join("/");
-            let (partition, target) = map_target(&layer_relative, promoted);
+            let (partition, target) = map_target(&layer_relative, layout)?;
             builder.add_overlay_layer(
                 &partition,
                 &target,
@@ -447,7 +468,7 @@ fn add_whole_overlay_layers(
         // path for this uncommon, but valid, module layout.
         if decision.entry.file_type != NodeFileType::Directory && components.len() == root_len + 1 {
             let parent = components[..root_len].join("/");
-            let (_, target) = map_target(&parent, promoted);
+            let (_, target) = map_target(&parent, layout)?;
             builder.add_overlay_file(
                 &target,
                 &module.id,
@@ -455,18 +476,11 @@ fn add_whole_overlay_layers(
             );
         }
     }
+    Ok(())
 }
 
-fn partition_root_len(components: &[&str], promoted: &BTreeSet<String>) -> usize {
-    if components.first() == Some(&"system")
-        && components
-            .get(1)
-            .is_some_and(|partition| promoted.contains(*partition))
-    {
-        2
-    } else {
-        1
-    }
+fn partition_root_len(components: &[&str], layout: &PartitionLayout) -> usize {
+    layout.root_len(&components.join("/"))
 }
 
 fn collect_magic(
@@ -631,10 +645,10 @@ fn normalize_rule_path(key: &str) -> String {
 
 /// Magisk-style modules commonly carry `system/vendor -> ../vendor` (and the
 /// equivalent links for other dynamic partitions) next to the real top-level
-/// partition subtree. Once that partition is promoted, the link is layout
+/// partition subtree. Once that partition is layout, the link is layout
 /// metadata rather than a mount contribution; mapping it onto `/vendor` would
 /// turn a real directory into a symlink in the shared tree.
-fn is_promoted_partition_alias(entry: &ModuleEntry, promoted: &BTreeSet<String>) -> bool {
+fn is_promoted_partition_alias(entry: &ModuleEntry, layout: &PartitionLayout) -> bool {
     if entry.file_type != NodeFileType::Symlink {
         return false;
     }
@@ -643,17 +657,21 @@ fn is_promoted_partition_alias(entry: &ModuleEntry, promoted: &BTreeSet<String>)
     components.next() == Some("system")
         && components
             .next()
-            .is_some_and(|partition| promoted.contains(partition))
+            .is_some_and(|partition| layout.roots.contains_key(partition))
         && components.next().is_none()
+        && entry.link_target.as_ref().is_some_and(|target| {
+            let name = entry.relative.rsplit('/').next().unwrap_or("");
+            target == &PathBuf::from(format!("../{name}"))
+        })
 }
 
 /// Older installers could accidentally create `product/product`,
-/// `vendor/vendor`, and equivalent self-named symlinks when the promoted
+/// `vendor/vendor`, and equivalent self-named symlinks when the layout
 /// top-level partition directory already existed.  They are layout artifacts,
 /// not mount contributions.  Treating one as a direct partition child would
 /// require a shallow overlay over the entire partition and place that root in
 /// KernelSU's try-unmount list.
-fn is_redundant_partition_self_alias(entry: &ModuleEntry, promoted: &BTreeSet<String>) -> bool {
+fn is_redundant_partition_self_alias(entry: &ModuleEntry, layout: &PartitionLayout) -> bool {
     if entry.file_type != NodeFileType::Symlink {
         return false;
     }
@@ -663,26 +681,19 @@ fn is_redundant_partition_self_alias(entry: &ModuleEntry, promoted: &BTreeSet<St
         return false;
     };
 
-    promoted.contains(partition)
+    layout.roots.contains_key(partition)
         && components.next() == Some(partition)
         && components.next().is_none()
+        && entry.link_target.as_ref().is_some_and(|target| {
+            target == &PathBuf::from(format!("./system/{partition}"))
+                || target == &PathBuf::from(format!("system/{partition}"))
+        })
 }
 
 /// Relative path to (partition, target mountpoint).
-fn map_target(relative: &str, promoted: &BTreeSet<String>) -> (String, String) {
-    let parts: Vec<&str> = relative.split('/').collect();
-    if parts.len() >= 2 && parts[0] == "system" && promoted.contains(parts[1]) {
-        let partition = parts[1].to_owned();
-        let target = format!("/{}", parts[1..].join("/"));
-        (partition, target)
-    } else if parts
-        .first()
-        .is_some_and(|partition| *partition != "system")
-    {
-        (parts[0].to_owned(), format!("/{relative}"))
-    } else {
-        ("system".to_owned(), format!("/{relative}"))
-    }
+fn map_target(relative: &str, layout: &PartitionLayout) -> Result<(String, String)> {
+    let (partition, target) = layout.map_target(relative)?;
+    Ok((partition, target.to_string_lossy().into_owned()))
 }
 
 fn has_overlay_ancestor(relative: &str, overlay: &BTreeSet<&str>) -> bool {
@@ -729,6 +740,7 @@ mod tests {
                         NodeFileType::RegularFile
                     },
                     replace: false,
+                    link_target: None,
                 })
                 .collect(),
         }
@@ -764,7 +776,7 @@ mod tests {
         let input = PlanInput {
             modules,
             config,
-            promoted_partitions: &promoted,
+            layout: &PartitionLayout::from_promoted(&promoted),
             vfs_available,
         };
         build_plan(&input).unwrap()
@@ -775,7 +787,7 @@ mod tests {
         let input = PlanInput {
             modules,
             config,
-            promoted_partitions: &promoted,
+            layout: &PartitionLayout::from_promoted(&promoted),
             vfs_available: true,
         };
         build_plan(&input).unwrap_err()
@@ -977,7 +989,9 @@ mod tests {
             ],
         );
         module.entries[2].file_type = NodeFileType::Symlink;
+        module.entries[2].link_target = Some("./system/product".into());
         module.entries[5].file_type = NodeFileType::Symlink;
+        module.entries[5].link_target = Some("./system/vendor".into());
 
         let result = plan(&[module], &config, &["product", "vendor"]);
 
@@ -1193,6 +1207,7 @@ mod tests {
             ],
         );
         adreno.entries[0].file_type = NodeFileType::Symlink;
+        adreno.entries[0].link_target = Some("../vendor".into());
 
         let mut extreme = record(
             "extreme",
@@ -1204,6 +1219,7 @@ mod tests {
             ],
         );
         extreme.entries[0].file_type = NodeFileType::Symlink;
+        extreme.entries[0].link_target = Some("../vendor".into());
 
         let mut haptics = record(
             "haptics",
@@ -1214,6 +1230,7 @@ mod tests {
             ],
         );
         haptics.entries[0].file_type = NodeFileType::Symlink;
+        haptics.entries[0].link_target = Some("../odm".into());
 
         let rules = BTreeMap::from([
             (
@@ -1490,6 +1507,61 @@ mod tests {
     }
 
     #[test]
+    fn unproven_partition_named_symlink_is_not_discarded() {
+        let mut module = record("real-link", &[("system/vendor", false)]);
+        module.entries[0].file_type = NodeFileType::Symlink;
+        let result = plan(&[module], &config(Mode::Magic, no_rules()), &["vendor"]);
+        assert!(result.tree.find("/vendor").is_some());
+    }
+
+    #[test]
+    fn actual_partition_layout_maps_all_backends_and_skips_conflicts() {
+        use crate::partitions::{PartitionDiagnostic, PartitionLayout};
+        let mut layout = PartitionLayout::default();
+        layout.roots.insert("system".into(), "/system".into());
+        layout
+            .roots
+            .insert("vendor".into(), "/system/vendor".into());
+        for mode in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
+            let modules = [record(
+                "demo",
+                &[("vendor/etc/demo", false), ("system/etc/keep", false)],
+            )];
+            let cfg = config(mode, no_rules());
+            let plan = build_plan(&PlanInput {
+                modules: &modules,
+                config: &cfg,
+                layout: &layout,
+                vfs_available: true,
+            })
+            .unwrap();
+            assert!(plan.tree.find("/system/vendor/etc/demo").is_some());
+            assert!(plan.tree.find("/vendor/etc/demo").is_none());
+            layout.errors.insert(
+                "vendor".into(),
+                PartitionDiagnostic {
+                    partition: "vendor".into(),
+                    code: "conflict".into(),
+                    reason: "different trees".into(),
+                    modules: vec![],
+                },
+            );
+            let plan = build_plan(&PlanInput {
+                modules: &modules,
+                config: &cfg,
+                layout: &layout,
+                vfs_available: true,
+            })
+            .unwrap();
+            assert!(plan.tree.find("/system/vendor/etc/demo").is_none());
+            assert!(plan.tree.find("/system/etc/keep").is_some());
+            assert_eq!(plan.partition_errors.len(), 1);
+            assert_eq!(plan.partition_errors[0].modules, vec!["demo"]);
+            layout.errors.clear();
+        }
+    }
+
+    #[test]
     fn map_target_splits_promoted_partitions() {
         let promoted: BTreeSet<String> = ["vendor", "product"]
             .into_iter()
@@ -1497,19 +1569,35 @@ mod tests {
             .collect();
 
         assert_eq!(
-            map_target("system/etc/hosts", &promoted),
+            map_target(
+                "system/etc/hosts",
+                &PartitionLayout::from_promoted(&promoted)
+            )
+            .unwrap(),
             ("system".to_owned(), "/system/etc/hosts".to_owned())
         );
         assert_eq!(
-            map_target("system/vendor/lib/x.so", &promoted),
+            map_target(
+                "system/vendor/lib/x.so",
+                &PartitionLayout::from_promoted(&promoted)
+            )
+            .unwrap(),
             ("vendor".to_owned(), "/vendor/lib/x.so".to_owned())
         );
         assert_eq!(
-            map_target("system/product/app", &promoted),
+            map_target(
+                "system/product/app",
+                &PartitionLayout::from_promoted(&promoted)
+            )
+            .unwrap(),
             ("product".to_owned(), "/product/app".to_owned())
         );
         assert_eq!(
-            map_target("vendor/lib/x.so", &promoted),
+            map_target(
+                "vendor/lib/x.so",
+                &PartitionLayout::from_promoted(&promoted)
+            )
+            .unwrap(),
             ("vendor".to_owned(), "/vendor/lib/x.so".to_owned())
         );
     }

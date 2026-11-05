@@ -645,11 +645,11 @@ pub fn handle_modules() -> Result<()> {
 }
 
 fn fallback_app_modules(modules: &[ModuleRecord], config: &Config) -> Vec<AppModule> {
-    let promoted_partitions = BTreeSet::new();
+    let layout = crate::partitions::PartitionLayout::default();
     let plan = build_plan(&PlanInput {
         modules,
         config,
-        promoted_partitions: &promoted_partitions,
+        layout: &layout,
         vfs_available: crate::vfs::available(),
     })
     .unwrap_or_else(|err| {
@@ -998,6 +998,7 @@ mod tests {
             relative: "system/etc/new".into(),
             file_type: crate::mount_tree::NodeFileType::RegularFile,
             replace: false,
+            link_target: None,
         });
         let merged = merge_module_snapshot(
             Vec::new(),
@@ -1153,11 +1154,13 @@ mod tests {
                 relative: "system/etc".to_owned(),
                 file_type: crate::mount_tree::NodeFileType::Directory,
                 replace: false,
+                link_target: None,
             },
             crate::scanner::ModuleEntry {
                 relative: "system/etc/hosts".to_owned(),
                 file_type: crate::mount_tree::NodeFileType::RegularFile,
                 replace: false,
+                link_target: None,
             },
         ];
 

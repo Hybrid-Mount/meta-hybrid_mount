@@ -67,7 +67,12 @@ fn extra_mount_selects_existing_roots_without_system_entries() {
         ..Config::default()
     };
     assert_eq!(config.extra_mount_partitions(&root), ["my_extra"]);
-    assert_eq!(config.scan_partition_names(&root), ["my_extra", "product"]);
+    let names = config.scan_partition_names(&root);
+    assert!(names.contains(&"my_extra".to_owned()));
+    assert!(names.contains(&"product".to_owned()));
+    assert!(names.contains(&"vendor".to_owned()));
+    assert!(!names.contains(&"apex".to_owned()));
+    assert!(!names.contains(&"missing".to_owned()));
 }
 
 #[cfg(unix)]

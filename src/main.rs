@@ -14,6 +14,7 @@ mod module_id;
 mod module_status;
 mod mount_tree;
 mod overlayfs;
+mod partitions;
 mod pipeline;
 mod plan;
 mod runtime;

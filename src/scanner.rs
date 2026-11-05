@@ -24,6 +24,8 @@ pub struct ModuleEntry {
     pub relative: String,
     pub file_type: NodeFileType,
     pub replace: bool,
+    /// Read-only evidence used to distinguish a module layout alias from content.
+    pub link_target: Option<PathBuf>,
 }
 
 /// A module record produced by the read-only scan.
@@ -209,6 +211,7 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
                     relative: partition.clone(),
                     file_type: NodeFileType::Directory,
                     replace: true,
+                    link_target: None,
                 });
             }
             entries.extend(collect_partition_entries(&partition_dir, &partition));
@@ -303,6 +306,11 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
                 relative: format!("{partition}/{relative}"),
                 file_type,
                 replace,
+                link_target: if file_type == NodeFileType::Symlink {
+                    fs::read_link(&path).ok()
+                } else {
+                    None
+                },
             });
 
             if file_type == NodeFileType::Directory {
