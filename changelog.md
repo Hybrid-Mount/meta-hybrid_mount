@@ -1,4 +1,48 @@
 
+## v6.2.6-rc.1
+
+
+### <!-- 1 --> Features
+
+- `vfs` Restore NoMount kernel provider support
+
+
+
+### <!-- 2 --> Fixes
+
+- `vfs` Guard fabricated inode file handle encoding
+
+- `vfs` Enforce backing permissions and safe dentry lifetimes
+
+- `vfs` Detect backported VMA flag helpers
+
+- `vfs` Warn when the provider protocol is unrecognized
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- 构建：下载并复用预编译通知工具
+
+- 测试：校验下载的预编译通知工具
+
+- `vfs` Refresh the prebuilt hybridmount modules
+
+- Refactor MiuixSelectField, Add icon , use MiuixArrowPerference idk why LLM not reuse it...
+
+- Refactor all miuix component and minor fix Add more icons. Use infinite MiuixProgressIndicator Add disabled series color tokens
+
+- Impl pulldowntorefresh
+
+- Fix lint
+
+- Add path rule controls to Miuix modules Allow users to add and remove module path rules, choose a mount mode in a dialog, and save a copy of the edited rules. Add localized labels across supported languages and refine module page styling.
+
+- `vfs` Refresh the prebuilt hybridmount modules
+
+
+
+
 ## v6.2.5
 
 
