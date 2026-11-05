@@ -956,7 +956,7 @@ static int hm_xattr_get(const struct xattr_handler *handler, struct dentry *dent
     return proxy->orig->get(proxy->orig, dentry, inode, name, buffer, size FLAGS_VAL);
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
+#ifdef HM_HAVE_XATTR__GET
 static int hm_xattr__get(const struct xattr_handler *handler, struct dentry *dentry,
                         struct inode *inode, const char *name, void *buffer, size_t size)
 {
@@ -1369,7 +1369,7 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
             proxies[i].orig = sb->s_xattr[i];
             proxies[i].fake = *sb->s_xattr[i];
             if (proxies[i].fake.get) proxies[i].fake.get = hm_xattr_get;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) && LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
+#ifdef HM_HAVE_XATTR__GET
             if (proxies[i].fake.__get) proxies[i].fake.__get = hm_xattr__get;
 #endif
             if (proxies[i].fake.set) proxies[i].fake.set = hm_xattr_set;

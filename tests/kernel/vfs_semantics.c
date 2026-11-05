@@ -73,7 +73,7 @@ struct dentry;
 struct xattr_handler {
     int (*get)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, void *, size_t);
     void (*set)(void);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
+#ifdef HM_HAVE_XATTR__GET
     int (*__get)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, void *, size_t);
 #endif
 };
@@ -249,7 +249,7 @@ int main(int argc,char **argv) {
         assert(inode.i_op==&native_iops && inode.i_fop==&native_fops);
     } else {
         struct xattr_handler orig={.get=native_get};
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
+#ifdef HM_HAVE_XATTR__GET
         orig.__get=native_get;
 #endif
         const struct xattr_handler *handlers[]={&orig,NULL}; struct super_operations ops={0};
@@ -261,7 +261,7 @@ int main(int argc,char **argv) {
         bool caps = !strcmp(mode,"xattr-capability");
         const char *name = caps ? XATTR_NAME_CAPS : "security.selinux";
         int result;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,14,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
+#ifdef HM_HAVE_XATTR__GET
         result=sb.s_xattr[0]->__get(sb.s_xattr[0],&d,&inode,name,NULL,0);
 #else
         result=sb.s_xattr[0]->get(sb.s_xattr[0],&d,&inode,name,NULL,0);

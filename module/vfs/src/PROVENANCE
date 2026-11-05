@@ -80,6 +80,14 @@ and command numbering are still the upstream ones.
 
 ## Syncing with upstream
 
+Selective compatibility port on 2026-11-05:
+- NoMount f0478cad4081: detect xattr_handler->__get from the kernel header,
+  including multiline declarations, rather than a kernel-version interval.
+  External Kbuild and setup.sh's generated in-tree Kbuild use the same probe;
+  the semantics harness covers each kernel version with and without the member.
+  The imported baseline and hm1 protocol are unchanged. Rebuild prebuilts before
+  distributing this source change (sources.txt must match).
+
 Selective fixes reviewed on 2026-10-07 (the imported baseline is unchanged):
 
 - 8c3efcdb6f6b63609a39b5f22f70fed7f90a2cd5: do not mark real backing inodes

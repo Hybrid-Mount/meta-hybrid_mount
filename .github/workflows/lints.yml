@@ -155,6 +155,9 @@ jobs:
       - name: Test VFS built-in integration script
         run: sh tests/shell/vfs_setup.sh
 
+      - name: Test VFS xattr member detection
+        run: sh tests/shell/vfs_xattr_feature.sh
+
       - name: Test the VFS sources digest checker
         run: sh tests/shell/vfs_sources_digest_test.sh
 
