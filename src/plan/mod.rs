@@ -41,6 +41,7 @@ pub struct MountPlan {
     pub partition_errors: Vec<PartitionDiagnostic>,
     pub operation_errors: Vec<OperationDiagnostic>,
     pub partition_layout: PartitionLayout,
+    pub protected_targets: Vec<PathBuf>,
 }
 
 impl MountPlan {
@@ -87,6 +88,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     ensure_vfs_opaque_exclusive(&builder.tree.root, "", None)?;
     let mut plan = builder.finish();
     plan.partition_layout = input.layout.clone();
+    plan.protected_targets = protected_targets(input.layout);
     Ok(plan)
 }
 
@@ -168,6 +170,7 @@ struct PlanBuilder {
     /// Cross-module allocation table from target to already-assigned node, used for conflict detection.
     assignments: BTreeMap<String, Vec<TargetAssignment>>,
     partition_errors: BTreeMap<String, PartitionDiagnostic>,
+    operation_errors: Vec<OperationDiagnostic>,
 }
 
 struct TargetAssignment {
@@ -263,8 +266,9 @@ impl PlanBuilder {
 
         MountPlan {
             partition_errors: self.partition_errors.into_values().collect(),
-            operation_errors: Vec::new(),
+            operation_errors: self.operation_errors,
             partition_layout: PartitionLayout::default(),
+            protected_targets: Vec::new(),
             tree: self.tree,
             overlay_ops,
             overlay_files,
@@ -287,8 +291,41 @@ fn process_module(
     layout: &PartitionLayout,
     builder: &mut PlanBuilder,
 ) -> Result<()> {
+    let protected = protected_targets(layout);
+    let mut blocked_subtrees = Vec::new();
+    for entry in &module.entries {
+        if rules.resolve_mode(&entry.relative) == Mode::Ignore {
+            continue;
+        }
+        let Ok((_, target)) = layout.map_target(&entry.relative) else {
+            continue;
+        };
+        let destructive = entry.replace
+            || matches!(
+                entry.file_type,
+                NodeFileType::Symlink | NodeFileType::Whiteout
+            );
+        if destructive
+            && protected.iter().any(|p| {
+                p.starts_with(&target)
+                    && (p != &target || entry.file_type == NodeFileType::Whiteout)
+            })
+        {
+            blocked_subtrees.push(entry.relative.clone());
+            builder.operation_errors.push(OperationDiagnostic {
+                module_id: module.id.to_string(), logical_path: entry.relative.clone(), target: Some(target),
+                code: "protected_ancestor".into(), reason: "replacement or deletion would cover a rejected partition or an existing child mount".into(),
+            });
+        }
+    }
     let mut decisions = Vec::new();
     for entry in &module.entries {
+        if blocked_subtrees
+            .iter()
+            .any(|p| crate::utils::is_same_or_below(&entry.relative, p))
+        {
+            continue;
+        }
         let mode = rules.resolve_mode(&entry.relative);
         let partition = layout.logical_partition(&entry.relative);
         if let Some(error) = layout.errors.get(partition) {
@@ -408,6 +445,21 @@ fn process_module(
     collect_magic(module, &decisions, builder);
     collect_vfs(module, &decisions, builder);
     Ok(())
+}
+
+fn protected_targets(layout: &PartitionLayout) -> Vec<PathBuf> {
+    let mut protected = layout.mount_points.clone();
+    for (name, error) in &layout.errors {
+        if error.code == "partition_missing" {
+            continue;
+        }
+        protected.insert(PathBuf::from("/").join(name));
+        protected.insert(PathBuf::from("/system").join(name));
+        if let Some(system) = layout.roots.get("system") {
+            protected.insert(system.join(name));
+        }
+    }
+    protected.into_iter().collect()
 }
 
 /// Preserve the v4.2 planner's split-at-partition-root behavior.  Mounting a
@@ -1504,6 +1556,43 @@ mod tests {
 
         assert!(result.overlay_ops.is_empty());
         assert!(result.overlay_module_ids.is_empty());
+    }
+
+    #[test]
+    fn rejected_partition_cannot_leak_through_an_ancestor_replace() {
+        let mut layout = PartitionLayout::from_promoted(&BTreeSet::from(["vendor".into()]));
+        layout.errors.insert(
+            "vendor".into(),
+            PartitionDiagnostic {
+                partition: "vendor".into(),
+                reason: "different trees".into(),
+                code: "conflict".into(),
+                modules: vec![],
+            },
+        );
+        let mut module = record(
+            "ancestor",
+            &[
+                ("system", true),
+                ("system/etc/demo", false),
+                ("system/vendor/etc/bad", false),
+                ("product/app/good", false),
+            ],
+        );
+        module.entries[0].replace = true;
+        for mode in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
+            let cfg = config(mode, no_rules());
+            let result = build_plan(&PlanInput {
+                modules: std::slice::from_ref(&module),
+                config: &cfg,
+                layout: &layout,
+                vfs_available: true,
+            })
+            .unwrap();
+            assert!(result.tree.find("/system").is_none());
+            assert!(result.tree.find("/product/app/good").is_some());
+            assert_eq!(result.operation_errors.len(), 1);
+        }
     }
 
     #[test]

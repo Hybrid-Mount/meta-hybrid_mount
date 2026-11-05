@@ -6,6 +6,7 @@ fn evidence(path: &str, ino: u64, mount: i32) -> PathEvidence {
         dev: 7,
         ino,
         visible_mount_id: mount,
+        is_dir: true,
     }
 }
 
@@ -81,6 +82,18 @@ fn top_level_directory_requires_a_visible_exact_mount() {
         layout(&s).map_target("vendor/etc/demo").unwrap().1,
         PathBuf::from("/vendor/etc/demo")
     );
+}
+
+#[test]
+fn a_file_or_missing_system_root_is_not_a_partition() {
+    let mut s = snapshot();
+    let mut file = evidence("/vendor", 42, 2);
+    file.is_dir = false;
+    s.paths.insert("/vendor".into(), file);
+    s.mounts.push(mount("/vendor", "/vendor", 2));
+    assert!(layout(&s).map_target("vendor/etc/demo").is_err());
+    s.paths.remove(Path::new("/system"));
+    assert!(layout(&s).map_target("system/etc/demo").is_err());
 }
 
 #[test]

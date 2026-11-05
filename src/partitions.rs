@@ -17,6 +17,7 @@ pub struct PathEvidence {
     pub dev: u64,
     pub ino: u64,
     pub visible_mount_id: i32,
+    pub is_dir: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -201,6 +202,9 @@ fn choose_root(snapshot: &LayoutSnapshot, name: &str, system: &Path) -> Result<P
     let a = snapshot.paths.get(&top);
     let b = snapshot.paths.get(&nested);
     for probe in [a, b].into_iter().flatten() {
+        if !probe.is_dir {
+            return Err(Error::msg("partition root is not a directory"));
+        }
         if probe.canonical != top && probe.canonical != system.join(name) {
             return Err(Error::msg(format!(
                 "partition alias resolves outside allowed roots: {}",
@@ -268,7 +272,11 @@ pub fn discover_layout(
         .map_or_else(|| PathBuf::from("/system"), |p| p.canonical.clone());
     layout.roots.insert("system".into(), system.clone());
     if let Some(probe) = snapshot.paths.get(Path::new("/system")) {
-        match identity(snapshot, probe) {
+        match if probe.is_dir {
+            identity(snapshot, probe)
+        } else {
+            Err(Error::msg("system root is not a directory"))
+        } {
             Ok(id) => {
                 layout.identities.insert("system".into(), id);
             }
@@ -284,6 +292,20 @@ pub fn discover_layout(
                 );
             }
         }
+    } else {
+        layout.errors.insert(
+            "system".into(),
+            PartitionDiagnostic {
+                partition: "system".into(),
+                code: "layout_unavailable".into(),
+                reason: snapshot
+                    .path_errors
+                    .get(Path::new("/system"))
+                    .cloned()
+                    .unwrap_or_else(|| "system root is missing".into()),
+                modules: vec![],
+            },
+        );
     }
     for name in managed {
         let chosen = choose_root(snapshot, name, &system).and_then(|p| identity(snapshot, &p));
@@ -297,7 +319,19 @@ pub fn discover_layout(
                     name.clone(),
                     PartitionDiagnostic {
                         partition: name.clone(),
-                        code: "layout_unavailable".into(),
+                        code: if [
+                            PathBuf::from("/").join(name),
+                            PathBuf::from("/system").join(name),
+                        ]
+                        .iter()
+                        .all(|p| {
+                            !snapshot.paths.contains_key(p) && !snapshot.path_errors.contains_key(p)
+                        }) {
+                            "partition_missing"
+                        } else {
+                            "layout_unavailable"
+                        }
+                        .into(),
                         reason: e.to_string(),
                         modules: vec![],
                     },
@@ -363,6 +397,8 @@ fn probe_path(path: &Path) -> std::io::Result<PathEvidence> {
         dev: stat.st_dev,
         ino: stat.st_ino,
         visible_mount_id,
+        is_dir: rustix::fs::FileType::from_raw_mode(stat.st_mode)
+            == rustix::fs::FileType::Directory,
     })
 }
 

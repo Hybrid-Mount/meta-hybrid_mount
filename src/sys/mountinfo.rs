@@ -87,13 +87,16 @@ pub fn mount_entries() -> Result<Vec<MountEntry>> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn read_mountinfo() -> Result<Vec<procfs::process::MountInfo>> {
-    let process = procfs::process::Process::myself().map_err(|err| {
-        Error::Mount(Box::new(crate::errors::ContextError::new(
-            "get self process for mountinfo",
-            None,
-            err,
-        )))
-    })?;
+    // setns/unshare affects the calling thread. /proc/self describes the group
+    // leader, which may still inhabit a different mount namespace.
+    let process = procfs::process::Process::new(rustix::thread::gettid().as_raw_nonzero().get())
+        .map_err(|err| {
+            Error::Mount(Box::new(crate::errors::ContextError::new(
+                "get self process for mountinfo",
+                None,
+                err,
+            )))
+        })?;
     let mountinfo = process.mountinfo().map_err(|err| {
         Error::Mount(Box::new(crate::errors::ContextError::new(
             "read mountinfo",
