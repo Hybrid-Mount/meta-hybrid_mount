@@ -209,6 +209,19 @@ generations and node retirement; `python3 tests/kernel/vfs_semantics.py` covers
 parent deletion, directory inode numbers, ops teardown and old-kernel xattr dispatch.
 The version fixtures do not replace compilation against real kernel headers.
 
+The held-directory regressions also check native fallback after UID isolation,
+nested opaque targets, and native VFS iteration with its own locking and cursor.
+In a disposable environment with this exact `hm1` provider loaded, root and Python 3,
+set `HM_DISPOSABLE_TEST=1` and `HM_BINARY=/absolute/hybrid-mount`, then run
+`sh tests/device/vfs_uid_directory_view.sh` or `sh tests/device/vfs_source_identity.sh`.
+`HM_TEST_ROOT` selects the scratch parent (default `/data/local/tmp`);
+`HM_TEST_UID` selects an otherwise unused isolated UID (default 61987).
+The probes print inode/content/error observations and remove only their own
+rules and UID; they never load a provider or clear shared tables. Source identity
+observations include rename, recreation, atomic replacement, symlink retargeting
+and concurrent replacement. These device probes have not been executed as part
+of the host-only validation documented in `docs/reviews/2026-11-06-vfs-uid-directory.md`.
+
 On a rooted test device with a freshly rebuilt provider, run
 `sh tests/device/vfs_parent_delete.sh /absolute/hybrid-mount /quiet/native/parent`
 to verify that child rules survive parent deletion while an old directory handle
