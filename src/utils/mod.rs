@@ -234,6 +234,36 @@ mod linux_tests {
     }
 
     #[test]
+    fn xattr_roundtrip_preserves_nonempty_label_bytes() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-xattr-label-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("source");
+        let destination = dir.join("destination");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::write(&destination, b"destination").unwrap();
+
+        // Use user.* on hosts without SELinux, but preserve the label bytes,
+        // including the trailing NUL, exactly as the Android metadata path does.
+        let name = "user.hybrid_mount_label";
+        let label = b"u:object_r:system_file:s0\0";
+        if let Err(err) = write_xattr(&source, name, label) {
+            if xattr_unavailable(&err) {
+                eprintln!("skipping label xattr test: {err}");
+                std::fs::remove_dir_all(&dir).unwrap();
+                return;
+            }
+            panic!("set label xattr failed: {err}");
+        }
+
+        let copied_label = read_xattr(&source, name).unwrap();
+        assert_eq!(copied_label, label);
+        write_xattr(&destination, name, &copied_label).unwrap();
+        assert_eq!(read_xattr_following(&destination, name).unwrap(), label);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn xattr_roundtrip_handles_long_contexts() {
         let dir = std::env::temp_dir().join(format!("hybrid-mount-xattr-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
