@@ -13,6 +13,7 @@ Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在�
 - OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
 - ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
 - Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
+- 在模块目录中放置普通文件 `.remove` 可隐藏该目标目录及其子树，原磁盘内容不会删除。三后端使用相同语义；`.remove` 优先于 `.replace`，标记和后代内容不会挂出。路径规则 `ignore` 可关闭此请求。分区根、已有子挂载边界和无效标记会跳过并显示原因；其他模块贡献同一目标或后代时按冲突报错。
 - VFS 通过 keyring 把注入规则下发给 `hybridmount` 或已有的兼容 NoMount 内核后端。发布包同时提供源码与每个受支持 Android/GKI 目标的 arm64 预编译模块，内核未内建时由启动流程自动加载；仍不可用时按 `vfs_strict` 降级。VFS 不是真实挂载。
 - WebUI 提供 MD3（默认）与 Miuix 两套界面。
 - 支持 arm64、armv7、x86_64 与 riscv64，安装脚本会自动选择对应二进制。riscv64 构建需要 Android NDK r27 或更新版本。

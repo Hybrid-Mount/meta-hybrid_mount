@@ -4,6 +4,49 @@ use super::*;
 use crate::module_id::ModuleId;
 use crate::mount_tree::{MountSource, MountTree};
 
+#[cfg(target_os = "linux")]
+#[test]
+fn native_directory_mount_mirror_keeps_its_nested_mounts() {
+    let _guard = crate::sys::faults::test_lock();
+    crate::sys::faults::reset();
+    if !crate::test_support::require_mount_namespace() {
+        return;
+    }
+    let fixture = crate::test_support::Fixture::new("magic-native-mount");
+    let source = fixture.join("source");
+    let native = source.join("native");
+    let work = fixture.join("work");
+    fs::create_dir_all(&native).unwrap();
+    fs::create_dir_all(&work).unwrap();
+    mount("tmpfs", &native, "tmpfs", MountFlags::empty(), None).unwrap();
+    fs::create_dir(native.join("nested")).unwrap();
+    mount(
+        "tmpfs",
+        native.join("nested"),
+        "tmpfs",
+        MountFlags::empty(),
+        None,
+    )
+    .unwrap();
+    fs::write(native.join("nested/keep"), "stock").unwrap();
+    let entry = fs::read_dir(&source).unwrap().next().unwrap().unwrap();
+    let mut stats = MagicMountStats::default();
+    let result = mount_mirror(&source, &work, &entry, &mut stats, &mut |_| {});
+    let cloned = crate::sys::mount::is_mounted(&work.join("native/nested")).unwrap();
+    let content = fs::read_to_string(work.join("native/nested/keep"));
+    if crate::sys::mount::is_mounted(&work.join("native")).unwrap() {
+        rustix::mount::unmount(work.join("native"), rustix::mount::UnmountFlags::DETACH).unwrap();
+    }
+    rustix::mount::unmount(native.join("nested"), rustix::mount::UnmountFlags::DETACH).unwrap();
+    rustix::mount::unmount(&native, rustix::mount::UnmountFlags::DETACH).unwrap();
+    assert!(
+        result.is_ok(),
+        "native mounts must be cloned as views: {result:?}"
+    );
+    assert!(cloned);
+    assert_eq!(content.unwrap(), "stock");
+}
+
 #[test]
 fn injected_magic_mount_failure_fires_before_side_effects() {
     let _fault_guard = crate::sys::faults::test_lock();

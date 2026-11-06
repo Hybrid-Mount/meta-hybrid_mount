@@ -1120,6 +1120,8 @@ mod tests {
             file_type: crate::mount_tree::NodeFileType::RegularFile,
             replace: false,
             link_target: None,
+            directory_remove: false,
+            marker_error: None,
         });
         let merged = merge_module_snapshot(
             Vec::new(),
@@ -1276,12 +1278,16 @@ mod tests {
                 file_type: crate::mount_tree::NodeFileType::Directory,
                 replace: false,
                 link_target: None,
+                directory_remove: false,
+                marker_error: None,
             },
             crate::scanner::ModuleEntry {
                 relative: "system/etc/hosts".to_owned(),
                 file_type: crate::mount_tree::NodeFileType::RegularFile,
                 replace: false,
                 link_target: None,
+                directory_remove: false,
+                marker_error: None,
             },
         ];
 

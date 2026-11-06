@@ -86,6 +86,7 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     ensure_replace_backend_consistency(&builder.tree.root, "")?;
     ensure_vfs_not_shadowed(&builder.tree.root, "", None)?;
     ensure_vfs_opaque_exclusive(&builder.tree.root, "", None)?;
+    ensure_whiteout_exclusive(&builder.tree.root, "")?;
     let mut plan = builder.finish();
     plan.partition_layout = input.layout.clone();
     plan.protected_targets = protected_targets(input.layout);
@@ -297,9 +298,31 @@ fn process_module(
         if rules.resolve_mode(&entry.relative) == Mode::Ignore {
             continue;
         }
+        if let Some(reason) = &entry.marker_error {
+            builder.operation_errors.push(OperationDiagnostic {
+                module_id: module.id.to_string(),
+                logical_path: entry.relative.clone(),
+                target: layout.map_target(&entry.relative).ok().map(|(_, p)| p),
+                code: "invalid_remove_marker".into(),
+                reason: reason.clone(),
+            });
+        }
         let Ok((_, target)) = layout.map_target(&entry.relative) else {
             continue;
         };
+        if entry.directory_remove
+            && entry.relative.split('/').count() == layout.root_len(&entry.relative)
+        {
+            blocked_subtrees.push(entry.relative.clone());
+            builder.operation_errors.push(OperationDiagnostic {
+                module_id: module.id.to_string(),
+                logical_path: entry.relative.clone(),
+                target: Some(target),
+                code: "partition_root_remove".into(),
+                reason: "directory .remove is not allowed at a partition root".into(),
+            });
+            continue;
+        }
         let destructive = entry.replace
             || matches!(
                 entry.file_type,
@@ -314,7 +337,7 @@ fn process_module(
             blocked_subtrees.push(entry.relative.clone());
             builder.operation_errors.push(OperationDiagnostic {
                 module_id: module.id.to_string(), logical_path: entry.relative.clone(), target: Some(target),
-                code: "protected_ancestor".into(), reason: "replacement or deletion would cover a rejected partition or an existing child mount".into(),
+                code: if entry.directory_remove { "protected_submount_remove" } else { "protected_ancestor" }.into(), reason: "replacement or deletion would cover a rejected partition or an existing child mount".into(),
             });
         }
     }
@@ -679,6 +702,38 @@ fn ensure_vfs_opaque_exclusive(
     Ok(())
 }
 
+fn ensure_whiteout_exclusive(node: &MountNode, target: &str) -> Result<()> {
+    let current = child_target(target, node);
+    if let Some(removal) = node
+        .sources
+        .iter()
+        .find(|s| s.file_type == NodeFileType::Whiteout && s.backend != Mode::Ignore)
+    {
+        let other = node
+            .sources
+            .iter()
+            .find(|s| s.file_type != NodeFileType::Whiteout && s.backend != Mode::Ignore)
+            .or_else(|| {
+                [Mode::Overlay, Mode::Magic, Mode::Vfs]
+                    .into_iter()
+                    .find_map(|mode| first_descendant_source(node, mode))
+            });
+        if let Some(other) = other {
+            return Err(Error::PlanConflict {
+                target: current,
+                first_backend: removal.backend.as_str().into(),
+                first_source: format!("{}:{} (whiteout)", removal.module_id, removal.relative),
+                second_backend: other.backend.as_str().into(),
+                second_source: format!("{}:{}", other.module_id, other.relative),
+            });
+        }
+    }
+    for child in node.children.values() {
+        ensure_whiteout_exclusive(child, &current)?;
+    }
+    Ok(())
+}
+
 fn first_descendant_source(node: &MountNode, backend: Mode) -> Option<&MountSource> {
     for child in node.children.values() {
         if let Some(source) = child.source_for(backend) {
@@ -793,6 +848,8 @@ mod tests {
                     },
                     replace: false,
                     link_target: None,
+                    directory_remove: false,
+                    marker_error: None,
                 })
                 .collect(),
         }
@@ -1556,6 +1613,100 @@ mod tests {
 
         assert!(result.overlay_ops.is_empty());
         assert!(result.overlay_module_ids.is_empty());
+    }
+
+    #[test]
+    fn directory_remove_cannot_hide_a_partition_root() {
+        let mut module = record(
+            "root-remove",
+            &[("vendor", false), ("system/etc/keep", false)],
+        );
+        module.entries[0].file_type = NodeFileType::Whiteout;
+        module.entries[0].directory_remove = true;
+        let layout = PartitionLayout::from_promoted(&BTreeSet::from(["vendor".into()]));
+        for mode in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
+            let cfg = config(mode, no_rules());
+            let result = build_plan(&PlanInput {
+                modules: std::slice::from_ref(&module),
+                config: &cfg,
+                layout: &layout,
+                vfs_available: true,
+            })
+            .unwrap();
+            assert!(result.tree.find("/vendor").is_none());
+            assert!(result.tree.find("/system/etc/keep").is_some());
+            assert_eq!(result.operation_errors[0].code, "partition_root_remove");
+        }
+    }
+
+    #[test]
+    fn scanned_directory_remove_is_a_whiteout_for_each_backend_and_can_be_ignored() {
+        use std::fs;
+        let root = crate::test_support::Fixture::new("remove-plan");
+        let source = root.join("hide/system/app/Foo");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(
+            root.join("hide/module.prop"),
+            "id=hide\nname=Hide\nversion=1\nauthor=A\ndescription=D\n",
+        )
+        .unwrap();
+        fs::write(source.join(".remove"), "").unwrap();
+        fs::write(source.join("old.apk"), "untouched").unwrap();
+        let scanned = crate::scanner::list_modules(&root, &[]).unwrap();
+        for mode in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
+            let result = plan(&scanned, &config(mode, no_rules()), &[]);
+            let node = result.tree.find("/system/app/Foo").unwrap();
+            assert_eq!(
+                node.source_for(mode).unwrap().file_type,
+                NodeFileType::Whiteout
+            );
+            assert!(node.children.is_empty());
+            if mode == Mode::Vfs {
+                assert!(
+                    matches!(&crate::vfs::rule::build_vfs_rules(&result.tree)[0].action, crate::vfs::rule::VfsAction::Whiteout { virtual_path } if virtual_path == "/system/app/Foo")
+                );
+            }
+        }
+        let result = plan(&scanned, &config(Mode::Ignore, no_rules()), &[]);
+        assert!(!result.tree.has_backend(Mode::Overlay));
+        assert!(crate::vfs::rule::build_vfs_rules(&result.tree).is_empty());
+        assert!(result.operation_errors.is_empty());
+        let mut layout = PartitionLayout::default();
+        layout.mount_points.insert("/system/app/Foo/native".into());
+        let cfg = config(Mode::Magic, no_rules());
+        let result = build_plan(&PlanInput {
+            modules: &scanned,
+            config: &cfg,
+            layout: &layout,
+            vfs_available: true,
+        })
+        .unwrap();
+        assert!(result.tree.find("/system/app/Foo").is_none());
+        assert_eq!(result.operation_errors[0].code, "protected_submount_remove");
+        assert_eq!(
+            fs::read_to_string(source.join("old.apk")).unwrap(),
+            "untouched"
+        );
+    }
+
+    #[test]
+    fn whiteout_cannot_silently_discard_another_modules_descendants() {
+        let mut removal = record("hide", &[("system/app/Foo", false)]);
+        removal.entries[0].file_type = NodeFileType::Whiteout;
+        let child = record("content", &[("system/app/Foo/new.apk", false)]);
+        for mode in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
+            let cfg = config(mode, no_rules());
+            let layout = PartitionLayout::default();
+            assert!(
+                build_plan(&PlanInput {
+                    modules: &[removal.clone(), child.clone()],
+                    config: &cfg,
+                    layout: &layout,
+                    vfs_available: true
+                })
+                .is_err()
+            );
+        }
     }
 
     #[test]

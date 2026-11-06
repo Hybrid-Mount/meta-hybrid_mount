@@ -26,6 +26,8 @@ pub struct ModuleEntry {
     pub replace: bool,
     /// Read-only evidence used to distinguish a module layout alias from content.
     pub link_target: Option<PathBuf>,
+    pub directory_remove: bool,
+    pub marker_error: Option<String>,
 }
 
 /// A module record produced by the read-only scan.
@@ -206,15 +208,27 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
             has_mount_files = true;
             // A partition-root .replace can intentionally contain no children.
             // Keep it as directory metadata so all backends see the replacement.
-            if partition != "system" && is_replace_dir(&partition_dir) {
+            let (directory_remove, marker_error) = remove_marker(&partition_dir);
+            if directory_remove
+                || marker_error.is_some()
+                || (partition != "system" && is_replace_dir(&partition_dir))
+            {
                 entries.push(ModuleEntry {
                     relative: partition.clone(),
-                    file_type: NodeFileType::Directory,
-                    replace: true,
+                    file_type: if directory_remove {
+                        NodeFileType::Whiteout
+                    } else {
+                        NodeFileType::Directory
+                    },
+                    replace: !directory_remove && is_replace_dir(&partition_dir),
                     link_target: None,
+                    directory_remove,
+                    marker_error,
                 });
             }
-            entries.extend(collect_partition_entries(&partition_dir, &partition));
+            if !directory_remove {
+                entries.extend(collect_partition_entries(&partition_dir, &partition));
+            }
         }
         entries.sort_by(|left, right| left.relative.cmp(&right.relative));
 
@@ -272,7 +286,9 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
                 }
             };
             let path = entry.path();
-            if entry.file_name() == defs::REPLACE_DIR_FILE_NAME {
+            if entry.file_name() == defs::REPLACE_DIR_FILE_NAME
+                || entry.file_name() == defs::REMOVE_DIR_FILE_NAME
+            {
                 continue;
             }
             let Ok(relative) = path.strip_prefix(root) else {
@@ -300,20 +316,32 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
                 log::warn!("unsupported module entry type: {}", path.display());
                 continue;
             };
-            let replace = file_type == NodeFileType::Directory && is_replace_dir(&path);
+            let (directory_remove, marker_error) = if file_type == NodeFileType::Directory {
+                remove_marker(&path)
+            } else {
+                (false, None)
+            };
+            let replace =
+                file_type == NodeFileType::Directory && !directory_remove && is_replace_dir(&path);
 
             out.push(ModuleEntry {
                 relative: format!("{partition}/{relative}"),
-                file_type,
+                file_type: if directory_remove {
+                    NodeFileType::Whiteout
+                } else {
+                    file_type
+                },
                 replace,
                 link_target: if file_type == NodeFileType::Symlink {
                     fs::read_link(&path).ok()
                 } else {
                     None
                 },
+                directory_remove,
+                marker_error,
             });
 
-            if file_type == NodeFileType::Directory {
+            if file_type == NodeFileType::Directory && !directory_remove {
                 walk(&path, root, partition, out);
             }
         }
@@ -338,6 +366,22 @@ fn classify_file_type(metadata: &fs::Metadata) -> Option<NodeFileType> {
     }
 
     NodeFileType::from_file_type(metadata.file_type())
+}
+
+fn remove_marker(path: &Path) -> (bool, Option<String>) {
+    let marker = path.join(defs::REMOVE_DIR_FILE_NAME);
+    match fs::symlink_metadata(&marker) {
+        Ok(metadata) if metadata.file_type().is_file() => (true, None),
+        Ok(_) => (
+            false,
+            Some(".remove must be a regular marker file, not a symlink or directory".into()),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (false, None),
+        Err(error) => (
+            false,
+            Some(format!("cannot inspect .remove marker: {error}")),
+        ),
+    }
 }
 
 fn is_replace_dir(path: &Path) -> bool {
@@ -525,6 +569,69 @@ mod tests {
                 .filter(|entry| entry.file_type == NodeFileType::RegularFile)
                 .count(),
             2
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlink_remove_marker_is_reported_without_hiding_contents() {
+        let root = module_dir("invalid-remove");
+        let path = write_module(&root, "invalid");
+        let target = path.join("system/app/Foo");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(path.join("marker"), "").unwrap();
+        std::os::unix::fs::symlink(path.join("marker"), target.join(".remove")).unwrap();
+        fs::write(target.join("keep"), "module").unwrap();
+        let modules = scan(&root, &[]);
+        let entry = modules[0]
+            .entries
+            .iter()
+            .find(|e| e.relative == "system/app/Foo")
+            .unwrap();
+        assert!(entry.marker_error.is_some());
+        assert!(!entry.directory_remove);
+        assert!(
+            modules[0]
+                .entries
+                .iter()
+                .any(|e| e.relative == "system/app/Foo/keep")
+        );
+        assert!(
+            !modules[0]
+                .entries
+                .iter()
+                .any(|e| e.relative.ends_with("/.remove"))
+        );
+    }
+
+    #[test]
+    fn remove_marker_hides_a_directory_and_overrides_replace() {
+        let root = module_dir("directory-remove");
+        let path = write_module(&root, "hide");
+        let hidden = path.join("system/app/Foo");
+        fs::create_dir_all(&hidden).unwrap();
+        fs::write(hidden.join(".remove"), "").unwrap();
+        fs::write(hidden.join(".replace"), "").unwrap();
+        fs::write(hidden.join("ignored"), "module").unwrap();
+        fs::write(path.join("system/app/ordinary.remove"), "ordinary").unwrap();
+        let modules = scan(&root, &[]);
+        let entries = &modules[0].entries;
+        let removed = entries
+            .iter()
+            .find(|e| e.relative == "system/app/Foo")
+            .unwrap();
+        assert_eq!(removed.file_type, NodeFileType::Whiteout);
+        assert!(!removed.replace);
+        assert!(
+            !entries
+                .iter()
+                .any(|e| e.relative.starts_with("system/app/Foo/"))
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.relative == "system/app/ordinary.remove"
+                    && e.file_type == NodeFileType::RegularFile)
         );
     }
 

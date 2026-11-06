@@ -1,5 +1,7 @@
 # Hybrid Mount 接口参考
 
+目录中的普通 `.remove` 文件规范化为目录路径的 whiteout，扫描停止收集其后代；`.remove` 优先于 `.replace`。规划在原逻辑路径上匹配 ignore，再应用实际分区映射与根/子挂载保护。跨模块 whiteout 与内容贡献冲突在执行前报错。Overlay staging 创建 0:0 字符设备，Magic 父镜像省略目标，VFS 发出已有 Whiteout 动作；不删除原目录，不改变协议。
+
 ## CLI 契约
 
 设备上的可执行文件通常是 `/data/adb/modules/hybrid_mount/hybrid-mount`。无参数时直接运行启动挂载流水线；命令失败会写入 stderr 并以非零状态退出。

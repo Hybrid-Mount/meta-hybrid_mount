@@ -853,10 +853,20 @@ fn run_mount_pipeline_impl(
         }),
     )?;
     for error in &plan.partition_errors {
-        log::error!("partition skipped: {}: {}; modules={:?}", error.partition, error.reason, error.modules);
+        log::error!(
+            "partition skipped: {}: {}; modules={:?}",
+            error.partition,
+            error.reason,
+            error.modules
+        );
     }
     for error in &plan.operation_errors {
-        log::error!("operation skipped: {}:{}: {}", error.module_id, error.logical_path, error.reason);
+        log::error!(
+            "operation skipped: {}:{}: {}",
+            error.module_id,
+            error.logical_path,
+            error.reason
+        );
     }
     log::info!(
         "plan: overlay_ops={}, overlay_modules={}, magic_modules={}, vfs_modules={}",

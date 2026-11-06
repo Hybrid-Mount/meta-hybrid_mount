@@ -614,6 +614,15 @@ fn mount_mirror(
             work_dir_path.display()
         );
         fs::create_dir(&work_dir_path)?;
+        if !crate::sys::faults::use_fake_magic_mount_ops() && crate::sys::mount::is_mounted(&path)?
+        {
+            // Preserve the native mount, labels and all nested mounts as one
+            // view instead of flattening it into a directory of file binds.
+            crate::overlayfs::overlayfs::bind_mount(&path, &work_dir_path)?;
+            stats.owned_mounts.push(path.to_string_lossy().into_owned());
+            on_mount(&work_dir_path.to_string_lossy());
+            return Ok(());
+        }
         let metadata = entry.metadata()?;
         chmod(&work_dir_path, Mode::from_raw_mode(metadata.mode()))?;
         chown(

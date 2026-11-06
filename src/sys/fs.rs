@@ -295,7 +295,19 @@ fn stage_overlay_node(
                 stats.symlinks += 1;
             }
             NodeFileType::Whiteout => {
-                make_device_node(&staged, &metadata)?;
+                // A directory .remove is a logical whiteout whose read-only
+                // source remains a directory. Materialize an actual 0:0 node.
+                if metadata.is_dir() {
+                    mknodat(
+                        CWD,
+                        &staged,
+                        FileType::CharacterDevice,
+                        Mode::from_raw_mode(0o600),
+                        0,
+                    )?;
+                } else {
+                    make_device_node(&staged, &metadata)?;
+                }
                 stats.special_entries += 1;
             }
         }
@@ -775,6 +787,37 @@ mod tests {
         assert!(recent.is_file());
         assert!(link.is_symlink());
         assert!(directory.is_dir());
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn directory_remove_stages_a_whiteout_without_copying_its_contents() {
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
+        let fixture = crate::test_support::Fixture::new("directory-remove-stage");
+        let source = fixture.join("module/system/app/Foo");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join(".remove"), "").unwrap();
+        fs::write(source.join("keep-on-disk"), "original").unwrap();
+        let mut tree = MountTree::default();
+        tree.insert(
+            "/system/app/Foo",
+            crate::test_support::mount_source_at(
+                "m",
+                "system/app/Foo",
+                NodeFileType::Whiteout,
+                MountMode::Overlay,
+                source.clone(),
+            ),
+        );
+        let staging = fixture.join("staging");
+        stage_overlay_tree(&tree, &staging).unwrap();
+        let metadata = fs::symlink_metadata(staging.join("m/system/app/Foo")).unwrap();
+        assert!(metadata.file_type().is_char_device());
+        assert_eq!(metadata.rdev(), 0);
+        assert_eq!(
+            fs::read_to_string(source.join("keep-on-disk")).unwrap(),
+            "original"
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]

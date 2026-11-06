@@ -78,6 +78,7 @@ pub const REMOVE_FILE_NAME: &str = "remove";
 pub const SKIP_MOUNT_FILE_NAME: &str = "skip_mount";
 pub const MOUNT_ERROR_FILE_NAME: &str = "mount_error";
 pub const REPLACE_DIR_FILE_NAME: &str = ".replace";
+pub const REMOVE_DIR_FILE_NAME: &str = ".remove";
 
 /// Reason reported for a module whose `mount_error` marker exists but carries no
 /// recorded reason. Shared with the WebUI contract.

@@ -170,6 +170,8 @@ mod tests {
                 file_type: NodeFileType::RegularFile,
                 replace: false,
                 link_target: None,
+                directory_remove: false,
+                marker_error: None,
             }],
         }
     }
