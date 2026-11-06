@@ -47,9 +47,9 @@ impl MountEntry {
         }
 
         Self {
-            root: info.root.clone().into(),
+            root: decode_mount_path(Path::new(&info.root)),
             parent_id: info.pid,
-            mount_point: info.mount_point.clone(),
+            mount_point: decode_mount_path(&info.mount_point),
             fs_type: info.fs_type.clone(),
             mount_source: info.mount_source.clone(),
             mnt_id: info.mnt_id,
@@ -67,6 +67,36 @@ impl MountEntry {
             (None, None) => "private".to_owned(),
         }
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn decode_mount_path(path: &Path) -> PathBuf {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let bytes = path.as_os_str().as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut offset = 0;
+    while offset < bytes.len() {
+        let tail = &bytes[offset..];
+        let escaped = if tail.starts_with(b"\\040") {
+            Some(b' ')
+        } else if tail.starts_with(b"\\011") {
+            Some(b'\t')
+        } else if tail.starts_with(b"\\012") {
+            Some(b'\n')
+        } else if tail.starts_with(b"\\134") {
+            Some(b'\\')
+        } else {
+            None
+        };
+        if let Some(byte) = escaped {
+            decoded.push(byte);
+            offset += 4;
+        } else {
+            decoded.push(bytes[offset]);
+            offset += 1;
+        }
+    }
+    std::ffi::OsString::from_vec(decoded).into()
 }
 
 /// Reads every mount visible to this process.
@@ -298,5 +328,18 @@ mod tests {
             assert_eq!(entry.master, None);
             assert_eq!(entry.propagation(), "private");
         }
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[test]
+    fn mount_paths_decode_kernel_escapes_once() {
+        let entry = MountEntry::from_mount_info(
+            &procfs::process::MountInfo::from_line(
+                r"40 1 0:35 /stock\040dir /system/a\040b\134040 rw - tmpfs tmpfs rw",
+            )
+            .unwrap(),
+        );
+        assert_eq!(entry.root, PathBuf::from("/stock dir"));
+        assert_eq!(entry.mount_point, PathBuf::from(r"/system/a b\040"));
     }
 }
