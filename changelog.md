@@ -1,4 +1,56 @@
 
+## v6.2.6-rc.2
+
+
+### <!-- 1 --> Features
+
+- Map existing partitions from visible mount identities
+
+- Report partition degradation and guard hot layout changes
+
+- Support guarded directory remove markers across backends
+
+
+
+### <!-- 2 --> Fixes
+
+- `vfs` Probe xattr handler members in both Kbuild paths
+
+- Use explicit rustix xattr length query APIs
+
+- Prepare complete child mount views before publishing overlays
+
+- Decode mountinfo paths before probing visible mounts
+
+- `vfs` Preserve native directory views across UID isolation
+
+
+
+### <!-- 3 --> Documentation
+
+- Record partition mapping and upstream implementation plans
+
+- `vfs` Assess upstream lifetime changes against local ownership
+
+- `vfs` Compare pinned source identity and add device probe
+
+
+
+### <!-- 4 --> Tests
+
+- `vfs` Cover native iterator bypass and concurrent source probes
+
+- Reproduce prerelease xattr label regression from issue 511
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- `vfs` Refresh all supported prebuilts and record verification
+
+
+
+
 ## v6.2.6-rc.1
 
 
