@@ -95,7 +95,9 @@ static int hm_call_iterate(struct file *f,struct dir_context *ctx,const struct f
 static int hm_d_revalidate(struct dentry *d,unsigned int flags) { assert(false); return 0; }
 static const struct dentry_operations *hm_native_dops(struct dentry *dentry);
 static int hm_revalidate_backing_child(struct inode *p,const struct qstr *n,const struct hm_inode_info *info) { assert(!rcu_depth); return 1; }
-static struct file native_file;
+static int bypass_iterate(struct file *file,struct dir_context *ctx) { return 0; }
+static const struct file_operations native_ops={.iterate_shared=bypass_iterate};
+static struct file native_file={.f_op=&native_ops};
 static int native_iterations, native_releases;
 static struct inode *file_inode(struct file *file) { return file->inode; }
 static const void *current_cred(void) { return &blocked; }

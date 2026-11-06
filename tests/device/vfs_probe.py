@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import shutil
+import threading
 from contextlib import nullcontext
 
 if os.environ.get('HM_DISPOSABLE_TEST') != '1':
@@ -55,7 +56,7 @@ try:
         root = Path(directory)
         root.chmod(0o755)
         if sys.argv[1] == 'source':
-            for case in ['rename', 'recreate', 'atomic-replace', 'symlink']:
+            for case in ['rename', 'recreate', 'atomic-replace', 'symlink', 'concurrent-replace']:
                 source, target = root / (case + '-source'), root / (case + '-target')
                 source.write_text('old')
                 target.write_text('stock')
@@ -75,11 +76,28 @@ try:
                         replacement = root / 'replacement'
                         replacement.write_text('new')
                         replacement.replace(source)
-                    else:
+                    elif case == 'symlink':
                         replacement = root / 'referent'
                         replacement.write_text('new')
                         supplied.unlink()
                         supplied.symlink_to(replacement)
+                    else:
+                        failures = []
+                        def replace_repeatedly():
+                            try:
+                                for index in range(100):
+                                    replacement = root / 'concurrent-new'
+                                    replacement.write_text('new' if index % 2 else 'old')
+                                    replacement.replace(source)
+                            except BaseException as error:
+                                failures.append(repr(error))
+                        writer = threading.Thread(target=replace_repeatedly)
+                        writer.start()
+                        for index in range(100):
+                            observe(f'{case}-{index}', target, fd)
+                        writer.join()
+                        if failures:
+                            raise RuntimeError(failures)
                     observe(case, target, fd)
                 finally:
                     os.close(fd)
@@ -117,6 +135,8 @@ try:
                                 row['openat'] = os.read(child, 64).decode()
                             finally:
                                 os.close(child)
+                            os.fchdir(fd)
+                            row['cwd_open'] = Path('stock').read_text()
                         except OSError as error:
                             row['errno'] = error.errno
                         print(json.dumps(row), flush=True)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
 import os
+import argparse
 from pathlib import Path
 import re
 import shlex
@@ -8,7 +9,9 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-source = (ROOT / "module/vfs/src/hybridmount.c").read_text()
+parser = argparse.ArgumentParser()
+parser.add_argument('--source', type=Path, default=ROOT / 'module/vfs/src/hybridmount.c')
+source = parser.parse_args().source.read_text()
 functions = []
 for name in [
     "hm_dir_get", "hm_dir_put", "__hybridmount_get_rule_info",
