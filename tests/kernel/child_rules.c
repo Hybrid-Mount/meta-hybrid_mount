@@ -45,11 +45,11 @@ struct hybridmount_rule {
     unsigned long v_ino;
     unsigned short child_len,flags;
     const char *name;
-    struct path r_path;
+    struct path r_path, native_path;
     struct hybridmount_dir_node *parent_dir,*this_dir;
 };
 struct hybridmount_child_array { void *rcu[2]; int count,capacity; u32 hashes[]; };
-struct hm_rule_info { struct path backing_path,r_path; unsigned short flags; unsigned long v_ino; struct hybridmount_dir_node *this_dir; };
+struct hm_rule_info { struct path backing_path,r_path,native_path,native_identity; unsigned short flags; unsigned long v_ino; struct hybridmount_dir_node *this_dir; };
 struct dir_context { u32 pos; unsigned long ino; int emitted; };
 #define hm_children_is_single(p) ((uintptr_t)(p)&1)
 #define hm_children_single_rule(p) ((struct hybridmount_rule *)((uintptr_t)(p)&~(uintptr_t)1))

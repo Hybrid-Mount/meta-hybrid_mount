@@ -27,6 +27,7 @@ typedef unsigned int uid_t;
 #define IDMAP_CALL idmap,
 #define IDMAP_PATH(path) (path).mnt,
 #define EACCES 13
+#define ENOENT 2
 #define ECHILD 10
 #define ELOOP 40
 #define MAY_NOT_BLOCK 128
@@ -56,6 +57,7 @@ typedef unsigned int uid_t;
 #define rcu_dereference(p) (p)
 #define ERR_PTR(n) ((void *)(intptr_t)(n))
 #define IS_ERR(p) ((uintptr_t)(p) >= (uintptr_t)-4095)
+#define PTR_ERR(p) ((int)(intptr_t)(p))
 #define hm_get_vpath(r) ((r)->paths)
 #define hm_get_rpath(r) ((r)->paths + (r)->v_len + 1)
 #define hm_dir_tag(d) test_dir_tag(d)
@@ -89,10 +91,10 @@ static void atomic_inc(atomic_t *n) { ++*n; }
 static void atomic_dec(atomic_t *n) { --*n; }
 static int atomic_read(atomic_t *n) { return *n; }
 struct hybridmount_dir_node { struct inode *v_inode; uintptr_t tag; int rcu; atomic_t inode_users; int refs; unsigned long long bloom_mask; };
-struct hm_inode_info { struct path r_path; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; bool backing_child; };
-struct hm_rule_info { struct path r_path, backing_path; struct hybridmount_dir_node *this_dir; u16 flags; unsigned long v_ino; };
+struct hm_inode_info { struct path r_path, native_path; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; bool backing_child; };
+struct hm_rule_info { struct path r_path, backing_path, native_path, native_identity; struct hybridmount_dir_node *this_dir; u16 flags; unsigned long v_ino; };
 struct hybridmount_rule {
-    struct path parent_path, r_path;
+    struct path parent_path, r_path, native_path;
     struct hybridmount_dir_node *this_dir;
     u16 v_len, flags;
     u32 v_hash;
@@ -160,12 +162,16 @@ static void *kmalloc(size_t size, int flags) { return calloc(1, size); }
 static void rcu_read_lock(void) { rcu_entries++; }
 static void rcu_read_unlock(void) {}
 struct test_uid { unsigned int val; };
-static struct test_uid current_fsuid(void) { return (struct test_uid){0}; }
+static unsigned int test_fsuid;
+static struct test_uid current_fsuid(void) { return (struct test_uid){test_fsuid}; }
 static bool __hybridmount_get_rule_info(struct hybridmount_dir_node *node,
     const unsigned char *name, size_t len, u32 hash, struct hm_rule_info *info, bool get_path, uid_t fsuid) {
     if (++rule_reads == 2 && delete_after_lookup) return false;
     *info = fixture;
     info->backing_path = fixture.r_path;
+    info->native_identity = fixture.native_path;
+    if (get_path) path_get(&info->native_path);
+    else info->native_path = (struct path){0};
     if (get_path) path_get(&info->r_path);
     else info->r_path = (struct path){0};
     return true;
@@ -184,6 +190,7 @@ static void hybridmount_init_prealloc_inode(struct inode *inode,
     if (info->dir_node) atomic_inc(&info->dir_node->inode_users);
     info->flags = rule->flags;
     info->r_path = rule->r_path;
+    info->native_path = rule->native_path;
     inode->i_private = info;
     inode->i_op = &hm_dir_iops;
 }
@@ -229,6 +236,7 @@ static void truncate_inode_pages_final(struct address_space *mapping) {}
 static void clear_inode(struct inode *inode) { evicted++; }
 static struct inode *d_backing_inode(struct dentry *dentry) { return dentry->inode; }
 static struct inode *d_inode(struct dentry *dentry) { return dentry->inode; }
+static bool d_is_positive(struct dentry *dentry) { return dentry->inode != NULL; }
 static bool hm_backing_noexec(const struct hm_inode_info *info) { return false; }
 static int inode_permission(void *idmap, struct inode *inode, int mask) {
     assert(idmap == inode && mask == 4);
@@ -376,7 +384,46 @@ static void lookup_case(const char *mode) {
 }
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "new";
-    if (!strcmp(mode, "permissions")) {
+    if (!strcmp(mode, "native-opaque-child")) {
+        struct hybridmount_dir_node node = {0};
+        struct inode stock_dir = {.i_op=&native_iops, .i_mode=S_IFDIR};
+        struct inode stock_child = {.i_op=&native_iops, .i_mode=S_IFDIR};
+        struct dentry parent = {.inode=&stock_dir}, child = {.inode=&stock_child};
+        struct hybridmount_rule existing = {.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR, .this_dir=&node, .native_path={&parent, &stock_dir}};
+        struct hybridmount_rule rule = {.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR, .v_len=13};
+        memcpy(rule.paths, "/parent/child", 14);
+        parent_variants=&existing;
+        expected_backing_parent=&parent;
+        backing_result=&child;
+        struct list_head generated={0}, victims={0};
+        assert(hybridmount_generate_virtual_topology(&rule,&generated,&victims)==0);
+        assert(rule.native_path.dentry==&child);
+        path_put(&rule.native_path);
+        assert(path_refs==0);
+        puts("PASS: opaque child captures native directory through published parent");
+    } else if (!strcmp(mode, "blocked-held-native-dir") || !strcmp(mode, "blocked-held-synthetic-dir") || !strcmp(mode, "unblocked-opaque-dir")) {
+        struct hm_uid_array blocked = {.count = 1, .uids = {42}};
+        struct super_block sb = {0};
+        struct inode native_dir = {.i_op = &native_iops, .i_sb = &sb};
+        struct inode native_child = {.i_op = &native_iops, .i_sb = &sb, .i_ino = 72};
+        struct dentry parent = {.inode = &native_dir}, child = {.inode = &native_child};
+        struct hm_inode_info info = {.flags = HM_FLAG_IS_DIR | HM_FLAG_VIRTUAL_DIR};
+        struct inode held = {.i_op = &hm_dir_iops, .i_private = &info, .i_sb = &sb};
+        struct dentry target = {.d_name = QSTR_INIT("child", 5)};
+        bool native = !strcmp(mode, "blocked-held-native-dir");
+        test_fsuid = !strcmp(mode, "unblocked-opaque-dir") ? 0 : 42;
+        hybridmount_uids = &blocked;
+        if (strcmp(mode, "blocked-held-synthetic-dir"))
+            info.native_path = (struct path){.dentry = &parent, .mnt = &sb};
+        expected_backing_parent = &parent;
+        backing_result = &child;
+        assert(hm_dir_lookup(&held, &target, 0) == NULL);
+        if (native) {
+            assert(spliced_inode && ((struct hm_inode_info *)spliced_inode->i_private)->r_path.dentry == &child);
+            iput(spliced_inode);
+        } else assert(!spliced_inode && !target.inode);
+        printf("PASS: %s\n", mode);
+    } else if (!strcmp(mode, "permissions")) {
         struct inode real = {0};
         struct dentry backing = {.inode = &real};
         struct hm_inode_info info = {.r_path = {.dentry = &backing, .mnt = &real}};

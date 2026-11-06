@@ -108,6 +108,9 @@ static bool __hybridmount_get_rule_info(struct hybridmount_dir_node *dir_node, c
     if (likely(rule_info)) {
         rule_info->backing_path = (found_rule->flags & HM_FLAG_VIRTUAL_DIR) ?
             (struct path){0} : found_rule->r_path;
+        rule_info->native_identity = found_rule->native_path;
+        rule_info->native_path = get_path ? found_rule->native_path : (struct path){0};
+        if (rule_info->native_path.dentry) path_get(&rule_info->native_path);
         rule_info->flags = found_rule->flags;
         rule_info->v_ino = found_rule->v_ino;
         rule_info->this_dir = found_rule->this_dir;
@@ -166,6 +169,7 @@ static inline void hm_destroy_virtual_inode(struct inode *inode)
      * this inode's own pages, and the backing path can now be released. */
     inode->i_mapping = &inode->i_data;
     if (info->r_path.dentry) path_put(&info->r_path);
+    if (info->native_path.dentry) path_put(&info->native_path);
 
     if (info->dir_node) {
         rcu_read_lock();
@@ -296,6 +300,7 @@ static void hybridmount_init_prealloc_inode(struct inode *inode, struct hm_inode
     struct inode *r_inode = NULL;
     info->flags = rule_info->flags;
     info->backing_child = false;
+    info->native_path = rule_info->native_path;
     info->dir_node = rule_info->this_dir;
     if (info->dir_node) atomic_inc(&info->dir_node->inode_users);
     if (rule_info->flags & HM_FLAG_VIRTUAL_DIR) {
@@ -333,6 +338,8 @@ static bool hm_cached_inode_matches(struct hm_inode_info *info, const struct hm_
 {
     return info && info->flags == rule->flags &&
            info->dir_node == rule->this_dir &&
+           info->native_path.dentry == rule->native_identity.dentry &&
+           info->native_path.mnt == rule->native_identity.mnt &&
            info->r_path.dentry == rule->backing_path.dentry &&
            info->r_path.mnt == rule->backing_path.mnt;
 }
@@ -398,6 +405,7 @@ resolve_rule:
          * its spare inode and path, but must not clear the winner's dir node. */
         hybridmount_init_prealloc_inode(prealloc_inode, prealloc_info, &rule_info);
         rule_info.r_path.dentry = NULL;
+        rule_info.native_path.dentry = NULL;
         if (rule_info.this_dir) {
             struct hm_inode_info *cached;
             struct inode *previous = NULL;
@@ -447,6 +455,8 @@ cleanup_out:
     hm_dir_put(target_node);
     if (rule_info.r_path.dentry) 
         path_put(&rule_info.r_path);
+    if (rule_info.native_path.dentry)
+        path_put(&rule_info.native_path);
 
     if (prealloc_inode) {
         kfree(prealloc_info);
@@ -588,6 +598,10 @@ static int hm_permission(IDMAP_ARG struct inode *inode, int mask)
     /* Native rename may dispatch through the other parent. A fabricated
      * directory must never be used as a writable native parent. */
     if ((mask & MAY_WRITE) && S_ISDIR(inode->i_mode)) return -EACCES;
+    if (S_ISDIR(inode->i_mode) && hybridmount_is_uid_blocked(current_fsuid().val)) {
+        if (!info->native_path.dentry) return -ENOENT;
+        return inode_permission(IDMAP_PATH(info->native_path) d_inode(info->native_path.dentry), mask);
+    }
     if (info->flags & HM_FLAG_VIRTUAL_DIR)
         return generic_permission(IDMAP_CALL inode, mask);
     if (unlikely(!info->r_path.dentry)) return -EACCES;
@@ -832,6 +846,19 @@ static int hm_dir_iterate_dir(struct file *file, struct dir_context *ctx)
     struct file *real_file = file->private_data;
     uid_t fsuid = current_fsuid().val;
     int res = 0;
+    /* An already-open proxy directory may outlive a UID isolation change.
+     * Its module file is not a native fallback. Open the pinned native target
+     * with current credentials, and never emit injected children on this path. */
+    if (hybridmount_is_uid_blocked(fsuid)) {
+        struct file *native;
+        if (!info || !info->native_path.dentry) return -ENOENT;
+        native = dentry_open(&info->native_path, O_RDONLY | O_DIRECTORY, current_cred());
+        if (IS_ERR(native)) return PTR_ERR(native);
+        native->f_pos = hm_is_virtual_pos(ctx->pos) ? 0 : ctx->pos;
+        res = iterate_dir(native, ctx);
+        fput(native);
+        return res;
+    }
     if (unlikely(hm_is_virtual_pos(ctx->pos))) goto emit_virtual;
 
     if (real_file) {
@@ -888,20 +915,22 @@ static struct dentry *hm_dir_lookup(struct inode *dir, struct dentry *dentry, un
     struct dentry *backing;
     struct inode *inode;
     struct dentry *res;
+    bool blocked = hybridmount_is_uid_blocked(current_fsuid().val);
+    const struct path *parent = blocked ? &info->native_path : &info->r_path;
 
-    if (info->dir_node) {
+    if (!blocked && info->dir_node) {
         u32 v_hash = full_name_hash((const void *)(unsigned long)HYBRIDMOUNT_MAGIC_SIG, dentry->d_name.name, dentry->d_name.len);
         if (READ_ONCE(info->dir_node->bloom_mask) & (1ULL << (v_hash & 63)) &&
             (res = hybridmount_resolve_rule_dentry(dir, dentry, info->dir_node, v_hash)) != ERR_PTR(-ENODATA))
                 return res;
     }
 
-    if (info->flags & HM_FLAG_VIRTUAL_DIR)
+    if ((blocked && !parent->dentry) || (!blocked && (info->flags & HM_FLAG_VIRTUAL_DIR)))
         goto negative_dentry;
 
     /* Look up a real child of the backing directory. Native lookup must
      * never see a dentry allocated by the destination filesystem. */
-    backing = hm_lookup_backing_child(&info->r_path, &dentry->d_name);
+    backing = hm_lookup_backing_child(parent, &dentry->d_name);
     if (IS_ERR(backing)) return backing;
     if (d_is_negative(backing)) {
         dput(backing);
@@ -924,7 +953,24 @@ static struct dentry *hm_dir_lookup(struct inode *dir, struct dentry *dentry, un
         return ERR_PTR(-ENOMEM);
     }
     child.r_path.dentry = backing;
-    child.r_path.mnt = mntget(info->r_path.mnt);
+    child.r_path.mnt = mntget(parent->mnt);
+    if (blocked) {
+        child.native_path = child.r_path;
+        path_get(&child.native_path);
+    } else if (info->native_path.dentry) {
+        struct dentry *native = hm_lookup_backing_child(&info->native_path, &dentry->d_name);
+        if (IS_ERR(native)) {
+            path_put(&child.r_path);
+            kfree(child_info);
+            iput(inode);
+            return native;
+        }
+        if (d_is_positive(native) && d_inode(native)->i_op != &hm_dir_iops &&
+            d_inode(native)->i_op != &hm_file_iops) {
+            child.native_path.dentry = native;
+            child.native_path.mnt = mntget(info->native_path.mnt);
+        } else dput(native);
+    }
     child.v_ino = d_inode(backing)->i_ino;
     hybridmount_init_prealloc_inode(inode, child_info, &child);
     child_info->backing_child = true;
@@ -1018,10 +1064,14 @@ static int hm_revalidate_backing_child(struct inode *parent, const struct qstr *
     const struct hm_inode_info *parent_info = parent->i_private;
     struct dentry *backing;
     bool valid;
+    const struct path *path;
 
-    if (!parent_info || parent_info->r_path.mnt != info->r_path.mnt)
+    if (!parent_info) return 0;
+    path = hybridmount_is_uid_blocked(current_fsuid().val) ?
+        &parent_info->native_path : &parent_info->r_path;
+    if (!path->dentry || path->mnt != info->r_path.mnt)
         return 0;
-    backing = hm_lookup_backing_child(&parent_info->r_path, name);
+    backing = hm_lookup_backing_child(path, name);
     if (IS_ERR(backing)) return PTR_ERR(backing);
     valid = backing == info->r_path.dentry && d_is_positive(backing);
     dput(backing);
@@ -1068,7 +1118,19 @@ static int hm_d_revalidate_common(struct inode *parent_inode, const struct qstr 
     }
 
     if (hybridmount_is_uid_blocked(current_fsuid().val)) {
-        if (owned) goto drop_it;
+        if (owned) {
+            if (parent_inode->i_op == &hm_dir_iops && inode &&
+                (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops)) {
+                const struct hm_inode_info *info = READ_ONCE(inode->i_private);
+                if (info && info->backing_child && info->native_path.dentry == info->r_path.dentry &&
+                    info->native_path.mnt == info->r_path.mnt) {
+                    rcu_read_unlock();
+                    if (flags & LOOKUP_RCU) return -ECHILD;
+                    return hm_revalidate_backing_child(parent_inode, name, info);
+                }
+            }
+            goto drop_it;
+        }
         goto orig_dops;
     }
 
@@ -1729,6 +1791,53 @@ static void hm_rollback_generated_topology_locked(struct hybridmount_rule *targe
     }
 }
 
+/* Capture before publication: opaque lookup cannot discover these native
+ * descendants through kern_path. Each rule/inode retains an independent pin. */
+static int hm_capture_native_descendants(struct hybridmount_rule *target,
+                                         struct list_head *generated,
+                                         const struct path *anchor, int parent_len)
+{
+    struct path parent = *anchor;
+    const char *path = hm_get_vpath(target);
+    int start = parent_len == 1 ? 1 : parent_len + 1;
+    int end, err = 0;
+    if (!parent.dentry) return 0;
+    path_get(&parent);
+    while (start < target->v_len) {
+        struct dentry *child;
+        struct hybridmount_rule *rule;
+        struct qstr name;
+        for (end = start; end < target->v_len && path[end] != '/'; end++) {}
+        name = (struct qstr)QSTR_INIT(path + start, end - start);
+        child = hm_lookup_backing_child(&parent, &name);
+        if (IS_ERR(child)) { err = PTR_ERR(child); break; }
+        if (!d_is_positive(child) || !S_ISDIR(d_inode(child)->i_mode)) {
+            dput(child);
+            break;
+        }
+        if (d_inode(child)->i_op == &hm_dir_iops) {
+            dput(child);
+            err = -ELOOP;
+            break;
+        }
+        dput(parent.dentry);
+        parent.dentry = child;
+        if (end == target->v_len && !target->native_path.dentry) {
+            target->native_path = parent;
+            path_get(&target->native_path);
+        }
+        list_for_each_entry(rule, generated, topology_node) {
+            if (rule->v_len == end && !rule->native_path.dentry) {
+                rule->native_path = parent;
+                path_get(&rule->native_path);
+            }
+        }
+        start = end + 1;
+    }
+    path_put(&parent);
+    return err;
+}
+
 static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target_rule,
                                                  struct list_head *generated_rules,
                                                  struct list_head *victims)
@@ -1755,6 +1864,8 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
         if (ex) {
             if (!(ex->flags & HM_FLAG_IS_DIR)) { err = -ENOTDIR; break; }
             if (unlikely(!(dir_node = ex->this_dir))) { err = -ENOMEM; break; }
+            err = hm_capture_native_descendants(target_rule, generated_rules, &ex->native_path, parent_len);
+            if (err) break;
             err = __hybridmount_inject_child_locked(dir_node, current_rule, child_name, child_len);
             break;
         }
@@ -1775,6 +1886,8 @@ static int hybridmount_generate_virtual_topology(struct hybridmount_rule *target
                     path_put(&p_path);
                     break;
                 }
+                err = hm_capture_native_descendants(target_rule, generated_rules, &info->native_path, parent_len);
+                if (err) { path_put(&p_path); break; }
             } else {
                 struct hm_iop *iop = hm_get_hm_iop(smp_load_acquire(&v_inode->i_op));
                 struct hm_fop *fop = hm_get_hm_fop(smp_load_acquire(&v_inode->i_fop));
@@ -1932,6 +2045,15 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
         struct dentry *target_dentry = v_path_struct.dentry;
         struct inode *target_inode = d_backing_inode(target_dentry);
         rule->v_ino = target_inode ? target_inode->i_ino : (unsigned long)rule->v_hash;
+        if ((rule->flags & HM_FLAG_IS_DIR) && target_inode && S_ISDIR(target_inode->i_mode)) {
+            if (target_inode->i_op == &hm_dir_iops) {
+                const struct hm_inode_info *info = target_inode->i_private;
+                if (info) rule->native_path = info->native_path;
+            } else {
+                rule->native_path = v_path_struct;
+            }
+            if (rule->native_path.dentry) path_get(&rule->native_path);
+        }
         d_drop(target_dentry);
         path_put(&v_path_struct);
     } else {
@@ -1945,6 +2067,7 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
         if (unlikely(!rule->this_dir)) {
             /* VIRTUAL_DIR (opaque) rules carry no real path, as in hm_free_rule. */
             if (!(rule->flags & HM_FLAG_VIRTUAL_DIR) && rule->r_path.dentry) path_put(&rule->r_path);
+            if (rule->native_path.dentry) path_put(&rule->native_path);
             kfree(rule);
             return ERR_PTR(-ENOMEM);
         }
@@ -1972,6 +2095,8 @@ static void hm_free_rule(struct hybridmount_rule *rule)
     }
     if (!(rule->flags & HM_FLAG_VIRTUAL_DIR) && rule->r_path.dentry)
         path_put(&rule->r_path);
+    if (rule->native_path.dentry)
+        path_put(&rule->native_path);
     /* Callers have drained rule readers before freeing retired rules. Generated
      * virtual rules can also pin a real parent, independently of r_path. */
     if (rule->parent_path.dentry)
@@ -2057,6 +2182,7 @@ static int hm_preserve_virtual_parent(struct hybridmount_rule *rule, struct list
     memcpy(hm_get_vpath(parent), hm_get_vpath(rule), rule->v_len + 1);
     hm_get_rpath(parent)[0] = '\0';
     if (parent->parent_path.dentry) path_get(&parent->parent_path);
+    if (parent->native_path.dentry) path_get(&parent->native_path);
 
     err = hm_tree_insert(parent);
     if (!err && parent->parent_dir)
@@ -2066,6 +2192,7 @@ static int hm_preserve_virtual_parent(struct hybridmount_rule *rule, struct list
         hm_art_remove_leaf(&hybridmount_art_root, parent);
         list_del_init(&parent->list_node);
         if (parent->parent_path.dentry) path_put(&parent->parent_path);
+        if (parent->native_path.dentry) path_put(&parent->native_path);
         kfree(parent);
         return err;
     }

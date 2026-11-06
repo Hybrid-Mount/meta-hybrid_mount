@@ -20,6 +20,10 @@ typedef unsigned int uid_t;
 #define HYBRIDMOUNT_MAGIC_SIG 0
 #define ENODATA 61
 #define ENOTDIR 20
+#define ENOENT 2
+#define O_RDONLY 0
+#define O_DIRECTORY 1
+#define PTR_ERR(p) ((int)(intptr_t)(p))
 #define EOPNOTSUPP 95
 #define ECHILD 10
 #define LOOKUP_RCU 1
@@ -36,15 +40,15 @@ struct dentry_operations { int (*d_revalidate)(struct dentry *, unsigned int); }
 struct hm_dop { struct dentry_operations ops; const struct dentry_operations *original; };
 struct inode { const struct inode_operations *i_op; void *i_private; };
 struct dentry { struct qstr d_name; struct inode *d_inode; const struct dentry_operations *d_op; };
-struct file { const struct file_operations *f_op; };
+struct file { const struct file_operations *f_op; struct inode *inode; void *private_data; unsigned long f_pos; };
 struct dir_context { int (*actor)(struct dir_context *,const char *,int,loff_t,u64,unsigned int); unsigned long pos; };
 struct hybridmount_dir_node { unsigned long long bloom_mask; int refs; int seq; int rcu; void *children; };
 struct path { struct dentry *dentry; void *mnt; };
-struct hm_inode_info { struct hybridmount_dir_node *dir_node; int flags; struct path r_path; bool backing_child; };
+struct hm_inode_info { struct hybridmount_dir_node *dir_node; int flags; struct path r_path,native_path; bool backing_child; };
 struct hm_iop { struct hybridmount_dir_node *dir_node; const struct inode_operations *orig_iop; };
 struct hm_fop { struct hybridmount_dir_node *dir_node; const struct file_operations *orig_fop; };
-struct hm_rule_info { struct path backing_path; int flags; unsigned long v_ino; struct hybridmount_dir_node *this_dir; struct path r_path; };
-struct hybridmount_rule { uint16_t child_len; char *name; uid_t target_uid; int flags; unsigned long v_ino; struct hybridmount_dir_node *this_dir; struct path r_path; };
+struct hm_rule_info { struct path backing_path,native_path,native_identity; int flags; unsigned long v_ino; struct hybridmount_dir_node *this_dir; struct path r_path; };
+struct hybridmount_rule { uint16_t child_len; char *name; uid_t target_uid; int flags; unsigned long v_ino; struct hybridmount_dir_node *this_dir; struct path r_path,native_path; };
 struct hybridmount_child_array { int count; };
 #define HM_FLAG_VIRTUAL_DIR 2
 #define rcu_dereference(p) (p)
@@ -76,7 +80,8 @@ static void hm_dir_rcu_free(int *p) { frees++; }
 static void call_rcu(int *p,void (*callback)(int *)) { callback(p); }
 struct test_uid { unsigned int val; };
 static struct test_uid current_fsuid(void) { fsuid_reads++; return (struct test_uid){42}; }
-static bool hybridmount_is_uid_blocked(unsigned int uid) { return false; }
+static bool blocked;
+static bool hybridmount_is_uid_blocked(unsigned int uid) { return blocked; }
 static u32 full_name_hash(const void *p,const char *name,int len) { return 1; }
 
 static struct dentry *hybridmount_resolve_rule_dentry(struct inode *i,struct dentry *d,struct hybridmount_dir_node *p,u32 hash) { assert(p->refs>1 && !rcu_depth); return ERR_PTR(-ENODATA); }
@@ -90,6 +95,17 @@ static int hm_call_iterate(struct file *f,struct dir_context *ctx,const struct f
 static int hm_d_revalidate(struct dentry *d,unsigned int flags) { assert(false); return 0; }
 static const struct dentry_operations *hm_native_dops(struct dentry *dentry);
 static int hm_revalidate_backing_child(struct inode *p,const struct qstr *n,const struct hm_inode_info *info) { assert(!rcu_depth); return 1; }
+static struct file native_file;
+static int native_iterations, native_releases;
+static struct inode *file_inode(struct file *file) { return file->inode; }
+static const void *current_cred(void) { return &blocked; }
+static struct file *dentry_open(const struct path *p,int flags,const void *cred) { assert(p->dentry && cred==current_cred()); return &native_file; }
+static int iterate_dir(struct file *file,struct dir_context *ctx) {
+    assert(file==&native_file && file->f_pos==37);
+    native_iterations++; ctx->pos=38; return 0;
+}
+static void fput(struct file *file) { assert(file==&native_file); native_releases++; }
+static bool dir_emit_dots(struct file *file,struct dir_context *ctx) { return true; }
 #include "production.h"
 static struct dentry *native_lookup(struct inode *i,struct dentry *d,unsigned int flags) { assert(node.refs>1 && !rcu_depth); return NULL; }
 static int native_iterate(struct file *f,struct dir_context *ctx) {
@@ -97,24 +113,42 @@ static int native_iterate(struct file *f,struct dir_context *ctx) {
     for(int i=0;i<8;i++) ctx->actor(ctx,"child",5,1,7,0);
     return 0;
 }
-static int native_revalidate(struct dentry *d,unsigned int flags) { assert(!rcu_depth); return 1; }
+static int native_calls;
+static int native_revalidate(struct dentry *d,unsigned int flags) { assert(!rcu_depth); native_calls++; return 1; }
 static int emit(struct dir_context *ctx,const char *name,int len,loff_t offset,u64 ino,unsigned int type) { return 0; }
 static const struct dentry_operations native_dops={native_revalidate};
 int main(int argc,char **argv) {
+    if (!strcmp(argv[1],"held-iterate")) {
+        struct dentry native={0};
+        struct hm_inode_info info={.flags=HM_FLAG_VIRTUAL_DIR,.native_path={.dentry=&native}};
+        struct inode proxy={.i_private=&info};
+        struct file file={.inode=&proxy};
+        struct dir_context ctx={.pos=37};
+        blocked=true;
+        assert(hm_dir_iterate_dir(&file,&ctx)==0);
+        assert(ctx.pos==38 && native_iterations==1 && native_releases==1);
+        info.native_path.dentry=NULL;
+        assert(hm_dir_iterate_dir(&file,&ctx)==-ENOENT);
+        assert(native_iterations==1);
+        puts("PASS: held directory uses native VFS iteration and preserves position");
+        return 0;
+    }
     struct inode_operations orig_iop={native_lookup};
     struct file_operations orig_fop={native_iterate};
     struct inode inode={&orig_iop,NULL};
     struct dentry dentry={.d_name={"child",5}};
-    struct file file={&orig_fop}; struct dir_context ctx={.actor=emit};
+    struct file file={.f_op=&orig_fop}; struct dir_context ctx={.actor=emit};
     node.refs=1; node.bloom_mask=2; proxy_iop=(struct hm_iop){&node,&orig_iop}; proxy_fop=(struct hm_fop){&node,&orig_fop};
     if (argv[1][0]=='l') assert(hybridmount_hijacked_lookup(&inode,&dentry,0)==NULL);
     if (argv[1][0]=='i') assert(hybridmount_hijacked_iterate_dir(&file,&ctx)==0);
     if (argv[1][0]=='r') {
+        blocked = true;
         struct hm_dop wrapper={.ops={hm_d_revalidate},.original=&native_dops};
         dentry.d_op=&wrapper.ops;
         assert(hm_d_revalidate_common(&inode,&dentry.d_name,&dentry,0,false)==1);
         struct inode new_parent={&orig_iop,NULL};
         assert(hm_d_revalidate_common(&new_parent,&dentry.d_name,&dentry,0,false)==1);
+        assert(native_calls == 2);
         dentry.d_op=&hm_dops;
         assert(!hm_native_dops(&dentry));
     }

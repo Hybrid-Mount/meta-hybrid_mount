@@ -93,7 +93,7 @@ struct hybridmount_dir_node {
     struct hybridmount_rule *owner; int rcu;
 };
 struct hybridmount_rule {
-    struct path r_path,parent_path; struct hybridmount_dir_node *this_dir,*parent_dir;
+    struct path r_path,parent_path,native_path; struct hybridmount_dir_node *this_dir,*parent_dir;
     unsigned long v_ino; u32 v_hash; unsigned int target_uid;
     u16 v_len,r_len,child_len,flags;
     struct list_head list_node,topology_node;
@@ -105,7 +105,7 @@ static struct hybridmount_rule *hybridmount_child_for_uid(struct hybridmount_chi
     const char *name,size_t len,u32 hash,uid_t uid,bool exact,int *index) { return NULL; }
 struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; int rcu; };
 struct hm_fop { struct file_operations fake_fop; const struct file_operations *orig_fop; struct hybridmount_dir_node *dir_node; int rcu; };
-struct hm_inode_info { struct path r_path; };
+struct hm_inode_info { struct path r_path,native_path; };
 struct hm_sop { struct super_operations fake_sop; const struct super_operations *orig_sop; struct export_operations fake_eop; const struct export_operations *orig_eop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
 struct hm_xattr_proxy { struct xattr_handler fake; const struct xattr_handler *orig; };
 struct dir_context { loff_t pos; unsigned long ino; };

@@ -81,6 +81,13 @@ and command numbering are still the upstream ones.
 ## Syncing with upstream
 
 Selective compatibility port on 2026-11-05:
+- NoMount 1ecef88d598d/e07896de51a3 motivated the held-directory isolation
+  comparison. Local opaque proxies need a separately owned native target path;
+  module backing paths are never treated as native targets. Rule snapshots,
+  retained inode generations and preserved parent rules each own their pin.
+  Native directory iteration uses iterate_dir with the native file position,
+  and nested opaque rules capture their native counterpart before publication.
+  No wire ABI change. Host harness and compilation do not replace device tests.
 - NoMount f0478cad4081: detect xattr_handler->__get from the kernel header,
   including multiline declarations, rather than a kernel-version interval.
   External Kbuild and setup.sh's generated in-tree Kbuild use the same probe;

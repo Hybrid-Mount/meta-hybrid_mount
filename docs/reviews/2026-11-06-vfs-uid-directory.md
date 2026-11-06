@@ -1,0 +1,11 @@
+# Held proxy directories after UID isolation
+
+The new host regression `blocked-held-native-dir` failed on the original implementation: a held opaque directory returned a negative dentry for an existing native child. `blocked-held-synthetic-dir` and `unblocked-opaque-dir` already behaved as intended. The native dentry revalidation callback remains delegated only for filesystem-created dentries; a blocked native revalidation fixture verifies its call count.
+
+The local fix pins a separate native directory path. The module source is not a native fallback. Rule allocation, owned resolver snapshots, inode initialization/eviction and preserved parent rules pair these additional references. Native paths remain immutable after publication. A rule beneath an already active opaque parent captures the native counterpart through that parent's native anchor, including generated intermediates, before its child entry is published. Lookup uses the existing permission-aware native child lookup and rejects recursion into proxies.
+
+For a blocked UID, a held directory iterates its native counterpart using `iterate_dir`, current credentials and the native file position. This supplies native inode locking and permission checks. Pure synthetic directories have no counterpart and return ENOENT. This does not revoke all access already granted through open file descriptors.
+
+Evidence on 2026-11-06: all six production-function host harnesses pass under WSL `cc`; the new nested opaque fixture and held-directory iteration fixture pass; Android14 6.1 module and built-in object compile. These do not establish Android runtime/KASAN correctness. The opt-in `tests/device/vfs_uid_directory_view.sh` requires a disposable environment, root and Python 3; it records held-FD list/openat results and removes only its own rules/UID. It has not been run on a device. CWD transitions and concurrent UID/rename stress remain device validation work.
+
+Independent review also found the raw mountinfo escaping issue and native iterator locking omission; both are corrected with targeted regression coverage. The supported prebuilt matrix must be rebuilt and checked before packaging these source changes.

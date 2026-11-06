@@ -97,6 +97,8 @@ struct hm_sop {
 
 struct hm_inode_info {
     struct path r_path;
+    /* Original target, independent of the module's backing directory. */
+    struct path native_path;
     struct hybridmount_dir_node *dir_node;
     u8 flags;
     bool backing_child;
@@ -131,6 +133,7 @@ struct hybridmount_dir_node {
 
 struct hybridmount_rule {
     struct path r_path;
+    struct path native_path;
     /* Keep the real parent with hijacked VFS operations alive while registered. */
     struct path parent_path;
     struct hybridmount_dir_node *this_dir;
@@ -152,9 +155,11 @@ struct hybridmount_rule {
 struct hm_rule_info {
     /* Borrowed identity only; compare under RCU, never path_put this snapshot. */
     struct path backing_path;
+    struct path native_identity;
     u16 flags;
     unsigned long v_ino;
     struct path r_path;
+    struct path native_path;
     struct hybridmount_dir_node *this_dir;
 };
 

@@ -16,6 +16,7 @@ for name in [
     "hybridmount_actor_proxy", "hm_cached_inode_matches", "hybridmount_hijacked_lookup",
     "hybridmount_hijacked_iterate_dir", "hm_d_revalidate_common",
     "hm_native_dops",
+    "hm_dir_iterate_dir",
 ]:
     match = re.search(rf"^static[^;\n]*\b{name}\([^;]*?\)\s*\{{", source, re.MULTILINE)
     end, depth = match.end(), 1
@@ -34,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix="hm-readers-") as temporary:
         str(ROOT / "tests/kernel/reader_lifetime.c"), "-o", str(executable),
     ], check=True)
     failures = []
-    for mode in ["lookup", "iterate", "revalidate"]:
+    for mode in ["lookup", "iterate", "revalidate", "held-iterate"]:
         result = subprocess.run([str(executable), mode], timeout=30)
         if result.returncode:
             failures.append(mode)
