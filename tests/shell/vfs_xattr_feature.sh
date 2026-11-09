@@ -16,6 +16,8 @@ for mode in present multiline absent; do
     esac
     for makefile in "$ROOT/module/vfs/src/Makefile" "$WORK/kernel/fs/hybridmount/Makefile"; do
         cp "$makefile" "$WORK/probe.mk"
+        # Preserve the Make variable for expansion by make, not the shell.
+        # shellcheck disable=SC2016
         printf '\n.PHONY: feature\nfeature:\n\t@echo $(ccflags-y)\n' >> "$WORK/probe.mk"
         flags=$(make -s -f "$WORK/probe.mk" srctree="$WORK/kernel" feature)
         case "$mode:$flags" in
