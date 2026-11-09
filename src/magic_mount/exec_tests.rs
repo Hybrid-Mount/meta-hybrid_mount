@@ -87,6 +87,7 @@ fn injected_magic_mount_failure_fires_before_side_effects() {
 
 #[test]
 fn direct_child_failure_aborts_directory_execution() {
+    let _fault_guard = crate::sys::faults::test_lock();
     let root = std::env::temp_dir().join(format!(
         "hybrid-mount-magic-direct-child-failure-{}",
         std::process::id()
@@ -177,6 +178,7 @@ fn real_file_bind_is_registered_while_a_staging_bind_is_not() {
 
 #[test]
 fn whiteout_returns_a_non_mount_result() {
+    let _fault_guard = crate::sys::faults::test_lock();
     let node = MountNode {
         name: "deleted".to_owned(),
         children: std::collections::BTreeMap::new(),
@@ -213,6 +215,7 @@ fn whiteout_returns_a_non_mount_result() {
 
 #[test]
 fn fake_bind_success_records_the_real_target_as_active_mount() {
+    let _fault_guard = crate::sys::faults::test_lock();
     let root = std::env::temp_dir().join(format!(
         "hybrid-mount-magic-fake-bind-{}",
         std::process::id()
@@ -320,6 +323,7 @@ fn readonly_remount_failure_is_propagated_without_active_mount() {
 
 #[test]
 fn nested_bind_registers_staging_target_for_rollback() {
+    let _fault_guard = crate::sys::faults::test_lock();
     let root = std::env::temp_dir().join(format!(
         "hybrid-mount-magic-nested-bind-{}",
         std::process::id()
@@ -386,6 +390,7 @@ fn nested_bind_registers_staging_target_for_rollback() {
 
 #[test]
 fn fake_symlink_success_does_not_register_a_mount_target() {
+    let _fault_guard = crate::sys::faults::test_lock();
     use std::os::unix::fs::symlink;
 
     let root = std::env::temp_dir().join(format!(
@@ -433,6 +438,7 @@ fn fake_symlink_success_does_not_register_a_mount_target() {
 
 #[test]
 fn fake_directory_move_reports_real_and_staging_targets_separately() {
+    let _fault_guard = crate::sys::faults::test_lock();
     let root = std::env::temp_dir().join(format!(
         "hybrid-mount-magic-fake-move-{}",
         std::process::id()
@@ -500,6 +506,7 @@ fn fake_directory_move_reports_real_and_staging_targets_separately() {
 
 #[test]
 fn fake_replace_success_returns_replace_result_and_mount_target() {
+    let _fault_guard = crate::sys::faults::test_lock();
     let root = std::env::temp_dir().join(format!(
         "hybrid-mount-magic-fake-replace-{}",
         std::process::id()

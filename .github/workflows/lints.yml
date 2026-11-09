@@ -43,7 +43,9 @@ jobs:
       # Mount rollback tests need private namespaces and tmpfs mounts. SYS_ADMIN alone is
       # not enough: the docker-default AppArmor profile denies mount(2) with EACCES, and
       # capabilities cannot override a profile, so the namespace step must run unconfined.
-      options: --cap-add SYS_ADMIN --security-opt apparmor=unconfined
+      # Whiteout tests need tmpfs: the container overlay filesystem can reject
+      # mknod(0:0) even with SYS_ADMIN, unlike the runtime staging tmpfs.
+      options: --cap-add SYS_ADMIN --security-opt apparmor=unconfined --tmpfs /tmp
     defaults:
       run:
         shell: bash
