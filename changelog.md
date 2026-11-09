@@ -1,6 +1,10 @@
 
 ## v6.2.6-rc.2
 
+> ⚠️ **Pre-release / 预发布版本（RC）**
+> This release is for testing and may cause module failures, bootloops, or data loss. Back up your data and prepare a recovery method before installing. Use a stable release if you cannot accept these risks.
+> 此版本用于测试，可能出现模块失效、无法开机或数据丢失。安装前请备份数据，并准备好禁用模块或恢复系统的方法；无法接受风险请使用正式版。
+
 
 ### <!-- 1 --> Features
 
