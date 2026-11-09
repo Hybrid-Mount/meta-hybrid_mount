@@ -1987,7 +1987,29 @@ fn apply_vfs_phase(
             );
         }
     }
-    match shared.borrow_mut().list_rules() {
+    confirm_vfs_readback(
+        config,
+        plan,
+        state,
+        shared.as_ref(),
+        applied.as_ref(),
+        stats,
+    )
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn confirm_vfs_readback(
+    config: &Config,
+    plan: &MountPlan,
+    state: &mut RunState,
+    shared: &RefCell<impl VfsKernel>,
+    applied: &RefCell<VfsApplied>,
+    stats: VfsExecStats,
+) -> Result<VfsExecStats> {
+    let planned_rule_count = applied.borrow().rules.len();
+    // Release the readback borrow before an error branch borrows again for cleanup.
+    let listed = shared.borrow_mut().list_rules();
+    match listed {
         Ok(listed) => {
             let missing = {
                 let expected = applied.borrow();
@@ -2110,6 +2132,90 @@ fn mount_magic_phase(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn vfs_readback_failures_clean_up_before_strict_or_degraded_result() {
+        use crate::vfs::protocol::{EncodedRule, ListedRule};
+
+        struct ReadbackKernel {
+            fail_read: bool,
+            present: bool,
+            cleanup_calls: usize,
+        }
+        impl VfsKernel for ReadbackKernel {
+            fn version(&mut self) -> Result<String> {
+                Ok("hm1".into())
+            }
+            fn apply_rules(&mut self, _: &[EncodedRule]) -> Result<()> {
+                Ok(())
+            }
+            fn add_uids(&mut self, _: &[u32]) -> Result<()> {
+                Ok(())
+            }
+            fn remove_rules(&mut self, rules: &[EncodedRule]) -> Result<()> {
+                assert_eq!(rules.len(), 1);
+                self.cleanup_calls += 1;
+                Ok(())
+            }
+            fn list_rules(&mut self) -> Result<Vec<ListedRule>> {
+                if self.fail_read {
+                    return Err(Error::msg("injected readback failure"));
+                }
+                Ok(if self.present {
+                    vec![ListedRule {
+                        flags: 0,
+                        uid: 0,
+                        virtual_path: "/system/etc/hosts".into(),
+                        real_path: "/module/hosts".into(),
+                    }]
+                } else {
+                    Vec::new()
+                })
+            }
+        }
+        for strict in [false, true] {
+            for (fail_read, present) in [(false, true), (false, false), (true, false)] {
+                let kernel = RefCell::new(ReadbackKernel {
+                    fail_read,
+                    present,
+                    cleanup_calls: 0,
+                });
+                let applied = RefCell::new(VfsApplied {
+                    rules: vec![EncodedRule {
+                        flags: 0,
+                        virtual_path: b"/system/etc/hosts".to_vec(),
+                        real_path: b"/module/hosts".to_vec(),
+                    }],
+                    ..VfsApplied::default()
+                });
+                let config = Config {
+                    vfs_strict: strict,
+                    ..Config::default()
+                };
+                let result = confirm_vfs_readback(
+                    &config,
+                    &MountPlan::default(),
+                    &mut RunState::default(),
+                    &kernel,
+                    &applied,
+                    VfsExecStats {
+                        injected: 1,
+                        ..VfsExecStats::default()
+                    },
+                );
+                assert_eq!(kernel.borrow().cleanup_calls, usize::from(!present));
+                assert_eq!(applied.borrow().rules.is_empty(), !present);
+                if present {
+                    assert_eq!(result.unwrap().injected, 1);
+                } else if strict {
+                    assert!(result.is_err());
+                } else {
+                    assert!(result.unwrap().failure.is_some());
+                }
+            }
+        }
+    }
 
     #[test]
     fn startup_failure_replaces_stale_state_and_module_snapshot() {

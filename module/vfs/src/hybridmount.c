@@ -866,7 +866,9 @@ static int hm_dir_iterate_dir(struct file *file, struct dir_context *ctx)
             .ctx.actor = hybridmount_actor_proxy, .ctx.pos = ctx->pos, .orig_ctx = ctx,
             .dir_node = dir_node, .emitted = false, .uid_blocked = hybridmount_is_uid_blocked(fsuid), .fsuid = fsuid
         };
-        res = hm_call_iterate(real_file, &proxy_ctx.ctx, real_file->f_op);
+        /* The outer VFS call locks the proxy inode, not this backing inode. */
+        real_file->f_pos = ctx->pos;
+        res = iterate_dir(real_file, &proxy_ctx.ctx);
         ctx->pos = proxy_ctx.ctx.pos;
         if (res < 0 || proxy_ctx.emitted) return res;
         ctx->pos = hm_pack_pos(0);

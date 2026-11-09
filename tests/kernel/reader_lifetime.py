@@ -38,7 +38,7 @@ with tempfile.TemporaryDirectory(prefix="hm-readers-") as temporary:
         str(ROOT / "tests/kernel/reader_lifetime.c"), "-o", str(executable),
     ], check=True)
     failures = []
-    for mode in ["lookup", "iterate", "revalidate", "held-iterate"]:
+    for mode in ["lookup", "iterate", "revalidate", "held-iterate", "proxy-iterate", "proxy-iterate-error"]:
         result = subprocess.run([str(executable), mode], timeout=30)
         if result.returncode:
             failures.append(mode)

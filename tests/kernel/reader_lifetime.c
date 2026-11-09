@@ -38,7 +38,7 @@ struct inode_operations { struct dentry *(*lookup)(struct inode *,struct dentry 
 struct file_operations { int (*iterate_shared)(struct file *,struct dir_context *); };
 struct dentry_operations { int (*d_revalidate)(struct dentry *, unsigned int); };
 struct hm_dop { struct dentry_operations ops; const struct dentry_operations *original; };
-struct inode { const struct inode_operations *i_op; void *i_private; };
+struct inode { const struct inode_operations *i_op; void *i_private; int read_locks; };
 struct dentry { struct qstr d_name; struct inode *d_inode; const struct dentry_operations *d_op; };
 struct file { const struct file_operations *f_op; struct inode *inode; void *private_data; unsigned long f_pos; };
 struct dir_context { int (*actor)(struct dir_context *,const char *,int,loff_t,u64,unsigned int); unsigned long pos; };
@@ -98,11 +98,19 @@ static int hm_revalidate_backing_child(struct inode *p,const struct qstr *n,cons
 static int bypass_iterate(struct file *file,struct dir_context *ctx) { return 0; }
 static const struct file_operations native_ops={.iterate_shared=bypass_iterate};
 static struct file native_file={.f_op=&native_ops};
-static int native_iterations, native_releases;
+static int native_iterations, native_releases, backing_iterations, backing_error;
 static struct inode *file_inode(struct file *file) { return file->inode; }
 static const void *current_cred(void) { return &blocked; }
 static struct file *dentry_open(const struct path *p,int flags,const void *cred) { assert(p->dentry && cred==current_cred()); return &native_file; }
 static int iterate_dir(struct file *file,struct dir_context *ctx) {
+    if (!blocked) {
+        file->inode->read_locks++;
+        ctx->pos=file->f_pos;
+        int result=file->f_op->iterate_shared(file,ctx);
+        file->f_pos=ctx->pos;
+        file->inode->read_locks--;
+        return result;
+    }
     assert(file==&native_file && file->f_pos==37);
     native_iterations++; ctx->pos=38; return 0;
 }
@@ -119,7 +127,31 @@ static int native_calls;
 static int native_revalidate(struct dentry *d,unsigned int flags) { assert(!rcu_depth); native_calls++; return 1; }
 static int emit(struct dir_context *ctx,const char *name,int len,loff_t offset,u64 ino,unsigned int type) { return 0; }
 static const struct dentry_operations native_dops={native_revalidate};
+static int backing_iterate(struct file *file,struct dir_context *ctx) {
+    assert(file->inode->read_locks==1);
+    assert(file->f_pos==37 && ctx->pos==37);
+    backing_iterations++;
+    ctx->pos=38;
+    return backing_error;
+}
 int main(int argc,char **argv) {
+    if (!strncmp(argv[1],"proxy-iterate",13)) {
+        struct inode backing={0};
+        struct file_operations ops={backing_iterate};
+        struct file real={.inode=&backing,.f_op=&ops,.f_pos=999};
+        struct hm_inode_info info={.dir_node=&node};
+        struct inode proxy={.i_private=&info,.read_locks=1};
+        struct file file={.inode=&proxy,.private_data=&real};
+        struct dir_context ctx={.pos=37};
+        blocked=false; node.refs=2;
+        backing_error=strstr(argv[1],"error") ? -13 : 0;
+        int result=hm_dir_iterate_dir(&file,&ctx);
+        assert(result==backing_error && backing_iterations==1);
+        assert(real.f_pos==38 && backing.read_locks==0 && proxy.read_locks==1);
+        assert(ctx.pos==(backing_error ? 38UL : 100UL));
+        puts("PASS: proxy backing iteration holds native inode lock and synchronizes position");
+        return 0;
+    }
     if (!strcmp(argv[1],"held-iterate")) {
         struct dentry native={0};
         struct hm_inode_info info={.flags=HM_FLAG_VIRTUAL_DIR,.native_path={.dentry=&native}};
@@ -137,7 +169,7 @@ int main(int argc,char **argv) {
     }
     struct inode_operations orig_iop={native_lookup};
     struct file_operations orig_fop={native_iterate};
-    struct inode inode={&orig_iop,NULL};
+    struct inode inode={.i_op=&orig_iop};
     struct dentry dentry={.d_name={"child",5}};
     struct file file={.f_op=&orig_fop}; struct dir_context ctx={.actor=emit};
     node.refs=1; node.bloom_mask=2; proxy_iop=(struct hm_iop){&node,&orig_iop}; proxy_fop=(struct hm_fop){&node,&orig_fop};
@@ -148,7 +180,7 @@ int main(int argc,char **argv) {
         struct hm_dop wrapper={.ops={hm_d_revalidate},.original=&native_dops};
         dentry.d_op=&wrapper.ops;
         assert(hm_d_revalidate_common(&inode,&dentry.d_name,&dentry,0,false)==1);
-        struct inode new_parent={&orig_iop,NULL};
+        struct inode new_parent={.i_op=&orig_iop};
         assert(hm_d_revalidate_common(&new_parent,&dentry.d_name,&dentry,0,false)==1);
         assert(native_calls == 2);
         dentry.d_op=&hm_dops;
