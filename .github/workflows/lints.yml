@@ -45,7 +45,7 @@ jobs:
       # capabilities cannot override a profile, so the namespace step must run unconfined.
       # Whiteout tests need tmpfs: the container overlay filesystem can reject
       # mknod(0:0) even with SYS_ADMIN, unlike the runtime staging tmpfs.
-      options: --cap-add SYS_ADMIN --security-opt apparmor=unconfined --tmpfs /tmp
+      options: --cap-add SYS_ADMIN --security-opt apparmor=unconfined --tmpfs /tmp:exec
     defaults:
       run:
         shell: bash
