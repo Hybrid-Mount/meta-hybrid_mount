@@ -1,6 +1,6 @@
 {
   "changelog": "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/changelog.md",
-  "version": "v6.2.6-rc.2",
-  "versionCode": 602006302,
-  "zipUrl": "https://github.com/Hybrid-Mount/meta-hybrid_mount/releases/download/v6.2.6-rc.2/Hybrid-Mount-6.2.6-rc.2-2154.zip"
+  "version": "v6.2.6-rc.4",
+  "versionCode": 602006304,
+  "zipUrl": "https://github.com/Hybrid-Mount/meta-hybrid_mount/releases/download/v6.2.6-rc.4/Hybrid-Mount-6.2.6-rc.4-2162.zip"
 }
