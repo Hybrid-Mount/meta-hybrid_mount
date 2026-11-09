@@ -41,7 +41,6 @@ pub struct MountPlan {
     pub partition_errors: Vec<PartitionDiagnostic>,
     pub operation_errors: Vec<OperationDiagnostic>,
     pub partition_layout: PartitionLayout,
-    pub protected_targets: Vec<PathBuf>,
 }
 
 impl MountPlan {
@@ -89,7 +88,6 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     ensure_whiteout_exclusive(&builder.tree.root, "")?;
     let mut plan = builder.finish();
     plan.partition_layout = input.layout.clone();
-    plan.protected_targets = protected_targets(input.layout);
     Ok(plan)
 }
 
@@ -269,7 +267,6 @@ impl PlanBuilder {
             partition_errors: self.partition_errors.into_values().collect(),
             operation_errors: self.operation_errors,
             partition_layout: PartitionLayout::default(),
-            protected_targets: Vec::new(),
             tree: self.tree,
             overlay_ops,
             overlay_files,
@@ -323,12 +320,8 @@ fn process_module(
             });
             continue;
         }
-        let destructive = entry.replace
-            || matches!(
-                entry.file_type,
-                NodeFileType::Symlink | NodeFileType::Whiteout
-            );
-        if destructive
+        // Directory removal keeps its own guard against hiding native mount roots.
+        if entry.directory_remove
             && protected.iter().any(|p| {
                 p.starts_with(&target)
                     && (p != &target || entry.file_type == NodeFileType::Whiteout)
@@ -336,8 +329,13 @@ fn process_module(
         {
             blocked_subtrees.push(entry.relative.clone());
             builder.operation_errors.push(OperationDiagnostic {
-                module_id: module.id.to_string(), logical_path: entry.relative.clone(), target: Some(target),
-                code: if entry.directory_remove { "protected_submount_remove" } else { "protected_ancestor" }.into(), reason: "replacement or deletion would cover a rejected partition or an existing child mount".into(),
+                module_id: module.id.to_string(),
+                logical_path: entry.relative.clone(),
+                target: Some(target),
+                code: "protected_submount_remove".into(),
+                reason:
+                    "directory removal would cover a rejected partition or an existing child mount"
+                        .into(),
             });
         }
     }
@@ -1706,43 +1704,6 @@ mod tests {
                 })
                 .is_err()
             );
-        }
-    }
-
-    #[test]
-    fn rejected_partition_cannot_leak_through_an_ancestor_replace() {
-        let mut layout = PartitionLayout::from_promoted(&BTreeSet::from(["vendor".into()]));
-        layout.errors.insert(
-            "vendor".into(),
-            PartitionDiagnostic {
-                partition: "vendor".into(),
-                reason: "different trees".into(),
-                code: "conflict".into(),
-                modules: vec![],
-            },
-        );
-        let mut module = record(
-            "ancestor",
-            &[
-                ("system", true),
-                ("system/etc/demo", false),
-                ("system/vendor/etc/bad", false),
-                ("product/app/good", false),
-            ],
-        );
-        module.entries[0].replace = true;
-        for mode in [Mode::Overlay, Mode::Magic, Mode::Vfs] {
-            let cfg = config(mode, no_rules());
-            let result = build_plan(&PlanInput {
-                modules: std::slice::from_ref(&module),
-                config: &cfg,
-                layout: &layout,
-                vfs_available: true,
-            })
-            .unwrap();
-            assert!(result.tree.find("/system").is_none());
-            assert!(result.tree.find("/product/app/good").is_some());
-            assert_eq!(result.operation_errors.len(), 1);
         }
     }
 

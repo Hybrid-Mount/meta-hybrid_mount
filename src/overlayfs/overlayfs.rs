@@ -3,8 +3,9 @@
 //! OverlayFS mount orchestration (behaviour aligned with v4.2.0 `e20f9c19`):
 //! - fsopen("overlay") is the primary path, with an escaped traditional `mount(2)` fallback;
 //! - past 64 lowerdirs, the trailing layers are stacked into staging first and used as a new layer;
-//! - child mount views are prepared in staging before one recursive attachment;
-//!   failure never publishes a parent which lost its child mounts.
+//! - after the root mount, sub-mounts are rebuilt as overlays one by one from `/proc/self/mountinfo`;
+//!   a sub-mount the kernel refuses is skipped and reported, while the root mount's failure is
+//!   returned so the pipeline transaction rolls back the registered targets.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::ffi::CString;
@@ -73,6 +74,35 @@ pub(crate) fn cleanup_staging_mount(path: PathBuf) -> Result<()> {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[derive(Debug)]
+struct CurrentDirGuard {
+    original: PathBuf,
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl CurrentDirGuard {
+    fn change_to(path: &Path) -> Result<Self> {
+        let original = std::env::current_dir()
+            .map_err(|err| Error::msg(format!("read current directory: {err}")))?;
+        std::env::set_current_dir(path)
+            .map_err(|err| Error::msg(format!("chdir to {}: {err}", path.display())))?;
+        Ok(Self { original })
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        if let Err(err) = std::env::set_current_dir(&self.original) {
+            log::error!(
+                "failed to restore current directory to {}: {err}",
+                self.original.display()
+            );
+        }
+    }
+}
+
 /// Maximum layers accepted in a single overlayfs mount (v4.2.0 behaviour).
 pub const MAX_LAYERS: usize = 64;
 
@@ -107,8 +137,11 @@ fn collapse_staging_layers<E>(
 
 /// Computes a sub-mount's path relative to the root mountpoint; `None` when it is not a descendant.
 pub fn child_relative_path(root: &str, mount_point: &str) -> Option<String> {
-    let relative = std::path::Path::new(mount_point).strip_prefix(root).ok()?;
-    (!relative.as_os_str().is_empty()).then(|| format!("/{}", relative.to_string_lossy()))
+    if mount_point == root {
+        return None;
+    }
+    let stripped = mount_point.strip_prefix(root)?;
+    stripped.starts_with('/').then(|| stripped.to_owned())
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -118,11 +151,8 @@ fn collect_child_mount_points(root_path: &Path) -> Result<Vec<String>> {
     let mut mount_seq: Vec<String> = mounts
         .into_iter()
         .filter(|entry| {
-            child_relative_path(
-                &root_path.to_string_lossy(),
-                &entry.mount_point.to_string_lossy(),
-            )
-            .is_some()
+            let mount_point = &entry.mount_point;
+            mount_point.starts_with(root_path) && mount_point != root_path
         })
         .filter_map(|entry| entry.mount_point.to_str().map(str::to_owned))
         .collect();
@@ -284,116 +314,80 @@ pub fn bind_mount(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Prepare the complete visible subtree away from the live target. Native
-/// child mounts are cloned recursively; modified children are prepared against
-/// their original mount, never against an already-covered relative path.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
-fn prepare_overlay_view(
-    destination: &Path,
-    stock: &Path,
+fn mount_overlay_child(
+    mount_point: &str,
+    relative: &str,
     module_roots: &[String],
-    children: &[String],
-    upperdir: Option<PathBuf>,
-    workdir: Option<PathBuf>,
+    stock_root: &str,
     staging_root: &Path,
     mount_source: &str,
+    register_unmountable: bool,
     on_effect: &mut dyn FnMut(MountEffect),
 ) -> Result<()> {
+    if !module_roots
+        .iter()
+        .any(|lower| Path::new(&format!("{lower}{relative}")).exists())
+    {
+        bind_mount(Path::new(stock_root), Path::new(mount_point))?;
+        if register_unmountable {
+            send_unmountable(Path::new(mount_point));
+        }
+        on_effect(MountEffect::Target(mount_point.to_owned()));
+        return Ok(());
+    }
+
+    if !Path::new(stock_root).is_dir() {
+        return Ok(());
+    }
+
+    let mut lower_dirs = Vec::new();
+    for lower in module_roots {
+        let lower_dir = format!("{lower}{relative}");
+        let path = Path::new(&lower_dir);
+        if path.is_dir() {
+            lower_dirs.push(lower_dir);
+        } else if path.exists() {
+            return Ok(());
+        }
+    }
+
+    if lower_dirs.is_empty() {
+        return Ok(());
+    }
+
+    if crate::sys::faults::should_fail_next_child_overlay_mount() {
+        return Err(Error::msg(format!(
+            "injected child overlay mount failure: mount_point={mount_point}"
+        )));
+    }
+
     mount_overlayfs(
-        module_roots,
-        &stock.to_string_lossy(),
-        upperdir,
-        workdir,
-        destination,
+        &lower_dirs,
+        stock_root,
+        None,
+        None,
+        Path::new(mount_point),
         staging_root,
         mount_source,
         on_effect,
-    )?;
-    let mut direct = Vec::<PathBuf>::new();
-    for child in children
-        .iter()
-        .map(Path::new)
-        .filter(|p| p.starts_with(stock) && *p != stock)
-    {
-        if direct.iter().any(|parent| child.starts_with(parent)) {
-            continue;
-        }
-        direct.push(child.to_owned());
-        let relative = child
-            .strip_prefix(stock)
-            .map_err(|e| Error::msg(e.to_string()))?;
-        let target = destination.join(relative);
-        let mut checked = destination.to_owned();
-        for component in relative.components() {
-            checked.push(component);
-            if std::fs::symlink_metadata(&checked)?
-                .file_type()
-                .is_symlink()
-            {
-                return Err(Error::msg(format!(
-                    "child mount target became a symlink: {}",
-                    checked.display()
-                )));
-            }
-        }
-        let mut layers = Vec::new();
-        for root in module_roots {
-            let layer = Path::new(root).join(relative);
-            if std::fs::symlink_metadata(&layer).is_ok() {
-                layers.push(layer);
-            }
-        }
-        if layers.is_empty() {
-            bind_mount(child, &target)?;
-        } else {
-            if crate::sys::faults::should_fail_next_child_overlay_mount() {
-                return Err(Error::msg(format!(
-                    "injected child overlay mount failure: {}",
-                    child.display()
-                )));
-            }
-            if child.is_dir() {
-                if layers.iter().any(|p| !p.is_dir()) {
-                    return Err(Error::msg(format!(
-                        "module changes child mount type: {}",
-                        child.display()
-                    )));
-                }
-                let layers = layers
-                    .iter()
-                    .map(|p| p.to_string_lossy().into_owned())
-                    .collect::<Vec<_>>();
-                prepare_overlay_view(
-                    &target,
-                    child,
-                    &layers,
-                    children,
-                    None,
-                    None,
-                    staging_root,
-                    mount_source,
-                    on_effect,
-                )?;
-            } else if layers[0].is_file()
-                && !std::fs::symlink_metadata(&layers[0])?
-                    .file_type()
-                    .is_symlink()
-            {
-                bind_mount(&layers[0], &target)?;
-            } else {
-                return Err(Error::msg(format!(
-                    "cannot preserve file child mount: {}",
-                    child.display()
-                )));
-            }
-        }
+    )
+    .map_err(|err| {
+        Error::msg(format!(
+            "child overlay failed: mount_point={mount_point}: {err}"
+        ))
+    })?;
+    if register_unmountable {
+        send_unmountable(Path::new(mount_point));
     }
+    on_effect(MountEffect::Target(mount_point.to_owned()));
     Ok(())
 }
 
-/// Publish only after every child mount is ready. Failure leaves the original
-/// live tree intact; staging effects remain owned by the enclosing transaction.
+/// Mounts the root overlay and rebuilds its sub-mounts. A root mount failure is returned so the
+/// pipeline transaction rolls back the registered targets; a sub-mount that cannot be rebuilt is
+/// skipped with a warning, because exiting non-zero would stop every module from mounting.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::too_many_arguments)]
 pub fn mount_overlay(
@@ -406,45 +400,97 @@ pub fn mount_overlay(
     register_unmountable: bool,
     on_effect: &mut dyn FnMut(MountEffect),
 ) -> Result<()> {
+    log::debug!("overlay mount root: target={root}");
+
     let root_path = Path::new(root);
-    let children = collect_child_mount_points(root_path)?;
-    if children.is_empty() {
-        mount_overlayfs(
-            module_roots,
-            root,
-            upperdir,
-            workdir,
-            root_path,
-            staging_root,
-            mount_source,
-            on_effect,
-        )?;
-    } else {
-        let prepared = crate::sys::temp::create_random_dir(staging_root)?;
-        on_effect(MountEffect::Staging(prepared.clone()));
-        prepare_overlay_view(
-            &prepared,
-            root_path,
-            module_roots,
-            &children,
-            upperdir,
-            workdir,
-            staging_root,
-            mount_source,
-            on_effect,
-        )?;
-        // bind_mount clones the complete recursive tree in one attachment.
-        // The original remains untouched until this call succeeds.
-        bind_mount(&prepared, root_path)?;
+    let _current_dir = CurrentDirGuard::change_to(root_path)?;
+    let stock_root = ".";
+    let mount_seq = collect_child_mount_points(root_path)?;
+
+    let root_result = mount_overlayfs(
+        module_roots,
+        root,
+        upperdir,
+        workdir,
+        root_path,
+        staging_root,
+        mount_source,
+        on_effect,
+    );
+
+    if let Err(err) = root_result {
+        return Err(Error::msg(format!(
+            "mount overlayfs for root failed: {err}"
+        )));
     }
     on_effect(MountEffect::Target(root.to_owned()));
-    for child in children {
-        if register_unmountable {
-            send_unmountable(Path::new(&child));
-        }
-        on_effect(MountEffect::Target(child));
+
+    let skipped_children = rebuild_sub_mounts(
+        root,
+        stock_root,
+        &mount_seq,
+        module_roots,
+        staging_root,
+        mount_source,
+        register_unmountable,
+        on_effect,
+    );
+
+    if skipped_children > 0 {
+        log::warn!(
+            "overlay sub-mounts skipped: root={root}, skipped={skipped_children}, discovered={}",
+            mount_seq.len()
+        );
     }
+
     Ok(())
+}
+
+/// Rebuilds every sub-mount discovered under the root overlay and reports how many were skipped.
+///
+/// A sub-mount stays best-effort even though the root mount is not: a non-zero metamodule exit
+/// stops every module from mounting (docs/RUNTIME.md), and the root overlay already serves this
+/// subtree's module content. Kernels seen in the field reject a pre-existing child mount as a
+/// lower layer (an f2fs `filesystem on './x' not supported`, EINVAL through both mount paths),
+/// which must not take the whole boot down.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
+fn rebuild_sub_mounts(
+    root: &str,
+    stock_root: &str,
+    mount_seq: &[String],
+    module_roots: &[String],
+    staging_root: &Path,
+    mount_source: &str,
+    register_unmountable: bool,
+    on_effect: &mut dyn FnMut(MountEffect),
+) -> usize {
+    let mut skipped = 0usize;
+    for mount_point in mount_seq {
+        let Some(relative) = child_relative_path(root, mount_point) else {
+            continue;
+        };
+        let child_stock_root = format!("{stock_root}{relative}");
+        if !Path::new(&child_stock_root).exists() {
+            continue;
+        }
+
+        if let Err(err) = mount_overlay_child(
+            mount_point,
+            &relative,
+            module_roots,
+            &child_stock_root,
+            staging_root,
+            mount_source,
+            register_unmountable,
+            on_effect,
+        ) {
+            log::warn!("child mount skipped: mount_point={mount_point}, error={err}");
+            skipped += 1;
+        }
+    }
+
+    skipped
 }
 
 #[cfg(test)]
@@ -610,142 +656,42 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn staged_overlay_preserves_nested_and_file_mounts_and_new_files() {
-        let _guard = crate::sys::faults::test_lock();
-        if !crate::test_support::require_mount_namespace() {
-            return;
-        }
-        let fixture = crate::test_support::Fixture::new("overlay-staged-view");
-        let target = fixture.join("target");
-        let child = target.join("child");
-        let nested = child.join("nested");
-        let layer = fixture.join("layer");
-        let staging = fixture.join("staging");
-        for path in [&child, &layer.join("child/nested"), &staging] {
-            std::fs::create_dir_all(path).unwrap();
-        }
-        mount("tmpfs", &child, "tmpfs", MountFlags::empty(), None).unwrap();
-        std::fs::create_dir(&nested).unwrap();
-        mount("tmpfs", &nested, "tmpfs", MountFlags::empty(), None).unwrap();
-        std::fs::write(child.join("stock"), "child-stock").unwrap();
-        std::fs::write(nested.join("stock"), "nested-stock").unwrap();
-        std::fs::write(target.join("file"), "unmounted").unwrap();
-        let original_file = fixture.join("original");
-        std::fs::write(&original_file, "file-stock").unwrap();
-        bind_mount(&original_file, &target.join("file")).unwrap();
-        for (path, value) in [
-            ("parent-new", "parent-module"),
-            ("child/new", "child-module"),
-            ("child/nested/new", "nested-module"),
-            ("file", "file-module"),
-        ] {
-            std::fs::write(layer.join(path), value).unwrap();
-        }
-        let mut effects = Vec::new();
-        mount_overlay(
-            &target.to_string_lossy(),
-            &[layer.to_string_lossy().into_owned()],
-            None,
-            None,
-            &staging,
-            "overlay",
-            false,
-            &mut |e| effects.push(e),
-        )
-        .unwrap();
-        for (path, value) in [
-            ("parent-new", "parent-module"),
-            ("child/stock", "child-stock"),
-            ("child/new", "child-module"),
-            ("child/nested/stock", "nested-stock"),
-            ("child/nested/new", "nested-module"),
-            ("file", "file-module"),
-        ] {
-            assert_eq!(std::fs::read_to_string(target.join(path)).unwrap(), value);
-        }
-        let visible = collect_child_mount_points(&target).unwrap();
-        assert!(visible.contains(&nested.to_string_lossy().into_owned()));
-        assert!(visible.contains(&target.join("file").to_string_lossy().into_owned()));
-        unmount(&target, UnmountFlags::DETACH).unwrap();
-        assert!(!target.join("parent-new").exists());
-        assert_eq!(
-            std::fs::read_to_string(child.join("stock")).unwrap(),
-            "child-stock"
-        );
-        assert_eq!(
-            std::fs::read_to_string(target.join("file")).unwrap(),
-            "file-stock"
-        );
-        for point in [nested, target.join("file"), child] {
-            if crate::sys::mount::is_mounted(&point).unwrap() {
-                unmount(&point, UnmountFlags::DETACH).unwrap();
-            }
-        }
-        for effect in effects.into_iter().rev() {
-            if let MountEffect::Staging(path) = effect {
-                cleanup_staging_mount(path).unwrap();
-            }
-        }
-    }
+    fn a_refused_sub_mount_is_skipped_and_stays_unregistered() {
+        let _fault_guard = crate::sys::faults::test_lock();
 
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn child_failure_never_publishes_the_parent_overlay() {
-        let _guard = crate::sys::faults::test_lock();
-        if !crate::test_support::require_mount_namespace() {
-            return;
-        }
-        let fixture = crate::test_support::Fixture::new("overlay-atomic-child");
-        let target = fixture.join("target");
+        let fixture = crate::test_support::Fixture::new("overlay-child-skip");
+        let root = &*fixture;
+        let target = root.join("target");
+        let layer = root.join("layer");
+        let staging = root.join("staging");
         let child = target.join("child");
-        let layer = fixture.join("layer");
-        let staging = fixture.join("staging");
-        for path in [&child, &layer.join("child"), &staging] {
-            std::fs::create_dir_all(path).unwrap();
-        }
-        mount("tmpfs", &child, "tmpfs", MountFlags::empty(), None).unwrap();
-        std::fs::write(child.join("stock"), "native").unwrap();
-        std::fs::write(layer.join("child/new"), "module").unwrap();
-        std::fs::write(layer.join("parent-new"), "module").unwrap();
-        assert!(
-            collect_child_mount_points(&target)
-                .unwrap()
-                .contains(&child.to_string_lossy().into_owned()),
-            "mountinfo must describe the caller's namespace"
-        );
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::create_dir_all(layer.join("child")).unwrap();
+        std::fs::create_dir_all(&staging).unwrap();
+
+        let _current_dir = CurrentDirGuard::change_to(&target).unwrap();
+
         crate::sys::faults::enable_next_child_overlay_mount_failure();
         let mut effects = Vec::new();
-        let result = mount_overlay(
+        let skipped = rebuild_sub_mounts(
             &target.to_string_lossy(),
+            ".",
+            &[child.to_string_lossy().into_owned()],
             &[layer.to_string_lossy().into_owned()],
-            None,
-            None,
             &staging,
             "overlay",
             false,
-            &mut |e| effects.push(e),
+            &mut |effect| effects.push(effect),
         );
-        let parent_was_untouched = !target.join("parent-new").exists();
         crate::sys::faults::reset();
-        if crate::sys::mount::is_mounted(&target).unwrap() {
-            unmount(&target, UnmountFlags::DETACH).unwrap();
-        }
-        if crate::sys::mount::is_mounted(&child).unwrap() {
-            unmount(&child, UnmountFlags::DETACH).unwrap();
-        }
-        for effect in effects.iter().rev() {
-            if let MountEffect::Staging(path) = effect {
-                cleanup_staging_mount(path.clone()).unwrap();
-            }
-        }
-        assert!(
-            result.is_err(),
-            "child failure must not become partial success"
+
+        assert_eq!(
+            skipped, 1,
+            "the refused sub-mount must be reported as skipped"
         );
         assert!(
-            parent_was_untouched,
-            "parent was exposed before children were ready"
+            effects.is_empty(),
+            "a skipped sub-mount must not be registered: {effects:?}"
         );
-        assert!(!effects.iter().any(|e| matches!(e, MountEffect::Target(_))));
     }
 }

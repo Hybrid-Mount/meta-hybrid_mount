@@ -112,13 +112,9 @@ and late-load KernelSU on a rooted device, with pure VFS and mixed backends, rep
 soft reboot, retained staging, stock child mounts, replaced/deleted module files,
 foreign rule/mount interference, and interrupted apply/cleanup. Check actual file
 visibility, `/proc/1/mountinfo`, provider rule readback and `run/runtime.json` together.
-# 分区布局与子挂载保护
+# 分区布局与子挂载处理
 
-启动在 init 挂载命名空间内根据当前线程的实际挂载表及目录身份确定现有分区路径。
-两个候选路径不是同一可见树时，该分区的模块内容跳过并报错；不会修改或移动模块目录。
-目录替换、删除或符号链接不能通过覆盖祖先来绕过被拒绝的分区和已有子挂载。
+启动依据当前线程的挂载表和目录身份确定现有分区路径；冲突分区跳过并报告诊断。
+目录 `.remove` 仍禁止移除分区根及覆盖已有子挂载。
 
-带子挂载的 OverlayFS 视图先在临时树中准备：未修改的原生子挂载递归克隆，修改过的子树以原始绝对路径作为 stock 层准备。
-全部准备成功后才递归挂接到目标。子挂载准备失败会返回错误，不再保留已遮住子挂载的父层并报告部分成功。
-`tests/linux/partition_mount_boundaries.sh` 在可销毁 Linux 环境的私有挂载命名空间验证这些边界；主机通过不代表 Android 真机验证完成。
-
+OverlayFS 已回退参考 Mountify 引入的完整子树预备与一次性发布策略，恢复原先先挂载父层、再逐个重建子挂载的处理。内核拒绝的子挂载会记录并跳过；该回退不代表已确认解决设备启动问题。
