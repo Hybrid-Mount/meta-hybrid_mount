@@ -21,9 +21,9 @@
   "dependencies": {
     "@material/web": "^2.5.0",
     "miuix-vue": "^0.1.1",
-    "motion-v": "^2.10.0",
-    "vue": "^3.5.44",
-    "vue-i18n": "^11.4.17",
+    "motion-v": "^2.11.1",
+    "vue": "^3.5.45",
+    "vue-i18n": "^11.4.18",
     "vue-material-design-icons": "^5.4.0"
   },
   "devDependencies": {
@@ -36,9 +36,9 @@
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.1",
-    "vite": "^8.3.5",
-    "vitest": "^5.0.5",
-    "vue-eslint-parser": "^10.4.1",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0",
+    "vue-eslint-parser": "^10.4.2",
     "vue-tsc": "^3.3.14"
   }
 }
