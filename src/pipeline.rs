@@ -365,6 +365,7 @@ type MountExecutionResult = (
 );
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[allow(clippy::too_many_arguments)]
 fn execute_mount_phases(
     config: &Config,
     modules: &[ModuleRecord],
@@ -373,6 +374,7 @@ fn execute_mount_phases(
     state: &mut RunState,
     transaction: &mut crate::sys::transaction::MountTransaction<'_>,
     mounted: &mut MountedTargets,
+    lua_hooks: &crate::magic_mount::lua::Hooks,
 ) -> Result<MountExecutionResult> {
     let needs_overlay_storage = !plan.overlay_ops.is_empty() || !plan.overlay_files.is_empty();
     let needs_runtime_temp = needs_overlay_storage || !plan.magic_module_ids.is_empty();
@@ -485,7 +487,7 @@ fn execute_mount_phases(
     overlay_phase.finish();
 
     let magic_phase = PhaseTimer::start("magic");
-    let magic_stats = mount_magic_phase(
+    let mut magic_stats = mount_magic_phase(
         config,
         plan,
         mount_source,
@@ -499,6 +501,31 @@ fn execute_mount_phases(
     let use_nomount = state.vfs_provider.as_deref() == Some("nomount");
     let vfs_stats = apply_vfs_phase(config, plan, state, use_nomount, transaction)?;
     vfs_phase.finish();
+
+    for (source, target) in lua_hooks.after()? {
+        let target_path = fs::canonicalize(&target)?;
+        let target = target_path
+            .to_str()
+            .ok_or_else(|| Error::msg("Lua bind target is not UTF-8"))?
+            .to_owned();
+        rustix::mount::mount(
+            Path::new(&source),
+            &target_path,
+            "",
+            rustix::mount::MountFlags::BIND,
+            None,
+        )
+        .map_err(|error| Error::msg(format!("Lua bind {source} -> {target}: {error}")))?;
+        if !config.disable_umount {
+            crate::utils::ksu::send_unmountable(&target_path);
+        }
+        transaction.register_rollback_only(format!("lua-bind:{target}"), move || {
+            rustix::mount::unmount(&target_path, rustix::mount::UnmountFlags::DETACH)
+                .map_err(|error| Error::Io(error.into()))
+        });
+        mounted.paths.push(target.clone());
+        magic_stats.active_mounts.push(target);
+    }
 
     crate::utils::ksu::commit_unmount_list()?;
 
@@ -773,7 +800,15 @@ fn run_mount_pipeline_impl(
         crate::partitions::detect_with_mounts(&config, baseline_mounts),
     )?;
     let managed_partitions = layout.scan_names();
-    let modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
+    let mut modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
+    let lua_hooks = startup_phase(
+        "lua_before",
+        crate::magic_mount::lua::Hooks::load(
+            Path::new(crate::magic_mount::lua::DIRECTORY),
+            &mut modules,
+            &config.moduledir,
+        ),
+    )?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {
         let entry_roots = module
@@ -962,6 +997,7 @@ fn run_mount_pipeline_impl(
             &mut state,
             &mut transaction,
             mounted,
+            &lua_hooks,
         ) {
             Ok(result) => result,
             Err(err) => {

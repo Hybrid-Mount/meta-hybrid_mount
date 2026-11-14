@@ -7,3 +7,5 @@
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod exec;
+#[cfg(any(test, target_os = "linux", target_os = "android"))]
+pub(crate) mod lua;
