@@ -17,21 +17,83 @@ pub enum RuleFormat {
     HybridMount,
     NomountLegacy,
     Nomount22,
+    Nomount23,
 }
 
 impl RuleFormat {
+    const fn supports_uid_ranges(self) -> bool {
+        matches!(self, Self::Nomount22 | Self::Nomount23)
+    }
+
     const fn extra_bytes(self) -> usize {
         match self {
-            Self::Nomount22 => 12,
+            Self::Nomount22 | Self::Nomount23 => 12,
             _ => 0,
         }
     }
 
-    fn write_uid_range(self, out: &mut Vec<u8>, uid: u32) {
-        if self == Self::Nomount22 {
-            out.extend_from_slice(&uid.to_le_bytes());
-            out.extend_from_slice(&[0; 8]);
+    fn write_uid_range(self, out: &mut Vec<u8>, scope: UidScope) {
+        if self.supports_uid_ranges() {
+            let range = scope.range.unwrap_or(UidRange {
+                uid_end: scope.uid,
+                deny_start: 0,
+                deny_end: 0,
+            });
+            for value in [range.uid_end, range.deny_start, range.deny_end] {
+                out.extend_from_slice(&value.to_le_bytes());
+            }
         }
+    }
+
+    fn check_scope(self, scope: UidScope) -> Result<()> {
+        if scope.range.is_some() && !self.supports_uid_ranges() {
+            return Err(Error::VfsProtocol {
+                detail: "UID ranges and exclusions require NoMount protocol 22 or 23".into(),
+            });
+        }
+        if self == Self::Nomount22
+            && let Some(range) = scope.range
+            && range.deny_start != 0
+            && range.deny_start == scope.uid
+        {
+            return Err(Error::VfsProtocol {
+                detail: "NoMount protocol 22 cannot exclude the first UID of a range".into(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct UidRange {
+    pub uid_end: u32,
+    pub deny_start: u32,
+    pub deny_end: u32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+pub struct UidScope {
+    pub uid: u32,
+    #[serde(flatten)]
+    pub range: Option<UidRange>,
+}
+
+impl UidScope {
+    pub fn new(uid: u32, uid_end: u32, deny_start: u32, deny_end: u32) -> Self {
+        Self {
+            uid,
+            range: (uid_end != uid || deny_start != 0 || deny_end != 0).then_some(UidRange {
+                uid_end,
+                deny_start,
+                deny_end,
+            }),
+        }
+    }
+}
+
+impl From<u32> for UidScope {
+    fn from(uid: u32) -> Self {
+        Self { uid, range: None }
     }
 }
 
@@ -87,14 +149,14 @@ impl EncodedRule {
 
     #[cfg(test)]
     pub fn write_into(&self, out: &mut Vec<u8>, uid: u32) {
-        self.write_record(out, uid, RuleFormat::HybridMount);
+        self.write_record(out, uid.into(), RuleFormat::HybridMount);
     }
 
-    fn write_record(&self, out: &mut Vec<u8>, uid: u32, format: RuleFormat) {
+    fn write_record(&self, out: &mut Vec<u8>, scope: UidScope, format: RuleFormat) {
         out.extend_from_slice(&self.flags.to_le_bytes());
         // ADD_RULE reads each record's uid, not the payload's target_uid.
-        out.extend_from_slice(&uid.to_le_bytes());
-        format.write_uid_range(out, uid);
+        out.extend_from_slice(&scope.uid.to_le_bytes());
+        format.write_uid_range(out, scope);
         out.extend_from_slice(&(self.virtual_path.len() as u16).to_le_bytes());
         out.extend_from_slice(&(self.real_path.len() as u16).to_le_bytes());
         out.extend_from_slice(&self.virtual_path);
@@ -149,9 +211,12 @@ pub fn build_add_rule_payloads(rules: &[EncodedRule], uid: u32) -> Result<Vec<Ve
 
 pub fn build_add_rule_payloads_for(
     rules: &[EncodedRule],
-    uid: u32,
+    scope: impl Into<UidScope>,
     format: RuleFormat,
 ) -> Result<Vec<Vec<u8>>> {
+    let scope = scope.into();
+    format.check_scope(scope)?;
+    let uid = scope.uid;
     let mut payloads = Vec::new();
     let mut buffer: Vec<u8> = Vec::new();
     for rule in rules {
@@ -171,7 +236,7 @@ pub fn build_add_rule_payloads_for(
             payloads.push(build_payload(NmCommand::AddRule, uid, &buffer)?);
             buffer.clear();
         }
-        rule.write_record(&mut buffer, uid, format);
+        rule.write_record(&mut buffer, scope, format);
     }
     if !buffer.is_empty() {
         payloads.push(build_payload(NmCommand::AddRule, uid, &buffer)?);
@@ -186,9 +251,12 @@ pub fn build_del_rule_payloads(paths: &[Vec<u8>], uid: u32) -> Result<Vec<Vec<u8
 
 pub fn build_del_rule_payloads_for(
     paths: &[Vec<u8>],
-    uid: u32,
+    scope: impl Into<UidScope>,
     format: RuleFormat,
 ) -> Result<Vec<Vec<u8>>> {
+    let scope = scope.into();
+    format.check_scope(scope)?;
+    let uid = scope.uid;
     let mut payloads = Vec::new();
     let mut buffer: Vec<u8> = Vec::new();
     for path in paths {
@@ -203,7 +271,7 @@ pub fn build_del_rule_payloads_for(
             buffer.clear();
         }
         buffer.extend_from_slice(&uid.to_le_bytes());
-        format.write_uid_range(&mut buffer, uid);
+        format.write_uid_range(&mut buffer, scope);
         buffer.extend_from_slice(&(path.len() as u16).to_le_bytes());
         buffer.extend_from_slice(path);
     }
@@ -323,7 +391,8 @@ pub fn parse_version(payload: &[u8]) -> Result<String> {
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct ListedRule {
     pub flags: u32,
-    pub uid: u32,
+    #[serde(flatten)]
+    pub scope: UidScope,
     pub virtual_path: String,
     pub real_path: String,
 }
@@ -384,18 +453,19 @@ pub fn parse_list_for(payload: &[u8], format: RuleFormat) -> Result<(Vec<ListedR
                 ),
             })?;
         let (virtual_path, real_path) = paths.split_at(v_len);
-        // Our rule identity is one UID (or global), so ranged/exclusion rules
-        // cannot participate in readback, ownership or rollback.
-        if format == RuleFormat::Nomount22
-            && (u32::from_le_bytes(field(header, 8, "rule uid_end")?) != uid
-                || header[12..20] != [0; 8])
-        {
-            pos += v_len + r_len;
-            continue;
-        }
+        let scope = if format.supports_uid_ranges() {
+            UidScope::new(
+                uid,
+                u32::from_le_bytes(field(header, 8, "rule uid_end")?),
+                u32::from_le_bytes(field(header, 12, "rule deny_start")?),
+                u32::from_le_bytes(field(header, 16, "rule deny_end")?),
+            )
+        } else {
+            uid.into()
+        };
         rules.push(ListedRule {
             flags,
-            uid,
+            scope,
             virtual_path: String::from_utf8_lossy(virtual_path).into_owned(),
             real_path: String::from_utf8_lossy(real_path).into_owned(),
         });
@@ -439,6 +509,11 @@ where
     loop {
         let payload = fetch(cursor)?;
         let (mut batch, next) = parse(&payload)?;
+        // NoMount v23 can mark a nonempty page as the last one.
+        if next == u32::MAX {
+            all.append(&mut batch);
+            return Ok(all);
+        }
         if batch.is_empty() && read_data_size(&payload)? == 0 {
             return Ok(all);
         }

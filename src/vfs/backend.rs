@@ -8,7 +8,7 @@ use crate::vfs::sys::{self, KeyringChannel, PageBuffer};
 
 /// Hybrid Mount protocol versions.
 pub const SUPPORTED_VERSIONS: &[&str] = &["hm1"];
-pub const NOMOUNT_VERSIONS: &[&str] = &["20", "21", "22"];
+pub const NOMOUNT_VERSIONS: &[&str] = &["20", "21", "22", "23"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VfsProvider {
@@ -198,6 +198,7 @@ pub(super) fn rule_format(channel: KeyringChannel, version: &str) -> Result<Rule
     Ok(match channel {
         KeyringChannel::Hybridmount => RuleFormat::HybridMount,
         KeyringChannel::Nomount if base == "22" => RuleFormat::Nomount22,
+        KeyringChannel::Nomount if base == "23" => RuleFormat::Nomount23,
         KeyringChannel::Nomount => RuleFormat::NomountLegacy,
     })
 }

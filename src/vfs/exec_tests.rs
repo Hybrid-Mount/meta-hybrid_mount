@@ -207,7 +207,7 @@ fn strict_apply_failure_still_removes_the_prefix_and_reports_the_error() {
 fn listed(virtual_path: &str) -> ListedRule {
     ListedRule {
         flags: 0,
-        uid: 0,
+        scope: 0.into(),
         virtual_path: virtual_path.to_owned(),
         real_path: String::new(),
     }

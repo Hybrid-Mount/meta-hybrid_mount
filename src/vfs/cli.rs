@@ -12,7 +12,7 @@ use super::backend::KeyringKernel;
 use super::boot_guard::{self, VfsGuardState};
 use super::control::{ClearScope, Controller, Mutation, MutationReport};
 use super::doctor::{self, VfsDoctorReport};
-use super::protocol::{self, EncodedRule, ListedRule};
+use super::protocol::{self, EncodedRule, ListedRule, UidScope};
 use crate::errors::{Error, Result};
 
 const HELP: &str = "Hybrid Mount VFS runtime control
@@ -41,6 +41,8 @@ Aliases (inside vfs): add/a, del/d, whiteout/w, block/b, unblock/u,
 
 Paths: virtual first, real second; relative paths use the current directory.
 Use -- to end option parsing. --uid 0 (default) means a global rule.
+NoMount protocols 22 and 23 support --uid-range all|START-END on rule add/del,
+with optional --uid-excluded START-END. Use the same scope to delete a rule.
 'uid add' isolates a UID from VFS; it does not assign a rule to that UID.
 --whiteout hides a path; --opaque keeps a directory with injected children only.
 All clear commands affect the provider's shared tables, including boot rules.
@@ -101,6 +103,17 @@ fn parse_uid(value: &str) -> Result<u32> {
     value
         .parse()
         .map_err(|_| usage(format!("UID out of range: {value:?}")))
+}
+
+fn parse_uid_range(value: &str) -> Result<(u32, u32)> {
+    let (start, end) = value
+        .split_once('-')
+        .ok_or_else(|| usage("expected START-END for a UID range"))?;
+    let (start, end) = (parse_uid(start)?, parse_uid(end)?);
+    if start > end {
+        return Err(usage("UID range start must not exceed its end"));
+    }
+    Ok((start, end))
 }
 
 /// Lexical normalization preserves virtual paths that do not exist yet and avoids
@@ -209,6 +222,8 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
     };
     let mut json = false;
     let mut uid = None;
+    let mut uid_range = None;
+    let mut uid_excluded = None;
     let mut yes = false;
     let mut options = true;
     let mut values = Vec::new();
@@ -269,13 +284,51 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
                 uid = Some(parse_uid(value)?);
                 continue;
             }
+            let (option, inline) = match arg.split_once('=') {
+                Some((option, value)) => (option, Some(value)),
+                None => (arg.as_str(), None),
+            };
+            if matches!(option, "--uid-range" | "--uid-excluded")
+                && matches!(action, Action::Add | Action::Delete)
+            {
+                let value = inline
+                    .or_else(|| iter.next().map(String::as_str))
+                    .ok_or_else(|| usage(format!("{option} requires a value")))?;
+                let slot = if option == "--uid-range" {
+                    &mut uid_range
+                } else {
+                    &mut uid_excluded
+                };
+                if slot.is_some() {
+                    return Err(usage(format!("{option} may only be specified once")));
+                }
+                *slot = Some(if option == "--uid-range" && value == "all" {
+                    (0, u32::MAX)
+                } else {
+                    parse_uid_range(value)?
+                });
+                continue;
+            }
             if arg.starts_with('-') {
                 return Err(usage(format!("unknown or inapplicable option: {arg}")));
             }
         }
         values.push(arg.as_str());
     }
+    if uid.is_some() && uid_range.is_some() {
+        return Err(usage("--uid and --uid-range are mutually exclusive"));
+    }
     let uid = uid.unwrap_or(0);
+    let (start, end) = uid_range.unwrap_or((uid, uid));
+    if let Some((deny_start, deny_end)) = uid_excluded
+        && (uid_range.is_none() || deny_start == 0 || deny_start < start || deny_end > end)
+    {
+        return Err(usage(
+            "--uid-excluded requires --uid-range and must lie within it with a nonzero start",
+        ));
+    }
+    let (deny_start, deny_end) = uid_excluded.unwrap_or_default();
+    let scope = UidScope::new(start, end, deny_start, deny_end);
     let operation = match action {
         Action::Add => {
             let step = if flags == 0 { 2 } else { 1 };
@@ -302,7 +355,7 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
                 }
                 rules.push(rule);
             }
-            Operation::Mutate(Mutation::Add { rules, uid })
+            Operation::Mutate(Mutation::Add { rules, scope })
         }
         Action::Delete => {
             if values.is_empty() {
@@ -318,7 +371,7 @@ fn parse(args: &[String], cwd: &Path) -> Result<Command> {
                     Ok(path)
                 })
                 .collect::<Result<Vec<_>>>()?;
-            Operation::Mutate(Mutation::Delete { paths, uid })
+            Operation::Mutate(Mutation::Delete { paths, scope })
         }
         Action::AddUid | Action::DeleteUid => {
             if values.is_empty() {
@@ -416,9 +469,17 @@ fn rules_text(rules: &[ListedRule]) -> String {
             } else {
                 format!("-> {:?}", rule.real_path)
             };
+            let uid = rule.scope.uid;
+            let mut scope = uid.to_string();
+            if let Some(range) = rule.scope.range {
+                scope = format!("{uid}-{}", range.uid_end);
+                if range.deny_start != 0 {
+                    scope.push_str(&format!(" excl {}-{}", range.deny_start, range.deny_end));
+                }
+            }
             format!(
-                "{:?} {action} [UID: {}, flags: {}]\n",
-                rule.virtual_path, rule.uid, rule.flags
+                "{:?} {action} [UID: {scope}, flags: {}]\n",
+                rule.virtual_path, rule.flags
             )
         })
         .collect()

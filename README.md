@@ -51,7 +51,7 @@ Upgrades accept the retired `partitions` key in its former array or comma-separa
 
 ## VFS backend
 
-Hybrid Mount can use built-in or loadable `hybridmount`, or an existing NoMount kernel provider that reports protocol 20, 21, or 22. When NoMount is detected, the boot pipeline skips loading `hybridmount`. Hybrid Mount's path-only opaque directory rules (including `.replace`) require `hybridmount`.
+Hybrid Mount can use built-in or loadable `hybridmount`, or an existing NoMount kernel provider that reports protocol 20 through 23. When NoMount is detected, the boot pipeline skips loading `hybridmount`. Hybrid Mount's path-only opaque directory rules (including `.replace`) require `hybridmount`.
 
 **How the provider is identified.** The boot decision keys on a read-only probe of the kernel key type `hybridmount`: if it answers with a supported version, the provider is usable. Separately, `vfs-doctor` classifies how it is present — an entry in `/proc/modules` means a loadable module registered it, a `/sys/module/hybridmount` directory without that entry means it is compiled into the kernel image, and if neither exists then no provider is present. Probing is read-only, so `status` and `vfs-doctor` never trigger an `insmod`.
 

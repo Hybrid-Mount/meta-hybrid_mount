@@ -1,6 +1,6 @@
 # VFS CLI
 
-`hybrid-mount vfs` 管理当前可用的 VFS 后端。内置和 LKM 版 Hybrid Mount 共用 `hybridmount` keyring 和 `hm1` 协议。检测到兼容的 NoMount 内核后端时，命令会使用 `nomount` keyring 和相应版本的协议。NoMount 22 的 UID 范围和排除规则由上游工具管理。
+`hybrid-mount vfs` 管理当前可用的 VFS 后端。内置和 LKM 版 Hybrid Mount 共用 `hybridmount` keyring 和 `hm1` 协议。检测到兼容的 NoMount 内核后端时，命令会使用 `nomount` keyring 和相应版本的协议。
 
 在设备 root shell 中设置：
 
@@ -118,6 +118,18 @@ VFS 会再次注入规则，因此如果崩溃原因未查清，同样的内核�
 
 `--uid UID` 与 `--uid=UID` 均支持；UID 是十进制 u32，负值、溢出、非数字和
 重复 `--uid` 均被拒绝。`--whiteout` 和 `--opaque` 互斥。
+
+NoMount 协议 22 和 23 支持在 `rule add` 和 `rule del` 上使用 `--uid-range all`
+或 `--uid-range START-END`，并可用 `--uid-excluded START-END` 从该规则排除一段 UID。
+范围两端均包含在内。排除范围必须位于应用范围内，且起点必须大于 0。
+协议 22 还要求排除起点大于应用范围起点。
+删除时传入添加时的范围和排除范围。列表 JSON 中的 `uid`、`uid_end`、
+`deny_start` 和 `deny_end` 对应这四个端点。
+
+```sh
+"$HM" vfs rule add /path/to/base.apk /path/to/patched.apk --uid-range all --uid-excluded 1000-1000
+"$HM" vfs rule del /path/to/base.apk --uid-range all --uid-excluded 1000-1000
+```
 
 相对路径以当前工作目录为基准，词法合并 `.`、`..`、重复 `/` 和尾部 `/`，
 不跟随符号链接。路径必须是有效 UTF-8，非空且不含 NUL。规范化路径短于 4096

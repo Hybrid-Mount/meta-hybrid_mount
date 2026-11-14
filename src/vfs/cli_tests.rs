@@ -10,6 +10,49 @@ fn command(args: &[&str]) -> Result<Command> {
 }
 
 #[test]
+fn rule_add_and_delete_accept_nomount_uid_scope() {
+    assert!(
+        command(&[
+            "rule",
+            "add",
+            "/v",
+            "/r",
+            "--uid-range",
+            "all",
+            "--uid-excluded",
+            "1000-1000",
+        ])
+        .is_ok()
+    );
+    assert!(
+        command(&[
+            "rule",
+            "del",
+            "/v",
+            "--uid-range=all",
+            "--uid-excluded=1000-1000",
+        ])
+        .is_ok()
+    );
+}
+
+#[test]
+fn invalid_rule_scopes_fail_argument_validation() {
+    for options in [
+        &["--uid-range", "1001-1000"][..],
+        &["--uid-range", "all", "--uid", "1000"],
+        &["--uid-range", "all", "--uid-excluded", "0-0"],
+        &["--uid-range", "0-999", "--uid-excluded", "1000-1000"],
+        &["--uid-excluded", "1000-1000"],
+    ] {
+        assert!(
+            command(&[&["rule", "add", "/v", "/r"][..], options].concat()).is_err(),
+            "{options:?}"
+        );
+    }
+}
+
+#[test]
 fn all_legacy_aliases_match_standard_commands() {
     for (aliases, canonical, tail) in [
         (&["add", "a"][..], &["rule", "add"][..], &["/v", "/r"][..]),
@@ -61,7 +104,7 @@ fn batch_add_normalizes_paths_and_carries_requested_uid() {
         Command {
             json: true,
             operation: Operation::Mutate(Mutation::Add {
-                uid: 10234,
+                scope: 10234.into(),
                 rules: vec![
                     EncodedRule {
                         flags: 0,
@@ -86,10 +129,10 @@ fn whiteout_and_opaque_are_batched_without_real_paths() {
         ("--opaque", protocol::FLAG_OPAQUE),
     ] {
         let parsed = command(&["rule", "add", flag, "/a", "/b", "--uid=44"]).unwrap();
-        let Operation::Mutate(Mutation::Add { rules, uid }) = parsed.operation else {
+        let Operation::Mutate(Mutation::Add { rules, scope }) = parsed.operation else {
             panic!("wrong operation")
         };
-        assert_eq!(uid, 44);
+        assert_eq!(scope, 44.into());
         assert_eq!(rules.len(), 2);
         assert!(
             rules
@@ -205,7 +248,7 @@ fn uid_boundary_values_and_duplicates_are_handled() {
         command(&["d", "/a", "/b", "--uid=0"]).unwrap().operation,
         Operation::Mutate(Mutation::Delete {
             paths: vec![b"/a".to_vec(), b"/b".to_vec()],
-            uid: 0
+            scope: 0.into()
         })
     );
 }
@@ -253,7 +296,7 @@ fn normalized_virtual_path_does_not_need_to_exist() {
 fn rule_json_escapes_paths_and_exposes_hm_flags() {
     let row = ListedRule {
         flags: protocol::FLAG_OPAQUE | protocol::FLAG_VIRTUAL_DIR | 1,
-        uid: 12,
+        scope: 12.into(),
         virtual_path: "/a\"\n\\b".into(),
         real_path: String::new(),
     };
@@ -266,6 +309,22 @@ fn rule_json_escapes_paths_and_exposes_hm_flags() {
     assert_eq!(json[0]["whiteout"], false);
     assert!(rules_text(&[row]).contains("opaque directory"));
     assert_eq!(rules_json(&[]).unwrap(), "[]");
+}
+
+#[test]
+fn rule_list_exposes_nomount_range_and_exclusion() {
+    let rows = [ListedRule {
+        flags: 0,
+        scope: UidScope::new(0, u32::MAX, 1000, 1000),
+        virtual_path: "/base.apk".into(),
+        real_path: "/patched.apk".into(),
+    }];
+    let json: serde_json::Value = serde_json::from_str(&rules_json(&rows).unwrap()).unwrap();
+    assert_eq!(json[0]["uid"], 0);
+    assert_eq!(json[0]["uid_end"], u32::MAX);
+    assert_eq!(json[0]["deny_start"], 1000);
+    assert_eq!(json[0]["deny_end"], 1000);
+    assert!(rules_text(&rows).contains("excl 1000-1000"));
 }
 
 #[test]

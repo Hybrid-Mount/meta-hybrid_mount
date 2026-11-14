@@ -55,6 +55,57 @@ fn word(page: &[u8], offset: usize) -> u32 {
 }
 
 #[test]
+fn nomount_22_writes_and_verifies_the_full_rule_scope() {
+    let scope = UidScope::new(0, u32::MAX, 1000, 1000);
+    let rule = rule("/v", "/r", 0);
+    // NoMount v22 list record with virtual and real path lengths of two bytes each.
+    let mut record: Vec<u8> = [0_u32, 0, u32::MAX, 1000, 1000]
+        .into_iter()
+        .flat_map(u32::to_le_bytes)
+        .collect();
+    record.extend_from_slice(b"\x02\x00\x02\x00/v/r");
+    let add = Mutation::Add {
+        rules: vec![rule],
+        scope,
+    };
+    let delete = Mutation::Delete {
+        paths: vec![b"/v".to_vec()],
+        scope,
+    };
+    let mut controller = Controller::new(Scripted::new(Vec::new()));
+    assert!(controller.mutate(&add).is_err());
+    controller.format = RuleFormat::NomountLegacy;
+    assert!(controller.mutate(&delete).is_err());
+    assert!(controller.transport.requests.is_empty());
+
+    controller.format = RuleFormat::Nomount22;
+    for (offset, mutation, cmd, request_size) in [
+        (32, &add, NmCommand::AddRule, 28),
+        (28, &delete, NmCommand::DelRule, 20),
+    ] {
+        for listed_exclusion in [1000_u32, 1001] {
+            record[12..16].copy_from_slice(&listed_exclusion.to_le_bytes());
+            record[16..20].copy_from_slice(&listed_exclusion.to_le_bytes());
+            controller.transport = Scripted::new(vec![
+                page(cmd, 0, request_size, &vec![0; request_size as usize]),
+                page(NmCommand::GetList, 0, 1, &record),
+                page(NmCommand::GetList, 0, 1, &[]),
+            ]);
+            let report = controller.mutate(mutation).unwrap();
+            assert_eq!(
+                report.ok,
+                (listed_exclusion == 1000) == (cmd == NmCommand::AddRule)
+            );
+            let request = &controller.transport.requests[0];
+            assert_eq!(word(request, offset), 0);
+            assert_eq!(word(request, offset + 4), u32::MAX);
+            assert_eq!(word(request, offset + 8), 1000);
+            assert_eq!(word(request, offset + 12), 1000);
+        }
+    }
+}
+
+#[test]
 fn nonzero_uid_is_encoded_in_every_record_across_batch_boundaries() {
     let one = rule(
         &format!("/{}", "v".repeat(1500)),
@@ -73,7 +124,7 @@ fn nonzero_uid_is_encoded_in_every_record_across_batch_boundaries() {
             response
         })
         .unwrap();
-        assert!(rows.iter().all(|row| row.uid == 10234));
+        assert!(rows.iter().all(|row| row.scope.uid == 10234));
     }
     assert_eq!(
         word(
@@ -105,7 +156,7 @@ fn addition_requires_matching_uid_real_path_and_semantic_flags() {
         let report = controller
             .mutate(&Mutation::Add {
                 rules: vec![expected.clone()],
-                uid: 42,
+                scope: 42.into(),
             })
             .unwrap();
         assert!(!report.ok);
@@ -134,7 +185,7 @@ fn opaque_readback_accepts_kernel_added_directory_flags() {
     let report = controller
         .mutate(&Mutation::Add {
             rules: vec![expected],
-            uid: 44,
+            scope: 44.into(),
         })
         .unwrap();
     assert!(report.ok, "{report:?}");
@@ -158,7 +209,7 @@ fn failed_batch_still_reads_all_final_results_and_preserves_error_offset() {
     let report = controller
         .mutate(&Mutation::Add {
             rules: vec![first.clone(), second],
-            uid: 42,
+            scope: 42.into(),
         })
         .unwrap();
     assert!(!report.ok);
@@ -186,7 +237,7 @@ fn duplicate_path_verifies_last_requested_value() {
     let report = controller
         .mutate(&Mutation::Add {
             rules: vec![before, after],
-            uid: 0,
+            scope: 0.into(),
         })
         .unwrap();
     assert!(report.ok);
@@ -204,7 +255,7 @@ fn delete_is_idempotent_and_does_not_match_another_uid() {
     let report = controller
         .mutate(&Mutation::Delete {
             paths: vec![b"/v".to_vec()],
-            uid: 42,
+            scope: 42.into(),
         })
         .unwrap();
     assert!(report.ok);
@@ -233,7 +284,7 @@ fn delete_accepts_only_a_plain_virtual_parent_as_remaining_topology() {
         let report = controller
             .mutate(&Mutation::Delete {
                 paths: vec![b"/parent".to_vec()],
-                uid: 42,
+                scope: 42.into(),
             })
             .unwrap();
         assert_eq!(report.ok, expected, "flags={flags} real={real} {report:?}");
@@ -249,7 +300,7 @@ fn short_delete_cursor_is_failure_even_when_rule_is_absent() {
     let report = controller
         .mutate(&Mutation::Delete {
             paths: vec![b"/v".to_vec()],
-            uid: 0,
+            scope: 0.into(),
         })
         .unwrap();
     assert!(!report.ok);
@@ -423,7 +474,7 @@ fn oversized_late_record_is_rejected_before_any_mutation() {
     let mut controller = Controller::new(Scripted::new(Vec::new()));
     let mutation = Mutation::Add {
         rules: vec![rule("/ok", "/r", 0), rule(&"x".repeat(4069), "/r", 0)],
-        uid: 4,
+        scope: 4.into(),
     };
     assert!(controller.mutate(&mutation).is_err());
     assert!(controller.transport.requests.is_empty());
@@ -501,7 +552,7 @@ fn whiteout_and_directory_injection_verify_successfully() {
         let report = controller
             .mutate(&Mutation::Add {
                 rules: vec![expected],
-                uid: 0,
+                scope: 0.into(),
             })
             .unwrap();
         assert!(report.ok, "{report:?}");

@@ -1890,7 +1890,7 @@ fn apply_vfs_phase(
             crate::vfs::protocol::build_add_rule_payloads_for(&planned.rules, 0, kernel.format())?;
             let existing = kernel.list_rules()?;
             if let Some(rule) = existing.iter().find(|rule| {
-                rule.uid == 0
+                rule.scope == 0.into()
                     && !crate::vfs::protocol::is_derived_parent(rule.flags, &rule.real_path)
                     && planned
                         .rules
@@ -2165,7 +2165,7 @@ mod tests {
                 Ok(if self.present {
                     vec![ListedRule {
                         flags: 0,
-                        uid: 0,
+                        scope: 0.into(),
                         virtual_path: "/system/etc/hosts".into(),
                         real_path: "/module/hosts".into(),
                     }]

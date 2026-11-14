@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 use super::backend::{KeyringKernel, parse_version_response, rule_format};
-use super::protocol::{self, EncodedRule, ListedRule, NmCommand, RuleFormat};
+use super::protocol::{self, EncodedRule, ListedRule, NmCommand, RuleFormat, UidScope};
 use super::sys::KeyringChannel;
 use crate::errors::{Error, Result};
 
@@ -38,8 +38,14 @@ pub(super) enum ClearScope {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Mutation {
-    Add { rules: Vec<EncodedRule>, uid: u32 },
-    Delete { paths: Vec<Vec<u8>>, uid: u32 },
+    Add {
+        rules: Vec<EncodedRule>,
+        scope: UidScope,
+    },
+    Delete {
+        paths: Vec<Vec<u8>>,
+        scope: UidScope,
+    },
     AddUids(Vec<u32>),
     DeleteUids(Vec<u32>),
     Clear(ClearScope),
@@ -61,9 +67,11 @@ impl Mutation {
     /// Encode every page before issuing any mutation, including later batches.
     fn pages(&self, format: RuleFormat) -> Result<Vec<Vec<u8>>> {
         match self {
-            Self::Add { rules, uid } => protocol::build_add_rule_payloads_for(rules, *uid, format),
-            Self::Delete { paths, uid } => {
-                protocol::build_del_rule_payloads_for(paths, *uid, format)
+            Self::Add { rules, scope } => {
+                protocol::build_add_rule_payloads_for(rules, *scope, format)
+            }
+            Self::Delete { paths, scope } => {
+                protocol::build_del_rule_payloads_for(paths, *scope, format)
             }
             Self::AddUids(uids) | Self::DeleteUids(uids) => {
                 let cmd = if matches!(self, Self::AddUids(_)) {
@@ -199,7 +207,7 @@ impl<T: Transport> Controller<T> {
         let mut readback_errors = Vec::new();
         let mut results = Vec::new();
         match mutation {
-            Mutation::Add { rules, uid } => {
+            Mutation::Add { rules, scope } => {
                 let listed = note_readback(&mut readback_errors, self.list_rules());
                 // Repeated paths use the last requested value, matching kernel replacement.
                 let expected: BTreeMap<&[u8], &EncodedRule> = rules
@@ -209,7 +217,7 @@ impl<T: Transport> Controller<T> {
                 for (path, rule) in expected {
                     let confirmed = listed.as_ref().is_some_and(|rows| {
                         rows.iter().any(|row| {
-                            row.uid == *uid
+                            row.scope == *scope
                                 && row.virtual_path.as_bytes() == path
                                 && row.real_path.as_bytes() == rule.real_path
                                 && row.flags & (protocol::FLAG_WHITEOUT | protocol::FLAG_OPAQUE)
@@ -220,24 +228,24 @@ impl<T: Transport> Controller<T> {
                     });
                     results.push(VerifiedItem {
                         target: String::from_utf8_lossy(path).into_owned(),
-                        uid: Some(*uid),
+                        uid: Some(scope.uid),
                         confirmed,
                     });
                 }
             }
-            Mutation::Delete { paths, uid } => {
+            Mutation::Delete { paths, scope } => {
                 let listed = note_readback(&mut readback_errors, self.list_rules());
                 for path in paths {
                     let confirmed = listed.as_ref().is_some_and(|rows| {
                         !rows.iter().any(|row| {
-                            row.uid == *uid
+                            row.scope == *scope
                                 && row.virtual_path.as_bytes() == path
                                 && !protocol::is_derived_parent(row.flags, &row.real_path)
                         })
                     });
                     results.push(VerifiedItem {
                         target: String::from_utf8_lossy(path).into_owned(),
-                        uid: Some(*uid),
+                        uid: Some(scope.uid),
                         confirmed,
                     });
                 }

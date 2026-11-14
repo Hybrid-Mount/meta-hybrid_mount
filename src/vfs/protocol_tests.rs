@@ -335,11 +335,11 @@ fn parse_list_reads_records_and_the_next_cursor() {
     assert_eq!(cursor, 2, "arg1 is the index of the next rule to read");
     assert_eq!(rules.len(), 2);
     assert_eq!(rules[0].flags, 0);
-    assert_eq!(rules[0].uid, 0);
+    assert_eq!(rules[0].scope.uid, 0);
     assert_eq!(rules[0].virtual_path, "/system/etc/hosts");
     assert_eq!(rules[0].real_path, "/data/adb/modules/m/hosts");
     assert_eq!(rules[1].flags, FLAG_WHITEOUT);
-    assert_eq!(rules[1].uid, 10123);
+    assert_eq!(rules[1].scope.uid, 10123);
     assert_eq!(rules[1].virtual_path, "/system/app/Foo");
     assert!(rules[1].real_path.is_empty());
 }
@@ -436,6 +436,21 @@ fn paginate_walks_the_cursor_until_the_kernel_returns_an_empty_batch() {
 }
 
 #[test]
+fn paginate_keeps_the_last_batch_when_nomount_signals_completion() {
+    let mut calls = 0;
+    let rows = paginate(
+        |_| {
+            calls += 1;
+            assert_eq!(calls, 1, "the terminal cursor must not be sent back");
+            Ok(page_with_data(0, u32::MAX, &1000_u32.to_le_bytes()))
+        },
+        parse_uids,
+    )
+    .unwrap();
+    assert_eq!(rows, vec![1000]);
+}
+
+#[test]
 fn paginate_asks_for_the_next_cursor_the_kernel_reported() {
     let mut seen = Vec::new();
     let pages = [
@@ -489,6 +504,25 @@ fn nomount_22_rule_records_include_uid_range_fields() {
 }
 
 #[test]
+fn only_nomount_23_can_exclude_a_nonzero_range_start() {
+    let rule = EncodedRule {
+        flags: 0,
+        virtual_path: b"/base.apk".to_vec(),
+        real_path: b"/patched.apk".to_vec(),
+    };
+    let scope = UidScope::new(1000, 1999, 1000, 1005);
+    assert!(
+        build_add_rule_payloads_for(std::slice::from_ref(&rule), scope, RuleFormat::Nomount22,)
+            .is_err()
+    );
+    let pages = build_add_rule_payloads_for(&[rule], scope, RuleFormat::Nomount23).unwrap();
+    assert_eq!(
+        &pages[0][32..48],
+        &[232, 3, 0, 0, 207, 7, 0, 0, 232, 3, 0, 0, 237, 3, 0, 0]
+    );
+}
+
+#[test]
 fn nomount_22_lists_and_deletes_single_uid_records() {
     let path = b"/system/example";
     let rule = EncodedRule {
@@ -503,7 +537,7 @@ fn nomount_22_lists_and_deletes_single_uid_records() {
     page[20..24].copy_from_slice(&1_u32.to_le_bytes());
     let (rules, cursor) = parse_list_for(&page, RuleFormat::Nomount22).unwrap();
     assert_eq!(rules[0].virtual_path, "/system/example");
-    assert_eq!(rules[0].uid, 123);
+    assert_eq!(rules[0].scope.uid, 123);
     assert_eq!(cursor, 1);
 
     let pages = build_del_rule_payloads_for(&[path.to_vec()], 123, RuleFormat::Nomount22).unwrap();

@@ -134,6 +134,7 @@ pub fn apply_rules_with_policy_diagnosed(
 pub fn missing_rules(expected: &[EncodedRule], listed: &[ListedRule]) -> Vec<String> {
     let installed: BTreeSet<&str> = listed
         .iter()
+        .filter(|rule| rule.scope.range.is_none())
         .map(|rule| rule.virtual_path.as_str())
         .collect();
     expected

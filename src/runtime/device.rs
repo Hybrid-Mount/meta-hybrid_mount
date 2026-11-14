@@ -95,12 +95,14 @@ impl RuleKernel for Kernel {
             .0
             .list_rules()?
             .into_iter()
+            // The ownership ledger can only represent global and single-UID rules.
+            .filter(|rule| rule.scope.range.is_none())
             .map(|r| SavedRule {
                 module_id: String::new(),
                 virtual_path: r.virtual_path,
                 real_path: r.real_path,
                 flags: r.flags,
-                uid: r.uid,
+                uid: r.scope.uid,
             })
             .collect())
     }

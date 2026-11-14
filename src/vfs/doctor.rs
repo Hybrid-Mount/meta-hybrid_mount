@@ -9,9 +9,9 @@
 use serde::Serialize;
 
 use crate::errors::Result;
-use crate::vfs::backend::{
-    KeyringKernel, NOMOUNT_VERSIONS, SUPPORTED_VERSIONS, VfsProvider, rule_format,
-};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::vfs::backend::KeyringKernel;
+use crate::vfs::backend::{NOMOUNT_VERSIONS, SUPPORTED_VERSIONS, VfsProvider, rule_format};
 use crate::vfs::protocol::ListedRule;
 use crate::vfs::sys::KeyringChannel;
 

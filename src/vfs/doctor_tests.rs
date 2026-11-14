@@ -6,7 +6,7 @@ use crate::errors::Error;
 fn rule(virtual_path: &str) -> ListedRule {
     ListedRule {
         flags: 0,
-        uid: 0,
+        scope: 0.into(),
         virtual_path: virtual_path.to_owned(),
         real_path: "/data/adb/modules/m/x".to_owned(),
     }
@@ -174,10 +174,10 @@ fn existing_providers_block_loading_even_when_the_probe_is_silent() {
 }
 
 #[test]
-fn nomount_22_is_available_without_hybridmount() {
+fn nomount_23_is_available_without_hybridmount() {
     let report = summarize_channel(
         KeyringChannel::Nomount,
-        Some("22 (123)".into()),
+        Some("23 (720)".into()),
         ModulePresence::BuiltIn,
         Ok((Vec::new(), Vec::new())),
     );
@@ -203,8 +203,8 @@ fn unrecognized_provider_requires_presence_or_a_protocol_reply() {
     assert!(is_unrecognized_provider(
         false,
         Err(Error::VfsUnsupportedVersion {
-            found: "23".into(),
-            supported: "20,21,22".into(),
+            found: "24".into(),
+            supported: "20,21,22,23".into(),
         }),
     ));
 }

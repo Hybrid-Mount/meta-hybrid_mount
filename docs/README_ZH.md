@@ -58,7 +58,7 @@ default_mode = "magic"
 
 ## VFS 后端
 
-VFS 支持内置或以 LKM 加载的 `hybridmount`，也支持已存在的 NoMount 内核后端（协议 20、21、22）。检测到 NoMount 时，启动流程会跳过 `hybridmount` 的自动加载。Hybrid Mount 无源路径的 opaque 目录规则（含 `.replace`）需要 `hybridmount`。
+VFS 支持内置或以 LKM 加载的 `hybridmount`，也支持已存在的 NoMount 内核后端（协议 20 至 23）。检测到 NoMount 时，启动流程会跳过 `hybridmount` 的自动加载。Hybrid Mount 无源路径的 opaque 目录规则（含 `.replace`）需要 `hybridmount`。
 
 **如何识别 Provider。** 启动决策只看对内核 key type `hybridmount` 的一次只读探测：只要它返回受支持的版本，Provider 即可用。`vfs-doctor` 另外负责判断它以何种方式存在——出现在 `/proc/modules` 中，说明由可加载模块注册；有 `/sys/module/hybridmount` 目录但没有上述条目，说明已编译进内核镜像；两者都没有，说明本机没有 Provider。探测是只读的，因此 `status` 与 `vfs-doctor` 都不会触发 `insmod`。
 
