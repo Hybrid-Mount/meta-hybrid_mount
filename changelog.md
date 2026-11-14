@@ -1,4 +1,31 @@
 
+## v6.2.6
+
+
+
+### <!-- 1 --> Features
+
+- `vfs` Support NoMount v23 and per-rule UID exclusions Refs #514
+
+- `magic-mount` Support upstream boot-time Lua hooks
+
+
+
+### <!-- 2 --> Fixes
+
+- `lkm` Sync Mountify ext4 modules and support Android 17
+
+- `overlayfs` Restore native child mounts on overlay failure
+
+
+
+### <!-- 5 --> Miscellaneous
+
+- Remove upstream Magic Mount custom mount hooks
+
+
+
+
 ## v6.2.6-rc.4
 
 
