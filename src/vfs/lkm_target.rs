@@ -67,6 +67,7 @@ const TARGETS: &[(u32, u32, u32, &str)] = &[
     (6, 1, 14, "hybridmount-android14-6.1.ko"),
     (6, 6, 15, "hybridmount-android15-6.6.ko"),
     (6, 12, 16, "hybridmount-android16-6.12.ko"),
+    (6, 18, 17, "hybridmount-android17-6.18.ko"),
 ];
 
 /// Prefer the kernel's GKI label; an optional hint never rules out same-line candidates.
@@ -191,7 +192,10 @@ mod tests {
             Some("hybridmount-android12-5.10.ko")
         );
         assert_eq!(select_lkm_filename("4.14.336-android12-9", None), None);
-        assert_eq!(select_lkm_filename("6.18.0-android17-0", None), None);
+        assert_eq!(
+            select_lkm_filename("6.18.0-android17-0", None),
+            Some("hybridmount-android17-6.18.ko")
+        );
         assert_eq!(select_lkm_filename("not-a-release", None), None);
     }
 
@@ -205,8 +209,8 @@ mod tests {
             .collect();
         assert_eq!(
             ci_targets.len(),
-            7,
-            "expected the seven supported DDK targets, found {ci_targets:?}"
+            TARGETS.len(),
+            "DDK targets must cover the supported kernel matrix: {ci_targets:?}"
         );
 
         for target in ci_targets {

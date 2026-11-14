@@ -25,6 +25,10 @@ make_kernel_tree "$tree"
 (cd "$tree" && sh "$SETUP" > /dev/null)
 
 [ -f "$tree/fs/hybridmount/hybridmount.c" ] || fail "sources were not copied"
+for source in hybridmount.c hybridmount.h; do
+    cmp -s "$REPO_ROOT/module/vfs/src/$source" "$tree/fs/hybridmount/$source" ||
+        fail "in-tree $source differs from the LKM source"
+done
 [ -f "$tree/fs/hybridmount/LICENSE" ] || fail "license was not copied"
 # shellcheck disable=SC2016
 grep -qF 'obj-$(CONFIG_HYBRIDMOUNT) += hybridmount/' "$tree/fs/Makefile" ||

@@ -25,7 +25,7 @@ typedef unsigned int uid_t;
 #define LOOKUP_FOLLOW 0
 #define IDMAP_ARG void *idmap,
 #define IDMAP_CALL idmap,
-#define IDMAP_PATH(path) (path).mnt,
+#define IDMAP_PATH(path) (path).mnt->idmap,
 #define EACCES 13
 #define ENOENT 2
 #define ECHILD 10
@@ -46,6 +46,22 @@ typedef unsigned int uid_t;
 #ifndef ENOTDIR
 #define ENOTDIR 20
 #endif
+#define ENODEV 19
+#define EINVAL 22
+#define O_RDONLY 0
+#define O_CLOEXEC 1
+#define O_LARGEFILE 2
+#define O_CREAT 4
+#define O_EXCL 8
+#define O_NOCTTY 16
+#define SEEK_DATA 3
+#define SEEK_HOLE 4
+#define EXT4_SUPER_MAGIC 0xef53
+#define F2FS_SUPER_MAGIC 0xf2f52010
+#define MNT_NODEV 4
+#define SB_I_NODEV 8
+#define loff_t int64_t
+#define umode_t unsigned int
 #define HYBRIDMOUNT_MAGIC_SIG 0
 #define likely(x) (x)
 #define unlikely(x) (x)
@@ -69,7 +85,8 @@ typedef unsigned int uid_t;
 
 struct inode;
 struct super_operations { void (*evict_inode)(struct inode *); };
-struct super_block { const struct super_operations *s_op; };
+struct super_block { const struct super_operations *s_op; unsigned long s_magic; int s_iflags; loff_t s_maxbytes; };
+struct vfsmount { unsigned int mnt_flags; struct super_block *mnt_sb; void *idmap; };
 struct address_space { int unused; };
 struct inode {
     void *i_private;
@@ -81,17 +98,44 @@ struct inode {
     unsigned long i_ino;
     unsigned int i_mode;
     bool locked;
+    loff_t size;
 };
 struct qstr { const unsigned char *name; size_t len; };
 struct dentry { struct inode *inode; struct qstr d_name; struct super_block *d_sb; };
-struct path { struct dentry *dentry; void *mnt; };
+struct path { struct dentry *dentry; struct vfsmount *mnt; };
 struct list_head { int unused; };
 typedef int atomic_t;
 static void atomic_inc(atomic_t *n) { ++*n; }
 static void atomic_dec(atomic_t *n) { --*n; }
 static int atomic_read(atomic_t *n) { return *n; }
 struct hybridmount_dir_node { struct inode *v_inode; uintptr_t tag; int rcu; atomic_t inode_users; int refs; unsigned long long bloom_mask; };
-struct hm_inode_info { struct path r_path, native_path; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; bool backing_child; };
+struct file { int refs, f_flags; const void *f_cred; void *private_data; struct inode *inode; loff_t f_pos; };
+static void fput(struct file *file) { --file->refs; }
+static struct file *get_file(struct file *file) { ++file->refs; return file; }
+static struct inode *file_inode(struct file *file) { return file->inode; }
+static loff_t i_size_read(struct inode *inode) { return inode->size; }
+static struct file backing_opens[8];
+static int backing_open_count;
+static struct file *dentry_open(const struct path *path, int flags, const void *cred) {
+    assert(backing_open_count < 8);
+    struct file *entry = &backing_opens[backing_open_count++];
+    *entry = (struct file){.refs=1,.f_flags=flags,.f_cred=cred,.inode=path->dentry->inode};
+    return entry;
+}
+static loff_t vfs_setpos(struct file *file, loff_t offset, loff_t maxbytes) {
+    if (offset < 0 || offset > maxbytes) return -EINVAL;
+    return file->f_pos = offset;
+}
+static loff_t generic_file_llseek_size(struct file *file, loff_t offset, int whence, loff_t maxbytes, loff_t end) {
+    if (whence == SEEK_CUR) offset += file->f_pos;
+    if (whence == SEEK_END) offset += end;
+    return vfs_setpos(file, offset, maxbytes);
+}
+static loff_t vfs_llseek(struct file *file, loff_t offset, int whence) {
+    if (whence == SEEK_HOLE) offset = file->inode->size;
+    return vfs_setpos(file, offset, file->inode->i_sb->s_maxbytes);
+}
+struct hm_inode_info { struct path r_path, native_path; struct file *read_file; struct hybridmount_dir_node *dir_node; u16 flags; int rcu; bool backing_child; };
 struct hm_rule_info { struct path r_path, backing_path, native_path, native_identity; struct hybridmount_dir_node *this_dir; u16 flags; unsigned long v_ino; };
 struct hybridmount_rule {
     struct path parent_path, r_path, native_path;
@@ -187,6 +231,7 @@ static struct inode *new_inode(struct super_block *sb) {
 static void hybridmount_init_prealloc_inode(struct inode *inode,
     struct hm_inode_info *info, struct hm_rule_info *rule) {
     info->dir_node = rule->this_dir;
+    info->read_file = NULL;
     if (info->dir_node) atomic_inc(&info->dir_node->inode_users);
     info->flags = rule->flags;
     info->r_path = rule->r_path;
@@ -211,7 +256,12 @@ static struct inode *test_cmpxchg(struct inode **slot, struct inode *expected, s
     }
     return previous;
 }
-#define cmpxchg(p, old, value) test_cmpxchg(p, old, value)
+static struct file *file_cmpxchg(struct file **slot, struct file *expected, struct file *value) {
+    struct file *previous = *slot;
+    if (previous == expected) *slot = value;
+    return previous;
+}
+#define cmpxchg(p, old, value) _Generic((p), struct file **: file_cmpxchg, default: test_cmpxchg)(p, old, value)
 static void iput(struct inode *inode);
 static struct dentry *protected_dentry;
 static struct inode *spliced_inode;
@@ -384,12 +434,41 @@ static void lookup_case(const char *mode) {
 }
 int main(int argc, char **argv) {
     const char *mode = argc > 1 ? argv[1] : "new";
-    if (!strcmp(mode, "native-opaque-child")) {
+    if (!strcmp(mode, "file-cache")) {
+        int first_cred, other_cred;
+        struct super_block sb = {.s_magic=EXT4_SUPER_MAGIC,.s_maxbytes=1000};
+        struct inode backing = {.i_sb=&sb,.i_mode=S_IFREG,.size=30};
+        struct dentry dentry = {.inode=&backing,.d_sb=&sb};
+        struct hm_inode_info *info = calloc(1, sizeof(*info));
+        struct inode proxy = {.i_private=info};
+        struct file first = {.f_cred=&first_cred,.inode=&proxy};
+        struct file second = first, other = first;
+        other.f_cred = &other_cred;
+        info->r_path.dentry = &dentry;
+        path_refs = 1;
+        assert(!hm_open(&proxy, &first) && !hm_open(&proxy, &second));
+        assert(backing_open_count == 1 && info->read_file->refs == 3);
+        assert(!hm_open(&proxy, &other) && backing_open_count == 2);
+        assert(other.private_data != first.private_data);
+        assert(hm_llseek(&first, 4, SEEK_SET) == 4);
+        assert(hm_llseek(&second, -10, SEEK_END) == 20);
+        assert(hm_llseek(&first, 0, SEEK_HOLE) == 30);
+        assert(second.f_pos == 20 && info->read_file->f_pos == 0);
+        assert(backing_open_count == 3 && backing_opens[2].refs == 0);
+        hm_release(&proxy, &first);
+        hm_release(&proxy, &second);
+        hm_release(&proxy, &other);
+        assert(info->read_file->refs == 1 && backing_opens[1].refs == 0);
+        hm_destroy_virtual_inode(&proxy);
+        assert(backing_opens[0].refs == 0 && path_refs == 0);
+        puts("PASS: backing cache respects credentials, offsets and references");
+    } else if (!strcmp(mode, "native-opaque-child")) {
         struct hybridmount_dir_node node = {0};
         struct inode stock_dir = {.i_op=&native_iops, .i_mode=S_IFDIR};
         struct inode stock_child = {.i_op=&native_iops, .i_mode=S_IFDIR};
         struct dentry parent = {.inode=&stock_dir}, child = {.inode=&stock_child};
-        struct hybridmount_rule existing = {.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR, .this_dir=&node, .native_path={&parent, &stock_dir}};
+        struct vfsmount mount = {0};
+        struct hybridmount_rule existing = {.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR, .this_dir=&node, .native_path={&parent, &mount}};
         struct hybridmount_rule rule = {.flags=HM_FLAG_IS_DIR|HM_FLAG_VIRTUAL_DIR, .v_len=13};
         memcpy(rule.paths, "/parent/child", 14);
         parent_variants=&existing;
@@ -404,6 +483,7 @@ int main(int argc, char **argv) {
     } else if (!strcmp(mode, "blocked-held-native-dir") || !strcmp(mode, "blocked-held-synthetic-dir") || !strcmp(mode, "unblocked-opaque-dir")) {
         struct hm_uid_array blocked = {.count = 1, .uids = {42}};
         struct super_block sb = {0};
+        struct vfsmount mount = {.mnt_sb = &sb};
         struct inode native_dir = {.i_op = &native_iops, .i_sb = &sb};
         struct inode native_child = {.i_op = &native_iops, .i_sb = &sb, .i_ino = 72};
         struct dentry parent = {.inode = &native_dir}, child = {.inode = &native_child};
@@ -414,7 +494,7 @@ int main(int argc, char **argv) {
         test_fsuid = !strcmp(mode, "unblocked-opaque-dir") ? 0 : 42;
         hybridmount_uids = &blocked;
         if (strcmp(mode, "blocked-held-synthetic-dir"))
-            info.native_path = (struct path){.dentry = &parent, .mnt = &sb};
+            info.native_path = (struct path){.dentry = &parent, .mnt = &mount};
         expected_backing_parent = &parent;
         backing_result = &child;
         assert(hm_dir_lookup(&held, &target, 0) == NULL);
@@ -426,7 +506,8 @@ int main(int argc, char **argv) {
     } else if (!strcmp(mode, "permissions")) {
         struct inode real = {0};
         struct dentry backing = {.inode = &real};
-        struct hm_inode_info info = {.r_path = {.dentry = &backing, .mnt = &real}};
+        struct vfsmount mount = {.idmap = &real};
+        struct hm_inode_info info = {.r_path = {.dentry = &backing, .mnt = &mount}};
         struct inode proxy = {.i_private = &info};
         assert(hm_permission(&proxy, &proxy, 4 | MAY_NOT_BLOCK) == -ECHILD);
         assert(hm_permission(&proxy, &proxy, 4) == 0);
@@ -441,11 +522,12 @@ int main(int argc, char **argv) {
         puts("PASS: proxy checks current backing permissions and its mount idmap");
     } else if (!strcmp(mode, "backing-lookup")) {
         struct super_block destination = {0}, source = {0};
+        struct vfsmount mount = {.mnt_sb = &source};
         struct inode real_dir = {.i_op = &native_iops, .i_sb = &source};
         struct inode real = {.i_op = &native_iops, .i_sb = &source, .i_ino = 71};
         struct dentry parent = {.d_sb = &source, .inode = &real_dir};
         struct dentry child = {.d_sb = &source, .inode = &real};
-        struct hm_inode_info info = {.r_path = {.dentry = &parent, .mnt = &source}};
+        struct hm_inode_info info = {.r_path = {.dentry = &parent, .mnt = &mount}};
         struct inode proxy = {.i_private = &info, .i_sb = &destination};
         struct dentry target = {.d_sb = &destination, .d_name = QSTR_INIT("child", 5)};
         expected_backing_parent = &parent;
@@ -458,7 +540,7 @@ int main(int argc, char **argv) {
         struct hm_inode_info *child_info = spliced_inode->i_private;
         assert(spliced_inode->i_sb == &destination);
         assert(child_info->backing_child && child_info->r_path.dentry == &child);
-        assert(child_info->r_path.mnt == &source);
+        assert(child_info->r_path.mnt == &mount);
         iput(spliced_inode);
         real.i_op = &hm_dir_iops;
         assert(hm_dir_lookup(&proxy, &target, 0) == ERR_PTR(-ELOOP));
@@ -477,17 +559,19 @@ int main(int argc, char **argv) {
         reset();
         struct inode inode = {0};
         struct dentry backing = {0};
+        struct file cached = {.refs = 1};
         struct hm_inode_info *reader = calloc(1, sizeof(*reader));
         reader->r_path.dentry = &backing;
+        reader->read_file = &cached;
         inode.i_private = reader;
         retiring_inode = &inode;
         observed_info = reader;
         path_refs = 1;
         hm_destroy_virtual_inode(&inode);
-        assert(!inode.i_private && !path_refs && !info_freed);
+        assert(!inode.i_private && !path_refs && !info_freed && cached.refs == 0);
         assert(deferred_info == reader);
         hm_destroy_virtual_inode(&inode);
-        assert(deferred_info == reader);
+        assert(deferred_info == reader && cached.refs == 0);
         free(deferred_info);
         puts("PASS: info unpublished before release and retired after RCU readers");
     } else if (!strcmp(mode, "evict")) {

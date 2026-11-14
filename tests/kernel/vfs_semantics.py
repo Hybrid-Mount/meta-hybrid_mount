@@ -25,7 +25,7 @@ def extract(name):
 
 
 functions = ["hm_alloc_rule", "hybridmount_emit_virtual_children",
-             "hm_destroy_hijacked_inode", "hm_xattr_get"]
+             "hm_destroy_hijacked_inode", "hm_xattr_get", "hm_xattr_set"]
 production = "\n\n".join(extract(name) for name in functions)
 source, saved_source = header, source
 production = "#define HM_SIG_16 0x686DULL\n" + "\n".join(
@@ -60,7 +60,7 @@ with tempfile.TemporaryDirectory(prefix="hm-semantics-") as temporary:
                             f"/out:{executable}", str(output), "libcmt.lib", "oldnames.lib"], check=True)
         for mode in ["hook-alloc-sop", "hook-alloc-xattr", "hook-pin", "source-flags", "dirent", "cursor-negative", "cursor-max", "cursor-compat-max", "dirent-compat", "parent", "parent-opaque",
                      "parent-empty", "parent-allocation", "parent-repeat",
-                     "teardown", "xattr", "xattr-native", "xattr-virtual", "xattr-capability"]:
+                     "teardown", "xattr", "xattr-native", "xattr-virtual", "xattr-capability", "xattr-write"]:
             result = subprocess.run([str(executable), mode], timeout=30)
             if result.returncode:
                 failures.append(f"{version}: {mode}")

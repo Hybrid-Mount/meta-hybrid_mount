@@ -97,6 +97,7 @@ struct hm_sop {
 
 struct hm_inode_info {
     struct path r_path;
+    struct file *read_file;
     /* Original target, independent of the module's backing directory. */
     struct path native_path;
     struct hybridmount_dir_node *dir_node;

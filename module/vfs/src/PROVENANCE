@@ -80,6 +80,19 @@ and command numbering are still the upstream ones.
 
 ## Syncing with upstream
 
+Selective compatibility port from NoMount v2.3.0-720:
+- 5237cb10 and the later backing-file cache fixes: cache eligible read-only
+  backing opens on ext4 and F2FS using exact credential identity. Each proxy
+  file has its own reference and offset. SEEK_DATA/SEEK_HOLE use an uncached
+  backing handle so filesystem llseek cannot change the shared file position.
+- e515f117 / 76e436a6: dispatch xattr writes and removals through the backing
+  VFS permission and LSM checks, with a read-only superblock check.
+- 7fce5e2c / 936539fd: guard native unlink, rename and rmdir callbacks from
+  fabricated inodes. Rule removal remains an explicit control operation.
+- 0b64d82a: add Android 17 / 6.18 to the external DDK build matrix and loader.
+  In-tree Kbuild continues to build the same source. The hm1 wire ABI and the
+  existing rule index and directory generation ownership are retained.
+
 Selective compatibility port on 2026-11-05:
 - NoMount 1ecef88d598d/e07896de51a3 motivated the held-directory isolation
   comparison. Local opaque proxies need a separately owned native target path;

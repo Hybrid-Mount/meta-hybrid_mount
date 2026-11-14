@@ -11,6 +11,7 @@
 #include <linux/cred.h>
 #include <linux/xattr.h>
 #include <linux/module.h>
+#include <linux/magic.h>
 #include <linux/mount.h>
 #include <linux/preempt.h>
 #include "hybridmount.h"
@@ -168,6 +169,7 @@ static inline void hm_destroy_virtual_inode(struct inode *inode)
     /* The proxy borrows the backing inode's mapping; eviction must only touch
      * this inode's own pages, and the backing path can now be released. */
     inode->i_mapping = &inode->i_data;
+    if (info->read_file) fput(info->read_file);
     if (info->r_path.dentry) path_put(&info->r_path);
     if (info->native_path.dentry) path_put(&info->native_path);
 
@@ -299,6 +301,7 @@ static void hybridmount_init_prealloc_inode(struct inode *inode, struct hm_inode
 {
     struct inode *r_inode = NULL;
     info->flags = rule_info->flags;
+    info->read_file = NULL;
     info->backing_child = false;
     info->native_path = rule_info->native_path;
     info->dir_node = rule_info->this_dir;
@@ -615,6 +618,7 @@ static int hm_open(struct inode *inode, struct file *file)
 {
     struct hm_inode_info *info = inode->i_private;
     struct file *real_file;
+    bool cacheable;
     umode_t mode;
 
     if (unlikely(!info)) return -ENODEV;
@@ -630,9 +634,23 @@ static int hm_open(struct inode *inode, struct file *file)
          (info->r_path.mnt->mnt_sb->s_iflags & SB_I_NODEV)))
         return -EACCES;
 
+    cacheable = S_ISREG(mode) &&
+        (file->f_flags & ~(O_LARGEFILE | O_CLOEXEC)) == O_RDONLY &&
+        (info->r_path.dentry->d_sb->s_magic == EXT4_SUPER_MAGIC ||
+         info->r_path.dentry->d_sb->s_magic == F2FS_SUPER_MAGIC);
+    real_file = cacheable ? smp_load_acquire(&info->read_file) : NULL;
+    if (real_file && real_file->f_cred == file->f_cred) {
+        file->private_data = get_file(real_file);
+        return 0;
+    }
+
     real_file = dentry_open(&info->r_path, (file->f_flags & ~(O_CREAT | O_EXCL | O_NOCTTY)), file->f_cred);
     if (IS_ERR(real_file)) return PTR_ERR(real_file);
 
+    if (cacheable && !READ_ONCE(info->read_file)) {
+        get_file(real_file);
+        if (cmpxchg(&info->read_file, NULL, real_file)) fput(real_file);
+    }
     file->private_data = real_file;
     return 0;
 }
@@ -646,9 +664,27 @@ static int hm_release(struct inode *inode, struct file *file)
 
 static loff_t hm_llseek(struct file *file, loff_t offset, int whence)
 {
+    struct hm_inode_info *info = file_inode(file)->i_private;
     struct file *real_file = file->private_data;
     loff_t res;
     if (!real_file) return -EINVAL;
+
+    if (real_file == READ_ONCE(info->read_file)) {
+        loff_t maxbytes = file_inode(real_file)->i_sb->s_maxbytes;
+
+        /* Each proxy file has its own offset. Shared backing files must never
+         * copy their f_pos into or out of another proxy's stream. */
+        if (whence == SEEK_SET || whence == SEEK_CUR || whence == SEEK_END)
+            return generic_file_llseek_size(file, offset, whence,
+                maxbytes, i_size_read(file_inode(real_file)));
+        if (whence != SEEK_DATA && whence != SEEK_HOLE) return -EINVAL;
+        /* The backing llseek may update f_pos and f_version. */
+        real_file = dentry_open(&info->r_path, O_RDONLY | O_LARGEFILE, file->f_cred);
+        if (IS_ERR(real_file)) return PTR_ERR(real_file);
+        res = vfs_llseek(real_file, offset, whence);
+        fput(real_file);
+        return res < 0 ? res : vfs_setpos(file, res, maxbytes);
+    }
 
     real_file->f_pos = file->f_pos;
     res = vfs_llseek(real_file, offset, whence);
@@ -1028,8 +1064,13 @@ static int hm_xattr_set(const struct xattr_handler *handler, IDMAP_ARG struct de
     struct hm_xattr_proxy *proxy = container_of(handler, struct hm_xattr_proxy, fake);
     if (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops) {
         struct hm_inode_info *info = inode->i_private;
+        const char *full_name;
         if (unlikely(!info || !info->r_path.dentry)) return -ENODATA;
-        return __vfs_setxattr(IDMAP_PATH(info->r_path) info->r_path.dentry, d_inode(info->r_path.dentry), xattr_full_name(handler, name), buffer, size, flags);
+        if (sb_rdonly(d_backing_inode(info->r_path.dentry)->i_sb)) return -EROFS;
+        full_name = xattr_full_name(handler, name);
+        if (buffer)
+            return vfs_setxattr(IDMAP_PATH(info->r_path) info->r_path.dentry, full_name, buffer, size, flags);
+        return vfs_removexattr(IDMAP_PATH(info->r_path) info->r_path.dentry, full_name);
     }
     return proxy->orig->set(proxy->orig, IDMAP_CALL dentry, inode, name, buffer, size, flags);
 }
@@ -1464,6 +1505,52 @@ static inline int hybridmount_hijack_superblock(struct super_block *sb)
     return 0;
 }
 
+static bool hm_is_virtual_dentry(struct dentry *dentry)
+{
+    struct inode *inode = d_inode(dentry);
+    return inode && (inode->i_op == &hm_file_iops || inode->i_op == &hm_dir_iops);
+}
+
+static int hm_hijacked_unlink(struct inode *dir, struct dentry *dentry)
+{
+    struct hm_iop *hook;
+    int (*unlink)(struct inode *, struct dentry *);
+
+    if (hm_is_virtual_dentry(dentry)) return -EPERM;
+    rcu_read_lock();
+    hook = hm_get_hm_iop(smp_load_acquire(&dir->i_op));
+    unlink = hook ? hook->orig_iop->unlink : NULL;
+    rcu_read_unlock();
+    return unlink ? unlink(dir, dentry) : -EPERM;
+}
+
+static int hm_hijacked_rmdir(struct inode *dir, struct dentry *dentry)
+{
+    struct hm_iop *hook;
+    int (*rmdir)(struct inode *, struct dentry *);
+
+    if (hm_is_virtual_dentry(dentry)) return -EPERM;
+    rcu_read_lock();
+    hook = hm_get_hm_iop(smp_load_acquire(&dir->i_op));
+    rmdir = hook ? hook->orig_iop->rmdir : NULL;
+    rcu_read_unlock();
+    return rmdir ? rmdir(dir, dentry) : -EPERM;
+}
+
+static int hm_hijacked_rename(IDMAP_ARG struct inode *old_dir, struct dentry *old_dentry,
+                             struct inode *new_dir, struct dentry *new_dentry, unsigned int flags)
+{
+    struct hm_iop *hook;
+    int (*rename)(IDMAP_ARG struct inode *, struct dentry *, struct inode *, struct dentry *, unsigned int);
+
+    if (hm_is_virtual_dentry(old_dentry) || hm_is_virtual_dentry(new_dentry)) return -EPERM;
+    rcu_read_lock();
+    hook = hm_get_hm_iop(smp_load_acquire(&old_dir->i_op));
+    rename = hook ? hook->orig_iop->rename : NULL;
+    rcu_read_unlock();
+    return rename ? rename(IDMAP_CALL old_dir, old_dentry, new_dir, new_dentry, flags) : -EPERM;
+}
+
 static inline int hybridmount_hijack_dir_ops(struct hybridmount_dir_node *dir_node, struct inode *inode)
 {
     struct hm_iop *hm_iop = hm_get_hm_iop(smp_load_acquire(&inode->i_op));
@@ -1488,6 +1575,9 @@ static inline int hybridmount_hijack_dir_ops(struct hybridmount_dir_node *dir_no
     hm_iop->orig_iop = inode->i_op;
     hm_iop->dir_node = dir_node;
     hm_iop->fake_iop.lookup = hybridmount_hijacked_lookup;
+    if (hm_iop->fake_iop.unlink) hm_iop->fake_iop.unlink = hm_hijacked_unlink;
+    if (hm_iop->fake_iop.rmdir) hm_iop->fake_iop.rmdir = hm_hijacked_rmdir;
+    if (hm_iop->fake_iop.rename) hm_iop->fake_iop.rename = hm_hijacked_rename;
     hm_fop->fake_fop = *inode->i_fop;
     hm_fop->orig_fop = inode->i_fop;
     hm_fop->dir_node = dir_node;

@@ -32,6 +32,7 @@ static bool in_compat_syscall(void) { return compat_mode; }
 #define ENODATA 61
 #endif
 #define EINVAL 22
+#define EROFS 30
 #define EOPNOTSUPP 95
 #define HYBRIDMOUNT_MAGIC_SIG 0
 #define likely(x) (x)
@@ -72,15 +73,15 @@ struct super_operations { int (*drop_inode)(struct inode *); void (*evict_inode)
 struct dentry;
 struct xattr_handler {
     int (*get)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, void *, size_t);
-    void (*set)(void);
+    int (*set)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, const void *, size_t, int);
 #ifdef HM_HAVE_XATTR__GET
     int (*__get)(const struct xattr_handler *, struct dentry *, struct inode *, const char *, void *, size_t);
 #endif
 };
 struct export_operations { int (*encode_fh)(struct inode *,u32 *,int *,struct inode *); };
-struct super_block { const struct super_operations *s_op; const struct export_operations *s_export_op; const struct xattr_handler **s_xattr; int s_active; };
+struct super_block { const struct super_operations *s_op; const struct export_operations *s_export_op; const struct xattr_handler **s_xattr; int s_active; bool readonly; };
 static void atomic_inc(int *value) { ++*value; }
-struct inode { const struct inode_operations *i_op; const struct file_operations *i_fop; unsigned long i_flags,i_ino; int i_mode; void *i_private; };
+struct inode { const struct inode_operations *i_op; const struct file_operations *i_fop; unsigned long i_flags,i_ino; int i_mode; void *i_private; struct super_block *i_sb; };
 struct dentry { struct inode *inode; };
 struct path { struct dentry *dentry; void *mnt; };
 struct list_head { int unused; };
@@ -170,7 +171,18 @@ static bool dir_emit(struct dir_context *ctx,const char *name,int len,unsigned l
 static int native_get(const struct xattr_handler *h,struct dentry *d,struct inode *i,const char *n,void *b,size_t s) { assert(i && i->i_op==&native_iops); return 71; }
 static int __vfs_getxattr(struct dentry *d,struct inode *i,const char *n,void *b,size_t s) { return native_get(NULL,d,i,n,b,s); }
 static const char *xattr_full_name(const struct xattr_handler *h,const char *n) { return n; }
-static void hm_xattr_set(void) {}
+#define IDMAP_ARG
+#define IDMAP_CALL
+#define IDMAP_PATH(path)
+static bool sb_rdonly(const struct super_block *sb) { return sb->readonly; }
+static int vfs_setxattr(struct dentry *d, const char *name, const void *value, size_t size, int flags) {
+    assert(d->inode == &source_inode && !strcmp(name, "user.test") && value && size == 1 && flags == 2);
+    return -EOPNOTSUPP;
+}
+static int vfs_removexattr(struct dentry *d, const char *name) {
+    assert(d->inode == &source_inode && !strcmp(name, "user.test"));
+    return 0;
+}
 static int hybridmount_hijacked_drop_inode(struct inode *i) { return 0; }
 static void hybridmount_hijacked_evict_inode(struct inode *i) {}
 static struct hm_sop *hm_get_hm_sop(const struct super_operations *ops) { return NULL; }
@@ -247,6 +259,17 @@ int main(int argc,char **argv) {
         assert(iop_frees==1 && fop_frees==0 && retirements==1);
         assert(!fop.dir_node);
         assert(inode.i_op==&native_iops && inode.i_fop==&native_fops);
+    } else if(!strcmp(mode,"xattr-write")) {
+        struct super_block backing_sb = {0};
+        struct hm_xattr_proxy proxy = {0};
+        struct hm_inode_info info = {.r_path={&source_dentry,NULL}};
+        struct inode inode = {.i_op=&hm_file_iops,.i_private=&info};
+        struct dentry target = {&inode};
+        source_inode.i_sb = &backing_sb;
+        assert(hm_xattr_set(&proxy.fake,&target,&inode,"user.test","x",1,2) == -EOPNOTSUPP);
+        assert(hm_xattr_set(&proxy.fake,&target,&inode,"user.test",NULL,0,0) == 0);
+        backing_sb.readonly = true;
+        assert(hm_xattr_set(&proxy.fake,&target,&inode,"user.test",NULL,0,0) == -EROFS);
     } else {
         struct xattr_handler orig={.get=native_get};
 #ifdef HM_HAVE_XATTR__GET

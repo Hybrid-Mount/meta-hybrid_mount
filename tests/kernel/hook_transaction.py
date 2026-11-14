@@ -13,7 +13,9 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--source", type=Path, default=ROOT / "module/vfs/src/hybridmount.c")
 source = parser.parse_args().source.read_text()
 functions = []
-names = ["hybridmount_hijack_superblock", "hybridmount_hijack_dir_ops", "hybridmount_restore_superblocks"]
+names = ["hybridmount_hijack_superblock", "hm_is_virtual_dentry",
+         "hm_hijacked_unlink", "hm_hijacked_rmdir", "hm_hijacked_rename",
+         "hybridmount_hijack_dir_ops", "hybridmount_restore_superblocks"]
 if re.search(r"^static int hm_encode_fh\(", source, re.MULTILINE):
     names.insert(0, "hm_encode_fh")
 for name in names:
@@ -34,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix="hm-hooks-") as temporary:
         str(ROOT / "tests/kernel/hook_transaction.c"), "-o", str(executable),
     ], check=True)
     failures = []
-    for point in range(18):
+    for point in range(19):
         result = subprocess.run([str(executable), str(point)], timeout=30)
         if result.returncode:
             failures.append(point)

@@ -11,6 +11,9 @@
 #define ENOMEM 12
 #define ENODEV 19
 #define EOPNOTSUPP 95
+#define EPERM 1
+#define IDMAP_ARG
+#define IDMAP_CALL
 #define FILEID_INVALID 255
 typedef uint32_t u32;
 #define likely(x) (x)
@@ -29,7 +32,12 @@ struct module { int refs; };
 static struct module ours, backing;
 #define THIS_MODULE (&ours)
 struct inode; struct dentry; struct file; struct dir_context;
-struct inode_operations { struct dentry *(*lookup)(struct inode *,struct dentry *,unsigned int); };
+struct inode_operations {
+    struct dentry *(*lookup)(struct inode *,struct dentry *,unsigned int);
+    int (*unlink)(struct inode *,struct dentry *);
+    int (*rmdir)(struct inode *,struct dentry *);
+    int (*rename)(struct inode *,struct dentry *,struct inode *,struct dentry *,unsigned int);
+};
 struct file_operations { struct module *owner; int (*iterate_shared)(struct file *,struct dir_context *); int (*iterate)(struct file *,struct dir_context *); };
 struct super_operations { int (*drop_inode)(struct inode *); void (*evict_inode)(struct inode *); };
 struct export_operations {
@@ -40,6 +48,8 @@ struct xattr_handler { int (*get)(void); int (*set)(void); };
 struct super_block { const struct super_operations *s_op; const struct export_operations *s_export_op; const struct xattr_handler **s_xattr; int s_active,s_inodes,s_inode_list_lock; };
 static void atomic_inc(int *value) { ++*value; }
 struct inode { const struct inode_operations *i_op; const struct file_operations *i_fop; struct super_block *i_sb; };
+struct dentry { struct inode *inode; };
+static struct inode *d_inode(struct dentry *dentry) { return dentry->inode; }
 struct list_head { int dummy; };
 struct hybridmount_dir_node { struct hm_iop *iop; struct hm_fop *fop; };
 struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; };
@@ -81,7 +91,10 @@ static void list_del_rcu(struct list_head *l) { installed_sop=NULL; }
 static void list_add_tail(struct list_head *l,int *head) { listed++; }
 static int try_module_get(struct module *m) { if(fail_at==5 || (fail_at==17 && m==THIS_MODULE)) return 0; if(m) m->refs++; return 1; }
 static void module_put(struct module *m) { if(m) m->refs--; }
-static struct hm_iop *hm_get_hm_iop(const struct inode_operations *ops) { return NULL; }
+static struct hm_iop *installed_iop;
+static struct hm_iop *hm_get_hm_iop(const struct inode_operations *ops) {
+    return installed_iop && ops==&installed_iop->fake_iop ? installed_iop : NULL;
+}
 static struct hm_fop *hm_get_hm_fop(const struct file_operations *ops) { return NULL; }
 static struct hm_sop *hm_get_hm_sop(const struct super_operations *ops) { return installed_sop && ops==&installed_sop->fake_sop ? installed_sop : NULL; }
 static struct dentry *hybridmount_hijacked_lookup(struct inode *i,struct dentry *d,unsigned int flags) { return NULL; }
@@ -90,17 +103,37 @@ static int hybridmount_hijacked_drop_inode(struct inode *i) { return 0; }
 static void hybridmount_hijacked_evict_inode(struct inode *i) {}
 static int hm_xattr_get(void) { return 0; }
 static int hm_xattr_set(void) { return 0; }
+static int native_remove(struct inode *dir, struct dentry *dentry) { return 7; }
+static int native_rename(struct inode *old_dir, struct dentry *old,
+                         struct inode *new_dir, struct dentry *new, unsigned int flags) { return 8; }
 #include "production.h"
 int main(int argc,char **argv) {
     int mode=atoi(argv[1]); fail_at=mode==6 ? 0 : mode;
     if(mode>=7) fail_at=0;
-    struct inode_operations iop={hybridmount_hijacked_lookup};
+    struct inode_operations iop={.lookup=hybridmount_hijacked_lookup};
     struct file_operations fop={.owner=&backing,.iterate_shared=hybridmount_hijacked_iterate_dir};
     struct super_operations sop={0}; struct xattr_handler handler={.get=hm_xattr_get};
     struct export_operations eop={.encode_fh=native_encode,.fh_to_dentry=native_decode};
     const struct xattr_handler *xattrs[]={&handler,NULL};
     struct super_block sb={.s_op=&sop,.s_export_op=&eop,.s_xattr=xattrs,.s_active=1}; struct inode inode={&iop,&fop,&sb};
     struct hybridmount_dir_node node={0};
+    if (mode==18) {
+        iop.unlink = iop.rmdir = native_remove;
+        iop.rename = native_rename;
+        assert(hybridmount_hijack_dir_ops(&node,&inode)==0);
+        installed_iop = node.iop;
+        struct inode fake = {.i_op=&hm_file_iops};
+        struct dentry real = {.inode=&inode}, proxy = {.inode=&fake}, absent = {0};
+        assert(inode.i_op->unlink(&inode,&proxy)==-EPERM);
+        assert(inode.i_op->rmdir(&inode,&proxy)==-EPERM);
+        assert(inode.i_op->rename(&inode,&proxy,&inode,&real,0)==-EPERM);
+        assert(inode.i_op->rename(&inode,&real,&inode,&proxy,0)==-EPERM);
+        assert(inode.i_op->unlink(&inode,&real)==7);
+        assert(inode.i_op->rmdir(&inode,&real)==7);
+        assert(inode.i_op->rename(&inode,&real,&inode,&absent,0)==8);
+        puts("PASS: native mutation callbacks never receive a virtual inode");
+        return 0;
+    }
     if(mode==17) {
         fail_at=17;
         assert(hybridmount_hijack_superblock(&sb)==-ENODEV);

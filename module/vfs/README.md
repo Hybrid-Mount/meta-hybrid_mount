@@ -111,6 +111,7 @@ Prebuilt modules are **aarch64-only**. The loader refuses other architectures, a
 | 14 / 6.1 | `hybridmount-android14-6.1.ko` |
 | 15 / 6.6 | `hybridmount-android15-6.6.ko` |
 | 16 / 6.12 | `hybridmount-android16-6.12.ko` |
+| 17 / 6.18 | `hybridmount-android17-6.18.ko` |
 
 Selection prefers the kernel release's Android/GKI label, then tries the other
 packaged builds for the same kernel major/minor line. Android userspace is not used
