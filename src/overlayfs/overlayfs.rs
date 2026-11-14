@@ -363,7 +363,7 @@ fn mount_overlay_child(
         )));
     }
 
-    mount_overlayfs(
+    if let Err(overlay_error) = mount_overlayfs(
         &lower_dirs,
         stock_root,
         None,
@@ -372,12 +372,18 @@ fn mount_overlay_child(
         staging_root,
         mount_source,
         on_effect,
-    )
-    .map_err(|err| {
-        Error::msg(format!(
-            "child overlay failed: mount_point={mount_point}: {err}"
-        ))
-    })?;
+    ) {
+        // Some child filesystems cannot be overlay lowerdirs. Keep the native
+        // subtree reachable, including any mounts nested below it.
+        bind_mount(Path::new(stock_root), Path::new(mount_point)).map_err(|bind_error| {
+            Error::msg(format!(
+                "child overlay and native restore failed: mount_point={mount_point}: {overlay_error}; {bind_error}"
+            ))
+        })?;
+        log::warn!(
+            "restored native child mount after overlay failure: {mount_point}: {overlay_error}"
+        );
+    }
     if register_unmountable {
         send_unmountable(Path::new(mount_point));
     }
