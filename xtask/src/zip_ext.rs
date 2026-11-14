@@ -123,8 +123,8 @@ mod tests {
             .map(|index| zip.by_index(index).unwrap().name().unwrap().into_owned())
             .collect();
 
-        assert!(names.contains(&"a.txt".to_string()));
-        assert!(names.contains(&"sub/".to_string()));
-        assert!(names.contains(&"sub/b.txt".to_string()));
+        assert!(names.iter().any(|name| name == "a.txt"));
+        assert!(names.iter().any(|name| name == "sub/"));
+        assert!(names.iter().any(|name| name == "sub/b.txt"));
     }
 }
