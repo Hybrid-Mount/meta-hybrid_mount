@@ -212,15 +212,11 @@ jobs:
           # riscv64 is a Tier 3 Rust target with no downloadable std, so it is built
           # from the rust-src component with -Z build-std instead of `rustup target add`.
           if [ "${{ matrix.target }}" = "riscv64-linux-android" ]; then
-            # Vendored Lua also needs the target C compiler during cargo check.
-            ndk_bin="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
-            export CC_riscv64_linux_android="$ndk_bin/riscv64-linux-android35-clang"
-            export AR_riscv64_linux_android="$ndk_bin/llvm-ar"
             cargo +nightly check -p hybrid-mount --target "${{ matrix.target }}" \
               -Z build-std=std,panic_abort
           else
             rustup target add "${{ matrix.target }}" --toolchain nightly
-            cargo ndk --platform 26 -t "${{ matrix.target }}" check -p hybrid-mount
+            cargo check -p hybrid-mount --target "${{ matrix.target }}"
           fi
 
   webui-lints:
