@@ -232,6 +232,7 @@ fn select_lkm_filename(release: &str, android_major: Option<u32>) -> Option<&'st
         ((6, 1), Some(14)) => Some("nuke-android14-6.1.ko"),
         ((6, 6), Some(15)) => Some("nuke-android15-6.6.ko"),
         ((6, 12), Some(16)) => Some("nuke-android16-6.12.ko"),
+        ((6, 18), Some(17)) => Some("nuke-android17-6.18.ko"),
         _ => None,
     }
 }
@@ -256,6 +257,10 @@ mod tests {
 
     #[test]
     fn selects_bundled_kernel_android_matrix() {
+        assert_eq!(
+            select_lkm_filename("6.18.1-android17-1", None),
+            Some("nuke-android17-6.18.ko")
+        );
         assert_eq!(
             select_lkm_filename("5.10.198-android12-9", None),
             Some("nuke-android12-5.10.ko")
@@ -319,6 +324,7 @@ mod tests {
             ("6.1.75-android14-13", None),
             ("6.6.30-android15-8", None),
             ("6.12.30-android16-6", None),
+            ("6.18.1-android17-1", None),
         ];
 
         let mut selected: Vec<&str> = selectable

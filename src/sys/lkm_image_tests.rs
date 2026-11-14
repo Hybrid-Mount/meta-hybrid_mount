@@ -181,7 +181,7 @@ fn missing_vermagic_diagnostic_does_not_retry_or_modify_the_image() {
 #[test]
 fn every_shipped_module_can_be_adapted_without_losing_its_identity() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    for (directory, expected_count) in [("module/vfs/binaries", 7), ("module/lkm/binaries", 8)] {
+    for (directory, expected_count) in [("module/vfs/binaries", 7), ("module/lkm/binaries", 9)] {
         let mut count = 0;
         for entry in std::fs::read_dir(root.join(directory)).unwrap() {
             let path = entry.unwrap().path();

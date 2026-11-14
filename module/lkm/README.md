@@ -8,11 +8,10 @@ matching prebuilt automatically for ext4 staging.
 
 ## License and provenance
 
-- `src/nuke.c` and the files in `binaries/` are derived from
-  [backslashxx/mountify](https://github.com/backslashxx/mountify) at snapshot
-  [`df5d309802623432d49447ed0e5c5d28841ed60e`](https://github.com/backslashxx/mountify/commit/df5d309802623432d49447ed0e5c5d28841ed60e).
-- The last upstream change affecting these LKM assets in that snapshot is
-  [`9310c7cf13c0a332aa79cc888d9b67c5b36b95e5`](https://github.com/backslashxx/mountify/commit/9310c7cf13c0a332aa79cc888d9b67c5b36b95e5).
+- `src/nuke.c` incorporates the Linux 6.13+ namespace fix from
+  [backslashxx/mountify](https://github.com/backslashxx/mountify/commit/5dd370064df6c0860423e18d3f88a20450d853b4).
+- The shipped modules and checksums are from
+  [Mountify's DDK refresh](https://github.com/backslashxx/mountify/commit/21f43e62798a7b4d7ced51ab656c2706a463ec46).
 - This LKM subtree is distributed under **GPL-2.0-only**. The complete license
   text is in [`src/LICENSE`](src/LICENSE); the corresponding source directory
   also retains the upstream `Kconfig`, `Makefile`, and README. It is a
@@ -65,6 +64,7 @@ Automatic selection is deliberately exact:
 | 6.1 | 14 | `nuke-android14-6.1.ko` |
 | 6.6 | 15 | `nuke-android15-6.6.ko` |
 | 6.12 | 16 | `nuke-android16-6.12.ko` |
+| 6.18 | 17 | `nuke-android17-6.18.ko` |
 
 The Android label is read from the kernel release's `androidNN` token first,
 then from `ro.build.version.release`. Unknown combinations are refused rather
