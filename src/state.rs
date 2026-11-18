@@ -659,6 +659,7 @@ fn query_module_snapshot_with_layout(
         }
     };
     for module in &mut cached {
+        module.is_mounted &= boot_owned.contains(module.id.as_str());
         module.partition_errors.clear();
         module.operation_errors.clear();
     }
@@ -669,10 +670,13 @@ fn query_module_snapshot_with_layout(
 /// A query never rewrites the cache: a concurrent hot operation owns that snapshot.
 pub fn handle_modules() -> Result<()> {
     let config = Config::load_or_default(Path::new(defs::CONFIG_PATH))?;
-    let (layout, cached) = crate::runtime::module_query_context(&config)?;
+    let crate::runtime::ModuleQueryContext {
+        layout,
+        cached,
+        boot_owned,
+    } = crate::runtime::module_query_context(&config)?;
     let managed_partitions = layout.scan_names();
     let installed = list_modules(&config.moduledir, &managed_partitions)?;
-    let boot_owned = crate::runtime::boot_owned_module_ids();
     let modules = if let Some(cached) = cached {
         merge_module_snapshot_with_layout(cached, &installed, &config, &boot_owned, &layout)?
     } else {
@@ -1184,6 +1188,10 @@ mod tests {
 
         let view = query_module_snapshot(&path, &[], &Config::default(), &BTreeSet::new());
         assert!(view.is_empty());
+        // An installed source can also survive the reboot that retired the mounts.
+        let installed =
+            query_module_snapshot(&path, &[original], &Config::default(), &BTreeSet::new());
+        assert!(!installed[0].is_mounted);
         assert_eq!(fs::read(path).unwrap(), committed);
     }
 

@@ -32,45 +32,43 @@ pub fn handle(args: &[String]) -> crate::errors::Result<()> {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub use device::{boot_id, enter_init_namespace};
 
-/// Only a boot-scoped ledger may supply applied layout/diagnostic provenance.
+pub(crate) struct ModuleQueryContext {
+    pub layout: crate::partitions::PartitionLayout,
+    pub cached: Option<Vec<crate::state::AppModule>>,
+    pub boot_owned: std::collections::BTreeSet<String>,
+}
+
+/// Read applied layout, diagnostics and ownership from one boot-scoped ledger snapshot.
 pub(crate) fn module_query_context(
     config: &crate::config::Config,
-) -> crate::errors::Result<(
-    crate::partitions::PartitionLayout,
-    Option<Vec<crate::state::AppModule>>,
-)> {
+) -> crate::errors::Result<ModuleQueryContext> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         let saved = device::load()?;
+        let boot_owned = ledger::owned_module_ids(&saved);
         if matches!(saved.phase.as_str(), "ready" | "syncing" | "incomplete")
             && let Some(layout) = saved.partition_layout
         {
-            return Ok((layout, Some(saved.modules)));
+            return Ok(ModuleQueryContext {
+                layout,
+                cached: Some(saved.modules),
+                boot_owned,
+            });
         }
         device::enter_init_namespace()?;
-        Ok((crate::partitions::detect(config)?, None))
+        Ok(ModuleQueryContext {
+            layout: crate::partitions::detect(config)?,
+            cached: None,
+            boot_owned,
+        })
     }
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         let _ = config;
-        Ok((crate::partitions::PartitionLayout::default(), None))
+        Ok(ModuleQueryContext {
+            layout: Default::default(),
+            cached: None,
+            boot_owned: Default::default(),
+        })
     }
-}
-
-/// Module ids whose mounts this kernel boot still owns, from the boot-scoped runtime ledger.
-///
-/// `scan.ret` outlives the boot that wrote it, so a module query must not treat its committed
-/// `is_mounted` flags as proof that those mounts are still live. An unreadable ledger reports no
-/// ownership instead of failing the query.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn boot_owned_module_ids() -> std::collections::BTreeSet<String> {
-    device::load()
-        .map(|ledger| ledger::owned_module_ids(&ledger))
-        .unwrap_or_default()
-}
-
-/// See the Linux/Android implementation: platforms without a runtime ledger own no mounts.
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn boot_owned_module_ids() -> std::collections::BTreeSet<String> {
-    std::collections::BTreeSet::new()
 }

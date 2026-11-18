@@ -69,6 +69,9 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
         source,
     })?;
 
+    let mut partitions = BTreeSet::from(["system".to_owned()]);
+    partitions.extend(extra_partitions.iter().cloned());
+
     for entry in entries {
         let entry = match entry {
             Ok(entry) => entry,
@@ -173,10 +176,8 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
 
         let mut has_mount_files = false;
         let mut entries = Vec::new();
-        let mut partitions = BTreeSet::from(["system".to_owned()]);
-        partitions.extend(extra_partitions.iter().cloned());
-        for partition in partitions {
-            let partition_dir = path.join(&partition);
+        for partition in &partitions {
+            let partition_dir = path.join(partition);
             // `Path::is_dir` follows symlinks.  Magisk-style modules commonly
             // expose aliases such as `product -> ./system/product`; following
             // that alias here scans the same subtree once as `product/*` and
@@ -227,7 +228,7 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
                 });
             }
             if !directory_remove {
-                entries.extend(collect_partition_entries(&partition_dir, &partition));
+                entries.extend(collect_partition_entries(&partition_dir, partition));
             }
         }
         entries.sort_by(|left, right| left.relative.cmp(&right.relative));

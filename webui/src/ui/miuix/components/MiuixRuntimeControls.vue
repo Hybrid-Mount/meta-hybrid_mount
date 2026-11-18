@@ -6,9 +6,8 @@ import { useRuntimeModule } from "../../../lib/useRuntimeModule";
 
 const props = defineProps<{ moduleId: string }>();
 const { t } = useI18n();
-const { module, reason, disabled, actionError, working, run } = useRuntimeModule(
-  () => props.moduleId,
-);
+const { module, reason, disabled, reloadDisabled, actionError, working, run } =
+  useRuntimeModule(() => props.moduleId);
 
 const MUTED = "var(--m-color-on-surface-variant-summary)";
 </script>
@@ -46,7 +45,7 @@ const MUTED = "var(--m-color-on-surface-variant-summary)";
     <div class="runtime-buttons">
       <MiuixButton
         type="primary"
-        :disabled="disabled"
+        :disabled="reloadDisabled"
         :title="reason ?? undefined"
         @click="run(module?.active ? 'reload' : 'load')"
       >
@@ -55,7 +54,7 @@ const MUTED = "var(--m-color-on-surface-variant-summary)";
       <MiuixButton
         v-if="module?.active"
         :disabled="disabled"
-        :title="reason ?? undefined"
+        :title="disabled ? (module.reason ?? undefined) : undefined"
         @click="run('unload')"
       >
         {{ t("runtime.unload") }}

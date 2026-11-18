@@ -2,38 +2,17 @@
 
 [AtomGit](https://atomgit.com/Hybrid-Mount/meta-hybrid_mount) · [GitHub](https://github.com/Hybrid-Mount/meta-hybrid_mount) · [简体中文](docs/README_ZH.md) · [Contributing](CONTRIBUTING.md)
 
-<img src="icon.png" alt="Hybrid Mount logo" align="right" width="120" />
-
-Hybrid Mount is a hybrid mount meta-module for KernelSU and APatch. During boot, it scans other modules and selects OverlayFS, Magic Mount, VFS, or ignore for each entry according to global, module, and path rules. Module source directories are always treated as read-only input.
-
-## Features
-
-- OverlayFS, Magic Mount, and VFS can be mixed per module and per path.
-- Path rules take precedence over module defaults, and module defaults take precedence over the global default.
-- OverlayFS supports both tmpfs and ext4 storage modes.
-- For ext4 staging, KernelSU uses the official ioctl to hide sysfs nodes; APatch and other non-KSU environments use the bundled LKM compatibility fallback by default.
-- Magic Mount supports files, directories, symbolic links, `.replace`, and whiteout semantics.
-- VFS sends injection rules through the keyring to `hybridmount` or an existing compatible NoMount kernel provider. Releases ship the sources and a prebuilt aarch64 module per supported Android/GKI target, which the boot pipeline loads when the kernel does not already carry one; if that fails it falls back according to `vfs_strict`. VFS is not a real mount.
-- The WebUI provides MD3 (default) and Miuix interfaces.
-- arm64, armv7, x86_64, and riscv64 are supported; the installer automatically selects the matching binary. The riscv64 build requires the Android NDK r27 or newer.
+Hybrid Mount is a KernelSU and APatch meta-module. At boot it scans module files and applies OverlayFS, Magic Mount or kernel-side VFS rules. Module source directories stay read-only.
 
 ## Installation
 
-Download the ZIP from [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) and install it with the KernelSU or APatch manager. On first installation, use the volume keys to select the default backend. Upgrades preserve `/data/adb/hybrid-mount/config.toml`.
-
-Mounting runs after module `post-fs-data.sh` scripts: at `post-mount` on APatch and `metamount` on KernelSU.
+Read the [usage notice](USAGE_NOTICE.md), then install the ZIP from [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) in the KernelSU or APatch manager. Use the volume keys to choose a default backend on first install. Upgrades preserve your configuration.
 
 ## Configuration
 
-Default configuration:
+Edit `/data/adb/hybrid-mount/config.toml` and reboot. Path rules override module defaults, which override the global default. Use `ignore` in a module or path rule to skip content. For example, this routes one module through Magic Mount and its hosts file through OverlayFS.
 
 ```toml
-moduledir = "/data/adb/modules"
-overlay_mode = "ext4" # ext4 | tmpfs
-disable_umount = false
-default_mode = "overlay" # overlay | magic | vfs
-extra_mount = []
-
 [rules.example_module]
 default_mode = "magic"
 
@@ -41,68 +20,16 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-Rule paths are relative to the module root. Module-level and path-level rules may also use `ignore`; the global default backend accepts `overlay`, `magic`, or `vfs`. `vfs_strict = true` makes startup fail when VFS is unavailable, and `vfs_isolate_uids` lists the UIDs that should see the native filesystem. The same file path cannot be assigned to more than one backend. Overlay and Magic, the two real mount backends, may share ordinary directories as structural nodes; VFS is a third injection path rather than a real mount. File, type, and `.replace` conflicts cause the startup planning stage to fail immediately. Configuration changes take effect after reboot.
+See the [default configuration](module/config.toml) for storage and partition options. VFS requires a compatible kernel provider. When unavailable, VFS rules are skipped unless `vfs_strict = true` makes the mount run fail.
 
-This routing does not change the project's existing `CONFIG_TMPFS_XATTR` capability check. On KernelSU, installation removes the module's entire `lkm/` directory and runtime uses only the official `NukeExt4Sysfs` ioctl. APatch and other non-KSU installations keep the LKM and try it by default after mounting ext4 staging. The bundled `.ko` files support aarch64 only. Automatic selection requires an exact kernel line and Android/GKI tag match; unknown combinations are rejected. Prebuilt LKMs must still be validated for ABI compatibility on the corresponding real device. If the device crashes during `insmod`, a persistent circuit-breaker marker prevents the LKM from loading again on the next boot while preserving the rest of Hybrid Mount. See [`module/lkm/README.md`](module/lkm/README.md) for the support matrix, checksums, sources, and licenses.
-
-`extra_mount = ["my_extra"]` reads `<module>/my_extra/` into `/my_extra/`. Each target must already be a directory, with no corresponding `/system/my_extra` entry (including a dangling symlink). Use single partition names, not paths; invalid entries are logged and skipped, and `apex` remains excluded. Modules without `system/` work and still honor `disable`, `remove`, `skip_mount`, and the module blacklist. Existing built-in partition handling is preserved. Additional entries use the same backend and path rules, for example `"my_extra/etc/file" = "magic"`. WebUI preserves this field when saving settings; edit it in `config.toml` and reboot to apply it.
-
-Upgrades accept the retired `partitions` key in its former array or comma-separated string form. It is ignored without discarding other settings or rules, and omitted from WebUI responses and subsequent configuration saves. Use `extra_mount` for additional partition roots. Unknown keys and malformed values still cause boot configuration loading to fail.
-
-## VFS backend
-
-Hybrid Mount can use built-in or loadable `hybridmount`, or an existing NoMount kernel provider that reports protocol 20 through 23. When NoMount is detected, the boot pipeline skips loading `hybridmount`. Hybrid Mount's path-only opaque directory rules (including `.replace`) require `hybridmount`.
-
-**How the provider is identified.** The boot decision keys on a read-only probe of the kernel key type `hybridmount`: if it answers with a supported version, the provider is usable. Separately, `vfs-doctor` classifies how it is present — an entry in `/proc/modules` means a loadable module registered it, a `/sys/module/hybridmount` directory without that entry means it is compiled into the kernel image, and if neither exists then no provider is present. Probing is read-only, so `status` and `vfs-doctor` never trigger an `insmod`.
-
-**Boot logic.** If the key type answers with a supported version, the provider is bound and nothing is loaded. On every boot, even when no rule selects VFS, if the probe is silent, the pipeline first tries the bundled module matching the kernel release's Android/GKI tag, then other builds for the same kernel major/minor line, probing after each attempt; still unavailable, every `vfs` rule degrades to `ignore`, or fails the boot when VFS is requested and `vfs_strict = true`. The load runs before the mount plan is built, because planning rewrites `vfs` rules to `ignore` while the provider is silent and the executor would then return early. A circuit-breaker marker is written before `insmod` and cleared when the attempt returns, so only a kernel crash leaves it behind; the next boot then refuses an automatic retry until the marker is removed by hand.
-
-The loader tries `ksud insmod`, then the built-in `hybrid-mount lkm-load` fallback, then ordinary `insmod`. The built-in fallback resolves core-kernel symbols and can adapt vermagic in memory after an explicit kernel rejection. Android userspace no longer decides the VFS GKI target. These adaptations do not guarantee ABI compatibility; see [`module/vfs/README.md`](module/vfs/README.md) for details.
-
-**Integrating VFS into a kernel.** Releases ship a prebuilt aarch64 module for every supported Android/GKI target and load it automatically, so those kernels need no integration step. Build it in when you want to avoid the `insmod`, or when your kernel line has no prebuilt. From the root of a kernel tree:
-
-```sh
-curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
-```
-
-`--cleanup`:
-
-```sh
-curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
-```
-
-This copies the sources into `fs/hybridmount/` and adds them to `fs/Makefile` and `fs/Kconfig`; enable `CONFIG_HYBRIDMOUNT=y` to build it in or `=m` to build it as a module. `bash -s -- --cleanup` reverts every change. A tree that already integrates NoMount is refused: both implementations hijack inode operations and the kernel will not stop them coexisting, since they register different key types.
-
-The WebUI and manager description hide VFS options and counters when the provider does not respond. Saved VFS rules remain intact. A responding built-in provider is supported even without a `/proc/modules` entry.
-
-**Diagnosing.** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` reports the presence state, the version the key type answered, the supported versions, and why a provider is unusable when it is.
-
-**Runtime CLI.** `hybrid-mount vfs help` lists rule and UID management, whiteout/opaque rules,
-diagnostics and explicit `load`. It supports NoMount-style aliases, readable text and `--json`.
-Clearing requires `--yes`; manual changes are runtime-only. See the [VFS CLI reference](docs/VFS_CLI.md).
-
-## Feedback
-
-Before installation or reporting an issue, read the [Usage Notice](USAGE_NOTICE.md). Include the KernelSU/APatch bugreport, module version, and reproduction steps. Contact us through [AtomGit Issues](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/issues), [GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) or the [Telegram group](https://t.me/hybridmountchat).
-
-## Contributing
-
-Code, documentation, translations and compatibility reports are welcome. See the [contribution guide](CONTRIBUTING.md). Source branches and tags are synchronized from GitHub to [AtomGit](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount); release ZIPs remain available from GitHub Releases. Maintainers can find the setup and scope in the [sync guide](docs/ATOMGIT_SYNC.md).
+- [Runtime mounting and recovery](docs/RUNTIME.md)
+- [VFS CLI and diagnostics](docs/VFS_CLI.md) · [VFS kernel integration](module/vfs/README.md)
+- [ext4 compatibility module](module/lkm/README.md)
+- [Bug reports and contributions](CONTRIBUTING.md)
 
 ## Languages
 
-- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
-- [Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ES.md)
-- [Français](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_FR.md)
-- [Bahasa Indonesia](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ID.md)
-- [Italiano](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_IT.md)
-- [日本語](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_JA.md)
-- [Русский](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_RU.md)
-- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_TR.md)
-- [Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_UK.md)
-- [Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_VI.md)
-- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
-- [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
+[English](README.md) · [Español](docs/README_ES.md) · [Français](docs/README_FR.md) · [Bahasa Indonesia](docs/README_ID.md) · [Italiano](docs/README_IT.md) · [日本語](docs/README_JA.md) · [Русский](docs/README_RU.md) · [Türkçe](docs/README_TR.md) · [Українська](docs/README_UK.md) · [Tiếng Việt](docs/README_VI.md) · [简体中文](docs/README_ZH.md) · [繁體中文](docs/README_ZH_TW.md)
 
 ## Acknowledgements
 

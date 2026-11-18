@@ -1327,7 +1327,11 @@ out:
 
 static void hm_owned_release(struct dentry *dentry)
 {
+#ifdef HM_HAVE_SB_PRIVATE_D_OP
+    const struct dentry_operations *ops = dentry->d_sb->__s_d_op;
+#else
     const struct dentry_operations *ops = dentry->d_sb->s_d_op;
+#endif
 
     /* d_alloc may have initialized native dentry state before our lookup. */
     if (ops && ops->d_init && ops->d_release)
@@ -1654,6 +1658,17 @@ out:
         d_drop(dentry);
 }
 
+/* Restore all published pointers before retiring their shared proxy storage.
+ * The permanent module pin above still protects sleeping VFS callbacks during
+ * normal operation; an RCU grace period alone cannot drain those callers. */
+static void hm_free_retired_sop(struct rcu_head *head)
+{
+    struct hm_sop *sop = container_of(head, struct hm_sop, rcu);
+
+    kfree(sop->fake_xattr);
+    kfree(sop);
+}
+
 static void hybridmount_restore_superblocks(void)
 {
     struct hm_sop *hm_sop, *tmp;
@@ -1672,13 +1687,12 @@ static void hybridmount_restore_superblocks(void)
             smp_store_release(&hm_sop->sb->s_op, hm_sop->orig_sop);
             if (hm_sop->fake_xattr) {
                 smp_store_release((const struct xattr_handler ***)&hm_sop->sb->s_xattr, hm_sop->orig_xattr);
-                kfree(hm_sop->fake_xattr); 
             }
             hm_debug("Successfully cured superblock for dev: 0x%x\n", hm_sop->sb->s_dev);
             deactivate_super(hm_sop->sb);
         }
         list_del_rcu(&hm_sop->list);
-        kfree_rcu(hm_sop, rcu);
+        call_rcu(&hm_sop->rcu, hm_free_retired_sop);
     }
 }
 
@@ -2128,9 +2142,14 @@ static struct hybridmount_rule *hm_alloc_rule(const char *v_path, const char *r_
             return ERR_PTR(-ENOENT);
         }
         real_inode = d_backing_inode(rule->r_path.dentry);
-        if (likely(real_inode)) {
-            if (S_ISDIR(real_inode->i_mode)) rule->flags |= HM_FLAG_IS_DIR;
+        /* A backing path may resolve through a symlink to one of our proxies. */
+        if (!real_inode || real_inode->i_op == &hm_dir_iops ||
+            real_inode->i_op == &hm_file_iops) {
+            path_put(&rule->r_path);
+            kfree(rule);
+            return ERR_PTR(real_inode ? -EINVAL : -ENOENT);
         }
+        if (S_ISDIR(real_inode->i_mode)) rule->flags |= HM_FLAG_IS_DIR;
     }
 
     if (kern_path(hm_get_vpath(rule), LOOKUP_FOLLOW, &v_path_struct) == 0) {

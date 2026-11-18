@@ -54,7 +54,20 @@ struct list_head { int dummy; };
 struct hybridmount_dir_node { struct hm_iop *iop; struct hm_fop *fop; };
 struct hm_iop { struct inode_operations fake_iop; const struct inode_operations *orig_iop; struct hybridmount_dir_node *dir_node; };
 struct hm_fop { struct file_operations fake_fop; const struct file_operations *orig_fop; struct hybridmount_dir_node *dir_node; struct list_head list; };
-struct hm_sop { struct super_operations fake_sop; const struct super_operations *orig_sop; struct export_operations fake_eop; const struct export_operations *orig_eop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
+struct rcu_head { void (*callback)(struct rcu_head *); };
+static struct rcu_head *pending;
+static void call_rcu(struct rcu_head *head, void (*callback)(struct rcu_head *)) {
+    assert(!pending);
+    head->callback = callback;
+    pending = head;
+}
+static void finish_grace_period(void) {
+    struct rcu_head *head = pending;
+    assert(head);
+    pending = NULL;
+    head->callback(head);
+}
+struct hm_sop { struct rcu_head rcu; struct super_operations fake_sop; const struct super_operations *orig_sop; struct export_operations fake_eop; const struct export_operations *orig_eop; const struct xattr_handler **orig_xattr,**fake_xattr; struct super_block *sb; struct list_head list; };
 struct hm_xattr_proxy { const struct xattr_handler *orig; struct xattr_handler fake; };
 static int fail_at,allocations,live,listed,deactivations; static int hybridmount_sb_list,hybridmount_fop_list __attribute__((unused));
 static struct hm_sop *installed_sop;
@@ -174,7 +187,10 @@ int main(int argc,char **argv) {
         sb.s_op=&installed_sop->fake_sop;
         expected_sop=&sop; expected_eop=mode==12 ? NULL : &eop;
         hybridmount_restore_superblocks();
-        assert(sb.s_op==&sop && sb.s_export_op==expected_eop && !live);
+        assert(sb.s_op==&sop && sb.s_export_op==expected_eop && sb.s_xattr==xattrs);
+        assert(!installed_sop && live==2);
+        finish_grace_period();
+        assert(!live);
         printf("PASS: export file handle case %d\n",mode);
         return 0;
     }
@@ -198,6 +214,7 @@ int main(int argc,char **argv) {
             expected_eop=&eop;
             hybridmount_restore_superblocks();
             assert(sb.s_active==0 && deactivations==1 && !installed_sop);
+            finish_grace_period();
             assert(sb.s_op==&sop && sb.s_xattr==xattrs);
         }
     }

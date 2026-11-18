@@ -41,6 +41,24 @@ describe("runtime controls", () => {
     expect(await runtimeStore.runAction("unknown", "load")).toBe(false);
     expect(API.runtimeAction).not.toHaveBeenCalled();
   });
+  it("allows unloading an active module whose files no longer support reload", async () => {
+    vi.mocked(API.getRuntimeStatus).mockResolvedValue({
+      ...status,
+      modules: [
+        {
+          id: "gone",
+          active: true,
+          eligible: true,
+          reason: null,
+          reload_reason: "installed module not found",
+        },
+      ],
+    });
+    await runtimeStore.loadRuntimeStatus();
+    expect(await runtimeStore.runAction("gone", "reload")).toBe(false);
+    expect(API.runtimeAction).not.toHaveBeenCalled();
+    expect(await runtimeStore.runAction("gone", "unload")).toBe(true);
+  });
   it("locks all runtime actions until the operation and refresh finish", async () => {
     let finish!: () => void;
     vi.mocked(API.runtimeAction).mockImplementationOnce(
@@ -106,6 +124,33 @@ describe("runtime controls", () => {
     expect(runtimeStore.status?.modules[0]?.active).toBe(true);
     expect(await runtimeStore.runAction("ready", "load")).toBe(false);
     expect(API.runtimeAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads runtime status again when a read overlaps a successful mutation", async () => {
+    let finishMutation!: (value: { ok: true; generation: number }) => void;
+    let finishRead!: (value: typeof status) => void;
+    vi.mocked(API.runtimeAction).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishMutation = resolve;
+        }),
+    );
+    vi.mocked(API.getRuntimeStatus)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRead = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ...status, generation: 4 });
+    const action = runtimeStore.runAction("ready", "load");
+    const read = runtimeStore.loadRuntimeStatus();
+    finishMutation({ ok: true, generation: 4 });
+    await Promise.resolve();
+    finishRead(status);
+    await read;
+    expect(await action).toBe(true);
+    expect(runtimeStore.status?.generation).toBe(4);
   });
 
   it("waits for an older module scan and then obtains a fresh post-operation scan", async () => {

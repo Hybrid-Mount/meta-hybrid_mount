@@ -16,7 +16,7 @@ describe("runtime bridge", () => {
     const status = await createRuntimeApi(exec).getRuntimeStatus();
     expect(exec).toHaveBeenCalledWith(expect.stringMatching(/ runtime status$/));
     expect(status.modules).toEqual([
-      { id: "demo", active: true, eligible: false, reason: null },
+      { id: "demo", active: true, eligible: false, reload_reason: null, reason: null },
     ]);
   });
   it.each(["load", "unload", "reload"] as const)(

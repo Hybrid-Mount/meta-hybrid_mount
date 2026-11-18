@@ -25,6 +25,8 @@ export function createRuntimeApi(
               id: String(item.id ?? ""),
               active: item.active === true,
               eligible: item.eligible === true,
+              reload_reason:
+                typeof item.reload_reason === "string" ? item.reload_reason : null,
               reason: typeof item.reason === "string" ? item.reason : null,
             }))
           : [],

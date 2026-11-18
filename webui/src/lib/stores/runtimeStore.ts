@@ -48,7 +48,10 @@ async function refresh(): Promise<void> {
         await sysStore.loadStatus();
         if (sysStore.loadError) throw new Error(sysStore.loadError);
       })(),
-      loadRuntimeStatus(),
+      (async () => {
+        if (pendingLoad) await pendingLoad;
+        await loadRuntimeStatus();
+      })(),
     ]);
     const failed = results.find((result) => result.status === "rejected");
     if (failed?.status === "rejected") {
@@ -69,7 +72,8 @@ async function runAction(moduleId: string, action: RuntimeAction): Promise<boole
     loading.value ||
     refreshing.value ||
     !status.value?.supported ||
-    !module?.eligible
+    !module?.eligible ||
+    (action === "reload" && Boolean(module.reload_reason))
   )
     return false;
   if ((action === "load") === module.active) return false;

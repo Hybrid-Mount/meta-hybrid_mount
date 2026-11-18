@@ -58,17 +58,9 @@ pub fn kernel_major_minor(release: &str) -> Option<(u32, u32)> {
     Some((parts.next()?.parse().ok()?, parts.next()?.parse().ok()?))
 }
 
-/// Supported packages in deterministic fallback order, matching the DDK build matrix.
-const TARGETS: &[(u32, u32, u32, &str)] = &[
-    (5, 10, 12, "hybridmount-android12-5.10.ko"),
-    (5, 10, 13, "hybridmount-android13-5.10.ko"),
-    (5, 15, 13, "hybridmount-android13-5.15.ko"),
-    (5, 15, 14, "hybridmount-android14-5.15.ko"),
-    (6, 1, 14, "hybridmount-android14-6.1.ko"),
-    (6, 6, 15, "hybridmount-android15-6.6.ko"),
-    (6, 12, 16, "hybridmount-android16-6.12.ko"),
-    (6, 18, 17, "hybridmount-android17-6.18.ko"),
-];
+#[path = "lkm_packages.rs"]
+mod packages;
+use packages::TARGETS;
 
 /// Prefer the kernel's GKI label; an optional hint never rules out same-line candidates.
 pub fn select_lkm_filename(release: &str, android_hint: Option<u32>) -> Option<&'static str> {

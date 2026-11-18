@@ -204,6 +204,15 @@ Local temporary mitigation for the 2026-10-22 inotify fdinfo panic:
   forwarding, missing export operations, allocation rollback and restoration.
   Prebuilt objects must be rebuilt before this mitigation reaches a device.
 
+Selective port on 2026-11-18 from NoMount dev:
+- 0548f9e064: reject a resolved HM proxy file or directory as the backing
+  source before looking up the destination or publishing the rule.
+- b8bb8812ee: retire the published xattr table and its embedded handlers with
+  the superblock wrapper in one RCU callback. Exit drains queued callbacks via
+  rcu_barrier(). Normal removal after hook installation remains blocked by the
+  module pin. This does not establish safe forced unload with sleeping callers.
+  HM retains its existing active superblock reference and teardown order.
+
 1. Fetch the upstream revision you want to compare against.
 2. Diff it against the commit recorded above and review every upstream change.
 3. Re-apply the Hybrid Mount divergences on top; never overwrite them blindly.

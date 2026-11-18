@@ -207,6 +207,14 @@ int main(int argc,char **argv) {
         struct super_block sb = {.s_op=&native, .s_active=1};
         assert(hybridmount_hijack_superblock(&sb)==0);
         assert(sb.s_active==2);
+    } else if(!strcmp(mode,"virtual-source")) {
+        const struct inode_operations *ops[] = { &hm_file_iops, &hm_dir_iops };
+        for (unsigned int i = 0; i < 2; i++) {
+            source_inode.i_op = ops[i];
+            struct hybridmount_rule *rule = hm_alloc_rule("/parent","/source",7,7,0,42);
+            assert(rule == ERR_PTR(-EINVAL));
+            assert(!path_refs && !live_allocations && !drops);
+        }
     } else if(!strcmp(mode,"source-flags")) {
         source_inode.i_flags=32;
         struct hybridmount_rule *rule=hm_alloc_rule("/parent","/source",7,7,0,42);

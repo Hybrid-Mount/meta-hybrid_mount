@@ -6,9 +6,8 @@ import { ICONS } from "../icons";
 
 const props = defineProps<{ moduleId: string }>();
 const { t } = useI18n();
-const { module, reason, disabled, actionError, working, run } = useRuntimeModule(
-  () => props.moduleId,
-);
+const { module, reason, disabled, reloadDisabled, actionError, working, run } =
+  useRuntimeModule(() => props.moduleId);
 </script>
 
 <template>
@@ -31,7 +30,7 @@ const { module, reason, disabled, actionError, working, run } = useRuntimeModule
         <button
           type="button"
           class="runtime-action runtime-primary"
-          :disabled="disabled"
+          :disabled="reloadDisabled"
           @click="run('reload')"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="ICONS.refresh" /></svg>

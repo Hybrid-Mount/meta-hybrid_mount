@@ -3,6 +3,9 @@
 //! Build and release automation: WebUI build with MODULE_ID injection, Rust cross-compilation,
 //! module.prop generation, zip packaging, update.json and Telegram notifications.
 
+#[path = "../../src/vfs/lkm_packages.rs"]
+mod lkm_packages;
+mod vfs_package;
 mod zip_ext;
 
 use std::{
@@ -555,6 +558,7 @@ fn render_module_prop(version: &str, version_code: u64) -> String {
 
 fn build(release: bool) -> Result<()> {
     let root = workspace_root()?;
+    vfs_package::verify(&root)?;
     let version = package_version()?;
     // The manifest version is already semver, so the shared encoder is the only part that has to
     // agree with the one the workflow uses for a tag.
@@ -934,35 +938,15 @@ mod tests {
     }
 
     #[test]
-    fn every_shipped_kernel_module_is_listed_in_its_manifest() {
+    fn ext4_kernel_modules_are_listed_in_their_manifest() {
         let root = workspace_root().expect("workspace root");
-
-        for (dir, names) in [
-            (
-                "module/lkm/binaries",
-                &["nuke-android12-5.10.ko", "nuke-android-4.14.ko"][..],
-            ),
-            (
-                "module/vfs/binaries",
-                &[
-                    "hybridmount-android12-5.10.ko",
-                    "hybridmount-android16-6.12.ko",
-                ][..],
-            ),
-        ] {
-            let binaries = root.join(dir);
-            let manifest = binaries.join("list.txt");
-            if !manifest.is_file() {
-                assert_eq!(dir, "module/vfs/binaries", "{dir}/list.txt is missing");
-                continue;
-            }
-            let listed = fs::read_to_string(&manifest).expect("read list.txt");
-            for name in names {
-                assert!(
-                    listed.contains(name),
-                    "{name} is not listed in {dir}/list.txt"
-                );
-            }
+        let binaries = root.join("module/lkm/binaries");
+        let listed = fs::read_to_string(binaries.join("list.txt")).expect("read ext4 manifest");
+        for name in ["nuke-android12-5.10.ko", "nuke-android-4.14.ko"] {
+            assert!(
+                listed.contains(name),
+                "{name} is missing from the ext4 manifest"
+            );
         }
     }
 }

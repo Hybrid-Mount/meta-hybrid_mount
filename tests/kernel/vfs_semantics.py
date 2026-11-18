@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="hm-semantics-") as temporary:
         if os.name == "nt" and "zig" not in os.environ.get("CC", "").lower():
             subprocess.run([os.environ.get("HM_TEST_LINK", "link"), "/nologo",
                             f"/out:{executable}", str(output), "libcmt.lib", "oldnames.lib"], check=True)
-        for mode in ["hook-alloc-sop", "hook-alloc-xattr", "hook-pin", "source-flags", "dirent", "cursor-negative", "cursor-max", "cursor-compat-max", "dirent-compat", "parent", "parent-opaque",
+        for mode in ["hook-alloc-sop", "hook-alloc-xattr", "hook-pin", "source-flags", "virtual-source", "dirent", "cursor-negative", "cursor-max", "cursor-compat-max", "dirent-compat", "parent", "parent-opaque",
                      "parent-empty", "parent-allocation", "parent-repeat",
                      "teardown", "xattr", "xattr-native", "xattr-virtual", "xattr-capability", "xattr-write"]:
             result = subprocess.run([str(executable), mode], timeout=30)

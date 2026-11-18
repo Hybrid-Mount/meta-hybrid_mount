@@ -73,6 +73,38 @@ fn malformed_and_wrong_architecture_images_are_rejected() {
 }
 
 #[test]
+fn rejects_modinfo_lengths_that_run_past_the_image() {
+    let header = ModuleImage::parse(MODULE.to_vec()).unwrap().modinfo_header;
+    for length in [MODULE.len() as u64 + 1, u64::MAX] {
+        let mut bytes = MODULE.to_vec();
+        bytes[header + 32..header + 40].copy_from_slice(&length.to_le_bytes());
+        assert!(ModuleImage::parse(bytes).is_err());
+    }
+}
+
+#[test]
+fn parses_symbol_tables_with_more_than_4096_undefined_entries() {
+    let parsed = ModuleImage::parse(MODULE.to_vec()).unwrap();
+    let sample = parsed.undefined.first().unwrap().1;
+    let file = object::File::parse(MODULE).unwrap();
+    let symtab = file.section_by_name(".symtab").unwrap();
+    let shoff = u64::from_le_bytes(MODULE[40..48].try_into().unwrap()) as usize;
+    let header = shoff + 64 * symtab.index().0;
+    let mut bytes = MODULE.to_vec();
+    let start = bytes.len().next_multiple_of(8);
+    bytes.resize(start, 0);
+    bytes.extend_from_slice(symtab.data().unwrap());
+    for _ in 0..4097 {
+        bytes.extend_from_slice(&MODULE[sample..sample + 24]);
+    }
+    let size = (bytes.len() - start) as u64;
+    bytes[header + 24..header + 32].copy_from_slice(&(start as u64).to_le_bytes());
+    bytes[header + 32..header + 40].copy_from_slice(&size.to_le_bytes());
+    let grown = ModuleImage::parse(bytes).unwrap();
+    assert_eq!(grown.undefined.len(), parsed.undefined.len() + 4097);
+}
+
+#[test]
 fn vermagic_diagnostic_must_match_both_module_and_attempted_version() {
     let image = ModuleImage::parse(MODULE.to_vec()).unwrap();
     let record = format!(

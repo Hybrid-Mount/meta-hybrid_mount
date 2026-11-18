@@ -14,12 +14,21 @@ for mode in present multiline absent; do
         multiline) printf 'struct xattr_handler {\n int (*\n __get\n )(void);\n};\n' > "$WORK/kernel/include/linux/xattr.h" ;;
         absent) printf 'struct xattr_handler { int (*get)(void); };\n' > "$WORK/kernel/include/linux/xattr.h" ;;
     esac
+    case "$mode" in
+        absent) printf 'struct super_block { void *s_d_op; };\n' > "$WORK/kernel/include/linux/fs.h" ;;
+        *) printf 'struct super_block { void *__s_d_op; };\n' > "$WORK/kernel/include/linux/fs.h" ;;
+    esac
     for makefile in "$ROOT/module/vfs/src/Makefile" "$WORK/kernel/fs/hybridmount/Makefile"; do
         cp "$makefile" "$WORK/probe.mk"
         # Preserve the Make variable for expansion by make, not the shell.
         # shellcheck disable=SC2016
         printf '\n.PHONY: feature\nfeature:\n\t@echo $(ccflags-y)\n' >> "$WORK/probe.mk"
         flags=$(make -s -f "$WORK/probe.mk" srctree="$WORK/kernel" feature)
+        case "$mode:$flags" in
+            absent:*HM_HAVE_SB_PRIVATE_D_OP*) echo 'FAIL: wrong superblock member' >&2; exit 1 ;;
+            absent:*|*:*HM_HAVE_SB_PRIVATE_D_OP*) ;;
+            *) echo "FAIL: __s_d_op not detected in $makefile" >&2; exit 1 ;;
+        esac
         case "$mode:$flags" in
             absent:*HM_HAVE_XATTR__GET*) echo 'FAIL: missing member enabled' >&2; exit 1 ;;
             absent:*) ;;
@@ -28,4 +37,4 @@ for mode in present multiline absent; do
         esac
     done
 done
-echo 'PASS: xattr member detection in external and generated in-tree Kbuild'
+echo 'PASS: xattr and superblock member detection in external and generated in-tree Kbuild'

@@ -22,13 +22,19 @@ export function useRuntimeModule(moduleId: () => string) {
   const busy = computed(() => runtimeStore.busy);
   const loading = computed(() => runtimeStore.loading);
   const disabled = computed(() => busy.value || loading.value || Boolean(reason.value));
+  const reloadReason = computed(
+    () => reason.value || module.value?.reload_reason || null,
+  );
+  const reloadDisabled = computed(
+    () => disabled.value || Boolean(module.value?.reload_reason),
+  );
   const actionError = computed(() =>
     runtimeStore.actionError?.moduleId === moduleId()
       ? runtimeStore.actionError.message
       : null,
   );
   async function run(action: RuntimeAction): Promise<void> {
-    if (disabled.value) return;
+    if (disabled.value || (action === "reload" && reloadDisabled.value)) return;
     working.value = true;
     try {
       if (await runtimeStore.runAction(moduleId(), action))
@@ -37,5 +43,15 @@ export function useRuntimeModule(moduleId: () => string) {
       working.value = false;
     }
   }
-  return { module, reason, disabled, actionError, busy, loading, working, run };
+  return {
+    module,
+    reason: reloadReason,
+    disabled,
+    reloadDisabled,
+    actionError,
+    busy,
+    loading,
+    working,
+    run,
+  };
 }

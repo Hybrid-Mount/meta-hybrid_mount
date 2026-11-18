@@ -30,7 +30,8 @@ module scripts, restart applications, or make a batch atomically visible. Mixed
 Magic/Overlay modules, skip-mount/removal/blacklist entries, and paths overlapping
 live real mounts are refused. Reload/load rescan configuration; unload uses saved
 ownership. An active module may remain unloadable even if its new configuration
-is no longer eligible for reload.
+is no longer eligible for reload. In that case `eligible` stays true for unload and
+`reload_reason` explains why the WebUI disables reload.
 
 ## Late-load and soft reboot
 

@@ -2,39 +2,17 @@
 
 [AtomGit 仓库](https://atomgit.com/Hybrid-Mount/meta-hybrid_mount) · [GitHub 仓库](https://github.com/Hybrid-Mount/meta-hybrid_mount) · [参与贡献](../CONTRIBUTING.md)
 
-<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
-
-Hybrid Mount 是面向 KernelSU 与 APatch 的混合挂载元模块。它会在启动阶段扫描其他模块，按全局、模块和路径规则，为每一项选择 OverlayFS、Magic Mount、VFS 或忽略，并且始终把模块源目录当作只读输入。
-
-## 功能
-
-- OverlayFS、Magic Mount 与 VFS 可按模块、按路径混用。
-- 路径规则优先于模块默认值，模块默认值优先于全局默认值。
-- OverlayFS 支持 tmpfs 与 ext4 两种存储模式。
-- ext4 staging 在 KernelSU 使用官方 ioctl 隐藏 sysfs 节点；在 APatch 等非 KSU 环境默认使用随附 LKM 兼容后备。
-- Magic Mount 支持文件、目录、符号链接、`.replace` 和 whiteout 语义。
-- 在模块目录中放置普通文件 `.remove` 可隐藏该目标目录及其子树，原磁盘内容不会删除。三后端使用相同语义；`.remove` 优先于 `.replace`，标记和后代内容不会挂出。路径规则 `ignore` 可关闭此请求。分区根、已有子挂载边界和无效标记会跳过并显示原因；其他模块贡献同一目标或后代时按冲突报错。
-- VFS 通过 keyring 把注入规则下发给 `hybridmount` 或已有的兼容 NoMount 内核后端。发布包同时提供源码与每个受支持 Android/GKI 目标的 arm64 预编译模块，内核未内建时由启动流程自动加载；仍不可用时按 `vfs_strict` 降级。VFS 不是真实挂载。
-- WebUI 提供 MD3（默认）与 Miuix 两套界面。
-- 支持 arm64、armv7、x86_64 与 riscv64，安装脚本会自动选择对应二进制。riscv64 构建需要 Android NDK r27 或更新版本。
+Hybrid Mount 是 KernelSU 和 APatch 的挂载元模块。启动时，它扫描其他模块的文件，按规则使用 OverlayFS、Magic Mount 或内核侧 VFS。模块源目录始终只读。
 
 ## 安装
 
-从 [Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载 ZIP，并在 KernelSU 或 APatch 管理器中安装。首次安装可用音量键选择默认后端；升级时会保留 `/data/adb/hybrid-mount/config.toml`。
-
-挂载在模块 `post-fs-data.sh` 执行后进行：APatch 使用 `post-mount` 阶段，KernelSU 使用 `metamount` 阶段。
+阅读[使用须知](../USAGE_NOTICE.md)，从 [GitHub Releases](https://github.com/Hybrid-Mount/meta-hybrid_mount/releases) 下载 ZIP，在 KernelSU 或 APatch 管理器中安装。首次安装用音量键选择默认后端，升级会保留已有配置。
 
 ## 配置
 
-默认配置：
+编辑 `/data/adb/hybrid-mount/config.toml`，重启后生效。路径规则优先于模块默认值，模块默认值优先于全局默认值。模块或路径规则可设为 `ignore` 以跳过相应内容。下例让一个模块使用 Magic Mount，其中的 hosts 文件单独使用 OverlayFS。
 
 ```toml
-moduledir = "/data/adb/modules"
-overlay_mode = "ext4" # ext4 | tmpfs
-disable_umount = false
-default_mode = "overlay" # overlay | magic | vfs
-extra_mount = []
-
 [rules.example_module]
 default_mode = "magic"
 
@@ -42,70 +20,16 @@ default_mode = "magic"
 "system/etc/hosts" = "overlay"
 ```
 
-规则路径相对模块根目录书写。模块级和路径级规则仍可使用 `ignore`；全局默认后端接受 `overlay`、`magic` 或 `vfs`。`vfs_strict = true` 时 VFS 不可用即启动失败，`vfs_isolate_uids` 列出应看到原生文件系统的 UID。同一文件路径不能同时进入多个后端；Overlay 与 Magic 两个真实挂载后端可以共享普通目录作为结构节点，VFS 是第三条注入路径、不是真实挂载。文件、类型或 `.replace` 冲突会在启动规划阶段直接报错。配置修改在重启后生效。
+存储模式和额外分区选项见[默认配置](../module/config.toml)。VFS 需要兼容的内核后端。后端不可用时，默认跳过 VFS 规则；启用 `vfs_strict = true` 且有规则请求 VFS 时，本次挂载流程会失败。
 
-`extra_mount = ["my_extra"]` 将 `<模块>/my_extra/` 合并到 `/my_extra/`。目标必须已存在且为目录，`/system/my_extra` 不得有任何同名项（包括悬空符号链接）。只填写单级分区名，不填写路径；无效项会记录警告并跳过，`apex` 仍不允许。没有 `system/` 的模块也受支持，仍遵循 `disable`、`remove`、`skip_mount` 和模块黑名单。内置分区沿用原有处理逻辑；额外分区内容按现有后端及路径规则分配，例如 `"my_extra/etc/file" = "magic"`。WebUI 保存设置时会保留该字段；在 `config.toml` 中编辑并重启生效。
+- [规则、目录标记与 CLI](ARCHITECTURE.md) · [运行时挂载与恢复](RUNTIME.md)
+- [VFS 命令与诊断](VFS_CLI.md) · [VFS 内核集成](../module/vfs/README.md)
+- [ext4 兼容模块](../module/lkm/README.md)
+- [问题反馈与贡献指南](../CONTRIBUTING.md)
 
-命令行工具的完整命令、参数和 JSON 输出说明见[CLI 参考](ARCHITECTURE.md#cli-契约)。
+## 其他语言
 
-升级时兼容旧版 `partitions` 字段的数组和逗号分隔字符串格式。该字段会被忽略，其他设置与规则仍保留；WebUI 输出和后续配置保存会移除它。需要额外分区时使用 `extra_mount`。未知字段和格式错误仍会导致启动配置加载失败。
-
-`hybrid-mount vfs` 提供运行态规则／UID 管理、whiteout／opaque、诊断和显式 LKM 加载。
-支持 NoMount 风格短命令，默认文本、可选 `--json`；清空需 `--yes`，手工修改不持久化。
-命令与示例见 [VFS CLI](VFS_CLI.md)。
-
-这套分流不改变项目现有的 `CONFIG_TMPFS_XATTR` 能力判断。KernelSU 安装时会删除模块中的整个 `lkm/` 目录，运行时只使用官方 `NukeExt4Sysfs` ioctl；APatch 等非 KSU 安装保留 LKM，并在 ext4 staging 挂载后默认尝试。随附 `.ko` 仅支持 aarch64；自动选择要求内核线和 Android/GKI 标签精确匹配，未知组合直接拒绝，但预编译 LKM 仍必须在对应真机验证 ABI。若设备在 `insmod` 期间崩溃，持久熔断标记会阻止下次启动再次加载 LKM，同时保留 Hybrid Mount 的其余功能。支持矩阵、校验值、来源与许可见 [`module/lkm/README.md`](../module/lkm/README.md)。
-
-## VFS 后端
-
-VFS 支持内置或以 LKM 加载的 `hybridmount`，也支持已存在的 NoMount 内核后端（协议 20 至 23）。检测到 NoMount 时，启动流程会跳过 `hybridmount` 的自动加载。Hybrid Mount 无源路径的 opaque 目录规则（含 `.replace`）需要 `hybridmount`。
-
-**如何识别 Provider。** 启动决策只看对内核 key type `hybridmount` 的一次只读探测：只要它返回受支持的版本，Provider 即可用。`vfs-doctor` 另外负责判断它以何种方式存在——出现在 `/proc/modules` 中，说明由可加载模块注册；有 `/sys/module/hybridmount` 目录但没有上述条目，说明已编译进内核镜像；两者都没有，说明本机没有 Provider。探测是只读的，因此 `status` 与 `vfs-doctor` 都不会触发 `insmod`。
-
-**启动逻辑。** 如果 key type 返回受支持的版本，Provider 即被绑定，不加载任何东西。每次启动都会探测 VFS 能力；即使没有规则选择 VFS，只要探测无响应，流水线优先尝试与内核 release 中 Android/GKI 标签匹配的随附模块，再尝试同一内核主次版本的其他候选，每次加载后重新探测；仍不可用时，所有 `vfs` 规则降级为 `ignore`，确有规则选择 VFS 且 `vfs_strict = true` 时则启动失败。加载发生在挂载计划构建之前，因为规划阶段会在 Provider 无响应时把 `vfs` 规则改写为 `ignore`，执行器随后就会提前返回。熔断标记在 `insmod` 前写入，尝试返回时清除，因此只有内核崩溃才会把它留下。标记记录写入它的构建与它准备插入的内核对象：来自其他构建、或其目标 `.ko` 已被新包替换的标记会被自动清除并重试（刷新随包模块后不需要手动 `rm`），只有当前构建仍随包提供同一内核对象时才会拒绝自动重试，直到手动删除该标记或执行 `hybrid-mount vfs guard clear --yes`。
-
-加载顺序为 `ksud insmod` → 内置 `hybrid-mount lkm-load` → 普通 `insmod`。内置加载器从核心内核符号表解析地址，并在内核明确报告 vermagic 不匹配时，在内存中适配后重试一次，不修改随包 `.ko`。VFS 选型不再使用 Android 用户空间版本，因此运行 Android 16 的自定义 `5.15` 内核仍会尝试对应的 `5.15` 模块。这些适配不能保证 ABI 兼容，详细流程见 [`module/vfs/README.md`](../module/vfs/README.md)。
-
-**把 VFS 集成进内核。** 发布包为每个受支持的 Android/GKI 目标都提供 aarch64 预编译模块并自动加载，因此这些内核无需任何集成步骤。当你希望避免 `insmod`，或你的内核线没有对应预编译模块时，可以把它内建进内核。在内核源码树根目录执行：
-
-```sh
-curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash
-```
-
-`--cleanup`:
-
-```sh
-curl -LSs "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/module/vfs/setup.sh" | bash -s -- --cleanup
-```
-
-这会把源码复制到 `fs/hybridmount/`，并加入 `fs/Makefile` 与 `fs/Kconfig`；启用 `CONFIG_HYBRIDMOUNT=y` 表示内建，`=m` 表示编译为模块。`bash -s -- --cleanup` 会撤销全部改动。已集成 NoMount 的内核树会被拒绝：两种实现都会劫持 inode 操作，而由于它们注册的 key type 不同，内核不会阻止二者并存。
-
-Provider 不可用时，WebUI 隐藏 VFS 选项和统计，管理器描述也不显示 VFS 计数；已有规则保持不变。内建 Provider 只要探测正常，即使没有 `/proc/modules` 条目也仍然支持。
-
-**诊断。** `/data/adb/modules/hybrid_mount/hybrid-mount vfs-doctor` 会报告存在状态、key type 返回的版本、受支持的版本，以及 Provider 不可用时的原因。
-
-## 反馈
-
-安装和反馈问题前请阅读 [使用须知](../USAGE_NOTICE.md)。反馈时请附上 KernelSU/APatch bugreport、模块版本与可复现步骤，可通过 [AtomGit Issues](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount/issues)、[GitHub Issues](https://github.com/Hybrid-Mount/meta-hybrid_mount/issues) 或 [Telegram 群组](https://t.me/hybridmountchat) 联系我们。
-
-## 参与贡献
-
-欢迎参与代码开发、文档完善、翻译和设备兼容性验证，详见[贡献指南](../CONTRIBUTING.md)。源码分支和标签从 GitHub 同步至 [AtomGit](https://atomgit.com/YuzakiKokuban/meta-hybrid_mount)，发行 ZIP 通过 GitHub Releases 下载。同步范围与维护配置见[同步说明](ATOMGIT_SYNC.md)。
-
-## 语言 / Languages
-
-- [English](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/README.md)
-- [Español](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ES.md)
-- [Français](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_FR.md)
-- [Bahasa Indonesia](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ID.md)
-- [Italiano](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_IT.md)
-- [日本語](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_JA.md)
-- [Русский](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_RU.md)
-- [Türkçe](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_TR.md)
-- [Українська](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_UK.md)
-- [Tiếng Việt](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_VI.md)
-- [简体中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH.md)
-- [繁體中文](https://github.com/Hybrid-Mount/meta-hybrid_mount/blob/dev/docs/README_ZH_TW.md)
+[English](../README.md) · [Español](README_ES.md) · [Français](README_FR.md) · [Bahasa Indonesia](README_ID.md) · [Italiano](README_IT.md) · [日本語](README_JA.md) · [Русский](README_RU.md) · [Türkçe](README_TR.md) · [Українська](README_UK.md) · [Tiếng Việt](README_VI.md) · [简体中文](README_ZH.md) · [繁體中文](README_ZH_TW.md)
 
 ## 鸣谢
 

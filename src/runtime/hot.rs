@@ -21,6 +21,7 @@ struct ModuleStatus {
     id: String,
     active: bool,
     eligible: bool,
+    reload_reason: Option<String>,
     reason: Option<String>,
 }
 #[derive(Serialize)]
@@ -62,34 +63,33 @@ fn status() -> Result<Status> {
     super::mounts::validate(&saved.mounts)?;
     let (config, modules) = config_and_modules()?;
     let layout = crate::partitions::detect(&config)?;
+    let mut remaining: BTreeSet<_> = saved.rules.iter().map(|r| r.module_id.as_str()).collect();
     let mut rows = Vec::new();
     for module in modules {
-        let active = saved
-            .rules
-            .iter()
-            .any(|r| r.module_id == module.id.as_str());
-        // Existing pure-VFS ownership can always be unloaded, even if its files/config changed.
-        let reason = if active && !saved.non_vfs_modules.contains(module.id.as_str()) {
-            None
-        } else {
-            policy::plan_hot_module(&module, &config, &layout, &saved)
-                .err()
-                .map(|e| e.to_string())
-        };
+        let active = remaining.remove(module.id.as_str());
+        let plan_error = policy::plan_hot_module(&module, &config, &layout, &saved)
+            .err()
+            .map(|e| e.to_string());
+        let can_unload = active && !saved.non_vfs_modules.contains(module.id.as_str());
         rows.push(ModuleStatus {
             id: module.id.to_string(),
             active,
-            eligible: reason.is_none(),
-            reason,
+            eligible: can_unload || plan_error.is_none(),
+            reload_reason: if active { plan_error.clone() } else { None },
+            reason: if can_unload { None } else { plan_error },
         });
     }
+    // Preserve the ledger's order for modules removed since boot.
     for rule in &saved.rules {
-        if !rows.iter().any(|m| m.id == rule.module_id) {
+        if remaining.remove(rule.module_id.as_str()) {
+            let mixed = saved.non_vfs_modules.contains(&rule.module_id);
             rows.push(ModuleStatus {
                 id: rule.module_id.clone(),
                 active: true,
-                eligible: !saved.non_vfs_modules.contains(&rule.module_id),
-                reason: None,
+                eligible: !mixed,
+                reload_reason: Some("installed module not found".into()),
+                reason: mixed
+                    .then(|| "module has active Magic/Overlay ownership; reboot required".into()),
             });
         }
     }
@@ -177,23 +177,23 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
     let after = if action == "unload" {
         Vec::new()
     } else {
-        let (config, modules) = config_and_modules()?;
-        let module = modules
+        let (config, mut modules) = config_and_modules()?;
+        let index = modules
             .iter()
-            .find(|m| m.id.as_str() == module_id)
+            .position(|m| m.id.as_str() == module_id)
             .ok_or_else(|| Error::msg("installed module not found"))?;
         // Validate the complete configured plan as well as current runtime ownership.
-        let mut configured = modules.clone();
-        if let Some(requested) = configured.iter_mut().find(|m| m.id.as_str() == module_id) {
-            requested.disabled = false;
-        }
+        let disabled = modules[index].disabled;
+        modules[index].disabled = false;
         let layout = crate::partitions::detect(&config)?;
         crate::plan::build_plan(&crate::plan::PlanInput {
-            modules: &configured,
+            modules: &modules,
             config: &config,
             layout: &layout,
             vfs_available: true,
         })?;
+        modules[index].disabled = disabled;
+        let module = &modules[index];
         let plan = policy::plan_hot_module(module, &config, &layout, &saved)?;
         requested_uids = config.vfs_isolate_uids.clone();
         updated_module = state::app_modules(

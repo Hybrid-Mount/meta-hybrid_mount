@@ -139,6 +139,7 @@ export interface RuntimeModule {
   id: string;
   active: boolean;
   eligible: boolean;
+  reload_reason?: string | null;
   reason: string | null;
 }
 

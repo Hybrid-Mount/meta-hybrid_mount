@@ -15,7 +15,7 @@ source = parser.parse_args().source.read_text()
 functions = []
 names = ["hybridmount_hijack_superblock", "hm_is_virtual_dentry",
          "hm_hijacked_unlink", "hm_hijacked_rmdir", "hm_hijacked_rename",
-         "hybridmount_hijack_dir_ops", "hybridmount_restore_superblocks"]
+         "hybridmount_hijack_dir_ops", "hm_free_retired_sop", "hybridmount_restore_superblocks"]
 if re.search(r"^static int hm_encode_fh\(", source, re.MULTILINE):
     names.insert(0, "hm_encode_fh")
 for name in names:
