@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 import { uiStore } from "../../lib/stores/uiStore";
 import Md3Layout from "./Md3Layout.vue";
 import StatusPage from "./pages/status.vue";
@@ -9,6 +9,8 @@ import ModulesPage from "./pages/modules.vue";
 import InfoPage from "./pages/info.vue";
 import { useI18n } from "vue-i18n";
 
+defineProps<{ wear?: boolean }>();
+const WearLayout = defineAsyncComponent(() => import("../wear/WearLayout.vue"));
 const { t } = useI18n();
 const pages = [StatusPage, ConfigPage, ModulesPage, InfoPage];
 const navindex = computed({
@@ -24,5 +26,6 @@ const titles = computed(() => [
 </script>
 
 <template>
-  <Md3Layout v-model:navindex="navindex" :pages="pages" :titles="titles" />
+  <WearLayout v-if="wear" :pages="pages" :titles="titles" />
+  <Md3Layout v-else v-model:navindex="navindex" :pages="pages" :titles="titles" />
 </template>

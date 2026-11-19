@@ -106,6 +106,7 @@ onMounted(() =>
         <input
           v-model="query"
           class="search-input"
+          :aria-label="t('modules.searchPlaceholder')"
           :placeholder="t('modules.searchPlaceholder')"
         />
         <div class="filter-group">
@@ -132,6 +133,12 @@ onMounted(() =>
       </md-filled-tonal-icon-button>
     </section>
 
+    <section v-if="moduleStore.loadError" class="error-banner" role="status">
+      <div class="error-content">
+        <strong>{{ t("modules.scanError") }}</strong>
+        <p>{{ moduleStore.loadError }}</p>
+      </div>
+    </section>
     <section v-if="mountErrorCount" class="error-banner">
       <md-icon class="error-icon"
         ><svg viewBox="0 0 24 24"><path :d="ICONS.bug" /></svg
@@ -326,7 +333,7 @@ onMounted(() =>
     <div v-if="moduleStore.loading" class="loading-container">
       <md-circular-progress indeterminate />
     </div>
-    <div v-else-if="filtered.length === 0" class="empty-state">
+    <div v-else-if="!moduleStore.loadError && filtered.length === 0" class="empty-state">
       <svg class="empty-icon" viewBox="0 0 24 24"><path :d="ICONS.modules" /></svg>
       <strong>{{ t("modules.empty") }}</strong>
       <span class="empty-state-hint">{{ t("modules.desc") }}</span>

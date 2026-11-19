@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { createApp } from "vue";
+import { exec } from "kernelsu";
 import i18n from "./locales";
 import "./style.css";
 
 import App from "./App.vue";
 import { uiStore } from "./lib/stores/uiStore";
-
-const app = createApp(App);
-app.use(i18n);
+import { useWearLayout } from "./lib/wearLayout";
 
 function loadOptionalManagerColors(): void {
   if (document.head.querySelector('link[data-manager-colors="true"]')) return;
@@ -22,9 +21,15 @@ function loadOptionalManagerColors(): void {
 }
 
 const init = async () => {
-  await uiStore.init();
+  const [wear] = await Promise.all([
+    useWearLayout(location.search, document.documentElement.clientWidth, async () => {
+      const result = await exec("pm has-feature android.hardware.type.watch");
+      return result.errno === 0 && result.stdout.trim() === "true";
+    }),
+    uiStore.init(),
+  ]);
   loadOptionalManagerColors();
-  app.mount("#app");
+  createApp(App, { wear }).use(i18n).mount("#app");
 };
 
 init();

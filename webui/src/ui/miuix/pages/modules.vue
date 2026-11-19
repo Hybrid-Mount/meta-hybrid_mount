@@ -315,6 +315,12 @@ onMounted(() =>
       </span>
     </div>
 
+    <MiuixBasicComponent
+      v-if="moduleStore.loadError"
+      role="status"
+      :title="t('modules.scanError')"
+      :summary="moduleStore.loadError"
+    />
     <MiuixCard v-if="mountErrorCount" class="card module-error-card">
       <div class="module-error-notice">
         <span class="module-error-copy">
@@ -466,7 +472,9 @@ onMounted(() =>
     </template>
 
     <MiuixBasicComponent
-      v-if="!moduleStore.loading && filteredModules.length === 0"
+      v-if="
+        !moduleStore.loading && !moduleStore.loadError && filteredModules.length === 0
+      "
       :title="t('modules.empty')"
     />
 

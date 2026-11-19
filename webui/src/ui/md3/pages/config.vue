@@ -82,7 +82,8 @@ onMounted(() =>
           <span class="card-text">
             <span class="card-title">WebUI</span>
             <span class="card-desc"
-              >{{ t("common.language") }} · {{ t("common.uiStyle") }}</span
+              >{{ t("common.language")
+              }}<span class="phone-style-field"> · {{ t("common.uiStyle") }}</span></span
             >
           </span>
         </div>
@@ -94,6 +95,7 @@ onMounted(() =>
             @update:model-value="uiStore.setLang"
           />
           <Md3SelectField
+            class="phone-style-field"
             :label="t('common.uiStyle')"
             :model-value="uiStore.uiStyle"
             :options="styleOptions"

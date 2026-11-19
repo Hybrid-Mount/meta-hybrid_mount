@@ -1,0 +1,335 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+.wear-root {
+  height: 100%;
+  background: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-background);
+  overflow-wrap: anywhere;
+  --wear-gutter: clamp(14px, 10vw, 28px);
+}
+
+.md3-active .wear-root .wear-scroll {
+  gap: 10px;
+  max-width: 320px;
+  padding: max(30px, 17vh) var(--wear-gutter);
+  overflow-x: hidden;
+}
+
+.wear-scroll > * {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.wear-page,
+.wear-page > .page {
+  display: contents;
+}
+
+.wear-title,
+.wear-summary {
+  text-align: center;
+}
+
+.wear-title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.25;
+  outline: none;
+}
+
+.wear-summary {
+  display: grid;
+  gap: 3px;
+  padding: 4px 4px 8px;
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.wear-summary strong {
+  color: var(--md-sys-color-primary);
+  font-size: 15px;
+}
+
+.wear-menu {
+  display: grid;
+  gap: 6px;
+}
+
+.wear-button,
+.wear-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-sys-color-surface-container-high);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wear-button svg,
+.wear-home svg {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.wear-home {
+  width: 48px;
+  align-self: center;
+}
+
+.wear-button:active,
+.wear-home:active {
+  background: var(--md-sys-color-surface-container-highest);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .wear-summary,
+  .wear-menu,
+  .wear-page > :not(.page),
+  .wear-page > .page > .dashboard-grid {
+    animation: wear-page-enter 180ms cubic-bezier(0.2, 0.75, 0.3, 1);
+  }
+
+  .wear-button,
+  .wear-home {
+    transition:
+      scale 110ms ease-out,
+      background-color 110ms ease-out;
+  }
+
+  .wear-button:active,
+  .wear-home:active {
+    scale: 0.96;
+  }
+}
+
+@keyframes wear-page-enter {
+  from {
+    opacity: 0.65;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.wear-root .wear-error {
+  color: var(--md-sys-color-on-error-container);
+  background: var(--md-sys-color-error-container);
+}
+
+.wear-root .wear-preview-toast {
+  bottom: 16vh;
+  justify-content: center;
+  max-width: min(250px, 72vw);
+  padding: 8px 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.wear-root .phone-style-field {
+  display: none;
+}
+
+.md3-active
+  .wear-root
+  :is(
+    .dashboard-grid,
+    .metrics-row,
+    .field-grid,
+    .rule-path-row,
+    .strategy-selector,
+    .error-banner__rows,
+    .contributors-list-vue
+  ) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.wear-root
+  :is(
+    .hero-card,
+    .metric-card,
+    .mode-stats-card,
+    .info-card,
+    .config-card,
+    .contributors-section,
+    .project-header,
+    .rule-card
+  ) {
+  padding: 12px;
+  border-radius: 18px;
+}
+
+.wear-root .hero-card {
+  min-height: auto;
+}
+
+.wear-root :is(.hero-value, .metric-value) {
+  font-size: 22px;
+  letter-spacing: normal;
+}
+
+.wear-root :is(.info-row, .setting-line, .runtime-actions, .error-banner) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.wear-root .info-val {
+  max-width: none;
+  text-align: start;
+  white-space: normal;
+}
+
+.wear-root .card-header {
+  align-items: start;
+  gap: 6px;
+}
+
+.wear-root :is(.card-icon, .search-icon) {
+  display: none;
+}
+
+.wear-root .header-section {
+  position: static;
+  align-items: stretch;
+  flex-direction: column;
+  padding: 0;
+}
+
+.wear-root .search-bar {
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.wear-root .search-input {
+  min-height: 48px;
+  padding: 8px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: var(--md-sys-color-surface-container);
+}
+
+.wear-root .filter-select-field.compact {
+  width: 100%;
+  max-width: none;
+  flex: auto;
+}
+
+.wear-root .module-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+}
+
+.wear-root .module-header .mode-pill {
+  grid-column: 2;
+  justify-self: start;
+  white-space: normal;
+}
+
+.wear-root :is(.module-name, .select-value) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wear-root :is(.module-card, .module-details) {
+  padding: 8px;
+}
+
+.md3-active .wear-root .rule-toolbar > :first-child {
+  flex-basis: 100%;
+}
+
+.wear-root .rule-toolbar :is(md-outlined-text-field, md-filled-tonal-icon-button),
+.wear-root .select-options {
+  min-width: 0;
+  width: 100%;
+}
+
+.wear-root .select-options {
+  max-height: none;
+  overflow: visible;
+}
+
+.wear-root :is(.strategy-option, .select-trigger, .select-option, .runtime-action) {
+  min-height: 48px;
+  padding-inline: 8px;
+}
+
+.wear-root .bottom-actions-root {
+  position: static;
+  justify-content: center;
+  padding: 0;
+  opacity: 1;
+  transform: none;
+}
+
+.wear-root .bottom-actions-root > .spacer {
+  display: none;
+}
+
+.wear-root .bottom-action-row {
+  flex-wrap: wrap;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.wear-root md-filled-tonal-icon-button {
+  min-width: 48px;
+  min-height: 48px;
+  --md-filled-tonal-icon-button-container-width: 48px;
+  --md-filled-tonal-icon-button-container-height: 48px;
+}
+
+.wear-root .bottom-action-row md-filled-tonal-icon-button {
+  flex-basis: 48px;
+}
+
+.wear-root md-dialog {
+  width: min(264px, calc(100% - 2 * var(--wear-gutter)));
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  max-height: 82vh;
+  --md-dialog-container-shape: 20px;
+  --md-dialog-headline-size: 16px;
+  --md-dialog-headline-line-height: 20px;
+}
+
+.wear-root md-dialog > [slot="headline"] {
+  justify-content: center;
+  padding: 10px 12px 0;
+  text-align: center;
+}
+
+.wear-root md-dialog > [slot="content"] {
+  padding: 8px 12px;
+}
+
+.wear-root md-dialog > [slot="actions"] {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0;
+  padding: 4px 8px 8px;
+}
+
+.wear-root md-dialog md-text-button {
+  min-height: 44px;
+  max-width: 100%;
+}

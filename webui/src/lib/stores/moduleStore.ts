@@ -11,7 +11,7 @@ const modules = ref<Module[]>([]);
 const loadError = ref<string | null>(null);
 const loading = ref(false);
 let pendingLoad: Promise<void> | null = null;
-let hasLoaded = false;
+const hasLoaded = ref(false);
 
 async function loadModules(): Promise<void> {
   if (pendingLoad) {
@@ -24,8 +24,9 @@ async function loadModules(): Promise<void> {
       const data = await API.scanModules();
       modules.value = [...data];
       loadError.value = null;
-      hasLoaded = true;
+      hasLoaded.value = true;
     } catch (error) {
+      hasLoaded.value = false;
       loadError.value = error instanceof Error ? error.message : String(error);
       uiStore.showToast("Failed to scan modules");
     } finally {
@@ -38,7 +39,7 @@ async function loadModules(): Promise<void> {
 }
 
 function ensureModulesLoaded(): Promise<void> {
-  if (hasLoaded) return Promise.resolve();
+  if (hasLoaded.value) return Promise.resolve();
   return loadModules();
 }
 
@@ -78,7 +79,7 @@ export const moduleStore = {
     return loadError.value;
   },
   get hasLoaded() {
-    return hasLoaded;
+    return hasLoaded.value;
   },
   ensureModulesLoaded,
   loadModules,
