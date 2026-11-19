@@ -51,10 +51,12 @@ jobs:
         with:
           filter: "tree:0"
 
+      - name: Install cargo-audit
+        run: cargo install --locked --version 0.23.0 cargo-audit
+
+      # Use the CLI exit status so the job works with read-only PR tokens.
       - name: Run cargo audit
-        uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo audit --file Cargo.lock
 
   pnpm-audit:
     runs-on: ubuntu-latest
