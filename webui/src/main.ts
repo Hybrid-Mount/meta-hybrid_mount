@@ -9,6 +9,17 @@ import App from "./App.vue";
 import { uiStore } from "./lib/stores/uiStore";
 import { useWearLayout } from "./lib/wearLayout";
 
+const WATCH_PROBE = `
+case ",$(/system/bin/getprop ro.build.characteristics)," in
+  *,watch,*) printf 'true\\n'; exit 0 ;;
+esac
+if [ "$(/system/bin/getprop ro.cw_build.wear_sdk.version)" -gt 0 ] 2>/dev/null; then
+  printf 'true\\n'
+  exit 0
+fi
+exec /system/bin/pm has-feature android.hardware.type.watch
+`;
+
 function loadOptionalManagerColors(): void {
   if (document.head.querySelector('link[data-manager-colors="true"]')) return;
 
@@ -22,8 +33,8 @@ function loadOptionalManagerColors(): void {
 
 const init = async () => {
   const [wear] = await Promise.all([
-    useWearLayout(location.search, document.documentElement.clientWidth, async () => {
-      const result = await exec("pm has-feature android.hardware.type.watch");
+    useWearLayout(location.search, async () => {
+      const result = await exec(WATCH_PROBE);
       return result.errno === 0 && result.stdout.trim() === "true";
     }),
     uiStore.init(),
