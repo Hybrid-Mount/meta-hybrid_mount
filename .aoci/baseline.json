@@ -1,0 +1,4215 @@
+{
+  "version": 1,
+  "created_at": "2026-11-19T16:06:06Z",
+  "updated_at": "2026-11-19T16:31:36Z",
+  "files": {
+    ".cargo/config.toml": {
+      "role": "index",
+      "sha256": "9657cb16df3d6fa339daf80a3a403a322e2597b76d101527474f3456740d9677",
+      "size": 83,
+      "normalized_sha256": "782077183e3c365fad65846d7584bb781fa242c9724107c4ac39e1f8713614af"
+    },
+    ".dsh/skills/hm-build-release/SKILL.md": {
+      "role": "index",
+      "sha256": "6ffae6d1cab3a6a483861ac0211beb2bd479e774a9de41a276dc47ca1715a97c",
+      "size": 3904,
+      "normalized_sha256": "a01b7a95a6c8c9ce98e705e8c3b72088f55337d2d4aef9f2d4e1b916b49b38b8"
+    },
+    ".dsh/skills/hm-ci/SKILL.md": {
+      "role": "index",
+      "sha256": "3fa99a40c4cda158d8bffb9412139bce8e2712ce3e41b0f066240c540f010e75",
+      "size": 18527,
+      "normalized_sha256": "d2712be897e7a0851dc36a96b04508eb4b7748dd11bf298f0c994d5383ed5121"
+    },
+    ".dsh/skills/hm-module-scripts/SKILL.md": {
+      "role": "index",
+      "sha256": "b3e9e10cce8301176142d3e23f81c43e76440c5979c81d9db6e651249f3919ae",
+      "size": 8879,
+      "normalized_sha256": "c34c5b3adb0dc7b40f528c77515ca2cb8ae5493b594a18b726b08b632f212a7d"
+    },
+    ".dsh/skills/hm-mount-safety-review/SKILL.md": {
+      "role": "index",
+      "sha256": "36f488b0b562361706a5eb991419776692b23f4012cf40f93f9f9072dbb4e14c",
+      "size": 2270,
+      "normalized_sha256": "9d827a9cd652b65837bd3b1cfc67d9a592749e7ebd4f6433f63e77951ae9b0d8"
+    },
+    ".dsh/skills/hm-planner-debug/SKILL.md": {
+      "role": "index",
+      "sha256": "a4bcb923f6ff7c77f6382a0ea5d5b016aa58ce3c589407638b168c3dbe0ea9e6",
+      "size": 2126,
+      "normalized_sha256": "9d84296327f14389c3e10c1eb5add09e0ce495f54f3a33d2b43baba410f9dd90"
+    },
+    ".dsh/skills/hm-runtime/SKILL.md": {
+      "role": "index",
+      "sha256": "688ffa111550854ae77e0ee3b9941f2aa1f7024aeb08749b1abf53cab0f5e7bf",
+      "size": 9488,
+      "normalized_sha256": "29c6a59bd87a0b757447a47282c6a6e3ab908a5200d3e6ad6097b34f3b399d09"
+    },
+    ".dsh/skills/hm-rust-android/SKILL.md": {
+      "role": "index",
+      "sha256": "1635708b1d0b2715c67b58e045ecfe57dbcf0df30c7be4ca09716907cae6d9ca",
+      "size": 1657,
+      "normalized_sha256": "433c2d14a63b18b9746dc28f9b938fbec16c76463d3b9ca2521d75dc36f0d004"
+    },
+    ".dsh/skills/hm-rust-lsp/SKILL.md": {
+      "role": "index",
+      "sha256": "2e9f33f41bcb29784be2c108888a1e991ecb6087bdeea777ec42a8448c16a8f6",
+      "size": 1351,
+      "normalized_sha256": "5e9c93294afcbc836615bf12a11638b99f39c6915903763255377d992dc7bd39"
+    },
+    ".dsh/skills/hm-verify/SKILL.md": {
+      "role": "index",
+      "sha256": "83906401375b790bf31ad526daca3606b8a1e064f15ef83e759ed376237e7c1f",
+      "size": 3763,
+      "normalized_sha256": "99a0d52bee63b40eb0b6a18e3b3954c3a08987f18052c13e94848ce0324a6b76"
+    },
+    ".dsh/skills/hm-vfs/SKILL.md": {
+      "role": "index",
+      "sha256": "1a07e0e1c92b039cc904504b7aa1822b1b7e4ceae9e7fd4dfb2a78c43aa14a85",
+      "size": 8718,
+      "normalized_sha256": "baf71282afa74d7e6da26e2d514a7a05341ca0b3aa9ba08a3684d4796a2bc6b0"
+    },
+    ".dsh/skills/hm-webui/SKILL.md": {
+      "role": "index",
+      "sha256": "6c09c86fbe6c344297810e35c28519f5404facaed6c2131e3d0f63e56267543e",
+      "size": 2104,
+      "normalized_sha256": "90f876e026270f5d00c8d4b882ae89bdd62e6787ce247cbc8f96b235617f983e"
+    },
+    ".dsh/skills/hybrid-mount-overview/SKILL.md": {
+      "role": "index",
+      "sha256": "3ea1b0961d32e0c5bbe1c90be422481ef2cd1eed1c0a34413dc912d15410cec5",
+      "size": 4227,
+      "normalized_sha256": "3f78473f5f353d9a186f764f9f548e2430613ee62029ea55afc39c07ccded279"
+    },
+    ".dsh/skills/kernel-development-skills/LICENSE": {
+      "role": "index",
+      "sha256": "0ba545ce9827ffc08f30eb1327131350376a29c605e7eba5132f45d956e9724a",
+      "size": 1092,
+      "normalized_sha256": "078a5969a0026d1806bb72f4c9080034ef9e515384e81a178f7f99e06d9020e1"
+    },
+    ".dsh/skills/kernel-development-skills/SKILL.md": {
+      "role": "index",
+      "sha256": "892b63b11d9842e30fc6f3e392975c59dad9f9e91bf41355f40faebc5e51de6f",
+      "size": 8526,
+      "normalized_sha256": "9624d4ef04cd32d379002a7a385c0666e1def85283494ea9ef530ca2360af690"
+    },
+    ".dsh/skills/kernel-development-skills/references/advanced-tooling.md": {
+      "role": "index",
+      "sha256": "9e74cccf9d704252f4982e4a0b265c3b1df973b0e7fb2f6a041250142b971928",
+      "size": 3837,
+      "normalized_sha256": "952c5441ca590df27755378eb30945e995149fe4db7ab6e33d5d17c2033d97b8"
+    },
+    ".dsh/skills/kernel-development-skills/references/ci-regression.md": {
+      "role": "index",
+      "sha256": "40209c33d9f297d7511209e63e4bcc2103e6a4c18d2a552d29a5005f6cbd74c9",
+      "size": 4321,
+      "normalized_sha256": "aa4c2948573e22fe295feea2093d11bf9aeb25c3473f129d02f138b4aae8dc06"
+    },
+    ".dsh/skills/kernel-development-skills/references/debugging-testing.md": {
+      "role": "index",
+      "sha256": "4eaa7dbea4338343e70180b4234f33236da883d1f1c7644a91e934ad7ad9949b",
+      "size": 8294,
+      "normalized_sha256": "2c52fd758195dc2fb63aa9b2a8825590261c2c5f10d674b8e08a11661492b1d7"
+    },
+    ".dsh/skills/kernel-development-skills/references/device-tree-drivers.md": {
+      "role": "index",
+      "sha256": "eb1aa0f1cd78ed317cd8b15d72afb19b60d5e2daf1a395566fdd0f71ec2b1533",
+      "size": 7030,
+      "normalized_sha256": "caa0bf61caf34d6a19b2075a58ba8cec090e8429425228f43631d3901ba781c7"
+    },
+    ".dsh/skills/kernel-development-skills/references/doc-routes.md": {
+      "role": "index",
+      "sha256": "f9cd4189a64eeace4634e6dcd599d273ed1ce3bf1dac8cb83313ad211b132c37",
+      "size": 3569,
+      "normalized_sha256": "a75063fa7f019d99c576b77b2ab2c416359879c2d84c9c1ecd70383636636f9b"
+    },
+    ".dsh/skills/kernel-development-skills/references/driver-api-cookbook.md": {
+      "role": "index",
+      "sha256": "8f699f80fbe3b199c8eb2635c4dfd1dda378f96cba6c5505dc74c286d84bec93",
+      "size": 11938,
+      "normalized_sha256": "a1c67980478ac45ccf998f03ae6fc5b8c9948212dcb99ba30c5b88d0703980b2"
+    },
+    ".dsh/skills/kernel-development-skills/references/driver-review-checklists.md": {
+      "role": "index",
+      "sha256": "4265c6d546975e1b3f0f0948709a8e1f231c1b4af7b5377cae041fba4c327123",
+      "size": 6087,
+      "normalized_sha256": "5ee29e317074ef2878fedd6e56cb56b94f6721cdce8f29711b8abf10c5ba659b"
+    },
+    ".dsh/skills/kernel-development-skills/references/kernel-workflow.md": {
+      "role": "index",
+      "sha256": "a14b58b86d4ec4b28d3a0b0d12103b952395efa21fc916dcd483fb56e7e96fb3",
+      "size": 7009,
+      "normalized_sha256": "fd5903f0fad67d6fc8d7800ad41b1c1a108f0f3538aa9746778818b3956be107"
+    },
+    ".dsh/skills/kernel-development-skills/scripts/check_kernel_api_patterns.py": {
+      "role": "index",
+      "sha256": "06a593c3ad8a9652659c4af5991e892318b499b71193fc818267d4f015c45f2e",
+      "size": 7623,
+      "normalized_sha256": "87803b7ac5d16562ad9efb44a018a14dc98f5d3dca461265c387db0b64fd3d4e"
+    },
+    ".dsh/skills/kernel-development-skills/scripts/index_kernel_docs.py": {
+      "role": "index",
+      "sha256": "40de6184bc834782a08e77ae74e674ec3c174ac827a2d175eaf492b3773be597",
+      "size": 12796,
+      "normalized_sha256": "cebafe5723277ee9c8635903c6b1028503a5d2d1c23458f49e7cb9ba2d89ef62"
+    },
+    ".dsh/skills/kernel-development-skills/scripts/triage_kernel_change.py": {
+      "role": "index",
+      "sha256": "49266095a89e35474b30b9593ed610da6dff9f39e04ceec76ae3c4fb6c7e5109",
+      "size": 9081,
+      "normalized_sha256": "eb88c96119e4d5cd90f62dc492636b0ccadf6b98844c5c723af24d56ef8e9bec"
+    },
+    ".dsh/skills/rust-best-practices/LICENSE": {
+      "role": "index",
+      "sha256": "89b87850aabf802fef0a50cbf19a03536751e8e7fb1332a8bc2dfd3f1a00b9cd",
+      "size": 1096,
+      "normalized_sha256": "37fe5c19dc6b3904a11dc50b4ac4a2463625ace4d2aa3b8c417c58bd58cfb361"
+    },
+    ".dsh/skills/rust-best-practices/SKILL.md": {
+      "role": "index",
+      "sha256": "615a1c9c785b4a24b46f7904751388fe9c87bea0ba1d097945333fcace1491cb",
+      "size": 4820,
+      "normalized_sha256": "c8cfa094ae51c63077c25141aed9c0ce24a8ed5c9918d7e5371525d7d2d71b3c"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_01.md": {
+      "role": "index",
+      "sha256": "db0d44b729c95f181a9a58d3616fb0e15bcc036b1e9d46864b73851752a0363b",
+      "size": 25909,
+      "normalized_sha256": "861af081c1ddc38e77964b84685a2e7ee698bc84e875fb8ac0078678e55a636e"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_02.md": {
+      "role": "index",
+      "sha256": "ece5b94cc3bdb21434a706feeb03f5fcb93892aad3dc4b19ed81b64c21d9ebaf",
+      "size": 5568,
+      "normalized_sha256": "c9552ee43944e5ca5ee8fbcf44563e7882581a5c804a5ab45e8c6b8b4f5effb0"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_03.md": {
+      "role": "index",
+      "sha256": "8c1745e1c8e9e28fbb4b040da2a1928e416f6bb2df3942eb2821ba32ada8981c",
+      "size": 8993,
+      "normalized_sha256": "c645d6501241933519988c357307758ddeb753fdf01e23bf57fec8b6c2a74ce1"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_04.md": {
+      "role": "index",
+      "sha256": "6b9d933b3c35a499bb30d7bc205e6bb03817cfe8285809dff149d9405228b931",
+      "size": 7262,
+      "normalized_sha256": "3257b7dfa06698bd59fe2d315b33b22181926d30cda3776bc16c792b51eeb239"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_05.md": {
+      "role": "index",
+      "sha256": "ba2b13c4eb5156bff6f982de012ce1f431cda4e067d2108d583de827c4ca8ae5",
+      "size": 15220,
+      "normalized_sha256": "c4be55ca03a87989b41c1286a0498104e19ad6b21993b4ee4de8aafa569f25d6"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_06.md": {
+      "role": "index",
+      "sha256": "1321424d42217de0d431609b22476c95ec0b75df2ffc7efbe27ff07dcb4ab930",
+      "size": 6973,
+      "normalized_sha256": "9aaec6375b1c2db67e24a9c4e2bfdd9a47b363a6598d282aad180dd09af1e486"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_07.md": {
+      "role": "index",
+      "sha256": "2d230a3caccb58add3480901ee4613d252ebab49e64ee4334a37c032e11adfea",
+      "size": 8459,
+      "normalized_sha256": "a4ec35c46290ee5b0fc3518ff1466670b4b2e12654dedfebd2cd7cf03a486d69"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_08.md": {
+      "role": "index",
+      "sha256": "db08f1a3a5c15695d5917aba337ee73c2184226cd3ce20428433efefd1c60880",
+      "size": 10618,
+      "normalized_sha256": "ad38c2b5d493d28b1169067484e53cb19214797d9baf0059c729ff791c3492c9"
+    },
+    ".dsh/skills/rust-best-practices/references/chapter_09.md": {
+      "role": "index",
+      "sha256": "f80f55f888d3eadb9bf179bbb3ac780beec9ebd9bc08e76e2dfadc33867ccd0d",
+      "size": 9824,
+      "normalized_sha256": "41f59d24830bdf2ae91e205969c760ba4461567a1f188d19e1abc125a3d53bb5"
+    },
+    ".dsh/skills/rust-guidelines/LICENSE.md": {
+      "role": "index",
+      "sha256": "9906940f61b1f0b533fa7d99baf55178b2808fbe113ea51dfbfad8572ccd5f2b",
+      "size": 1162,
+      "normalized_sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+    },
+    ".dsh/skills/rust-guidelines/SKILL.md": {
+      "role": "index",
+      "sha256": "4d143b0148657eda4602dd5a6782441baa28707d1cba5f1329cee0782134e1fc",
+      "size": 6822,
+      "normalized_sha256": "23250dc19398557895a2e3104e3e93142f3dcdd92b74a7f21ec28bbb97c68a09"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/README.md": {
+      "role": "index",
+      "sha256": "86ecae9ee34ba49928029a531f66905b3d186e3a89cb16f6e9089b9111ea7051",
+      "size": 2646,
+      "normalized_sha256": "866298aae5a439716bb7655469ac10838f06c90801f53a2c511c406dbd439a4f"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/checklist/README.md": {
+      "role": "index",
+      "sha256": "95cd35def80a52787be26904d74fe46f862f7576461ecdf443ab2f8f857641d2",
+      "size": 11217,
+      "normalized_sha256": "977e5fb17ae8061733063349e3aee48dc1bc32c3e03eb7448b633f8e871e6108"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-PANIC-CONTINUATION.md": {
+      "role": "index",
+      "sha256": "cde8225e2589bcd5dfff9668ee929eff52f6b495b7138f44fb2db25c4699a9e2",
+      "size": 1641,
+      "normalized_sha256": "fc5339ac0873d715475b7d56abd97ec42e245d73f75abaf6acde41acaf2ef051"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-PANIC-IS-STOP.md": {
+      "role": "index",
+      "sha256": "f3e318fd104bf64af635fbb59fbe031d660fd46b92dae5a564e8a047d6f2a48a",
+      "size": 1400,
+      "normalized_sha256": "05bbb4bd660126383c161c6aa7ed963d127f159f311885fb3e36d89c41f7fa49"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-PANIC-MESSAGE.md": {
+      "role": "index",
+      "sha256": "814b9993603022e27cb2dfa9248c7b28d2c72cc82c7f73063e588736a5152d0c",
+      "size": 966,
+      "normalized_sha256": "e02665744d93cea5836f4869b2cc4179645dac9b5780f99f8e9866594f594cbe"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-PANIC-ON-BUG.md": {
+      "role": "index",
+      "sha256": "5a36a2f7952f7a819d52dfb88ebaeedec8ee93a1e7ff810a97e551ce16fa87d6",
+      "size": 2162,
+      "normalized_sha256": "401532810c1bbb7fb394d4b2b39c0cfe621661446c6c206ab8a5f25027a8e365"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-UNSAFE-IMPLIES-UB.md": {
+      "role": "index",
+      "sha256": "f4fd00b53528216ec65af98fbc5e8ea2ed6eccb4d03e15fe40f6fdd46da23888",
+      "size": 583,
+      "normalized_sha256": "70cbae42b0caa083695a08424ca50af7ee18ce59b42f4c2b94cc93642bd39298"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-UNSAFE.md": {
+      "role": "index",
+      "sha256": "9b49ec49998b8d0e1d5030abe252c94f95da3f70579c1be51675509e8227e922",
+      "size": 3107,
+      "normalized_sha256": "a468a08f2dfe4428ac789c5674be1b1797210a2846f1fdb82f3c4234a1758e08"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/M-UNSOUND.md": {
+      "role": "index",
+      "sha256": "64bd6b17626452383759a67c8f1969083b97a9501f17d7a97996cd1f4612c7a0",
+      "size": 2459,
+      "normalized_sha256": "5b50a3b0d004c58434fef93ba98a47ba50e7088a0ae834b81a9be00d3314de69"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/correctness/README.md": {
+      "role": "index",
+      "sha256": "107772dbe39c7cb9e58f15d73cc3a725f760321bfef30079060ecf8b8cb6a069",
+      "size": 338,
+      "normalized_sha256": "33ba9895e476aff43f4601fc9c3dc853ce21c5738d1e05a9d352881669025c8f"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/ffi/M-FFI-NAMING.md": {
+      "role": "index",
+      "sha256": "b746b4b52fb8095c9de9ec7826d6401f7c5a906c05e560781e7166511d1647c1",
+      "size": 675,
+      "normalized_sha256": "0bdfee56ff008f0ac1098d7a9916929b5a8572b5f1eee3e34a5ee24534c9614a"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/ffi/M-FFI-TRANSLATES.md": {
+      "role": "index",
+      "sha256": "c720344d9a87380fc1f28eddcda983964d3f07dc637294185b11c43dc394152a",
+      "size": 2014,
+      "normalized_sha256": "0ce63fc687739527220bef6e114319fca1d9cbc0db1806c5148313dc244dbf50"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/ffi/M-ISOLATE-DLL-STATE.md": {
+      "role": "index",
+      "sha256": "99a720a620ed8f50d016124cfa181fd1f0b8dcb46e4cd9d858405f4f87ef330d",
+      "size": 2859,
+      "normalized_sha256": "e964119927c0a14bbe18c7837cd2b47606e5b8c3b30b55ab280e723dd150373d"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/ffi/README.md": {
+      "role": "index",
+      "sha256": "12ca2f9ff7832cba7cc9036222c300824f4093c79131a65947fc7c99bff3d2cd",
+      "size": 205,
+      "normalized_sha256": "b43dc91e02a202b2310a4a0511437219af901156ebf082d37dde8e2d7423222b"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-DOCUMENTED-MAGIC.md": {
+      "role": "index",
+      "sha256": "786307c478c35d330ab50efa1e41698590a3deb061de33aa6df2949a17aeefca",
+      "size": 1288,
+      "normalized_sha256": "4b7fdcdce408ee0d1b8e5ac051943aef24a39de53c8f462f8d2192ac088ab0dd"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-LINT-OVERRIDE-EXPECT.md": {
+      "role": "index",
+      "sha256": "fbcb25b7c8253b1d06fe9fab6f25f256a4a1d060469fec50b83c8f98edafb07e",
+      "size": 778,
+      "normalized_sha256": "9a472b53c0867603b5c7737e999c63cb0d5075c5c937832b32fbd5a0a542e26d"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-LOG-STRUCTURED.md": {
+      "role": "index",
+      "sha256": "d69b7bb15e1a7f7be24a7acd8a2e4b232f8352ef968e4467fce429a42a59509c",
+      "size": 4232,
+      "normalized_sha256": "22ab6b5b8c433025f32b884a7261259f5b74ee38230daeec8a3ed070f6e28ece"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-PUBLIC-DEBUG.md": {
+      "role": "index",
+      "sha256": "719a998f1870024e1389b10ca21d34dc134efa18bba4e507d3eb738204dc8875",
+      "size": 1099,
+      "normalized_sha256": "2eb1126ebda797c660cf90be531469b2f8ac92901a813c3fe850d8f4393fa4cc"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-PUBLIC-DISPLAY.md": {
+      "role": "index",
+      "sha256": "722142f7a19b1ae8328b05ed06ae1d61b7bb35605a665b76de9a2792af63bd95",
+      "size": 704,
+      "normalized_sha256": "b7c6b92f0d61a03ca31df14698dcca11e7894a708bf2fbdfa4779ace865d983e"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-REGULAR-FN.md": {
+      "role": "index",
+      "sha256": "b70e23fc593dd6d6b08d3e7582a877303642e01e5c9be0a0ee26f97950d5beec",
+      "size": 1325,
+      "normalized_sha256": "ee1c2a28cf049a67ec79f66814062fdfc7e4c9db009eaf9d8bdae2f8dae95bf7"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-SHORT-NAMES.md": {
+      "role": "index",
+      "sha256": "102f26906eed9f3c958d844978378725069b908d92b2a3df97e89e97de4db69e",
+      "size": 874,
+      "normalized_sha256": "654fcf2f4567273345353070f04cc5ae0d79c0b9f40f6d3b19420c9a19f533f4"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-SMALLER-CRATES.md": {
+      "role": "index",
+      "sha256": "eb3e4ac3c2291d02fc3a6b665f1662d1165596a0ea570b7a591304cd0f01d68f",
+      "size": 1889,
+      "normalized_sha256": "f372a18bb3713872c43450e5cfebfe9fb6732159bc19dd80992f2f378c947d63"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-STATIC-VERIFICATION.md": {
+      "role": "index",
+      "sha256": "d48d9df10722ed6e842eca7a288e8956b05311cec7faa6a4d8842df3e21483c3",
+      "size": 3413,
+      "normalized_sha256": "a3e82046fdfc25783071b6da737e2d3101c21e5f4645f2900cbd2cfafea908e8"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-UPSTREAM-GUIDELINES.md": {
+      "role": "index",
+      "sha256": "5b1851be610527786d0df109e5b65439a76cb56a4379e19a65b39902debd6498",
+      "size": 1958,
+      "normalized_sha256": "86cc9e2065029cbd6253b2674ac9fe90c672e068ba9ab15332820eff0887034d"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/M-WEASEL-WORDS.md": {
+      "role": "index",
+      "sha256": "32104c3fca1117eeb908c1431b17a8e13195f81b7e227ea5bb38681858016809",
+      "size": 1812,
+      "normalized_sha256": "336296500c8d4ac22707415bf68f9f382dd2d000fe161d2f171915119f619135"
+    },
+    ".dsh/skills/rust-guidelines/guidelines/universal/README.md": {
+      "role": "index",
+      "sha256": "fc1305ffa8f92c256321a2db39121f415c63d7980195b6e54f223c19b4c758c8",
+      "size": 491,
+      "normalized_sha256": "5ec6b9710092d986f0a13a88158b180eb0cc0d6b6df36f93551e1cb3e580887b"
+    },
+    ".dsh/skills/rust-skills/LICENSE": {
+      "role": "index",
+      "sha256": "5f6b6967c843285a7016975cc41b716b69f544a379cb0637c4aa495f579bc2cf",
+      "size": 1096,
+      "normalized_sha256": "663ce6f8f087dc366602ac34eefd4cf71a5d8db411359422298a1399a014a9d5"
+    },
+    ".dsh/skills/rust-skills/SKILL.md": {
+      "role": "index",
+      "sha256": "cb4546fbd251b96630034c5db1c5cb27a29c30b1ea59bea685aaa4111ccfe839",
+      "size": 40940,
+      "normalized_sha256": "e7fbc8309e637cf5fda56513c4e2bbd32f90341bc4411b95505d860ffd2ccf07"
+    },
+    ".dsh/skills/rust-skills/checks/validate.py": {
+      "role": "index",
+      "sha256": "10e7e5b54fd6cf64d64ce69753bb0e02364193b8a1683c0f0270af500c594d19",
+      "size": 2097,
+      "normalized_sha256": "438ba510bee8d3d6c0d527cec09ad6810b9268e83e54852cf3b0b49cecf6f7cb"
+    },
+    ".dsh/skills/rust-skills/rules/anti-clone-excessive.md": {
+      "role": "index",
+      "sha256": "13af804c78cb4bd5195b12f79989b1d11cb5137a4422da7b2a19ca9b23e84488",
+      "size": 2738,
+      "normalized_sha256": "983913692f9f6a22cf0826151c410d84070b7e2a07f40ba3994bf3f68625002e"
+    },
+    ".dsh/skills/rust-skills/rules/anti-collect-intermediate.md": {
+      "role": "index",
+      "sha256": "384a7c0aa2590eb48e0011fdffad040cd2b9f4176f1fb3f03d2d8fb62c0ac58c",
+      "size": 3361,
+      "normalized_sha256": "3d8c23b528a68489b183d38aca1cddc2352d840f80cd08a4c97751485fbcbdef"
+    },
+    ".dsh/skills/rust-skills/rules/anti-empty-catch.md": {
+      "role": "index",
+      "sha256": "64398f2684abb441f91cbc4238766c0c54d4e34312f76e3391df7c92a5672da3",
+      "size": 3266,
+      "normalized_sha256": "95f134cd9ea0f14e8991d13114acc8f3a385a097165ea6ecb992ef8e1eadea33"
+    },
+    ".dsh/skills/rust-skills/rules/anti-expect-lazy.md": {
+      "role": "index",
+      "sha256": "51786e2153d0ba8a8fa1b08a70ee23e2d9963927a37d8d8fb49d8207b0f6749c",
+      "size": 2791,
+      "normalized_sha256": "62208c2b6d0584b51991ffad5449fb7f6db21e65601e4f6783c07508f5cdc1f2"
+    },
+    ".dsh/skills/rust-skills/rules/anti-format-hot-path.md": {
+      "role": "index",
+      "sha256": "fa6818423e1980a6ca8e43867f81dc08165242605d4533ea199f5c710d053165",
+      "size": 3780,
+      "normalized_sha256": "e9db4de4f59209fb989257133ee7abe46ac314b8362fea8f87902ec5116461d7"
+    },
+    ".dsh/skills/rust-skills/rules/anti-index-over-iter.md": {
+      "role": "index",
+      "sha256": "19926605697a72eb519debb492c2b68324ec90167d4d9b50d0deb408e05dd394",
+      "size": 3034,
+      "normalized_sha256": "57e116484ffff5e5fd3ebd36281ba12a7c8c9b000d46f4bcf25f0257438d8e94"
+    },
+    ".dsh/skills/rust-skills/rules/anti-lock-across-await.md": {
+      "role": "index",
+      "sha256": "69cb91407cbe684b0f39a03e2e08522af5a4c578d030e622e78b64686097ec73",
+      "size": 3328,
+      "normalized_sha256": "3429177799acb2baa2aa6cccb1ec22ee1605b7a531d684fd98cd5a0e14824f8a"
+    },
+    ".dsh/skills/rust-skills/rules/anti-over-abstraction.md": {
+      "role": "index",
+      "sha256": "88e976447ad272f0ce38c0c47a5fee3649cfc6bd6aadda5b92b4ccb20c67b55a",
+      "size": 3267,
+      "normalized_sha256": "620cb64669e9e844233f04393c9bffa4ea2e5d9d91640018fe7a2f480a8119be"
+    },
+    ".dsh/skills/rust-skills/rules/anti-panic-expected.md": {
+      "role": "index",
+      "sha256": "074992a8cf70e297d770ce20ad452b6be369dcea1916991f2a40a9ccae97c25e",
+      "size": 3559,
+      "normalized_sha256": "5f35f5e5b3447fd39f7610e8b15ef9f737ec860a53b654f6d9da77f80c71afb7"
+    },
+    ".dsh/skills/rust-skills/rules/anti-premature-optimize.md": {
+      "role": "index",
+      "sha256": "3e75f865b5145b36e38cf5bd8975cf59fc08cbf97b8069a7fab6a43c15d87d9b",
+      "size": 3936,
+      "normalized_sha256": "fb1678ce741683cb660670480a1c37ac00adac34594bf94145c92173df70eb2b"
+    },
+    ".dsh/skills/rust-skills/rules/anti-string-for-str.md": {
+      "role": "index",
+      "sha256": "f69286186f5df8daf537cd768eef2f2d772945fb6e3441ee186a62487ef421aa",
+      "size": 2778,
+      "normalized_sha256": "4c1dc918ecf13227ad612246024fa7a767a54ce076e864c4636c90defab473b8"
+    },
+    ".dsh/skills/rust-skills/rules/anti-stringly-typed.md": {
+      "role": "index",
+      "sha256": "3ffdef8200117d53c667d91e1104c1d6727fea5958a29a6621638d399dfd43ca",
+      "size": 4349,
+      "normalized_sha256": "bf6d3de6138e573b9f53447e7259515370d19a63219229360735871d739563ef"
+    },
+    ".dsh/skills/rust-skills/rules/anti-type-erasure.md": {
+      "role": "index",
+      "sha256": "f5de9ff26c4c6ebcf80bf36ae4c1b16aa457c974e8d6db43be79da303e3e978f",
+      "size": 3871,
+      "normalized_sha256": "e0fff7b4b25fba5c5565167f1d460375da61510f4bd52f82fc959ab538b9e013"
+    },
+    ".dsh/skills/rust-skills/rules/anti-unwrap-abuse.md": {
+      "role": "index",
+      "sha256": "96cde512a6bddd1a577854861ae9b3c94ecdb2d1246593d38c3d6c03d3997a0f",
+      "size": 3566,
+      "normalized_sha256": "5a01b900c39611b0a3bc7ea840dd1ef7ea5925fa40cb1f3132393892ca7a2690"
+    },
+    ".dsh/skills/rust-skills/rules/anti-vec-for-slice.md": {
+      "role": "index",
+      "sha256": "648aef90ed9663a4f47ffac0a51bf5528ea1dab136b035ab34245faf7e9da2f5",
+      "size": 2651,
+      "normalized_sha256": "a2c2613b01d4d6c4202ef611abf2f27de45cfdbca29d934a179a00e2d9fd4fbd"
+    },
+    ".dsh/skills/rust-skills/rules/api-builder-must-use.md": {
+      "role": "index",
+      "sha256": "55dcf1af1aee7576597ecf4d456d68a98fd860c66462270cc9c925aed5e6d56d",
+      "size": 4074,
+      "normalized_sha256": "2fc7eed1a0c7a505dfbcf1b5c3ed8893951d06ea517cd35aa706c04ac428edaf"
+    },
+    ".dsh/skills/rust-skills/rules/api-builder-pattern.md": {
+      "role": "index",
+      "sha256": "f767a8cfb2734bc5ec4673e8e8fda50a8747d628becc05794e972ea3ad0427fe",
+      "size": 4860,
+      "normalized_sha256": "ef6da2925a5c3bd8190a5fbaee35cdc08d326c59bc45b01f273bf1a245feade6"
+    },
+    ".dsh/skills/rust-skills/rules/api-common-traits.md": {
+      "role": "index",
+      "sha256": "8875944b2e1564c44d8c69f367574de069c3e333c1b034ccf7d71dd2361363ab",
+      "size": 4535,
+      "normalized_sha256": "94a006d41066115beaf9a0bfeffd1cc5e1e074a969888902d5e478c1aef103fa"
+    },
+    ".dsh/skills/rust-skills/rules/api-default-impl.md": {
+      "role": "index",
+      "sha256": "c260499fe2b1a5c7ee95f9b81de30b8788fd2389fc4fc817072fe745e11606fc",
+      "size": 4312,
+      "normalized_sha256": "7afc2bf93eb62f1f1a85ae8d6086e47ee3a54c902f22f294608a847ca9926b76"
+    },
+    ".dsh/skills/rust-skills/rules/api-extension-trait.md": {
+      "role": "index",
+      "sha256": "db76ae93df45994bbdc6097eefe341eaf7a10613ea2e5954d57afa1051df66d2",
+      "size": 4036,
+      "normalized_sha256": "259b0bca3c6d40f0f9b7caff9a36648ec79ba463aca7b1f9f37f0daa5b6ee543"
+    },
+    ".dsh/skills/rust-skills/rules/api-from-not-into.md": {
+      "role": "index",
+      "sha256": "1480ee591d248f058dafdeeaa3aa198415ac57003a354e9b239d410bf651c8f0",
+      "size": 3541,
+      "normalized_sha256": "21baad5a4fd92743b91c93f0f63eb02aba768a133e90e8257c38f251a8a444e2"
+    },
+    ".dsh/skills/rust-skills/rules/api-impl-asref.md": {
+      "role": "index",
+      "sha256": "942869169062027d6ab6f70703ce2d52c8be89bb76bf843cd0a1120688a5539e",
+      "size": 3681,
+      "normalized_sha256": "5b6768f706333dc6f58709f65160683cda564de0455a7c951a1d3454d89686e7"
+    },
+    ".dsh/skills/rust-skills/rules/api-impl-fromiterator.md": {
+      "role": "index",
+      "sha256": "f23325d3a0dc3f4742dca30e22d3f0c57b3eda44c3aab87d8b97757e603d2a03",
+      "size": 3602,
+      "normalized_sha256": "cb8da222b375e0ef6f1919d4d2edb1f43acf015130ae586e8de8a43c2d710bae"
+    },
+    ".dsh/skills/rust-skills/rules/api-impl-into.md": {
+      "role": "index",
+      "sha256": "7003520e83537a64f88e2975ae8d410d0d87b66a0d573ad6bfab8ea224649305",
+      "size": 4254,
+      "normalized_sha256": "f33eb54c4637184b79bab795a3e6c038cb671b077d11ade768f3e316c8b4d778"
+    },
+    ".dsh/skills/rust-skills/rules/api-must-use.md": {
+      "role": "index",
+      "sha256": "31d98bbd3e68ab1778d2097c8303581cfa80193135d1a7e0f46e6ef42e432016",
+      "size": 3704,
+      "normalized_sha256": "713d5fe166dfff22e893a821ec7ca2046efb8d54f12c45b1f9ae57064bb9eee2"
+    },
+    ".dsh/skills/rust-skills/rules/api-newtype-safety.md": {
+      "role": "index",
+      "sha256": "f7ca3fe49355b9a9890006b566c60b6c7edd873bd93d82de1174eebed593ab33",
+      "size": 4190,
+      "normalized_sha256": "3af731fed522a13c7b8db89f1b26f5c60f743547377480e08869fbd572db44e9"
+    },
+    ".dsh/skills/rust-skills/rules/api-non-exhaustive.md": {
+      "role": "index",
+      "sha256": "3a1215707f3e575cfd0ea038026d2cf9e17d72ca191f8c7a93d8fb50a4f6d4b3",
+      "size": 4152,
+      "normalized_sha256": "d8d168df3a1bd779bd693e2f5c7a4c277a5885e42da9c5e8cdcb69dc94ee38f3"
+    },
+    ".dsh/skills/rust-skills/rules/api-operator-overload.md": {
+      "role": "index",
+      "sha256": "3544c3cee1aca8047f8bc8759fca8033ec186058ffbefd178ee55edd4cb8d636",
+      "size": 3492,
+      "normalized_sha256": "0413c8eb0b3db94c4b710bed9e7c18e53d0fbdf6e8f987245bb7e36d95389bec"
+    },
+    ".dsh/skills/rust-skills/rules/api-parse-dont-validate.md": {
+      "role": "index",
+      "sha256": "8d1a1cb3098953cd4955bb08e779b547baa34146bdcc1c700731931d80a4b275",
+      "size": 4610,
+      "normalized_sha256": "d701e99ea070aff336113afd443a6f812e5e15319b8481754fe6137876515d8a"
+    },
+    ".dsh/skills/rust-skills/rules/api-sealed-trait.md": {
+      "role": "index",
+      "sha256": "60a1d82bd43cb97887949f7482e8a0538407dc65ec84fd1e93f36e952e75eafc",
+      "size": 4809,
+      "normalized_sha256": "9dce70e82b02d48e364bf23b601485a017f9ccdd969af48920e2906c74a40f3e"
+    },
+    ".dsh/skills/rust-skills/rules/api-serde-optional.md": {
+      "role": "index",
+      "sha256": "95096701c7d7a68f8b988c07df44d007bd52b36657f9ff256c5e07c4ff038cc7",
+      "size": 4489,
+      "normalized_sha256": "67f8c80bf848aebe20c58e72cc204f4587af374d208132bc03da9980e09bebd8"
+    },
+    ".dsh/skills/rust-skills/rules/api-typestate.md": {
+      "role": "index",
+      "sha256": "ab2c20513c7ff6da054ee4f4ea6554c577229be4450ca28c0abdc2b2fff6239d",
+      "size": 5191,
+      "normalized_sha256": "3db0bd349c144609dc61327029958244db2a16337780655596f9c4a04f7e4f2a"
+    },
+    ".dsh/skills/rust-skills/rules/async-async-fn-bounds.md": {
+      "role": "index",
+      "sha256": "c145c90bba125d4e7f9e0334a161311569b3b9108869b9a6cb977a28fe5d4e8b",
+      "size": 3555,
+      "normalized_sha256": "376fcab276d65b81aa8a9300b1149b03947153377227e85c6c1f21de9a1421b9"
+    },
+    ".dsh/skills/rust-skills/rules/async-bounded-channel.md": {
+      "role": "index",
+      "sha256": "ab18a52d372ef08ea64047a688abe3bcdc2402c1d65cfe8e0fa21711acef905c",
+      "size": 4783,
+      "normalized_sha256": "99e2fbafa1f88fa55de2e37e34c8d8cfc26eed3c9e4136f9a1d8480c0d901e68"
+    },
+    ".dsh/skills/rust-skills/rules/async-broadcast-pubsub.md": {
+      "role": "index",
+      "sha256": "73f623d4fced824cec5c56126c0c19e419ef20b199cc40d79339c0cb52825ed1",
+      "size": 4334,
+      "normalized_sha256": "60ec09e2fbcc1aa3a3a09337147e813ac2d1743a5cc768c16848efa90fe77786"
+    },
+    ".dsh/skills/rust-skills/rules/async-cancel-safety.md": {
+      "role": "index",
+      "sha256": "c4420476d87ad99ef34f4458a7ab45f875d4d637fde3ebe7fc2dfc6864cba8cf",
+      "size": 4550,
+      "normalized_sha256": "bc86cde4fa4c70562cdf3c456331ce76d07f785286896f219074e2feba4689e4"
+    },
+    ".dsh/skills/rust-skills/rules/async-cancellation-token.md": {
+      "role": "index",
+      "sha256": "4e0c92e8e1837a4a4d8a9aaf89d016525af2db1a6a132681ed19cbb64f8375d0",
+      "size": 5116,
+      "normalized_sha256": "5c64c67d952470e61fedab7fb2d78e58b0422fb3b4d365570a2ebe903e27c5c2"
+    },
+    ".dsh/skills/rust-skills/rules/async-clone-before-await.md": {
+      "role": "index",
+      "sha256": "3e5ec9fde99bfb2088df6e2698b39fc9791cc8284469473bd1729997e4fd2e15",
+      "size": 4250,
+      "normalized_sha256": "0b18c24466d6394fb0800e25bccd2ba9d4f09f8a2e805061eca125bf6fb5e686"
+    },
+    ".dsh/skills/rust-skills/rules/async-fn-in-trait.md": {
+      "role": "index",
+      "sha256": "f84e5f4379bafd1e21b623bfed59c40ba1c9e16e3517cd213da64e324df73b0c",
+      "size": 3796,
+      "normalized_sha256": "ad92f77e431f6e0e825755b9f334c83cba7e4c7709e456d06fd173a042b1a4c3"
+    },
+    ".dsh/skills/rust-skills/rules/async-join-parallel.md": {
+      "role": "index",
+      "sha256": "2a4a2b57cab10003547b1e5619e5ebdd8b38a683b5cd267aff1f41acb5df6fbd",
+      "size": 4261,
+      "normalized_sha256": "a2beabe51163a6780241a675f4c54b02629ae6e6cf319ac243741d2abeb5abb8"
+    },
+    ".dsh/skills/rust-skills/rules/async-joinset-structured.md": {
+      "role": "index",
+      "sha256": "a3854746c5966016e4bc90d7d201b8dc533f33343c4b72ff4bc0eb719627112a",
+      "size": 4815,
+      "normalized_sha256": "10d2eeed25d370b002741d9b14914ff2dd3c5deae1d214c704aa2867a563c1d4"
+    },
+    ".dsh/skills/rust-skills/rules/async-mpsc-queue.md": {
+      "role": "index",
+      "sha256": "aeec6b8b1b37aee1ab7989a4fe3b0e2d834c559b43216c7134ed999cf8593d22",
+      "size": 4186,
+      "normalized_sha256": "bb53b571f6bded40ef69c1b8612950b8c67a1539b0fbf83d90d01df8d7e14aa6"
+    },
+    ".dsh/skills/rust-skills/rules/async-no-lock-await.md": {
+      "role": "index",
+      "sha256": "047e865a9fa4866a36543dc6509e8357c2fcc16877b1a8a73d3b626be9c9fa76",
+      "size": 4212,
+      "normalized_sha256": "c83093b164ee511801dddbe5d1297e9ef0e73ccecdbc7c835d5d356078676196"
+    },
+    ".dsh/skills/rust-skills/rules/async-oneshot-response.md": {
+      "role": "index",
+      "sha256": "9a7a83b107d1fc3533ef951cabdc0b2e5c999455970efc879610e76f5fb0cfac",
+      "size": 4758,
+      "normalized_sha256": "7ea9db323cf845435797ed4ed07da7033916e5579ae74e3343ec267ea9e2eff7"
+    },
+    ".dsh/skills/rust-skills/rules/async-select-racing.md": {
+      "role": "index",
+      "sha256": "b60587e3ecec80969fbff2c8bc4c1560eca1e871ab2e9897362aa772029d0403",
+      "size": 4871,
+      "normalized_sha256": "27000a7081eb0fc396ac03f031466bfe835d96d017f87c9af28d682d4c18b036"
+    },
+    ".dsh/skills/rust-skills/rules/async-spawn-blocking.md": {
+      "role": "index",
+      "sha256": "10233bdedca4393aeaeda94082a00f5968d339338be1b351bf4a53b13886401e",
+      "size": 3871,
+      "normalized_sha256": "398a926fe15f08ae831d4058695e4910c624460d7262bd6d6248f517eabea51b"
+    },
+    ".dsh/skills/rust-skills/rules/async-tokio-fs.md": {
+      "role": "index",
+      "sha256": "e9e20fe4602da9055fa6b6469b7a81ba44ca4a0485fa6ecb60a95f9a00a5e37a",
+      "size": 4342,
+      "normalized_sha256": "29ee1a563ee1c204e6240074c2542b8dceba8fa08e51fb0abb06ce3649f6b4f8"
+    },
+    ".dsh/skills/rust-skills/rules/async-tokio-runtime.md": {
+      "role": "index",
+      "sha256": "00d4b35b10ee85162124ca2b2c6c3fcf1b26aca07b85a79ee65b968540ec97f2",
+      "size": 4751,
+      "normalized_sha256": "fbdfd8a78e12df7f7cb724a7992e4ac20628fd72a9ce926021d7acdddb8813b6"
+    },
+    ".dsh/skills/rust-skills/rules/async-try-join.md": {
+      "role": "index",
+      "sha256": "3723091d51474722e64eea1493c755dc240d31290366c4f5f16616b67c451108",
+      "size": 4601,
+      "normalized_sha256": "95802f2aeee7dc96555db783b826fc0df69a1d828257857e254b542dde330f51"
+    },
+    ".dsh/skills/rust-skills/rules/async-watch-latest.md": {
+      "role": "index",
+      "sha256": "81fc6edb6e4fc4136f35214d26caaad2012437e5b4e96221f2090b5b26f13927",
+      "size": 4812,
+      "normalized_sha256": "b6fff522604f17454a73b696fe22292a96aa357866a683552b01725940778837"
+    },
+    ".dsh/skills/rust-skills/rules/closure-disjoint-capture.md": {
+      "role": "index",
+      "sha256": "44a4f602ec54555b685e4539247c890b84563ebd3937bc198940c4f50ef30bb5",
+      "size": 3675,
+      "normalized_sha256": "14058ce4714e4f7758024c9736af13ce476d5cce74f90f71e3c5b3254e8ff60c"
+    },
+    ".dsh/skills/rust-skills/rules/closure-fn-trait-bounds.md": {
+      "role": "index",
+      "sha256": "19f0d23ef1574b5f43e1bb2c8c230c2f57e47aef3761fb6617ecf138357023d0",
+      "size": 3020,
+      "normalized_sha256": "adfe85d835223da1f0934e94a31259f13b22b5ede93ade6b0292fd3d7c4f8559"
+    },
+    ".dsh/skills/rust-skills/rules/closure-impl-fn-return.md": {
+      "role": "index",
+      "sha256": "2329b7a78e6f4ce9147a5068d54fa1707180238311a88d02a132c81bf10ed749",
+      "size": 2963,
+      "normalized_sha256": "66b5ed8a8d45ac65a5cb1b2d0bb36b731b2b2cc5909ddf5fc84f03fcd8e10162"
+    },
+    ".dsh/skills/rust-skills/rules/closure-move-capture.md": {
+      "role": "index",
+      "sha256": "79e8a13a3ff3510a5fc5c4cf012c3a9651c8dac9efa30a849d553f45c7a10e23",
+      "size": 2990,
+      "normalized_sha256": "e6edf52ec7955b4719cd9bd19ca55593b185bafdeb82390196202b9df71f5902"
+    },
+    ".dsh/skills/rust-skills/rules/closure-static-vs-dyn.md": {
+      "role": "index",
+      "sha256": "fd3f2cbaa1eef225b86611be55063ede8fa2f16f2ff5451648af62d6451d7595",
+      "size": 3367,
+      "normalized_sha256": "c1dcc10f8358580a76248f0e9950c20572aa3e77b8fe3ce07d737915c4813f72"
+    },
+    ".dsh/skills/rust-skills/rules/coll-binaryheap.md": {
+      "role": "index",
+      "sha256": "5cc18fcb15b1fda0b2a4e29db2cd06d19e5a1a13cc17de5fc502ebc638362e60",
+      "size": 3702,
+      "normalized_sha256": "d45bb133abf0e9f1a1526e72e3e157909c0ddb319f749b1643f7eee0ed909544"
+    },
+    ".dsh/skills/rust-skills/rules/coll-map-choice.md": {
+      "role": "index",
+      "sha256": "fc37729f1e9f15437edf0d70c246a03bacd9eff91ac849f36bfae906cba034d4",
+      "size": 3816,
+      "normalized_sha256": "7854a0470c0dc09e48a15eaba629144e3605cc00341e70821415c101c0b72cf8"
+    },
+    ".dsh/skills/rust-skills/rules/coll-seq-choice.md": {
+      "role": "index",
+      "sha256": "fa2ebef1ed7d6be6551799a05cce72f9991005cd4644c3c5177e33698bf19967",
+      "size": 3072,
+      "normalized_sha256": "8ed03c3f481148712dd3268ff79c612221efa5bf1a0f30f85c383bef4fdd9eca"
+    },
+    ".dsh/skills/rust-skills/rules/coll-set-membership.md": {
+      "role": "index",
+      "sha256": "b6607932ff3774ab2c9fe3f66efa40f8093d7e58d70753cc960440670d04a187",
+      "size": 3296,
+      "normalized_sha256": "b645928c78212e1dec8b0b15a0be0559fbdf923eb3b6e270343450cc2c8631d6"
+    },
+    ".dsh/skills/rust-skills/rules/conc-atomic-ordering.md": {
+      "role": "index",
+      "sha256": "48a697cd174d9fdb39c1b1c78bf95c26f5409f236bd8f8965e90900aa27d30f6",
+      "size": 3691,
+      "normalized_sha256": "261df660bde33ab0c76ea6d73abaec3ee1525822c05c02fde375a725d562bdde"
+    },
+    ".dsh/skills/rust-skills/rules/conc-rayon-par-iter.md": {
+      "role": "index",
+      "sha256": "52f4367c6c0e77ae964d06af8a6877bb74dce1911269558888c5ea0f524a22db",
+      "size": 2534,
+      "normalized_sha256": "cc7bff57ccbb530e6dbdca607fc0dd048bb42abb11890971252f68037f0b27a0"
+    },
+    ".dsh/skills/rust-skills/rules/conc-scoped-threads.md": {
+      "role": "index",
+      "sha256": "07fc7aee3d657130d4cdd4fe07f223e1d5291a805a49bdf77f82ac9d9d0773e0",
+      "size": 2878,
+      "normalized_sha256": "4b19dcecc0d54989c9892b1d9cf5df66518aa6cb7eebea62ff69e75db313205a"
+    },
+    ".dsh/skills/rust-skills/rules/conc-thread-local.md": {
+      "role": "index",
+      "sha256": "4b358d09c8e600b690ad3e24c2b07a5637c68b29cdc3f6b31d8227db8dffa1d0",
+      "size": 2718,
+      "normalized_sha256": "bbbb870a59f85af120888692c4f44592d912fc92b4380f82fda9c2706c8bd86c"
+    },
+    ".dsh/skills/rust-skills/rules/const-block.md": {
+      "role": "index",
+      "sha256": "499a6444be4bb909d1b3e5f978354b30847064582f966de06d431ce790cf5fbc",
+      "size": 3039,
+      "normalized_sha256": "8f78ce809fe59ba8b9f5a452ba100566fbd35c64aebb137373afdf762a1a3cfb"
+    },
+    ".dsh/skills/rust-skills/rules/const-fn.md": {
+      "role": "index",
+      "sha256": "2db2e2ad331f98fe64ad38be497611f8bb1f3d2fa757bd073b9a33eeddd5dcc9",
+      "size": 2249,
+      "normalized_sha256": "eab5b82ee3c486a9b26cd5a377dda6f93cb867226f8448e48e80b3441584774c"
+    },
+    ".dsh/skills/rust-skills/rules/const-generics.md": {
+      "role": "index",
+      "sha256": "03eb8c3b356b19cf533865ce3e15f2c795f4dcd2694c0c13424fe58ba6c38cae",
+      "size": 2874,
+      "normalized_sha256": "d999587775d4f7b73de55e834eb6c96fff8e6dc714173fab520a275369b0a291"
+    },
+    ".dsh/skills/rust-skills/rules/const-vs-static.md": {
+      "role": "index",
+      "sha256": "09465597c9d54be299eed57a5795c33c7a5c6722294e97f8e56daba0ac1f6ca7",
+      "size": 2907,
+      "normalized_sha256": "cc528ca115cc4bd3fcf1d5b82cabd04ba42eb5252d3f0033492017b27155e752"
+    },
+    ".dsh/skills/rust-skills/rules/conv-asmut-mutable.md": {
+      "role": "index",
+      "sha256": "2da78b7ac3cc78161dcca12884d2aabf1991a3e742a8732f3814ccba1c43240a",
+      "size": 2218,
+      "normalized_sha256": "5da738305828c80e6ea3e37ab1977a15f4ce16b72b9742353ffe2654a130c75b"
+    },
+    ".dsh/skills/rust-skills/rules/conv-fromstr-parsing.md": {
+      "role": "index",
+      "sha256": "dfda9b37ae044b4ca893671a56b53af71699adb5e47d5370ee186f3cac361d90",
+      "size": 2673,
+      "normalized_sha256": "3760a9495cb1d5ca3c1c68ec005ac335a29bf00ea6e9785cd02008c445f8aa24"
+    },
+    ".dsh/skills/rust-skills/rules/conv-tryfrom-fallible.md": {
+      "role": "index",
+      "sha256": "ada58e6a10644fb499db11dcfd7e0b3255d63057dc3d5ee87556b1fc54955f74",
+      "size": 2421,
+      "normalized_sha256": "2f781769f99e16e32b79d2e61542b5696a73b4c142c14c6bb091a09d45ed493f"
+    },
+    ".dsh/skills/rust-skills/rules/doc-all-public.md": {
+      "role": "index",
+      "sha256": "99a2657716b46e96734f58287e8ad55cbd073e709b1c80b75dcad4f0dd0baffd",
+      "size": 2843,
+      "normalized_sha256": "3ce223d43e18875184d0b8ff7c97cb31ef174934660c8e2cf976e9736d2221b5"
+    },
+    ".dsh/skills/rust-skills/rules/doc-cargo-metadata.md": {
+      "role": "index",
+      "sha256": "f59dea2994967bca489aee9ed94683823cf0d9985cc61ec3bb8d7a4cabdb7a3e",
+      "size": 3383,
+      "normalized_sha256": "62d0946aa9085af41b4054176b9815ad39eec2126cab8d71dd7ece6e3c3cc948"
+    },
+    ".dsh/skills/rust-skills/rules/doc-crate-readme.md": {
+      "role": "index",
+      "sha256": "13b2ec7028edf9b782fe1da8e408aedf8fc65f46a6ace582a60423577d7eae44",
+      "size": 2212,
+      "normalized_sha256": "959b42ee2632de15edfab908a466965979d0b037f0c13ecb776cf280bd5a972c"
+    },
+    ".dsh/skills/rust-skills/rules/doc-errors-section.md": {
+      "role": "index",
+      "sha256": "de61214d32794f6fe5cd32a31b9ab7c8a96d7c6e46d4bcb2af6aff1daf85960c",
+      "size": 3441,
+      "normalized_sha256": "32bff3e8f672cd812c6237565cbf73efa84b758e66b248e9815754426b7808ba"
+    },
+    ".dsh/skills/rust-skills/rules/doc-examples-section.md": {
+      "role": "index",
+      "sha256": "b636196d9f46171de5a531a63d8078ed166d0f5d7c1f1d3878f195fa073880c0",
+      "size": 3086,
+      "normalized_sha256": "e3b614a89fedf4caf16b33925e86ebbbba37c4d2e723ac9cceb1a82fb9a40077"
+    },
+    ".dsh/skills/rust-skills/rules/doc-hidden-setup.md": {
+      "role": "index",
+      "sha256": "1ea01b1adfbf39a8f4a38aed0b0ba113b396e7d1ea2b351ac3b5ee118403f7b7",
+      "size": 3780,
+      "normalized_sha256": "dfa8a8c02094019919742bbb5ffde5f62908c2043f31f04bf47487363380f306"
+    },
+    ".dsh/skills/rust-skills/rules/doc-intra-links.md": {
+      "role": "index",
+      "sha256": "4722261be6228345022317e025e09d3db711fbf931406cc62498f34f3ddaebbf",
+      "size": 3561,
+      "normalized_sha256": "acd7610ae0fc1aa3e57ca95927397bebc17c5dd5d21764d9137d9cd8cfee98dd"
+    },
+    ".dsh/skills/rust-skills/rules/doc-link-types.md": {
+      "role": "index",
+      "sha256": "28c457057bb154074be8125020dbacb7d2b2bc74f6015f046918fea553db7c9a",
+      "size": 4056,
+      "normalized_sha256": "04e310bfbc9eddc87663d81a6d14e2aaf59f657155a292e53ab7cbdcb4c9a8ff"
+    },
+    ".dsh/skills/rust-skills/rules/doc-module-inner.md": {
+      "role": "index",
+      "sha256": "fabfdc1ee6e297064140142a6028bc8aa55ab5cac47d64ad14e6fb6cb2601a90",
+      "size": 2968,
+      "normalized_sha256": "c29a2a6eaa504274a7b82568865a491ae13e5180743c955c95b785227a09dc0c"
+    },
+    ".dsh/skills/rust-skills/rules/doc-panics-section.md": {
+      "role": "index",
+      "sha256": "39b96245cb4c794a14740c622c9e84639d12f6117225e836e27641c1a6671039",
+      "size": 3299,
+      "normalized_sha256": "e59101cdcfb1b2bb7f03bff86d40a18b4fdbd4d8ff86ec6149ce018f6d93908f"
+    },
+    ".dsh/skills/rust-skills/rules/doc-question-mark.md": {
+      "role": "index",
+      "sha256": "ef08f82d4d655affefaf9e1f10556ab4a4e5427c1ed394bb0849aaa2deae8dc1",
+      "size": 3363,
+      "normalized_sha256": "a621c16fa2d53c9b582132cc1267ff10157260c9fe67f66a69acf6d0e268b470"
+    },
+    ".dsh/skills/rust-skills/rules/doc-safety-section.md": {
+      "role": "index",
+      "sha256": "958fe38fe5d18085f159e18c080fd4a2adaf127ac0eec42c076ac493263253bf",
+      "size": 4056,
+      "normalized_sha256": "9f3da270ef3c7e55392bee3372c567f079e6a3ec0b930f89e66ca1ba4123d436"
+    },
+    ".dsh/skills/rust-skills/rules/err-anyhow-app.md": {
+      "role": "index",
+      "sha256": "1f5d1fa82695bc101473d064d7ceac38a3bec0c5399018016a08302d51d69189",
+      "size": 4445,
+      "normalized_sha256": "9ca754780a6c8cbfffeaab761f23c58621bbddc23f907fc0b57e1e25f597c831"
+    },
+    ".dsh/skills/rust-skills/rules/err-context-chain.md": {
+      "role": "index",
+      "sha256": "8e6366a1ca24890bdc010e1dd50bd32924d41134608e384d464b8657d753b72b",
+      "size": 3682,
+      "normalized_sha256": "7485b4ca0f82bdf031aac3c3e20d289ce4110fc92ba8096d482a9eb9c2d3ac41"
+    },
+    ".dsh/skills/rust-skills/rules/err-custom-type.md": {
+      "role": "index",
+      "sha256": "b09106c2b4ae55a18be10a24687b8154201f1e04d878c5f239fdaae79961d329",
+      "size": 4232,
+      "normalized_sha256": "20fdae092f4b86a10b8c140801950f1ee39ffc76340a860697a98fa979c2aa25"
+    },
+    ".dsh/skills/rust-skills/rules/err-doc-errors.md": {
+      "role": "index",
+      "sha256": "5f3d6c3abbc85a3b819d2087b0b4897842898848349cebca7c9a868b34ae4dbd",
+      "size": 4073,
+      "normalized_sha256": "18025097119b1dd1986f43e870c6f44296a1a54d955f7b26c770f070cf8e4599"
+    },
+    ".dsh/skills/rust-skills/rules/err-expect-bugs-only.md": {
+      "role": "index",
+      "sha256": "471b92f9a6aed5bb5ad34b83500576b83c3414b165bcccec8befd37d689535a9",
+      "size": 3962,
+      "normalized_sha256": "b8f1b475e7f016c679ea5c64bfb8c70dddf302e5c2838554b31c8ba924eb5a7a"
+    },
+    ".dsh/skills/rust-skills/rules/err-from-impl.md": {
+      "role": "index",
+      "sha256": "aff5befd4f57d714618733308b45dc42098a24b11eb4c1b770541a0b462363ca",
+      "size": 4108,
+      "normalized_sha256": "a828e81c58f7bc67721e01af7c8bd49996ab610f59ea7703351b35dafff36f6a"
+    },
+    ".dsh/skills/rust-skills/rules/err-lowercase-msg.md": {
+      "role": "index",
+      "sha256": "a0fa3590b0eaf52f65392964b00b0422a2db99f61af1201cd49fb8c37d951b23",
+      "size": 3489,
+      "normalized_sha256": "99eae0ae9d567f2b32c739648b58dd8f648833ad26f56d6d2cbc37c5eba778e4"
+    },
+    ".dsh/skills/rust-skills/rules/err-no-unwrap-prod.md": {
+      "role": "index",
+      "sha256": "32a10b6eea88dded632b75dd469c02466c4d8c26fddd4a9cf319d9e44c01999d",
+      "size": 3324,
+      "normalized_sha256": "b8ba7f86cdf68b408cf22218af2420b52279999ee15e946ca0f25b7f49ad6671"
+    },
+    ".dsh/skills/rust-skills/rules/err-question-mark.md": {
+      "role": "index",
+      "sha256": "a6c412d50ebf1d89df55701af543117033f36a29e8f51c65c16a8fc33eb3619c",
+      "size": 3534,
+      "normalized_sha256": "d1b8ad7240c10d8683ba26140fc911aa694c260705a8b2f5ca6add7a60a74fdd"
+    },
+    ".dsh/skills/rust-skills/rules/err-result-over-panic.md": {
+      "role": "index",
+      "sha256": "0ea5704f1aa8717c41934fce42e7945ae3260cd1f52f1af24ffea6bc1acb2790",
+      "size": 3612,
+      "normalized_sha256": "63d66e846d4f783feb21eaffc5b258691dbecd341b535180bc4ade144f28c15a"
+    },
+    ".dsh/skills/rust-skills/rules/err-source-chain.md": {
+      "role": "index",
+      "sha256": "0dde7faf9c499d1f15622c43e2244d4e078def1a52a78c145c637a63d8ac9dec",
+      "size": 4048,
+      "normalized_sha256": "31e3f29a51794c8f06621b9c073093cc3938771aedc7cdb4983b39fe32fb893e"
+    },
+    ".dsh/skills/rust-skills/rules/err-thiserror-lib.md": {
+      "role": "index",
+      "sha256": "4905b6c356b18c9df42091cc00a2513599e274b5a6c9d22b33d340400b272d78",
+      "size": 4358,
+      "normalized_sha256": "fd6c025b335b3a8cbef8390d9d606eaeab584c8f81e4f088f24b33f0e266e866"
+    },
+    ".dsh/skills/rust-skills/rules/lint-cargo-metadata.md": {
+      "role": "index",
+      "sha256": "e1ccc1031767fd2da1304a76e350fc75e19466778c6e0a3fe25de562cd6f6647",
+      "size": 3018,
+      "normalized_sha256": "b83fb6f6304a9614720223fddccf46ace83653348e7b7cf815fb0b32a26e31d3"
+    },
+    ".dsh/skills/rust-skills/rules/lint-cfg-check.md": {
+      "role": "index",
+      "sha256": "4988211b3935cd08c8e0950d4a37dc176aed0b1530d8f624d8d3f28409f46eb8",
+      "size": 2544,
+      "normalized_sha256": "fcdbea5c7f2a7f4318a815fc292e69d506e694a084e48d363487e33b0dc29efb"
+    },
+    ".dsh/skills/rust-skills/rules/lint-clippy-nursery-selected.md": {
+      "role": "index",
+      "sha256": "61ca90f496f311197ea162558469d6fc5d5a0949ea0b424acf4b7cbbce3ece88",
+      "size": 2740,
+      "normalized_sha256": "761e2aac35e778c92ac2dbc8740bd6509904d17743b7beeb1f430fe2072968e6"
+    },
+    ".dsh/skills/rust-skills/rules/lint-deny-correctness.md": {
+      "role": "index",
+      "sha256": "9c7a3eed049fa4d62443c048f74403a3108c13fa43239db5a926590c713471f4",
+      "size": 2396,
+      "normalized_sha256": "4c7c029fe826c7a3bc8cd01d6ec22ea63ce0393c3cc679b4033662010a49581f"
+    },
+    ".dsh/skills/rust-skills/rules/lint-missing-docs.md": {
+      "role": "index",
+      "sha256": "a8d44eb630560456228cafb2b1c6232ca2e81dca15430acfb16a56ac12f395d2",
+      "size": 3158,
+      "normalized_sha256": "ab1cd1aee1a3af6537ca081f1cd3e5ab25871808ee2762a9b5bd8fd154451dfd"
+    },
+    ".dsh/skills/rust-skills/rules/lint-pedantic-selective.md": {
+      "role": "index",
+      "sha256": "ae780028a9ffb23100546a496545f280603d92e0925b60f677be702f6d500cb0",
+      "size": 3296,
+      "normalized_sha256": "e421399a4671021725d1cb5913d585fb84e646ffa056a5627c7df1e2ba0293fa"
+    },
+    ".dsh/skills/rust-skills/rules/lint-rustfmt-check.md": {
+      "role": "index",
+      "sha256": "ed502b71261dff75e9094bfd9f61a12445ab725dd127ec16346d89d3199196e0",
+      "size": 2948,
+      "normalized_sha256": "487bd0343b985e0b8791140b01da95b9fb236831535e64acaaf6bc1712626c9f"
+    },
+    ".dsh/skills/rust-skills/rules/lint-unsafe-doc.md": {
+      "role": "index",
+      "sha256": "6d1100b6d048f622aa6e3b8cac14ecc5bb891f7b03c1d2f9b7e3b7e3312e7eff",
+      "size": 3310,
+      "normalized_sha256": "57db005a20a1f5f50bfe84a170d2060b55bf6249c22ba53ffb28f7568f9351f8"
+    },
+    ".dsh/skills/rust-skills/rules/lint-warn-complexity.md": {
+      "role": "index",
+      "sha256": "87a9d908a2c32d22a92878d3df44b9a8325526fbfd326e307208b2dabea5249a",
+      "size": 3161,
+      "normalized_sha256": "fde6ab1d1cf1ea3d3375c29ce305e5b1eaa585c52e57d514549c5f560393476f"
+    },
+    ".dsh/skills/rust-skills/rules/lint-warn-perf.md": {
+      "role": "index",
+      "sha256": "4de5edebd817833640f98b0daef72d4a425b852a24b5cd2fa0b326b6d2c08d10",
+      "size": 3372,
+      "normalized_sha256": "28711ddf0e20df6b304a40955a6526f917bb3e59754f44145ca4e8b1346f829e"
+    },
+    ".dsh/skills/rust-skills/rules/lint-warn-style.md": {
+      "role": "index",
+      "sha256": "ff268c24cc2c7955583bc1f9d55335ee3cf3bc59bed792a91af095294de3a4f9",
+      "size": 3079,
+      "normalized_sha256": "215b87b1262d7616cf43d4ce76f3b4dbc0ff204aa31591fb6b953f07021bd209"
+    },
+    ".dsh/skills/rust-skills/rules/lint-warn-suspicious.md": {
+      "role": "index",
+      "sha256": "3b0939b6a824b803a1712db3687b209821792e2c3e00483c473258518569128b",
+      "size": 3109,
+      "normalized_sha256": "bbf029550c6f5f3ba426959cca73799616aa9a12d24af62813cd877d55e9bc38"
+    },
+    ".dsh/skills/rust-skills/rules/lint-workspace-lints.md": {
+      "role": "index",
+      "sha256": "e6a4c2ae3df609fbc5dbd20f452d81f97da9fda35675d79b814c118dec684b75",
+      "size": 3816,
+      "normalized_sha256": "6fc509559776fe6b97f34408e919bed7e68daeaf56adac8e4bf0b8038258f5ea"
+    },
+    ".dsh/skills/rust-skills/rules/macro-export-crate-path.md": {
+      "role": "index",
+      "sha256": "d5b09d8ce87623a57b8a7cb421818646e41a0fc0948870b27569d4d51268d8c7",
+      "size": 2705,
+      "normalized_sha256": "74008ade9c0cb83f2b90cad5cc122927b301d4f16bce208767d3a9e58d2a5d9b"
+    },
+    ".dsh/skills/rust-skills/rules/macro-fragment-specifiers.md": {
+      "role": "index",
+      "sha256": "e4390cb78913c13d7df57831d3c20b3fdde4f4c74e9511522ca74cf848a287c6",
+      "size": 3084,
+      "normalized_sha256": "e9f4ce18312a94a8d3a2b5b93e5652f3fc21396dfc38e14b47f9eca25de3e19a"
+    },
+    ".dsh/skills/rust-skills/rules/macro-prefer-functions.md": {
+      "role": "index",
+      "sha256": "abe05c7957268204265750b8cd529bf22ddd5ae420fc62394999d5809503a35d",
+      "size": 2193,
+      "normalized_sha256": "f8f89e40a69bc547311708e35ea42fcf9e250cd3ece1791dd37089891a596d0a"
+    },
+    ".dsh/skills/rust-skills/rules/macro-private-helpers.md": {
+      "role": "index",
+      "sha256": "499d93ce5adbe3723edc6761ad55e2d49f7d2aa81386f7a4e193c662b764d427",
+      "size": 3133,
+      "normalized_sha256": "73cace5447b2083f521cce08aa64b52224650fb88d7b37f0a0b5070fd6f7af2e"
+    },
+    ".dsh/skills/rust-skills/rules/macro-proc-error-spans.md": {
+      "role": "index",
+      "sha256": "96618067d1d4a931247c33a2363aee1ad1ed330ce7129fa8323771f80157d9a5",
+      "size": 3934,
+      "normalized_sha256": "6e73e2ace34efb58f48feca16c7a23b788d42c4d084b5c8fef708641b2353842"
+    },
+    ".dsh/skills/rust-skills/rules/macro-proc-syn-quote.md": {
+      "role": "index",
+      "sha256": "d6642b53c372201232080d8442ac57acf8529a27cb64fe96cd683f5333149d7b",
+      "size": 3647,
+      "normalized_sha256": "a880da74f52469d92e6f71262772d2852c98675227758c9586d3eff19af53d02"
+    },
+    ".dsh/skills/rust-skills/rules/macro-proc-two-crate.md": {
+      "role": "index",
+      "sha256": "dde4d7fa007689e746caca8738738f12a9378994dfdeb5c955ae7a80de08edf2",
+      "size": 4027,
+      "normalized_sha256": "e30f2e5034b63a1c9e1fa17e61246551fa67d28f5ff901bf4128bd99a59c980b"
+    },
+    ".dsh/skills/rust-skills/rules/macro-rules-hygiene.md": {
+      "role": "index",
+      "sha256": "f86865085aa2a9ed0be72ba11322c741405bbe34a092dbf5afea2d68235c901f",
+      "size": 2951,
+      "normalized_sha256": "acf4977b06bea149a042e11f4a8263f1b8a3c81d4e9e3206a5a6a4e571b691c4"
+    },
+    ".dsh/skills/rust-skills/rules/mem-arena-allocator.md": {
+      "role": "index",
+      "sha256": "afdb5b4428e00179e78ba363b25028b98f651bf261edb129b5891d62a1f5e925",
+      "size": 4726,
+      "normalized_sha256": "3027217813a2d8a996591a96676abeefdff87a3462486316b58a54e621912f65"
+    },
+    ".dsh/skills/rust-skills/rules/mem-arrayvec.md": {
+      "role": "index",
+      "sha256": "e4e8476fe613accd18c80f72120e8098038eb8c5f3eb601610116957d2f09074",
+      "size": 3849,
+      "normalized_sha256": "8114ceb52948d2aad3e320c47a096f351dc24099fb514f79acb0fb1b8e332f82"
+    },
+    ".dsh/skills/rust-skills/rules/mem-assert-type-size.md": {
+      "role": "index",
+      "sha256": "99aa543dcc4b5180bedc8e13cd04a54f582f7e00ab9ce7360f42a74a5a5f84e4",
+      "size": 4042,
+      "normalized_sha256": "288396b8bd1324d71ab3304c12322d087a0b9db70de79949b4899e7dcb66334b"
+    },
+    ".dsh/skills/rust-skills/rules/mem-avoid-format.md": {
+      "role": "index",
+      "sha256": "e6fc0755c009e8452bd2cf6bdb5ec15f1351e060cf1860d8f94268245b0d9848",
+      "size": 3755,
+      "normalized_sha256": "73aeda367c72ab290024d38ce90cfef726500e9d548a854ec9b9a05579d2d325"
+    },
+    ".dsh/skills/rust-skills/rules/mem-box-large-variant.md": {
+      "role": "index",
+      "sha256": "fc75094bc3c3331059f0ec637c33c412c35bd3f3fe520dbd71efd0ab8770029c",
+      "size": 3973,
+      "normalized_sha256": "fd3a95b28488ba01475c9da9a5dd89cbba1124e3c394b45ffd0dcfebf3d47081"
+    },
+    ".dsh/skills/rust-skills/rules/mem-boxed-slice.md": {
+      "role": "index",
+      "sha256": "46e5a971d0cc85e719216596e8e2f118a65c93af2d097c2ef22621b98944dfd9",
+      "size": 3728,
+      "normalized_sha256": "1e8b1023efd305bbe2046cfc1c877b0cae1e7f06be00a05c76570576a8ac22b1"
+    },
+    ".dsh/skills/rust-skills/rules/mem-clone-from.md": {
+      "role": "index",
+      "sha256": "228f899b7c59a267da18c44f76b9140f030a96207eec452cac97e1c6abf4edc4",
+      "size": 3683,
+      "normalized_sha256": "48e93c36a55b0a4c801b621f951aa1102126f4e0bcac5ef8dad8405775d7863e"
+    },
+    ".dsh/skills/rust-skills/rules/mem-compact-string.md": {
+      "role": "index",
+      "sha256": "091304ac80672649c2cea618b41340928c005dc876a73b8672e516b37fa130a6",
+      "size": 3949,
+      "normalized_sha256": "a3e001e5cda9e4f8f9de8d1fc1857a299e9a7744b733bb879452f81d7217fb5c"
+    },
+    ".dsh/skills/rust-skills/rules/mem-drop-order.md": {
+      "role": "index",
+      "sha256": "aa44f40cf3686470731fbf257a5f81cd22836a182e048fa66e68935b75cb863e",
+      "size": 4709,
+      "normalized_sha256": "03828e4267fe3df947b8ae9bb7b16a067f6fcb68f1e3d115e209678833b22923"
+    },
+    ".dsh/skills/rust-skills/rules/mem-reuse-collections.md": {
+      "role": "index",
+      "sha256": "46c551e3a1f3d3d7605c51089c1568ff84d63775a5f9dd8cf25d751b55123298",
+      "size": 4492,
+      "normalized_sha256": "e930bc6b880a073141ab50dcb9af3181dd0e403a745b0558c584c246614e8a88"
+    },
+    ".dsh/skills/rust-skills/rules/mem-smaller-integers.md": {
+      "role": "index",
+      "sha256": "5168a9f6d86d1ed0eb7a7c16417bcd5ccfa3f0cd5aa85541348e1d26856cf428",
+      "size": 4154,
+      "normalized_sha256": "23723a89cbde43591708293f2459094069ca7751410ce42f7cc4102a721ab68c"
+    },
+    ".dsh/skills/rust-skills/rules/mem-smallvec.md": {
+      "role": "index",
+      "sha256": "e01028466b842fdf201d7426b1006a71fcc24111cd1c2ee546f611d1e755f836",
+      "size": 3590,
+      "normalized_sha256": "a0556de953d23a2f0670098c013550fb3290c2af9a7c807c1d5923a4ef310571"
+    },
+    ".dsh/skills/rust-skills/rules/mem-take-replace.md": {
+      "role": "index",
+      "sha256": "069aae600cd72af6e3c490245a09ad4474780eddafd685bd843cddaf9a667816",
+      "size": 3747,
+      "normalized_sha256": "d8c396f4acff5cf1e01d103404d2d5a5d2925373af5e1aba50b20e9ea38baa9b"
+    },
+    ".dsh/skills/rust-skills/rules/mem-thinvec.md": {
+      "role": "index",
+      "sha256": "71b544221bf4af33dacd05c3d90fae0ba2d1ecaa82b329f417273fa6f7a0df51",
+      "size": 3453,
+      "normalized_sha256": "50cf1f0cc9b78d2eb8bb48739cc05026176722e5f62b8b5aeb4fdb1de5f8a462"
+    },
+    ".dsh/skills/rust-skills/rules/mem-with-capacity.md": {
+      "role": "index",
+      "sha256": "9e5f776eb3d75dd6056d3f38e18fd676a467f63b4d611230ed373a5d8438b1de",
+      "size": 3992,
+      "normalized_sha256": "2bb5ff99287414a60458c687ef925d595414f07bbf26f3a3f5194107a4ac4478"
+    },
+    ".dsh/skills/rust-skills/rules/mem-write-over-format.md": {
+      "role": "index",
+      "sha256": "88c491a93fb06fc12459199e60a50e6b1aee8df6954ac93a3d07fe787ad0a445",
+      "size": 4572,
+      "normalized_sha256": "370491b9cd639f9d7d2e0a1e4fc58fe5e13cdd54b17750d45000885ac839b7b1"
+    },
+    ".dsh/skills/rust-skills/rules/mem-zero-copy.md": {
+      "role": "index",
+      "sha256": "de737052c3d001fe9ac8fd3481ffafb1948add1b904c2029179b0ac32bea2fdc",
+      "size": 4282,
+      "normalized_sha256": "0128bf291e401d615032c1c1c5543a3791dc63c249e800e71c2e2012a2681a13"
+    },
+    ".dsh/skills/rust-skills/rules/name-acronym-word.md": {
+      "role": "index",
+      "sha256": "30f76d85f4ca764cbcae1c5467bd886bba2afaaaaf80465fd0cc92479795e979",
+      "size": 2958,
+      "normalized_sha256": "adf757646953837175f3e8edf19359cb5bf648c534c8c1c04f998efde53ff786"
+    },
+    ".dsh/skills/rust-skills/rules/name-as-free.md": {
+      "role": "index",
+      "sha256": "9f51667db6c2f5acf0813798fa3c14cf3ed9ade2abc80a8ad5a5e1a898bade11",
+      "size": 2444,
+      "normalized_sha256": "62ab9a56b679a3352c3e1159d4b090ea0cd1a7b98d2699ba55069ad9b4116efe"
+    },
+    ".dsh/skills/rust-skills/rules/name-consts-screaming.md": {
+      "role": "index",
+      "sha256": "af856313d4202abd9377572a3797eb495727a23e89029172652600b457d4d273",
+      "size": 2349,
+      "normalized_sha256": "b3a94463e11d6bf4694848370bf019727120df003ef808ef79491e44e93ea844"
+    },
+    ".dsh/skills/rust-skills/rules/name-crate-no-rs.md": {
+      "role": "index",
+      "sha256": "5f17d8a75736f982e55f4870d32abbebb410ac46399b7e5d391b17603d24e242",
+      "size": 2141,
+      "normalized_sha256": "d2aaf1f2fdb570883146caf1599f1461d1227d72abe7dffe293dd6a71a68cad6"
+    },
+    ".dsh/skills/rust-skills/rules/name-funcs-snake.md": {
+      "role": "index",
+      "sha256": "b49d87f130b63540f89aa88dcda862c30bc3430d370c804b27cdb062ff594f48",
+      "size": 2057,
+      "normalized_sha256": "6f88da65a474590629b487474f7d16669e2bc85f42deec234bbb4561bce53c25"
+    },
+    ".dsh/skills/rust-skills/rules/name-into-ownership.md": {
+      "role": "index",
+      "sha256": "dad81dffa26df2d018eab5d2dd7d3776c4adcdd82d4041d96f49177a75b7238c",
+      "size": 2924,
+      "normalized_sha256": "fe5908c4ac4dd5a746c9433a168b850093a607d7b49e9d4fd1c18fa3732f757b"
+    },
+    ".dsh/skills/rust-skills/rules/name-is-has-bool.md": {
+      "role": "index",
+      "sha256": "7f27bd1dd809bd360b619038bac27bd81ab5e76b952834f0efe4f37b3c07f64a",
+      "size": 3367,
+      "normalized_sha256": "b6c6809beea29b05c0e6a2dd40b386c624bfa1427b5383d0bced556356b528d7"
+    },
+    ".dsh/skills/rust-skills/rules/name-iter-convention.md": {
+      "role": "index",
+      "sha256": "f7d76c9237984b10d73d7a1b4a5a281f71b8ff93e0e561092d8345c7d79e8e56",
+      "size": 3497,
+      "normalized_sha256": "c73310b518aaaf38384e8beaad5ed224eac3a88de2022bac771bbc66477aa324"
+    },
+    ".dsh/skills/rust-skills/rules/name-iter-method.md": {
+      "role": "index",
+      "sha256": "87e0c83a9d718fd38b558a9976c3c691a88cdb71ab5f44344fae11fcb4906e26",
+      "size": 3507,
+      "normalized_sha256": "ba0d5411ef4f07de3fa1e17e88ce39a4c9585971b894c2d817a2d025b7aae603"
+    },
+    ".dsh/skills/rust-skills/rules/name-iter-type-match.md": {
+      "role": "index",
+      "sha256": "48b26d63ee2f005047685854a0c80ec50622a4f763c02ff18c76c49dfefbda0e",
+      "size": 3790,
+      "normalized_sha256": "121958603d75c2c69e5aa74bd0fb729030e9832ee245007ee9667f0c9096072b"
+    },
+    ".dsh/skills/rust-skills/rules/name-lifetime-short.md": {
+      "role": "index",
+      "sha256": "6a1eb6d93db22ff8722fa4dc0a4fb37b4f73fda15b0a5b4147fef20c70ba5321",
+      "size": 2446,
+      "normalized_sha256": "6b41b7a418c68a79a8d013d4fdeb9a5141818f5d0d6231f163680f2bb0358423"
+    },
+    ".dsh/skills/rust-skills/rules/name-no-get-prefix.md": {
+      "role": "index",
+      "sha256": "d9be7970e9bc6ad7bb0b72a0f6552ac42be351c67e4da3a0e1bb40a49f0dcee7",
+      "size": 3271,
+      "normalized_sha256": "161062d503bfc0a54defa2c4e7ec12e204c866166fddd09bef0724a63b8bd277"
+    },
+    ".dsh/skills/rust-skills/rules/name-to-expensive.md": {
+      "role": "index",
+      "sha256": "4aa5cbd2580f06739ece384ddc66ec5c4fed38732575602242cdd9f2a6accfeb",
+      "size": 3116,
+      "normalized_sha256": "4f9fccabab1d14c4466c0430c2e6585db902696c4ada7c8e8dfc7b3241df3300"
+    },
+    ".dsh/skills/rust-skills/rules/name-type-param-single.md": {
+      "role": "index",
+      "sha256": "4bcdb708157d2dccf20d5c7fd0236fc69ec9b831b814da3251e7c508768a753b",
+      "size": 2439,
+      "normalized_sha256": "e1b5083bb60dc80ba2f1666ee303ddb57a6a160cddc1427a867362d727c0a341"
+    },
+    ".dsh/skills/rust-skills/rules/name-types-camel.md": {
+      "role": "index",
+      "sha256": "26d1f9abd5d8744f12e0b109cb449a0d47efdd24cf817cb8296a7b4525b08a56",
+      "size": 1863,
+      "normalized_sha256": "73321d6f5ed12a3ff23c5051e2faeb7e70ebf0446436c72d3f7862ec2f3b56ed"
+    },
+    ".dsh/skills/rust-skills/rules/name-variants-camel.md": {
+      "role": "index",
+      "sha256": "5e08f8878a205c53eb94c80e3c6950dccad038f642f3a41531bb0c15a33a5c74",
+      "size": 1915,
+      "normalized_sha256": "a113c2363310dafe26a45db0f0f4a3ff41cfb85ede8a99a19c8f51c6781778e8"
+    },
+    ".dsh/skills/rust-skills/rules/num-cast-try-from.md": {
+      "role": "index",
+      "sha256": "4eccdceae77748e3b3d7b80ee9ef1aac9a7ec2cd05b2f7d54c31e278d80949c1",
+      "size": 3249,
+      "normalized_sha256": "2cec97a24fbf09dba01cbc4cb5b7a904398439163bdbb1d407e536ebe9140195"
+    },
+    ".dsh/skills/rust-skills/rules/num-float-compare.md": {
+      "role": "index",
+      "sha256": "0c18a857ce966daab2ddc39069ba79ded205b3c0667d66f0f5735bf30f0b9f23",
+      "size": 3321,
+      "normalized_sha256": "0af0ed600acab59edfe8ff7f7a49eb0091d06ce581e051550fe33f7e4d50468a"
+    },
+    ".dsh/skills/rust-skills/rules/num-nonzero.md": {
+      "role": "index",
+      "sha256": "f712dcd2797f067fef3e4b588ed282bdb55e5cdf22fbd99835d2e2f50c1714a3",
+      "size": 3538,
+      "normalized_sha256": "66a09b6d3e59806e80c403aa76eb69c9a1f94614c0784756a6cabac68b30e1a9"
+    },
+    ".dsh/skills/rust-skills/rules/num-overflow-explicit.md": {
+      "role": "index",
+      "sha256": "312897c64c398320834291c616f8079d6bbb569204823d00dd55556053c7cbf2",
+      "size": 2846,
+      "normalized_sha256": "e472eefad4531bbacd02622af4904f3f903ed9f21761563b218cb6d41ba00cde"
+    },
+    ".dsh/skills/rust-skills/rules/num-saturating-clamp.md": {
+      "role": "index",
+      "sha256": "a9079dfbe867c6212a5065dedf0a7ce39602d20dd58e3c990cf23050241a646a",
+      "size": 3241,
+      "normalized_sha256": "13094dcb7e52a5136a459080f589799b20d75ebe9c5ca3a1137efc9a1a24e147"
+    },
+    ".dsh/skills/rust-skills/rules/obs-error-chain.md": {
+      "role": "index",
+      "sha256": "7bbd1701a8925d55c4b78e991a37adbb953aa5ed56a4ad215a1d73ef0a23a8c3",
+      "size": 3556,
+      "normalized_sha256": "bf9431c478a78c013b1f900f7e462747fac32aa80bb115044ba244765eec8507"
+    },
+    ".dsh/skills/rust-skills/rules/obs-instrument-spans.md": {
+      "role": "index",
+      "sha256": "9db7cb548bca6a3c0bfb0f28cffeb94964c8a55da81f872b2befea4971d701db",
+      "size": 3382,
+      "normalized_sha256": "26192ab33b9afa7f62ba3ffb0b4c247e8b13749c94ef9746e61ca8b3409bfa12"
+    },
+    ".dsh/skills/rust-skills/rules/obs-levels-filter.md": {
+      "role": "index",
+      "sha256": "4a2f516b09368cd828546b190f32866fb71f3ca672522673910e81b2b9efb5d3",
+      "size": 3524,
+      "normalized_sha256": "79ddf7b046683c10fa77034ea44c293c32fa3b7726b1f97383e0b84018df369d"
+    },
+    ".dsh/skills/rust-skills/rules/obs-library-facade.md": {
+      "role": "index",
+      "sha256": "2c75f3e474c46a4ad34ec0b9e2040bc74921caedd3b829051f48fd8e8703d49d",
+      "size": 2785,
+      "normalized_sha256": "e19123adc6b31ef2d332df48f2c61a91d72a0d60ae4de2a10928b5680ae53dcb"
+    },
+    ".dsh/skills/rust-skills/rules/obs-no-sensitive-data.md": {
+      "role": "index",
+      "sha256": "95f125c8af87e586fb4f375e0558d01078e0af2d14774d43df7f8f84fb6e539e",
+      "size": 3663,
+      "normalized_sha256": "0c5159885993839cb43267926ede588efcbe0ec907468c5c240903f301ca689c"
+    },
+    ".dsh/skills/rust-skills/rules/obs-structured-fields.md": {
+      "role": "index",
+      "sha256": "68a277c2d50cce97b0e2417aebeaf24be00db40b165d36fef0b183685786ee93",
+      "size": 2811,
+      "normalized_sha256": "98f91c169f11499e831358c27b241102f530df9a6dbd03a82b04c9fe43aa0b0f"
+    },
+    ".dsh/skills/rust-skills/rules/obs-tracing-over-log.md": {
+      "role": "index",
+      "sha256": "4ff0f7302c8b0e68c2b85a69f086eaa4eedfa373d21125bf90a3a18cf67aa830",
+      "size": 2259,
+      "normalized_sha256": "6fd7d2fd40f59d2f5f7a692450b16d70a0b07ce9bcbda9ca11e265bfc931df56"
+    },
+    ".dsh/skills/rust-skills/rules/opt-bounds-check.md": {
+      "role": "index",
+      "sha256": "35a57843c614e6092bbda285ac986f287475d3b755c94fb2adc54e232ea06420",
+      "size": 4410,
+      "normalized_sha256": "1d104897ea1fc911c14828ef72547350610144c9fbf047715a80f9e285e72bd7"
+    },
+    ".dsh/skills/rust-skills/rules/opt-cache-friendly.md": {
+      "role": "index",
+      "sha256": "017f61cd1a168092c83e6db414dda96a85b8c82761d0ba362d4439f0da8294e9",
+      "size": 4839,
+      "normalized_sha256": "1751b422b51311c83492f6b2b089143923ad9ea8d7ba9c651f068a9b9d65f686"
+    },
+    ".dsh/skills/rust-skills/rules/opt-codegen-units.md": {
+      "role": "index",
+      "sha256": "eaaa85d57764ecadbd9965e05d080c52c617cfaaa9f8dc9da743e4825ef8a69a",
+      "size": 3529,
+      "normalized_sha256": "6978c8c3d757efce2e2b7201fbc990dbcc51504f037b3093cbeb524aa45250e7"
+    },
+    ".dsh/skills/rust-skills/rules/opt-cold-unlikely.md": {
+      "role": "index",
+      "sha256": "ff6e6c354fc67d2965b250d88a1264fdabc53153a03706a54e867dc251199bc2",
+      "size": 3729,
+      "normalized_sha256": "59dd0ac875cb7fc34f4f6a642c726e504f9dfd7717c8b444d0a1c8d850dadd69"
+    },
+    ".dsh/skills/rust-skills/rules/opt-inline-always-rare.md": {
+      "role": "index",
+      "sha256": "b137c7440dc2fc9891d0b75f008225c8a27244a98e4f10a1aac73dad2c32fc79",
+      "size": 3532,
+      "normalized_sha256": "c803bdf268d59bfc55dca1877c2a84913c752649b0e15ce139c6ce8a59c23d81"
+    },
+    ".dsh/skills/rust-skills/rules/opt-inline-never-cold.md": {
+      "role": "index",
+      "sha256": "b0fffff91349edbf76888fd0ed82607bf418a5d28130c76ef1f733708c66fbaa",
+      "size": 4630,
+      "normalized_sha256": "ac8fc899f5153a7cd52b0455aded1a30cb98697142608ae37d3dd0561ec6bc8d"
+    },
+    ".dsh/skills/rust-skills/rules/opt-inline-small.md": {
+      "role": "index",
+      "sha256": "bd113926c13166a4dc14662cefc1d40899d39af073051b2e6ca0c908259752fb",
+      "size": 4111,
+      "normalized_sha256": "0eb6bcf8e09b7227ad6bf163b6ab401729ba91ef26b8a48380ec7275936d0df1"
+    },
+    ".dsh/skills/rust-skills/rules/opt-likely-hint.md": {
+      "role": "index",
+      "sha256": "08878e667b91388091c83bf88dafa5dbcafc859da9ea5406a80f71f97b23ac68",
+      "size": 4484,
+      "normalized_sha256": "8d2b906ffe918718ea55848f438d3f11b672f5c733a6f220e64ba80d20c5431f"
+    },
+    ".dsh/skills/rust-skills/rules/opt-lto-release.md": {
+      "role": "index",
+      "sha256": "e2d00aa74f3269ded11438227a9d6f40506b517b8c5485019ade2e14f3d7e492",
+      "size": 3478,
+      "normalized_sha256": "3f8b28fd8e752f9dee874a5c6cc28b17a5a3fe1feba7f291f8606d43ec46c9b9"
+    },
+    ".dsh/skills/rust-skills/rules/opt-pgo-profile.md": {
+      "role": "index",
+      "sha256": "027fd3f7bc079c62e307a0b85f775cfab77d34bfd595aabdd05789e1cf33def3",
+      "size": 4349,
+      "normalized_sha256": "5272b2b55268462ed2072a63d202eb0d3b7858485be76d67676d15fc9ffe49f0"
+    },
+    ".dsh/skills/rust-skills/rules/opt-simd-portable.md": {
+      "role": "index",
+      "sha256": "de9a5c52c9d087ab3c702ef32598fe64f93a44b6a8447d8be1b18ffeea00d182",
+      "size": 4240,
+      "normalized_sha256": "31717432b5a9136e24d1adc4cfb4dd516306b404d411059f0f87bd57f40221d2"
+    },
+    ".dsh/skills/rust-skills/rules/opt-target-cpu.md": {
+      "role": "index",
+      "sha256": "de7f32b9da85c979c8e2463cd45d45753c973fcf33c4e1be941554218a13a393",
+      "size": 4037,
+      "normalized_sha256": "437e6cc771ec258de5560c755f4cb4e567e145a8257fac40fbe1fc0c4c817cf2"
+    },
+    ".dsh/skills/rust-skills/rules/own-arc-shared.md": {
+      "role": "index",
+      "sha256": "b70be3f3cdc8fce0bbd39385b374633fd68a0876e340863ea9debe7f02974ffb",
+      "size": 3623,
+      "normalized_sha256": "62bfe5de6a545bd572042b2199599d37cca472d7a20192ecc00ee7148930ca2a"
+    },
+    ".dsh/skills/rust-skills/rules/own-borrow-over-clone.md": {
+      "role": "index",
+      "sha256": "03531c080129fb724dbb7972a0cad78054475e6fd75e96523e8704ac4091f524",
+      "size": 2541,
+      "normalized_sha256": "495bbffcdbdd58230585d802b43b28808058e7e9e24a1602427250822a84253b"
+    },
+    ".dsh/skills/rust-skills/rules/own-clone-explicit.md": {
+      "role": "index",
+      "sha256": "913ebd46fbafbd5aa5df226093e9b1e78a513ade66dd4169e8cba1e8629fd11f",
+      "size": 3582,
+      "normalized_sha256": "d6c9b7da0eba4e167694fc410e76d93d344bc6ec586469920e09fcc2a0b3b5a4"
+    },
+    ".dsh/skills/rust-skills/rules/own-copy-small.md": {
+      "role": "index",
+      "sha256": "9783a1dc8babbb9c1827f694efb94d541c851731db4071a3368545499ab8c50c",
+      "size": 3157,
+      "normalized_sha256": "30b6c640b9f9ab49e2604046392070d255476fe5afd7606e800654873c7cfbdf"
+    },
+    ".dsh/skills/rust-skills/rules/own-cow-conditional.md": {
+      "role": "index",
+      "sha256": "5b517216111f11ec752b881291f2bc8b8e7f18d12a710cce599e39b618e19e33",
+      "size": 3766,
+      "normalized_sha256": "9f7961785309d5f73a98ebf73e7f9b0ca3977b44aa7d50133b9af65d432e707b"
+    },
+    ".dsh/skills/rust-skills/rules/own-lifetime-elision.md": {
+      "role": "index",
+      "sha256": "2d9694e9868d823d50f4309c58cd60ae451c9fd5be69916c8e26181117661530",
+      "size": 3349,
+      "normalized_sha256": "65d60b8beef3fbff885028b0d235d0b94bee2f84b5bbbff45db30e100771a65c"
+    },
+    ".dsh/skills/rust-skills/rules/own-move-large.md": {
+      "role": "index",
+      "sha256": "0db996260224395d0f15e61b121fbec496360783c457b98ed2c53eb4745a5fdc",
+      "size": 3600,
+      "normalized_sha256": "e1688804ddd6dd56dfae625dd110c6a3f94e8c152a06fbca348af0008f93f866"
+    },
+    ".dsh/skills/rust-skills/rules/own-mutex-interior.md": {
+      "role": "index",
+      "sha256": "afede221aa97a6e96783c5734fcccfc79ef915991eecd49e0720c14c9b17c0ff",
+      "size": 2935,
+      "normalized_sha256": "d071f58d4e763740eeaba48f5f7821522170b5791698abfba22c3c6b8cc5da21"
+    },
+    ".dsh/skills/rust-skills/rules/own-rc-single-thread.md": {
+      "role": "index",
+      "sha256": "bb241b9e418731abef977cac3a6babc4e35fc025a52f1d8009b71ab072986edf",
+      "size": 3509,
+      "normalized_sha256": "ccfb12f6547c1d42092df685b3d441b128898b355b827c9b12e63eb40c13f91e"
+    },
+    ".dsh/skills/rust-skills/rules/own-refcell-interior.md": {
+      "role": "index",
+      "sha256": "7289e2b84e07e49d7c81f0fb650687644cb2422c58595c3ef7aba5df5afb524d",
+      "size": 3129,
+      "normalized_sha256": "85993378fbd8cefbe53d75b32eda36295f6ccfce388b141597e1735afb150269"
+    },
+    ".dsh/skills/rust-skills/rules/own-rwlock-readers.md": {
+      "role": "index",
+      "sha256": "9743950b8b2d6a49fcdfe57d5af4f93db3873a2811a537bbbc934e321829372c",
+      "size": 3364,
+      "normalized_sha256": "04bb52563a0a472d03f211493ec4e0a80b74b13485bb538d119bd03ebb90d920"
+    },
+    ".dsh/skills/rust-skills/rules/own-slice-over-vec.md": {
+      "role": "index",
+      "sha256": "2b30bc995a5942bd33745e69836e1b2b520fcdac610b331ef9243b9a703935d9",
+      "size": 2843,
+      "normalized_sha256": "2602c6d319a2dd4926950cd11c4c980fa9ce3766f58d0a1ed2720c88cfbb019a"
+    },
+    ".dsh/skills/rust-skills/rules/pat-at-bindings.md": {
+      "role": "index",
+      "sha256": "5ecdc199dc378215bdc509f66921f42cd4950ffa93aba89cb2311dea3f31959e",
+      "size": 3071,
+      "normalized_sha256": "562ec8fa2c151524cf53a21aed57f400506a888a37d4da7aae595c39d5ba3ecf"
+    },
+    ".dsh/skills/rust-skills/rules/pat-exhaustive-enum.md": {
+      "role": "index",
+      "sha256": "f6eb41723a0a38b6abc0cc8b8d28cd2886d3dfd235be35e338fe48879c98ca60",
+      "size": 2826,
+      "normalized_sha256": "42184c0f7140afdaf9d5377d0f64d027cb1fa5fa2ec30c9f320114168013e34d"
+    },
+    ".dsh/skills/rust-skills/rules/pat-if-let-chains.md": {
+      "role": "index",
+      "sha256": "6054243df79409301a4f5db54bec0666944432585b3b1cddafb535b1013c4a85",
+      "size": 2291,
+      "normalized_sha256": "3ce1ed93221bbf0d74311120a0dc2b754ecc6e9573670dfedcd6e323bfef346c"
+    },
+    ".dsh/skills/rust-skills/rules/pat-let-else.md": {
+      "role": "index",
+      "sha256": "fdba64de6d7434e3d6fc13cefdf3ed929d7e24f988d321e9967df9f5226cace1",
+      "size": 2134,
+      "normalized_sha256": "da56508174af078b040e6e713943a9fb184d388b1d55e0bf43514a9a92287002"
+    },
+    ".dsh/skills/rust-skills/rules/pat-matches-macro.md": {
+      "role": "index",
+      "sha256": "3c1851f8efb62a228bdb1febf75c8632a32d3362b52a7ba6bf5ded55d0f46bda",
+      "size": 2804,
+      "normalized_sha256": "33f9535fee4966692998d83e52450b81832ddcef30eda5b317cc763fb52e34f6"
+    },
+    ".dsh/skills/rust-skills/rules/perf-ahash.md": {
+      "role": "index",
+      "sha256": "eaad0f624e7ef3100599950e7136dbf73828c08370192c5923e0f252c00c0d1d",
+      "size": 3406,
+      "normalized_sha256": "62c03be18979a894006baa4d8f5705a411c5e53abda2f78fff0455fc2a8e665e"
+    },
+    ".dsh/skills/rust-skills/rules/perf-black-box-bench.md": {
+      "role": "index",
+      "sha256": "3263b92f11b5d9f35f896f7ed5c7d98854c6bdac5d8866ff091286caa44dfb0b",
+      "size": 3925,
+      "normalized_sha256": "1d605b2ab9bfa2a6a4d8dcc10941cf88c2e065b46d7b6139a71683e54f9d9090"
+    },
+    ".dsh/skills/rust-skills/rules/perf-chain-avoid.md": {
+      "role": "index",
+      "sha256": "00eb1a2e28d79358072c744705493bfc295abfeb85c2734672413b72fc359fd4",
+      "size": 3326,
+      "normalized_sha256": "c83e1ef0e198ddaee171f1ebd281284ffcc0233f6024f84702a965a05e0dd6a9"
+    },
+    ".dsh/skills/rust-skills/rules/perf-collect-into.md": {
+      "role": "index",
+      "sha256": "bdb4dff0551b450217db1aaca589a8595c76dc4649e5e9a739f0b47872a7e479",
+      "size": 3675,
+      "normalized_sha256": "3fe3419b1cdb577125f0605917a0bf6b67471dcc68a694c258e70b2587a91def"
+    },
+    ".dsh/skills/rust-skills/rules/perf-collect-once.md": {
+      "role": "index",
+      "sha256": "4646f73269a4caa59819273cfd7682d81c8387a2efdacf696be103bc77aac3a0",
+      "size": 2903,
+      "normalized_sha256": "82fee7d56af575e982276a9b30f0aae6d8deb8ddb2d48478747eb07bc086e2ad"
+    },
+    ".dsh/skills/rust-skills/rules/perf-drain-reuse.md": {
+      "role": "index",
+      "sha256": "9534769dae4be3e1b021b22bed5882dce4f71f08c7a7d9708b38b2bb85768e57",
+      "size": 3655,
+      "normalized_sha256": "9eafa0e5a8f39c0150bc8c063f8a600aa6f7fee55e6f8601cfc4d7702690216e"
+    },
+    ".dsh/skills/rust-skills/rules/perf-entry-api.md": {
+      "role": "index",
+      "sha256": "a280ecd9c33bffc58696689c29e1ec5be64bfd26868de75e069f1390783b15c9",
+      "size": 3651,
+      "normalized_sha256": "327790871f3a46571549e9967aeaeb51525fb8632f258a5f80dbbd9d910d324c"
+    },
+    ".dsh/skills/rust-skills/rules/perf-extend-batch.md": {
+      "role": "index",
+      "sha256": "2480fe1e0f0bc14864a410a7a1649288caaeba8256dab95a3853a47aa0b8770a",
+      "size": 3638,
+      "normalized_sha256": "cb1ee0834562f18f638c1d57c2081f5506850f894ad221c17f5735316f585b27"
+    },
+    ".dsh/skills/rust-skills/rules/perf-io-buffering.md": {
+      "role": "index",
+      "sha256": "5d26f0651014e20ad9a9669079f0a869e55d598b9bb6c3475fb86395cb8d5982",
+      "size": 3959,
+      "normalized_sha256": "e79c82449d5b0805b882a6c3b90def0dbec831c081077458897582ff76cbc8aa"
+    },
+    ".dsh/skills/rust-skills/rules/perf-iter-lazy.md": {
+      "role": "index",
+      "sha256": "466a3adfba773afaa2b87be8f7ac4e1d9680eb8f8c3b5bca44987f7915ef6473",
+      "size": 3168,
+      "normalized_sha256": "2c26bdc7dcb28b2d320719f1e35737e565de5830927a1b6a318e60ee88b050f9"
+    },
+    ".dsh/skills/rust-skills/rules/perf-iter-over-index.md": {
+      "role": "index",
+      "sha256": "b86f811254b824c425da70cf0bc3e3d64b3b673f6feb6bddf03433095caf2c40",
+      "size": 2862,
+      "normalized_sha256": "3c199c371b338812298813075710a04be75bc705ac76013316e7429f84c73e2f"
+    },
+    ".dsh/skills/rust-skills/rules/perf-profile-first.md": {
+      "role": "index",
+      "sha256": "7af307fab2e3f55f7f0c59651403373e693274021de03f5e1c302525eb22ef14",
+      "size": 4221,
+      "normalized_sha256": "19c1e3658dbd4346b298c9ec6d06adb1f5dc4d3f3e607055351711b17ad9d5d4"
+    },
+    ".dsh/skills/rust-skills/rules/perf-release-profile.md": {
+      "role": "index",
+      "sha256": "d5472c79d45a534a4aaa2c4ea848a4a7272b019986896afcca593640190f7e09",
+      "size": 3496,
+      "normalized_sha256": "2092294d1d844a3cba3f37ab81b49016c2daf932b4f1b6175b5f94329c9d3960"
+    },
+    ".dsh/skills/rust-skills/rules/proj-bin-dir.md": {
+      "role": "index",
+      "sha256": "fde7cb57ac4f4b29297ec1e00d9f7a9e2ab3106a3ad06996c61537cf7783ab8d",
+      "size": 3107,
+      "normalized_sha256": "d3ec76960da1ee68963b49fecbeb81dac0d0d904fa3d688474b0e35950eb493d"
+    },
+    ".dsh/skills/rust-skills/rules/proj-build-rs-minimal.md": {
+      "role": "index",
+      "sha256": "ddc924b97c0cbe9c940d0c2f384e5693f25a0f286d4c9be78ca2c934a649aeb2",
+      "size": 3211,
+      "normalized_sha256": "0cd0a49c2cb2e4e1589978219d70b1a1a7b4bc4feb1f8903eb5282df90bae384"
+    },
+    ".dsh/skills/rust-skills/rules/proj-feature-additive.md": {
+      "role": "index",
+      "sha256": "f1ea1913fceca398b30aeb39f826695d12255d61a10e7b95140b2afd45bf5f4c",
+      "size": 2330,
+      "normalized_sha256": "e6f90553463f23206b89156ea780f7ab81b8b5f9d64427d618396db47b73ab86"
+    },
+    ".dsh/skills/rust-skills/rules/proj-flat-small.md": {
+      "role": "index",
+      "sha256": "bef8d07cb9f7369b596988e8a56caf80be2724f8fe89313d5d01858b87635e16",
+      "size": 2893,
+      "normalized_sha256": "4a0335ef126fa30d6ad96f5e3c591a6130fbdbb6300e5914a6bc85c1d43229ee"
+    },
+    ".dsh/skills/rust-skills/rules/proj-lib-main-split.md": {
+      "role": "index",
+      "sha256": "6d729f87ee0dc06854197ca58295f9a29a79f3f146523c3908947a0102b3db8c",
+      "size": 3392,
+      "normalized_sha256": "839dd04878f9190d209332efde1a751a0f4d255595e82703ae7f8551e002a541"
+    },
+    ".dsh/skills/rust-skills/rules/proj-mod-by-feature.md": {
+      "role": "index",
+      "sha256": "8fc93dd7f3418c7e44e4de4887fecb3ba4e5c05330f75ab05b93ea0c0e2ed710",
+      "size": 3463,
+      "normalized_sha256": "fc8180f6fa7867c15a41137d5e36d0c48d9dfdc3b403e17a2d58ded814db63f3"
+    },
+    ".dsh/skills/rust-skills/rules/proj-mod-rs-dir.md": {
+      "role": "index",
+      "sha256": "67e5b9f4fdbf6de12ca9b628747860b0ce3fb02263047a497c8dd32eec913a25",
+      "size": 2896,
+      "normalized_sha256": "1714485aeb998ee22d2f19d9f612fbb89524ccf963ad3b584f298725423e335e"
+    },
+    ".dsh/skills/rust-skills/rules/proj-msrv-declare.md": {
+      "role": "index",
+      "sha256": "638056f62a98a14f4f0e77ef604fa8f3b1675955645a95a63898731512a9abc7",
+      "size": 2182,
+      "normalized_sha256": "6a1cfb6620570248e132d6dc792c839c16a672d6ff427825582720c94331accb"
+    },
+    ".dsh/skills/rust-skills/rules/proj-prelude-module.md": {
+      "role": "index",
+      "sha256": "4abd626fef698713dc4ce572d15be19bd2c72d1640238728aff78365579206d4",
+      "size": 3463,
+      "normalized_sha256": "33f82f80234eec337be0f126da6433177bd7392009e908c06a7d5c84259f0654"
+    },
+    ".dsh/skills/rust-skills/rules/proj-pub-crate-internal.md": {
+      "role": "index",
+      "sha256": "3b384e14bf576d91a2a94580aa61e0f60de872fb9bfeeef1e631295e6d346deb",
+      "size": 3353,
+      "normalized_sha256": "8e3f147828685dda0956b8860419a3dbc5235e36ba4f7677a0483e8bb8911787"
+    },
+    ".dsh/skills/rust-skills/rules/proj-pub-super-parent.md": {
+      "role": "index",
+      "sha256": "3b371deb5c723523fd118afc6851fe09d22b488d54aaa0535198678cd8587703",
+      "size": 3059,
+      "normalized_sha256": "dc87e711a4988d16e705999a5dcad718af982d8acde2ea0db449d5122669fb6c"
+    },
+    ".dsh/skills/rust-skills/rules/proj-pub-use-reexport.md": {
+      "role": "index",
+      "sha256": "ff309399508144eda32c03155e9d2ceb4c4b9dcd9e306f8f6dfce1d6891574e7",
+      "size": 3224,
+      "normalized_sha256": "64f7d524b4fd31079cd156151ea1d09a97af4d24bd9e302792d0072522d9cc24"
+    },
+    ".dsh/skills/rust-skills/rules/proj-workspace-deps.md": {
+      "role": "index",
+      "sha256": "ab569fc46ff98ba4dd0b178adef533ccbf4cd4bc29d14787b72ee1c8c87f7eeb",
+      "size": 4010,
+      "normalized_sha256": "708e66dd25799f6b82520c327916d5cb9e4067a481256374a87262905a99fedb"
+    },
+    ".dsh/skills/rust-skills/rules/proj-workspace-large.md": {
+      "role": "index",
+      "sha256": "d67a3d283293f94e52d4d051a4719c4e17b30de8c09ff081db480c925f11d53f",
+      "size": 3553,
+      "normalized_sha256": "eba7f6546fea1ae4d617cf331775e54b21529360377367a225d12e25a4214716"
+    },
+    ".dsh/skills/rust-skills/rules/serde-custom-with.md": {
+      "role": "index",
+      "sha256": "af5da9b7080e47effe8adc2a8fb0372b13ed917466ead6f3c156a8ac293a718d",
+      "size": 3109,
+      "normalized_sha256": "332c49af356fb5c0d4a50c00658c66ae6218dd3a710a7eef975a20e7f84b5c33"
+    },
+    ".dsh/skills/rust-skills/rules/serde-default-compat.md": {
+      "role": "index",
+      "sha256": "3294ec0f85b5dfa526553e466670ba5b021ef4a4dc991f3d3f27d4cefd716d67",
+      "size": 2900,
+      "normalized_sha256": "463a0533f6afbefc8b0ce78ad19986c7f4071b9262094e675ce7576f5d705b8b"
+    },
+    ".dsh/skills/rust-skills/rules/serde-deny-unknown-fields.md": {
+      "role": "index",
+      "sha256": "76c74bdc1bd3f166c908990978d05f7d109cae1f511d218e37d8cc955dfff205",
+      "size": 2794,
+      "normalized_sha256": "b127f0548708d21e1f4eceaf4bc33410b169167e1ceadcc85dadb3c276bc7fc3"
+    },
+    ".dsh/skills/rust-skills/rules/serde-enum-representation.md": {
+      "role": "index",
+      "sha256": "8de811bf45a3515e0a5d018ad44f7d3682588b0cbc1381cebfc1c2ed5554f9f1",
+      "size": 3350,
+      "normalized_sha256": "d5cd9860b8da7ba5653e231fd356a3e149a872b80839ea183a2d28f5a9359d7e"
+    },
+    ".dsh/skills/rust-skills/rules/serde-flatten.md": {
+      "role": "index",
+      "sha256": "d2ffb50b8c65427a5fa6c7cc3b86f7de7d813be203649ee3482942291ee655d6",
+      "size": 3121,
+      "normalized_sha256": "0d8a09e5afad99e18487f7ea4254c3293618f2b1ab2e21114fdc0b9906b2aa11"
+    },
+    ".dsh/skills/rust-skills/rules/serde-rename-all.md": {
+      "role": "index",
+      "sha256": "eaf8b676fc3f33585ac5a06c07ac1cf05ab6323970e0fe1e3d203100088895fe",
+      "size": 2258,
+      "normalized_sha256": "d01831a463257716360783347589f6d8e9ca03e37d65b476e35cc9a00af80017"
+    },
+    ".dsh/skills/rust-skills/rules/serde-skip-empty.md": {
+      "role": "index",
+      "sha256": "636b024b9f6b343ae3311aa42e161e6d855ee10e2b135f424d055f509164c10d",
+      "size": 2897,
+      "normalized_sha256": "d02963950e9293dc038ea7a69a9074d0f1b10376ee814e395bd9c174c5f960f7"
+    },
+    ".dsh/skills/rust-skills/rules/serde-try-from-validate.md": {
+      "role": "index",
+      "sha256": "722a6be5431bdb6faa1d38090c11604515f18b57969acc0921bee6c4ae2b3346",
+      "size": 4141,
+      "normalized_sha256": "148c1ae58b75e955dc7d3d49160d8367299d3831622fe34d0f7438c94cb09a61"
+    },
+    ".dsh/skills/rust-skills/rules/test-arrange-act-assert.md": {
+      "role": "index",
+      "sha256": "2cba5a02741d689feec89280bd99536aed41c46a73c583b0ff6850a772399ede",
+      "size": 3870,
+      "normalized_sha256": "4daca01e870bca5ec7b36e57fc6f0e06ef61800ca034e131a801e50848ac531f"
+    },
+    ".dsh/skills/rust-skills/rules/test-cfg-test-module.md": {
+      "role": "index",
+      "sha256": "40f4d67bdf9871976c31bb39b3ddcb668e56c8e1b17402529318ebce92450532",
+      "size": 3123,
+      "normalized_sha256": "2084ab59f12fb797cbede297ad09e953585d7abd7500d2ce420520da78be8cf3"
+    },
+    ".dsh/skills/rust-skills/rules/test-criterion-bench.md": {
+      "role": "index",
+      "sha256": "5ee44a046a5b9ccba4da7e23f1742091c8ae16dac3744fd0ece883cafa9ad48c",
+      "size": 3901,
+      "normalized_sha256": "f3c06a4d90266a9d689732d836d157aa670fdad8bea5e2df1c530ac39d2ee459"
+    },
+    ".dsh/skills/rust-skills/rules/test-descriptive-names.md": {
+      "role": "index",
+      "sha256": "d224e77bd7c7733cffb285f417a8bf55ef209a67405021d4f75dfa6d931c4cbe",
+      "size": 2840,
+      "normalized_sha256": "4ff666c26eb922f24510c69276395ba5c7f8a65664889eee1e0498b1fb32513b"
+    },
+    ".dsh/skills/rust-skills/rules/test-doctest-examples.md": {
+      "role": "index",
+      "sha256": "441651ba13292f0f79ffd38d6c48cf1e5ce07a3471c9b9ef0f1fa918ab705e1d",
+      "size": 3413,
+      "normalized_sha256": "da10cb635ca404442050a05a52b66d253ba74e122308691209793ec0fc0c3fe0"
+    },
+    ".dsh/skills/rust-skills/rules/test-fixture-raii.md": {
+      "role": "index",
+      "sha256": "42bbc999cfaf2b8c069b380a2652d74fd2912f096a7cef518493a28a2ae9fbd0",
+      "size": 3792,
+      "normalized_sha256": "31bb3387870ab5dd1c8bf727bef82057722051b50e8550d509d3e82540c36c89"
+    },
+    ".dsh/skills/rust-skills/rules/test-integration-dir.md": {
+      "role": "index",
+      "sha256": "ea3ef6543f32ad62a734775665abac31805e62b9ce3d155336f53c21cbbd22dd",
+      "size": 3200,
+      "normalized_sha256": "66f2c347ee954ed2b4895165fece70d12dcd8cba43accbe691d4f55552b704e9"
+    },
+    ".dsh/skills/rust-skills/rules/test-loom-concurrency.md": {
+      "role": "index",
+      "sha256": "f03ecf6ad449d6459f031f7fc4a73cd28847eecd22fefb9eada9200924817cab",
+      "size": 3511,
+      "normalized_sha256": "3b0c6184d623b767c152728170f07742999dac5cae8b1030a64bdafb2df9d842"
+    },
+    ".dsh/skills/rust-skills/rules/test-mock-traits.md": {
+      "role": "index",
+      "sha256": "c42792fa7962c2665ae447d4b671cc8bbdb2d08d20ddc7bcc52459747b40cb56",
+      "size": 4771,
+      "normalized_sha256": "8048818116513292350d5839e5d0e937b8391558956c5c1afa2d511e9b51b2b6"
+    },
+    ".dsh/skills/rust-skills/rules/test-mockall-mocking.md": {
+      "role": "index",
+      "sha256": "10e438aa879e6c5853b53396601feee12a46e6fe6fa15b0dbbe83cb38c2aac00",
+      "size": 4810,
+      "normalized_sha256": "2e35181ef1ad9df518453d0bac75c969006d110005e99a34a2c99b6c0f7b2617"
+    },
+    ".dsh/skills/rust-skills/rules/test-proptest-properties.md": {
+      "role": "index",
+      "sha256": "21e8c95c9c1ad397626701f1cffd70ba5f9833303bcf9415b91c06d5782f2f8b",
+      "size": 3675,
+      "normalized_sha256": "5ce67a89328f52a06b792b889482e68ecb68f7c61e34c5023c8438cb85950531"
+    },
+    ".dsh/skills/rust-skills/rules/test-should-panic.md": {
+      "role": "index",
+      "sha256": "9fb5b37490ccef820a81e8387c4660dc0ce4a56abebb03b37ed154f5532dac45",
+      "size": 3024,
+      "normalized_sha256": "e8fe40303c56fa7bada350c562a3a7b34a5e30d2ee03ac84b1d3bdfb9bd4b6ed"
+    },
+    ".dsh/skills/rust-skills/rules/test-snapshot-testing.md": {
+      "role": "index",
+      "sha256": "bfc6992e8830f2e9e4502c582d9a0394f25fec4ee6e1a48eed3a5d52d0379440",
+      "size": 3260,
+      "normalized_sha256": "f63a289fbadc531754620571e4a8aa31aef6d514d5dfe4764fd0a9e0704b86cb"
+    },
+    ".dsh/skills/rust-skills/rules/test-tokio-async.md": {
+      "role": "index",
+      "sha256": "aff04a60a170f798cc9cc21469980a06255a45b2da9521a64dbfec39ada04d30",
+      "size": 3584,
+      "normalized_sha256": "e861ad78c2a8cedae3bb05866993b5a4c38d807dd1010b3303f367f97c8058fe"
+    },
+    ".dsh/skills/rust-skills/rules/test-use-super.md": {
+      "role": "index",
+      "sha256": "e565638468386f9013494b0ebb5b1197462371e8bca14152b359118a6f6c2cd7",
+      "size": 2780,
+      "normalized_sha256": "f4b898b762887c3d7682f5bc9b11b898c9de38d6a50fdc97ccc9559c8e9643c9"
+    },
+    ".dsh/skills/rust-skills/rules/trait-associated-type-vs-generic.md": {
+      "role": "index",
+      "sha256": "96e9323887c577002f229eb4cb29b618255d9ba2db3d42a182ff931087805fa2",
+      "size": 4128,
+      "normalized_sha256": "d7b6f4d8374908db94e5293f7782aee279c85b507f6d50061ed2b1e15a0de082"
+    },
+    ".dsh/skills/rust-skills/rules/trait-blanket-impl.md": {
+      "role": "index",
+      "sha256": "aa2a462fbf9d79075ad89983f435eb1ca89afda36a2e80b10485e680afe6a50b",
+      "size": 3433,
+      "normalized_sha256": "f7ca3c2d845949872141f16567ba821b3ec63e50443012e60b0b51cb292d479c"
+    },
+    ".dsh/skills/rust-skills/rules/trait-coherence-newtype.md": {
+      "role": "index",
+      "sha256": "88abb6511e2040e0f3a8a48eb1e91737053390632bc5d2a7597dea55763071f3",
+      "size": 3707,
+      "normalized_sha256": "2b83200c3bf2ffee547ac8633322096eef159e9046f70459055b6284e6339cac"
+    },
+    ".dsh/skills/rust-skills/rules/trait-default-methods.md": {
+      "role": "index",
+      "sha256": "52456a6954029ad3153b50986881543deae89829fa6ad19b404cfba284b023cf",
+      "size": 4334,
+      "normalized_sha256": "49b37f36353fde6fe1ed07f203cce0ea7398bef9cf9b575951b9b2ca38deb578"
+    },
+    ".dsh/skills/rust-skills/rules/trait-dyn-vs-generic.md": {
+      "role": "index",
+      "sha256": "025f2fc6e27e701e2bbb29b6db24d48afd6d8a773d894e02a9b94e703b26a2a0",
+      "size": 3645,
+      "normalized_sha256": "eebcf9ff7f642734a151d59491b2c1db30899567ddecbe2d45240923baf4eec8"
+    },
+    ".dsh/skills/rust-skills/rules/trait-object-safety.md": {
+      "role": "index",
+      "sha256": "9554fd872adad5f88c292e7bc65126ca1bd63df4823d9c049778ccf2ba81ad8e",
+      "size": 3847,
+      "normalized_sha256": "f5b6f7a18f8fd23c85593659c59ee365ca98db7b21caf89f19d2fdee049a13d4"
+    },
+    ".dsh/skills/rust-skills/rules/type-deref-coercion.md": {
+      "role": "index",
+      "sha256": "94199d735e66658f256ab4cb91a29c9ed3974a7b5b01a13c4d7b06f97d95a190",
+      "size": 2677,
+      "normalized_sha256": "deff96ce81f5db9e39e9f05975902af2ff801797766aac04d55f667beb8107d9"
+    },
+    ".dsh/skills/rust-skills/rules/type-display-vs-debug.md": {
+      "role": "index",
+      "sha256": "ba5de8d4eddc14b7981f5f766ea08972e91c7596b2413c157b187e77d74a154a",
+      "size": 2861,
+      "normalized_sha256": "09a1ae18299dae852b5218181b2e722e63bcfa2c2ac9a1386ee3064097a39781"
+    },
+    ".dsh/skills/rust-skills/rules/type-enum-states.md": {
+      "role": "index",
+      "sha256": "89506d782b028910001e90304dee1be7a99a635d85f0a1361d9c836fe31e3bc4",
+      "size": 4262,
+      "normalized_sha256": "5f93957ca56e0a03050e7852ef9df857cefe3d9c8a7b41ce489852d9d4463bcb"
+    },
+    ".dsh/skills/rust-skills/rules/type-generic-bounds.md": {
+      "role": "index",
+      "sha256": "b2aafd5b6f75dd65b4a247a0ae8ebf2398ba81e04b9f37b447f96abe07fab2d3",
+      "size": 3612,
+      "normalized_sha256": "c196af7099dfdb7499000d761e214c29b50bc0a93fdae9ea119b8f7c5a741e61"
+    },
+    ".dsh/skills/rust-skills/rules/type-never-diverge.md": {
+      "role": "index",
+      "sha256": "09f83633ce9749c9d593032f5b3c4b42b78735513a1185d403f5c3e4681a41bb",
+      "size": 3386,
+      "normalized_sha256": "5bd9a078025c64642538a77cae49f184b20998f30720e3ba7dfaa03e0dad98c6"
+    },
+    ".dsh/skills/rust-skills/rules/type-newtype-ids.md": {
+      "role": "index",
+      "sha256": "e6918189d696973f0e7b4c3f2701d6cc7ac2dafac4c9379b88cc20ddbf9e282b",
+      "size": 3820,
+      "normalized_sha256": "d3b64fa3536caaf7d77dc22a88b40bbe6ddae1c296c6d3abfe0b370cb26e9f82"
+    },
+    ".dsh/skills/rust-skills/rules/type-newtype-validated.md": {
+      "role": "index",
+      "sha256": "b9bbfbb53333101d7798841b634ec4dc561b4326b61a68196de052b9e344d431",
+      "size": 3879,
+      "normalized_sha256": "41e458dd0adcab22fb32be189fe4e90ae9a07e344c8f4ef49dda97ee88f4133f"
+    },
+    ".dsh/skills/rust-skills/rules/type-no-stringly.md": {
+      "role": "index",
+      "sha256": "5d7d3f71e853de39695dd609c2c6d80eb7ca6c2e24d7160bfd805310f618900d",
+      "size": 3402,
+      "normalized_sha256": "23a8dc86e5778c1d5c96b4eea1c98ec432387a62f708cc014d3fcdeedf024061"
+    },
+    ".dsh/skills/rust-skills/rules/type-numeric-fmt.md": {
+      "role": "index",
+      "sha256": "5404fe387f95aae9a674ed08e7829cbf8f7cba1cd2f0ee24976a3f84f00da025",
+      "size": 2820,
+      "normalized_sha256": "f4ba074a4904f14ca434aa297eb82a0ae6b4409418d5afb6134e80d852b4a32e"
+    },
+    ".dsh/skills/rust-skills/rules/type-option-nullable.md": {
+      "role": "index",
+      "sha256": "6a620be078fb02824bcefdff26bcc0ff3f960fde4706ef225f9d1c71675b8b95",
+      "size": 3372,
+      "normalized_sha256": "fef313793530de5b3bd2539f5e42bdca997f8c0784dfc275944e09f99b68e3b0"
+    },
+    ".dsh/skills/rust-skills/rules/type-phantom-marker.md": {
+      "role": "index",
+      "sha256": "b2fab8ec47eac86b71cd79973ffd5392d8e2f87855803f7c30c299898a4ff64c",
+      "size": 4012,
+      "normalized_sha256": "4016cfcd272db697a578c3ba133a452ddc414f29982cc329f764bbe624a029d5"
+    },
+    ".dsh/skills/rust-skills/rules/type-repr-transparent.md": {
+      "role": "index",
+      "sha256": "04aaf13ea2f51040d2a52493b88d488b4ce1be3631b2efe74e2b5d708dc277dd",
+      "size": 3368,
+      "normalized_sha256": "8e601b0963b5c32201dec7e01e652835d7e5427f71f4e7e94956d7a54db13d27"
+    },
+    ".dsh/skills/rust-skills/rules/type-result-fallible.md": {
+      "role": "index",
+      "sha256": "9b0e79ec2b8e42af95a7c880578f00e33bd85c076fa1d3cd729ce37a89d8c29a",
+      "size": 3554,
+      "normalized_sha256": "079b48f3c5d6cb141443169968528395bcf81ef880c2abdb2eb61ba5a974faee"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-extern-block.md": {
+      "role": "index",
+      "sha256": "40fcccfde5eb10d7331215179d08a7b23c2410331ca39fe25a7c2378cb7a1d52",
+      "size": 3455,
+      "normalized_sha256": "bc876c2a529ef454218aec7f2c78a9dc2d430b5db79119d712ff921daa20aba3"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-maybeuninit.md": {
+      "role": "index",
+      "sha256": "1cdd65085b9e37d8d4b6667bcfa3763c400983d811406f555234d8d20280d328",
+      "size": 3796,
+      "normalized_sha256": "d5fbbb609229c22546e4795fe663b94aeb11b95d696362e98b005858966ff03a"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-minimize-scope.md": {
+      "role": "index",
+      "sha256": "84bbb18779da234cd094f4425c685ee9e934024a79fbfb789ab6df3507528897",
+      "size": 3617,
+      "normalized_sha256": "19d39cc40dbf83bbe2c53073cdcbf1e9406b13b1d24e452c9ba1a1a91ba307b6"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-miri-ci.md": {
+      "role": "index",
+      "sha256": "c3805bbd18d42037ce62c375da7887ac933a7fd5d5d8703f683cf178a0060854",
+      "size": 2999,
+      "normalized_sha256": "7ded95c281d210623c7ec9046479423e2abd100651b3fface5bb47a83bec2728"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-no-mangle-unsafe.md": {
+      "role": "index",
+      "sha256": "c72a3508b76017a8327bfaf95d2f87bd71d3482425e7f1d9dd9d3e01c93571a8",
+      "size": 2930,
+      "normalized_sha256": "429ffbd81bcf9f749614472a06c9ea2c14f3d242294318797ba5e30d7d559cd7"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-safety-comment.md": {
+      "role": "index",
+      "sha256": "510985533b4962583161b6b8a5bf77c240cfd5aba92e7cd97989cdf8e94837a6",
+      "size": 3035,
+      "normalized_sha256": "4892500c59f446eb8031fcf2cc98bf64f3323276abee0355409f4af53cbdcaab"
+    },
+    ".dsh/skills/rust-skills/rules/unsafe-send-sync-manual.md": {
+      "role": "index",
+      "sha256": "7860313f1b442912fee182868502e799ce19cf993cc34dce4e3a0f4a3878c67e",
+      "size": 4412,
+      "normalized_sha256": "106ca8ba1843ec8dfe9658c5db41fd99d106bcf2b8b4ece41e8db1dd347372f2"
+    },
+    ".dsh/skills/rust-unsafe-review/LICENSE.md": {
+      "role": "index",
+      "sha256": "49bbe9114e49214df2ccc324cb3ac8d1d1aa1c3a0947f94c286765e86647b32e",
+      "size": 11558,
+      "normalized_sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+    },
+    ".dsh/skills/rust-unsafe-review/SKILL.md": {
+      "role": "index",
+      "sha256": "d6a9dd312fc3687070c0f1aa4a309c768d7f86c11b52474d6ac178c047bb3e70",
+      "size": 72940,
+      "normalized_sha256": "09b97437d577d6129bcd406da5ab9f79771d92d2a3c8ee639b6809e0e511d52b"
+    },
+    ".dsh/skills/vue-best-practices/LICENSE": {
+      "role": "index",
+      "sha256": "cd25f188ebc7d2a73ec19e289a00c6411c91b31f17d57c7de87bd778ac148b63",
+      "size": 1119,
+      "normalized_sha256": "2ea4e714425cf682879c4dea3d0d0a1a379a1418f463063f9eea1aa709ad946d"
+    },
+    ".dsh/skills/vue-best-practices/SKILL.md": {
+      "role": "index",
+      "sha256": "19af0621c9c1c7a6ff0ab6c8ebab7a0e92d1fd2342070a103ceca4dcbe6fd737",
+      "size": 10642,
+      "normalized_sha256": "81165e696ccf0c1bad3eaeefc949f11acab0c7896ef9382001bb15c1441ef2e1"
+    },
+    ".dsh/skills/vue-best-practices/references/animation-class-based-technique.md": {
+      "role": "index",
+      "sha256": "aa10a60b78a1a9918a8ba0da1ac24cb7e44505f0741f401b6d84fd1a74065a6e",
+      "size": 5280,
+      "normalized_sha256": "d37e4ae4f124454fc5dfa54d23816edb16d337228641a77ec04c8ee9fe5a32fe"
+    },
+    ".dsh/skills/vue-best-practices/references/animation-state-driven-technique.md": {
+      "role": "index",
+      "sha256": "c93562f97ea02d025a74e9f4e4f22424741a08a5a45d0093d60f4f14a3499305",
+      "size": 6120,
+      "normalized_sha256": "9a17a15356b32c8cd8669c3ede28dd890e9a48c03101047738a5c6dec7c716d6"
+    },
+    ".dsh/skills/vue-best-practices/references/component-async.md": {
+      "role": "index",
+      "sha256": "322857dafb99f5570eabea8a82c59b1d26d3a2c460a103a32155a355420969fd",
+      "size": 2629,
+      "normalized_sha256": "e20036c6622a1647d9e1c23f1fe871b2465cf4bab434422e17eb05710c8878f3"
+    },
+    ".dsh/skills/vue-best-practices/references/component-data-flow.md": {
+      "role": "index",
+      "sha256": "e6a9bfc3d45db5602b1c2554b3068f984f1a5dedd2a51c484fe9eeb7dddff283",
+      "size": 7263,
+      "normalized_sha256": "81277341d7dfe240721c2324548b9d404354d3ce270515acb130e8ac0c7396aa"
+    },
+    ".dsh/skills/vue-best-practices/references/component-fallthrough-attrs.md": {
+      "role": "index",
+      "sha256": "a53a21427ca1d9bfdbd1c9c34d26b072cffebe358de5547bdb68c945b61e5ca7",
+      "size": 4221,
+      "normalized_sha256": "62d291508df9997d3b6c5adfde251d6c722926ecf5f7168dea0272564f119919"
+    },
+    ".dsh/skills/vue-best-practices/references/component-keep-alive.md": {
+      "role": "index",
+      "sha256": "345720b891529816e435d32a3be4c21c891d29a0063667ff05acb6a207fe9f59",
+      "size": 3624,
+      "normalized_sha256": "8738608665ad42baa6d2d7548d46b3ecd318a85f4ec3a0afac5f728948ade3ca"
+    },
+    ".dsh/skills/vue-best-practices/references/component-slots.md": {
+      "role": "index",
+      "sha256": "15e8ced145c843176520b287a827d86db446ffdc09f45dc3b5271a2ff7859b63",
+      "size": 4685,
+      "normalized_sha256": "726fdac036fcdb6071e669f1ed90af5b3bdc5fc150ad82ff41afa0af5e39f481"
+    },
+    ".dsh/skills/vue-best-practices/references/component-suspense.md": {
+      "role": "index",
+      "sha256": "6ee108b894d5b2ff36ef39473ca4ebc80078da9bb05fdfff4eb2470ff81b0c38",
+      "size": 5595,
+      "normalized_sha256": "6a5a98dcc6a2093f038f877eb6fefeedb199aba058a5dea71b139017c557bdd1"
+    },
+    ".dsh/skills/vue-best-practices/references/component-teleport.md": {
+      "role": "index",
+      "sha256": "97d1b2f16e4ed185de49c63155386a7c97d3eb730e4837f7ccd512ffaf12d332",
+      "size": 3029,
+      "normalized_sha256": "4e48748842262df50c293ab23857c22c107e3e8360c87da482d23f0eb88b2c3f"
+    },
+    ".dsh/skills/vue-best-practices/references/component-transition-group.md": {
+      "role": "index",
+      "sha256": "7586a9b007842b89ca1608ac932857a11d43477f3a78bbc077107f27e31b25d0",
+      "size": 3132,
+      "normalized_sha256": "cfdd76e2466a8c0ef8a965674a74924e5cf25e538e75ce97d02213472442ccb2"
+    },
+    ".dsh/skills/vue-best-practices/references/component-transition.md": {
+      "role": "index",
+      "sha256": "1cef6d55afce8ec782fb1906a343cb76778e0119035199b46cb07779dea75eb6",
+      "size": 2847,
+      "normalized_sha256": "bc59a19f2e8eed7a228bdb6383d423a57c6dd75704ae11c9596018c9fb1cac42"
+    },
+    ".dsh/skills/vue-best-practices/references/composables.md": {
+      "role": "index",
+      "sha256": "baa214915e7f287d08e70ec68be8d208e3da22eef9cd01df6d0c8495dc466564",
+      "size": 7301,
+      "normalized_sha256": "8fcb3ede4ecb13f8dc7e4c7db07561652f6d306c85a91bc6736fda4fae2b624d"
+    },
+    ".dsh/skills/vue-best-practices/references/directives.md": {
+      "role": "index",
+      "sha256": "b266b11729f36d8891ab4339200f7e2f2e2e65f8a37d4abaf726b3b42ccaeaec",
+      "size": 3965,
+      "normalized_sha256": "70d4c68ea15a961eec6471c42b4c44d37adfeb094f694b6811fb718eab7b2cf7"
+    },
+    ".dsh/skills/vue-best-practices/references/perf-avoid-component-abstraction-in-lists.md": {
+      "role": "index",
+      "sha256": "11c3a47b43c32a636e66a84b74131aad1d6669e138c66182acb32e9897aa53ef",
+      "size": 4842,
+      "normalized_sha256": "a5fb787065cbaa4731a12d3ab2f40284d058a4d6a45972b48b3052931e4f80da"
+    },
+    ".dsh/skills/vue-best-practices/references/perf-v-once-v-memo-directives.md": {
+      "role": "index",
+      "sha256": "930eebbba47f94b2990c4badd1d9f7eb95e5ce766f78595f5305ad55a1adc3b4",
+      "size": 4951,
+      "normalized_sha256": "066a45e60f6faa702cb75b76724c391d7e560aa6805c9bc379c06f2c64d97677"
+    },
+    ".dsh/skills/vue-best-practices/references/perf-virtualize-large-lists.md": {
+      "role": "index",
+      "sha256": "4d37e996db659f40aa11a1484d3282e6a2ef367a7aa4b86c7ddce0a3c8fec6c6",
+      "size": 5189,
+      "normalized_sha256": "69712f1f296cf03401c47f936e1a9c32481bfd82623f536b1fe08d05c846bada"
+    },
+    ".dsh/skills/vue-best-practices/references/plugins.md": {
+      "role": "index",
+      "sha256": "ef1b075975a8f19cd036731d6c98587ab5ad8a15164165a6d7cd1fb37c551a90",
+      "size": 4048,
+      "normalized_sha256": "b1583522aca059c4295708517ba987530dd6a13134f6046aed9fd7327fb9c936"
+    },
+    ".dsh/skills/vue-best-practices/references/reactivity.md": {
+      "role": "index",
+      "sha256": "08739fb63584a79a9be7adfc42d5fb34b924197d0aac6e819cb8ee4fff14d0cb",
+      "size": 8796,
+      "normalized_sha256": "48c97831e72f0b82bfae0344cf02a181c7723e1ee4a29a58a85009aab7d60a4b"
+    },
+    ".dsh/skills/vue-best-practices/references/render-functions.md": {
+      "role": "index",
+      "sha256": "6ac584135f9e7533126f9a0b59446f1738a9ba11800392d447b2c51188799356",
+      "size": 4067,
+      "normalized_sha256": "01b35e671f7890939fa5acda52c5cf0a50b398e153d80cc9fc9f74c19e460357"
+    },
+    ".dsh/skills/vue-best-practices/references/sfc.md": {
+      "role": "index",
+      "sha256": "7bef1a6958cc8c23a9c425b401d63f50d87ffa1c01eb3e743182e52a517b498e",
+      "size": 6526,
+      "normalized_sha256": "dfe09f28869a2bc44e618068c3b6269f55d925d096714df25e253d2bbb58c28f"
+    },
+    ".dsh/skills/vue-best-practices/references/state-management.md": {
+      "role": "index",
+      "sha256": "fe24a46442bbb1c7d2ca49b535f79d71b037808149cd19db3a641b270a26371b",
+      "size": 3515,
+      "normalized_sha256": "9e98a1c6d9009c0c8ef7228b6b3bcf10d30be6b713ffcef448ab7db3b419a851"
+    },
+    ".dsh/skills/vue-best-practices/references/updated-hook-performance.md": {
+      "role": "index",
+      "sha256": "c1d9cc4c261e7f33554e2dc655e0fa24c00fd8f8ebd21816b21c2c17249bbe27",
+      "size": 4805,
+      "normalized_sha256": "ded08ce93f9b23082538846f84e8d159d84af757c27b2c6b43a9283df803a32b"
+    },
+    ".dsh/skills/vue-testing-best-practices/LICENSE": {
+      "role": "index",
+      "sha256": "cd25f188ebc7d2a73ec19e289a00c6411c91b31f17d57c7de87bd778ac148b63",
+      "size": 1119,
+      "normalized_sha256": "2ea4e714425cf682879c4dea3d0d0a1a379a1418f463063f9eea1aa709ad946d"
+    },
+    ".dsh/skills/vue-testing-best-practices/SKILL.md": {
+      "role": "index",
+      "sha256": "a83b7b0a644674935ecb015ec42efb1777857d0103e1d88e78ab32050d300380",
+      "size": 3775,
+      "normalized_sha256": "21fd9ba22273acf49ab0f1c3df30d2509ef22031c790c388d6e9869ed1c978fa"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/async-component-testing.md": {
+      "role": "index",
+      "sha256": "0678a0d43caf178579eedc362c035cae8de23f0c19157759b9aeff9d0bb5a73a",
+      "size": 5059,
+      "normalized_sha256": "75b1c7b3949a5f0211824c525fd7b3f8a6b2cdd4933592ada65f37ecaa4146d3"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/teleport-testing-complexity.md": {
+      "role": "index",
+      "sha256": "fdc98d8e850f49cabe96acd4222230a14fc04f6751a59a2fdd03f945952cbc46",
+      "size": 4294,
+      "normalized_sha256": "5a42ce8eb5497b5165b09cd758b647ddf4bb537be9cf808a84bee7ae8c3aca39"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-async-await-flushpromises.md": {
+      "role": "index",
+      "sha256": "7d7345020fb0857d96f5aa340f9cfdbfaf8f204c648a7a317e9878ec1d1d6468",
+      "size": 5429,
+      "normalized_sha256": "2dd5099b32cf2626d19aab2ef4b365cc26102cfb5a0aedc5667efc06d2070cab"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-browser-vs-node-runners.md": {
+      "role": "index",
+      "sha256": "9e06ae50aabafb3b55258c6a6147e84dea947862068d971b27f970495c6d9881",
+      "size": 5831,
+      "normalized_sha256": "ffc13da105aadfca0bded6d955f79f9c02c5548ee699f274ff5976cb7484ac98"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-component-blackbox-approach.md": {
+      "role": "index",
+      "sha256": "ea09bc35c6aa3f5051f729b7433011511525bf001d5c4b316e66502bbdcc0b80",
+      "size": 4897,
+      "normalized_sha256": "16ac94d67addf1cb60177a81a5c5c01318daa310216261ffb2d60b396112f86d"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-composables-helper-wrapper.md": {
+      "role": "index",
+      "sha256": "84acbd9038809bf41ce2025735e687351ebcf6a5fc7935ba8872a3e1a1291043",
+      "size": 6357,
+      "normalized_sha256": "57af3ae779cf0770ed53034575d783463d2b9e790c29fbc9bb80f166be3255bd"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-e2e-playwright-recommended.md": {
+      "role": "index",
+      "sha256": "390b39021362e25e8da0fa58286be09b9cb76d53a1d94ee3af0c2f43569250b7",
+      "size": 6823,
+      "normalized_sha256": "d415a403c6851cb57666b9143cb3acec6eba53af269cf765918c108dd0c96355"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-no-snapshot-only.md": {
+      "role": "index",
+      "sha256": "45a7d02edf2374de5fd17023d9c7c56060c9dce2f8a5f2e8a69f40cefb573396",
+      "size": 6480,
+      "normalized_sha256": "d541b490b8c9c0f822a2ca0d8184d7325b07918e76124d717fb480bc7a488995"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-pinia-store-setup.md": {
+      "role": "index",
+      "sha256": "8c55f34addc1c5a0e381d2f6beaf399ed02eed62d919bfff421252a5989410fd",
+      "size": 6477,
+      "normalized_sha256": "005a375c587bd33d1eb3a1b7fe1c89e42daf4c115014e49cf327ab5af5d0ed4e"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-suspense-async-components.md": {
+      "role": "index",
+      "sha256": "ad363997f9b1dc03018083beca349472b46d850836b25c2d455ec51954faf290",
+      "size": 6677,
+      "normalized_sha256": "12307929380fcf0e8bcbd6be23a6bc1710904c9462cec945f80ce4b5aa0b7f12"
+    },
+    ".dsh/skills/vue-testing-best-practices/reference/testing-vitest-recommended-for-vue.md": {
+      "role": "index",
+      "sha256": "49ea5279b38410ee69209eb8db60dee195f4eb90ff78e5d8d142ace9506ccc52",
+      "size": 5243,
+      "normalized_sha256": "acfa0b3986e092f43d4cd8090864860cff07ffa3aaa62a10c5a622770ccaeb6b"
+    },
+    ".dsh/validate-skills.mjs": {
+      "role": "index",
+      "sha256": "ac1366afd5ec4e0e2dfdcc3b49709b018ab8448f9c2575a9c838a66e9f8da3c3",
+      "size": 4879,
+      "normalized_sha256": "f9609db7eeaeea8bd9fbcd9430647cf1e1738e12d91edf6bdab73a5b0b1901c7"
+    },
+    ".gitattributes": {
+      "role": "index",
+      "sha256": "5350b0a3790645d610df282bf7895109ab2a0895884d13a1e685c3a56a591b22",
+      "size": 547,
+      "normalized_sha256": "59584205a5dc70f7ff2eba1e795b2bf23d8f651b9329a6ff85d8f88f7cb5fc03"
+    },
+    ".github/ISSUE_TEMPLATE/blacklist_request.yml": {
+      "role": "index",
+      "sha256": "0be1d6bd2a64883e04ff3e9495edc748ac7569e428e6914fd232f656f3398fe7",
+      "size": 1483,
+      "normalized_sha256": "a1bb1fef90f808288dd621739b4185349c4c16a4f76f61dd06e46cac02bfabae"
+    },
+    ".github/ISSUE_TEMPLATE/bug_report.yml": {
+      "role": "index",
+      "sha256": "ed0687d449b275e4d746d6c15ab3c4fc9d0a40a96a1f679f3537e945c0fc5801",
+      "size": 2981,
+      "normalized_sha256": "42423023f15327509fc73feadba002ceea93207cda2fc15fb4b67ea7c7945fe5"
+    },
+    ".github/ISSUE_TEMPLATE/config.yml": {
+      "role": "index",
+      "sha256": "c740e91593127e01e66c0ad382e34d08a28531316a970ed225f8faa310bbb24b",
+      "size": 312,
+      "normalized_sha256": "44e17697563084a1827115ef1bcbe8bb0aec43e7a76f046ffef771f20e26694a"
+    },
+    ".github/ISSUE_TEMPLATE/feature_request.yml": {
+      "role": "index",
+      "sha256": "525bc873011a90c2dc55ac2d8e35586be2afd3de707d7fec0af4251138223527",
+      "size": 887,
+      "normalized_sha256": "5803159cceb696538e899cf85161a3e74e475d880e910ab1f33cd5b0512509b5"
+    },
+    ".github/dependabot.yml": {
+      "role": "index",
+      "sha256": "0979dbe60f3cec763b0b665d6147bd9655a9261a9c401be1b6007114029af16b",
+      "size": 1600,
+      "normalized_sha256": "65d4d1ba8d890e712b7601c67acccd8a27d0b32834d5d8da15059a37ae08cf18"
+    },
+    ".github/scripts/issue-policy.cjs": {
+      "role": "index",
+      "sha256": "a5941b1d93dbb52c8283ba56ecd01c04c42ce0bdedc2936375acaf68aa2c8407",
+      "size": 11216,
+      "normalized_sha256": "7890452d59323f8e277d2e1e06675b5486fc6e94d3dd9bd38effe4c26102ac3a"
+    },
+    ".github/scripts/issue-policy.test.cjs": {
+      "role": "index",
+      "sha256": "304b6a4883ec6161047c47c8a6a1202891931354ccb815a8137628004ca46f3e",
+      "size": 13729,
+      "normalized_sha256": "0e8b0321c418c5ff26c940352578cbcc7e64ad4b2141c2535a0d49308779607a"
+    },
+    ".github/scripts/notify-artifact.cjs": {
+      "role": "index",
+      "sha256": "2355fb476e58d37f3dd3c18689c4b333cc556225644e87400218ef81e3e53fa8",
+      "size": 1222,
+      "normalized_sha256": "c361cdfd1af5f0a8f12c515427a686ebd94644b8c6c4758e0443cec78d040dad"
+    },
+    ".github/scripts/notify-artifact.test.cjs": {
+      "role": "index",
+      "sha256": "9a5f6851c693d63d86da6564c907f245c6ccc7db7c393aebece8ab758858cc3e",
+      "size": 2546,
+      "normalized_sha256": "394345947e594fdad20d4fe0570233eab8cec1c7d877f8b2b50e4fb840800f45"
+    },
+    ".github/scripts/notify_source.py": {
+      "role": "index",
+      "sha256": "b84b5dc644fbcedd5ae01c671df5ad9f8e9638a3a0a79a7bfd4cfc23a8cc0bc7",
+      "size": 2069,
+      "normalized_sha256": "8cd01d203398ae2356f1b03147f97f9345667fc37bc7ea4b75f9c5e187082a10"
+    },
+    ".github/scripts/test_notify_source.py": {
+      "role": "observe",
+      "sha256": "6a2e9194cc2c1cc2003429edfff713adfd63873ca6b754cc7afb5191f8b4f650",
+      "size": 3670,
+      "normalized_sha256": "4f06f62e0725d8174ccfb26bebe5f4d6405416ee91a1800d4145093fa4ac4f6e"
+    },
+    ".github/workflows/auto-blacklist-pr.yml": {
+      "role": "index",
+      "sha256": "350de82ee895a501cdf1f791c69832e0f229f5471df9c944639917c8d3875c10",
+      "size": 3600,
+      "normalized_sha256": "84397f07418e9ac62af1e4fe0ecdc03755d5ef460c188329298a73c4dc4576da"
+    },
+    ".github/workflows/auto-label.yml": {
+      "role": "index",
+      "sha256": "27e2b38e7ca19f99f2f6016c410c4c26aa4daf41355a6da65825fa10a9e17123",
+      "size": 911,
+      "normalized_sha256": "6c31b2984a5fd628ff838fb7c4781366fad3f6d3094fcd6cff2a24d2645b527c"
+    },
+    ".github/workflows/build.yml": {
+      "role": "index",
+      "sha256": "22a7c22869b6e862639b666b80a2195cdb6fef7cca7be1df84c7552615c18f6d",
+      "size": 10165,
+      "normalized_sha256": "bf3d75fd954f288cf14b5cf8bd9c63f723ff97497b7a15891ece0b5c2b0a4ddb"
+    },
+    ".github/workflows/dependency-audit.yml": {
+      "role": "index",
+      "sha256": "6564c4e60df30259a6a0b45f895ce5c245bc9703f590ffcda70d4733cac45c5f",
+      "size": 2017,
+      "normalized_sha256": "449c5743febea1e997c5d00d7e8388815d945a16fc24c87a975de05d6177fc47"
+    },
+    ".github/workflows/kernel-module.yml": {
+      "role": "index",
+      "sha256": "87077e56301ce6511b71aeb476fc0f0875eb9f5236e065e6f5c1ca7f384182f4",
+      "size": 7051,
+      "normalized_sha256": "40e437c85e59c279a88c3c3fcf3102dda63d26034bc266e7a667f27f3f07f327"
+    },
+    ".github/workflows/lints.yml": {
+      "role": "index",
+      "sha256": "d4e2ea45e348fa49560e61bd628924af2208ee28fa1a1e7d8755b98dc91f801c",
+      "size": 9587,
+      "normalized_sha256": "dffe32329dc32846a157990721b150de80ef9da9560d363603cf266018483a77"
+    },
+    ".github/workflows/notify-tool.yml": {
+      "role": "index",
+      "sha256": "c60f7fa1b21361b3d7e1d54816060f67f775c9479225c310361b308fff78371a",
+      "size": 3016,
+      "normalized_sha256": "2fcc326abebdc6e4d02782041eba36bc0aed4c0b4d2d1a363f3fa1495127786f"
+    },
+    ".github/workflows/release.yml": {
+      "role": "index",
+      "sha256": "4619fa774eeb9bc658a4a449748f64d4fb00e9414c35c38b77f827489f4c0139",
+      "size": 17381,
+      "normalized_sha256": "e2997137fcd727c7af154c8971ee7548f2e774314f7d79f538135e7aabfaa9e4"
+    },
+    ".gitignore": {
+      "role": "index",
+      "sha256": "459127943d888b9441398b2ea3c2e9727f0638fe59c3dbb412f953b465fb915e",
+      "size": 961,
+      "normalized_sha256": "f987822f616f1faf6cb68eb5d1433f91ba93395399a7e5a90282b61af81e4b4e"
+    },
+    "AGENTS.md": {
+      "role": "index",
+      "sha256": "8dfc9de92509cb22289cefa4ad652c5df2d079221b407b6a67572d5ef75007e8",
+      "size": 14078,
+      "normalized_sha256": "8dfc9de92509cb22289cefa4ad652c5df2d079221b407b6a67572d5ef75007e8"
+    },
+    "CLAUDE.md": {
+      "role": "index",
+      "sha256": "77972317a8c06903c5a036000294c055f0ce6cd55a53431e66139c5e8ac95358",
+      "size": 8678,
+      "normalized_sha256": "3e0aa714409caf8a103df4dc87cae110977a917bbb1e5408cc711af17d265159"
+    },
+    "CONTRIBUTING.md": {
+      "role": "index",
+      "sha256": "5274843db021af726f22066de8eb2b14ebae2e6da62cd162706426113fec52ef",
+      "size": 2210,
+      "normalized_sha256": "1d5f468c6a884ff9dd9ff3058db888854bede00227eea3ec0947318959d97e80"
+    },
+    "Cargo.lock": {
+      "role": "observe",
+      "sha256": "43c6a06fe4623f6f734a52cc0a8d7f8c912b8d23cb7e964bb07df8f774da5255",
+      "size": 62216,
+      "normalized_sha256": "36d06866c34e6cb5de866f92d857a89dcb5675befb2b3b6474da5d59a32d60a4"
+    },
+    "Cargo.toml": {
+      "role": "index",
+      "sha256": "182d37451d35bed1c360dc1b84031e4dafc773c97e8a3c386b8a3f093c3b90da",
+      "size": 1821,
+      "normalized_sha256": "dd883305c04f26a3d60cb7a6c7c28be43ae954853ec08c3e6d8c9a31428eca6a"
+    },
+    "LICENSE": {
+      "role": "index",
+      "sha256": "230184f60bae2feaf244f10a8bac053c8ff33a183bcc365b4d8b876d2b7f4809",
+      "size": 35823,
+      "normalized_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    "README.md": {
+      "role": "index",
+      "sha256": "c3abdfc26e5c912531766649bb2bde6dea44b0869bf3c20f8609acca181f8cb5",
+      "size": 3238,
+      "normalized_sha256": "108c767c19ad0d68ce79c3403dac587c1bf5c1bc73a198df7bd2412d2be67f60"
+    },
+    "THIRD_PARTY.md": {
+      "role": "index",
+      "sha256": "45fabe2828561c4c1d7217612d31db8ff7fd21745cbcd0e75184eb20d67dbb05",
+      "size": 11667,
+      "normalized_sha256": "13237151d168a462983b81581c28e118420bfc19f9045efe1393e42ae2aedd64"
+    },
+    "USAGE_NOTICE.md": {
+      "role": "index",
+      "sha256": "701fb6c01f57c8e9979cafc9fff8cefccb52f3ad2a802cab83df6e00c744e495",
+      "size": 1380,
+      "normalized_sha256": "1209c717b2b401660fc6af3a7e88f0455c6d38b970e1cf39241e3aec7e1adac0"
+    },
+    "aoci.code.txt": {
+      "role": "index",
+      "sha256": "2f3896b791fe65ac9f4ccb1ee1f605b099ffe3ae5f2fd38161e42574565a9e2a",
+      "size": 106378,
+      "normalized_sha256": "2f3896b791fe65ac9f4ccb1ee1f605b099ffe3ae5f2fd38161e42574565a9e2a"
+    },
+    "aoci.meta.txt": {
+      "role": "index",
+      "sha256": "5ccd06dd2198435423141174e4f3eaed7e7645644070e0b5cc2e20dbc889172a",
+      "size": 2187,
+      "normalized_sha256": "5ccd06dd2198435423141174e4f3eaed7e7645644070e0b5cc2e20dbc889172a"
+    },
+    "aoci.txt": {
+      "role": "index",
+      "sha256": "1d81d117a605703d1b7b697bbcb924e2fa9ddb61aace6a2908d70dc721dc9100",
+      "size": 306,
+      "normalized_sha256": "1d81d117a605703d1b7b697bbcb924e2fa9ddb61aace6a2908d70dc721dc9100"
+    },
+    "changelog.md": {
+      "role": "index",
+      "sha256": "deb7363bc971971519c96a19da5df02a1d42c15348a271fb6f0b5948d62c6a43",
+      "size": 63581,
+      "normalized_sha256": "b689489f630c663dd3df02baa804b36fd74f6a18783b15aeacdefaf4c7ca8a7e"
+    },
+    "cliff.toml": {
+      "role": "index",
+      "sha256": "36221b7cc1e3f5858795f538dd73dba34a6ef19e1c1c466c380065f89962fbf1",
+      "size": 1901,
+      "normalized_sha256": "c8d6d16a08137979725b5df512d4f27f853dd4d5f30eae17b1d7f4859558f68c"
+    },
+    "clippy.toml": {
+      "role": "index",
+      "sha256": "d0a9d707ad79b38d6ac2563fc082e17c874bb074d3c23944c56dc8c253b284ce",
+      "size": 101,
+      "normalized_sha256": "740bee94544d5c345e17c80051de028d93b372cce8e9459cadb0dc62eca92803"
+    },
+    "docs/ARCHITECTURE.md": {
+      "role": "index",
+      "sha256": "4817bffee1cee4f4d08eb20437e28c0329ffd72b795c75c99edf390d5b57a818",
+      "size": 4764,
+      "normalized_sha256": "b112a292de73a0bd0ee2f7f92bd1eb3ed473ce94d7c0c7a3a43335cbeae756a9"
+    },
+    "docs/KERNELSU_MODULES.md": {
+      "role": "index",
+      "sha256": "46862ef8b902bebe9064d788f53b0f7725313d8ac39cefc1a4df72f0db7edd7e",
+      "size": 2951,
+      "normalized_sha256": "8397ed1f8fc3431d30e1aa60a8fe8b94138b15ca116f92f28fabebd333cda09b"
+    },
+    "docs/README_ES.md": {
+      "role": "index",
+      "sha256": "4ddcd2f73455d229c329c20bd41b21d9273babd4bd8262631d2717a573d330f4",
+      "size": 11017,
+      "normalized_sha256": "10b3bc57ec6117399ee02144d651145c735bd6680f73cabaface4a550a0f325b"
+    },
+    "docs/README_FR.md": {
+      "role": "index",
+      "sha256": "b3c6cd68835e18f4a3cec9554d09e490c58c2c554b918799aea1bb5f8cd4202a",
+      "size": 11448,
+      "normalized_sha256": "de785a233b7afaa524a9f0514c079ca24b49e1940b983d5939e82df409dad0df"
+    },
+    "docs/README_ID.md": {
+      "role": "index",
+      "sha256": "5b6c2a3c2b471b74a20bd49df848cc9535620a265d7a7b884142abd345fe0c3d",
+      "size": 10450,
+      "normalized_sha256": "357f8490941bb111db61344aa8963e6c53b7815365a0d4ae27b86be3e1ccd703"
+    },
+    "docs/README_IT.md": {
+      "role": "index",
+      "sha256": "ebf60b0f12ffc471ffa795818361700418f61fae441dd7eb7dcd62a9173dd051",
+      "size": 10809,
+      "normalized_sha256": "433dd56fdb392cb7f0ac8e1b6aa01e1223bf626bff87ffbe124977706ed48cb7"
+    },
+    "docs/README_JA.md": {
+      "role": "index",
+      "sha256": "39a22ceaeec8ca72767ac7c0d4fe8ea8253bb0c679dcdf335042dceb3c45d878",
+      "size": 12838,
+      "normalized_sha256": "ce598aaaebb335b7c17225376034764ed62616a4b34e878d21300fe909644a7e"
+    },
+    "docs/README_RU.md": {
+      "role": "index",
+      "sha256": "e1d78fa1cb80219ab6829a7726430af16666cfffbd7f9cd6f0dde8bb4215de1b",
+      "size": 15396,
+      "normalized_sha256": "77f57970cbcfbc71f8df1106dbb9c4f55ffd0e1a96ceabc7d4ed4a0490eb0aaf"
+    },
+    "docs/README_TR.md": {
+      "role": "index",
+      "sha256": "8128d53b97583488715c01cb9eea24c174f13b49370a4f457694ffcd39bbfd1e",
+      "size": 10957,
+      "normalized_sha256": "d27844489c4e7d01695c60577109b95062be252fcfb5cdf686d5d1c6ec10b5bb"
+    },
+    "docs/README_UK.md": {
+      "role": "index",
+      "sha256": "63d314328c809f3a1eb16802bc76498f09b24b3ccea423d93d55af7e92c84fbb",
+      "size": 15155,
+      "normalized_sha256": "332cba62b5389df757dc2bad58145e1bee83dbbced855b875aaf5e156383a208"
+    },
+    "docs/README_VI.md": {
+      "role": "index",
+      "sha256": "0615952c6ca83be662d3967412aaaf7b253938793326c01440de3c356fdadfe1",
+      "size": 12176,
+      "normalized_sha256": "dc51cdbac3e5a4b70bcc85763b789779cc21b6ad5ea106ae712c90b922aaa71d"
+    },
+    "docs/README_ZH.md": {
+      "role": "index",
+      "sha256": "0c66e70030d266fffad7528485f5c45a74eda08571094830e1ddbe0e815854f0",
+      "size": 3192,
+      "normalized_sha256": "d6f3e04341114eaf38b343f4f14cc612f2437692c6e4e99b1f78e9c0cd3f9274"
+    },
+    "docs/README_ZH_TW.md": {
+      "role": "index",
+      "sha256": "69089d2b5ba334ecc66d3aa7e2530cd4c5e717e57f0a7adf08985bc20653de3f",
+      "size": 9260,
+      "normalized_sha256": "ee7f3befb89e7f5a2c1e4915f19b39abe01f4aed14aadfa14b04259c9c334bba"
+    },
+    "docs/RUNTIME.md": {
+      "role": "index",
+      "sha256": "f2c3988a4b186a59e3f0c6478a56dbde9376cebc728ced64cb510dcc0d9fbaf6",
+      "size": 8299,
+      "normalized_sha256": "67194f1ac901b36a4c4800a4b3bea697b99a0138aa2a5abe559169666739dece"
+    },
+    "docs/VFS_CLI.md": {
+      "role": "index",
+      "sha256": "fe7e077a6536f99cdfe0a15a09327ab5d14dd4822052a7b716cea729a65e3a7f",
+      "size": 12773,
+      "normalized_sha256": "053f4d453bed0d528596240d37907e71fa620b73ffa4dcd3c0dc4c74ec6f4091"
+    },
+    "docs/reviews/2026-11-05-vfs-source-identity.md": {
+      "role": "index",
+      "sha256": "19b49d6d3d6a3a0856b2f017bf8ad1610f953141466c2761ae7ae72672cbbc71",
+      "size": 2722,
+      "normalized_sha256": "274643d8d6e1d5694aa6617cd930421c0bd4f8c7ce772ad2b62f894acde1ee2c"
+    },
+    "docs/reviews/2026-11-05-vfs-upstream-lifetime.md": {
+      "role": "index",
+      "sha256": "8452e1ff482b343362db571aef48b771305549445d3cddc9a2872ed1744ae30d",
+      "size": 2919,
+      "normalized_sha256": "4412c0d8bff3838f3eaba455a51079c793396d8ed74ccd75c1024eb0fba3f2c7"
+    },
+    "docs/reviews/2026-11-06-implementation-verification.md": {
+      "role": "index",
+      "sha256": "d22dcab797e226077a93a0319bdd2c29914b4fb163c60bd877df11682f732f20",
+      "size": 6477,
+      "normalized_sha256": "1d88c0e82197284ac2b2c2a95f2e4323d062c7c0401bd1d388e038584e2c694e"
+    },
+    "docs/reviews/2026-11-06-prerelease-511.md": {
+      "role": "index",
+      "sha256": "0c814f561f0a549d619f507646d00c1a31b0412055a49346824b1216c66e0627",
+      "size": 6070,
+      "normalized_sha256": "1f81ac2594187062e07635ceb99d01456cc8064fa9f5c0fd7e0416acca0afac7"
+    },
+    "docs/reviews/2026-11-06-vfs-uid-directory.md": {
+      "role": "index",
+      "sha256": "060dee2297757edcaa634a27ec77da48c2d7f40e76dfcf941504cdd9e28b982d",
+      "size": 2327,
+      "normalized_sha256": "c3bcf885b90b2e18395d55515687b15d8c577738845075eec62f27a3e091911e"
+    },
+    "icon.png": {
+      "role": "index",
+      "sha256": "b3a933b89393bb5f3662157d14c3aeb6bdb380fabb5befeef0523431850c0f3e",
+      "size": 33079
+    },
+    "icon.svg": {
+      "role": "observe",
+      "sha256": "ec7791cd3ee1ae2d5184d0532aec5f740d870dadd42b33378a9eb8bed22a9312",
+      "size": 1045,
+      "normalized_sha256": "5a889c5134ee03e161b8418bdc86a799069f9974790b7131e61660253308ef3f"
+    },
+    "module.yaml": {
+      "role": "index",
+      "sha256": "a8726726c0498dfc709ccfb3c6502a93820801547ba1951eac9aeff3d3a35a35",
+      "size": 740,
+      "normalized_sha256": "26e4eaf7ec1536d02918cfcfc06d32f814746c4c6b817e171d156013a43ce741"
+    },
+    "module/boot-completed.sh": {
+      "role": "index",
+      "sha256": "327b59e3c064a66c7340e6551eafe259c9263c91821deff727d3c61090aeb328",
+      "size": 280,
+      "normalized_sha256": "327b59e3c064a66c7340e6551eafe259c9263c91821deff727d3c61090aeb328"
+    },
+    "module/config.toml": {
+      "role": "index",
+      "sha256": "5257097f1e5453111084eb34ec9efbd9df0e30ec812eaa26c544f4498dff7785",
+      "size": 644,
+      "normalized_sha256": "46991e858cb2efc8751ef414a982ce8672ac44f34dad76783d25450995d91bca"
+    },
+    "module/customize.sh": {
+      "role": "index",
+      "sha256": "30a6a280b3f5c2826c77fc1227941f750d370cdf8ad2d46c6b0f78fd49a83f25",
+      "size": 4013,
+      "normalized_sha256": "30a6a280b3f5c2826c77fc1227941f750d370cdf8ad2d46c6b0f78fd49a83f25"
+    },
+    "module/emulated-soft-reboot.sh": {
+      "role": "index",
+      "sha256": "3b694d62bcdc59498660d733eb2b554d3bd573911910f5b3252f0e337f282a58",
+      "size": 185,
+      "normalized_sha256": "3b694d62bcdc59498660d733eb2b554d3bd573911910f5b3252f0e337f282a58"
+    },
+    "module/lkm/README.md": {
+      "role": "index",
+      "sha256": "1697a7f6309ad2f0bcd69df60918ae1929494a510110bc641b01d48211517f41",
+      "size": 3749,
+      "normalized_sha256": "7e0f892edd04c4d18a3961017544d16df9abc1d639370a1b08ec68437e9f50e2"
+    },
+    "module/lkm/binaries/list.txt": {
+      "role": "index",
+      "sha256": "08aeb36b568da1c6db4a1423e138794f0c5f9439a69bdcf3be4f9db9ab00d1d6",
+      "size": 797,
+      "normalized_sha256": "08aeb36b568da1c6db4a1423e138794f0c5f9439a69bdcf3be4f9db9ab00d1d6"
+    },
+    "module/lkm/binaries/nuke-android-4.14.ko": {
+      "role": "index",
+      "sha256": "d224286e7a8dc76f012a2de41c95a607028b7e7a32e56c7d696422106b889f0e",
+      "size": 9952
+    },
+    "module/lkm/binaries/nuke-android12-5.10.ko": {
+      "role": "index",
+      "sha256": "e20b65532aa53bb18181d3af23236bdab4acc395d1f74ed8d81904f54ce58451",
+      "size": 13840
+    },
+    "module/lkm/binaries/nuke-android13-5.10.ko": {
+      "role": "index",
+      "sha256": "cf1f872bcd019e4a0a180ffeb4a1fc1f1d33a8add8e5c5cf04c54647c360753c",
+      "size": 13056
+    },
+    "module/lkm/binaries/nuke-android13-5.15.ko": {
+      "role": "index",
+      "sha256": "6186919a662a30fe64b7cdd96eedb675ccd8e0f767925040fe2c3ae8266621f4",
+      "size": 13704
+    },
+    "module/lkm/binaries/nuke-android14-5.15.ko": {
+      "role": "index",
+      "sha256": "47849c18816008bbff5355c6dcd72242805cb2b05b3967b9e22cfe6dab41a3f5",
+      "size": 18296
+    },
+    "module/lkm/binaries/nuke-android14-6.1.ko": {
+      "role": "index",
+      "sha256": "ac432ee609ac20b17d423eba484fca203d70ca7fcf7b4af04fd337c6d5f8c902",
+      "size": 14200
+    },
+    "module/lkm/binaries/nuke-android15-6.6.ko": {
+      "role": "index",
+      "sha256": "7179a22343f8702b6a3bf5b552db420b7b8ec4d7f7e20e54c5dd01a14aae123c",
+      "size": 14656
+    },
+    "module/lkm/binaries/nuke-android16-6.12.ko": {
+      "role": "index",
+      "sha256": "ef2c712869220ae148cd4cd0baf0baf1921a6e0ae3fbe821dd79540632a39933",
+      "size": 14960
+    },
+    "module/lkm/binaries/nuke-android17-6.18.ko": {
+      "role": "index",
+      "sha256": "3fc08d5b183ff1fa0c686e1163bd617e3c12abd8af45182e59defddb036c5778",
+      "size": 15160
+    },
+    "module/lkm/src/Kconfig": {
+      "role": "index",
+      "sha256": "6e9d42fb20d92edcd7ba315b62da1912ef70fd04fc2e064c21c324a621afddd3",
+      "size": 332,
+      "normalized_sha256": "27789a016075a1f263ce003ca6d587d7fb81f4a881dfff134a02cdb2eb5785d0"
+    },
+    "module/lkm/src/LICENSE": {
+      "role": "index",
+      "sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b",
+      "size": 18431,
+      "normalized_sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    "module/lkm/src/Makefile": {
+      "role": "index",
+      "sha256": "dd91e3431acfed77aeeb4e5ef6accdca99a018ad84d3d7a3398e539c005e4145",
+      "size": 129,
+      "normalized_sha256": "281f6b663ff587c032a3a74b0f3aa99957c5a9f8b06899cd1ce9715e2636401c"
+    },
+    "module/lkm/src/UPSTREAM_README.md": {
+      "role": "index",
+      "sha256": "ad84c56d02ab3276d9386c90bd85898a41e83c7008f03131b0005338534bcaff",
+      "size": 736,
+      "normalized_sha256": "784c74a4462e9d92c2bcdf375450c4391ac116fead8edfdf60a94d7061428875"
+    },
+    "module/lkm/src/nuke.c": {
+      "role": "index",
+      "sha256": "b1ba166ff9c0321e7cca3101b28490253fae915439aeb77cde42f26ca3f17e73",
+      "size": 3797,
+      "normalized_sha256": "84e59c889d4112d116eb1a50ada41adee232f3cd3f20dc4a706b6a97a5b7523c"
+    },
+    "module/metainstall.sh": {
+      "role": "index",
+      "sha256": "0854273914444d660bafb1122ac44cf96b5ac21cb463b07e7e5efb6da7a57164",
+      "size": 2455,
+      "normalized_sha256": "0854273914444d660bafb1122ac44cf96b5ac21cb463b07e7e5efb6da7a57164"
+    },
+    "module/metamount.sh": {
+      "role": "index",
+      "sha256": "d56281bc3f1ac49177517c248523d563b4fec7cd54c955b8a1ad51d861b61e86",
+      "size": 100,
+      "normalized_sha256": "d56281bc3f1ac49177517c248523d563b4fec7cd54c955b8a1ad51d861b61e86"
+    },
+    "module/module_blacklist.toml": {
+      "role": "index",
+      "sha256": "7a602cebb3321a8749e4b75923d6f3c2d08ac0990c923596b0cb62b365825aa8",
+      "size": 269,
+      "normalized_sha256": "9f5d444450cfac793df59ab4f13de50d3c65c59247fee9cc84bcb4809bce421d"
+    },
+    "module/post-mount.sh": {
+      "role": "index",
+      "sha256": "df38242e2cd30228e9ffe7c752277088d5a8b49c4070735cae30d8453aeb5789",
+      "size": 101,
+      "normalized_sha256": "df38242e2cd30228e9ffe7c752277088d5a8b49c4070735cae30d8453aeb5789"
+    },
+    "module/uninstall.sh": {
+      "role": "index",
+      "sha256": "2144deb6ebe3860da8700563909bc71930eb0fceedcaa091bd21056c81e45c3a",
+      "size": 256,
+      "normalized_sha256": "2144deb6ebe3860da8700563909bc71930eb0fceedcaa091bd21056c81e45c3a"
+    },
+    "module/vfs/README.md": {
+      "role": "index",
+      "sha256": "139eb7d8eb76bfbff5175acdce29000b0c15d18ac0ee839b79b236b185146f6d",
+      "size": 13750,
+      "normalized_sha256": "2a952bf577254a3c0a076be6984e6fe25a0c221279b689af68db97d1934cd1bd"
+    },
+    "module/vfs/binaries/hybridmount-android12-5.10.ko": {
+      "role": "index",
+      "sha256": "22ca4b80dec09b790a8aee48780bdb53c5d6acdc9820e29053a0305e7b2be572",
+      "size": 117496
+    },
+    "module/vfs/binaries/hybridmount-android13-5.10.ko": {
+      "role": "index",
+      "sha256": "6431f09d82addc921b142d1d937b26b8e522032c189afdec7252b5f2e8aba925",
+      "size": 115032
+    },
+    "module/vfs/binaries/hybridmount-android13-5.15.ko": {
+      "role": "index",
+      "sha256": "f6cd4c6fb165d0be45636a7da88ea3ab16ec69bde80b3e98bb4d19c3fc60530e",
+      "size": 126008
+    },
+    "module/vfs/binaries/hybridmount-android14-5.15.ko": {
+      "role": "index",
+      "sha256": "75ead84ee22c8144193e2377674b9c9809a19e544ec6e459ed946cf54be3524e",
+      "size": 134952
+    },
+    "module/vfs/binaries/hybridmount-android14-6.1.ko": {
+      "role": "index",
+      "sha256": "ed46a487c094fc8a34cd2f43a9fa35e19a738b6d18b448cccb987e1c598b2cd5",
+      "size": 91712
+    },
+    "module/vfs/binaries/hybridmount-android15-6.6.ko": {
+      "role": "index",
+      "sha256": "4dbbfa34bf50237259199c12a3a9d698334fe4137f46ef75f1a402ade8d78e80",
+      "size": 94816
+    },
+    "module/vfs/binaries/hybridmount-android16-6.12.ko": {
+      "role": "index",
+      "sha256": "4820248610ca4c2ea6a42c1e240e35627189a36258e4477f742d3b9a59131f23",
+      "size": 111264
+    },
+    "module/vfs/binaries/hybridmount-android17-6.18.ko": {
+      "role": "index",
+      "sha256": "5e9ab4d99f883fd512e261ff2cbfd5e2bf1787bdead979be82d15d40926114ec",
+      "size": 104808
+    },
+    "module/vfs/binaries/list.txt": {
+      "role": "index",
+      "sha256": "0048701881bc543a44497354c15e5c1ba62df88fea3810d30e0b5da11710d6f5",
+      "size": 766,
+      "normalized_sha256": "0048701881bc543a44497354c15e5c1ba62df88fea3810d30e0b5da11710d6f5"
+    },
+    "module/vfs/binaries/sources.txt": {
+      "role": "index",
+      "sha256": "08bb078362f0ae33345a291b186d5c5dc2c78854881423f139c1d497c9b68645",
+      "size": 65,
+      "normalized_sha256": "08bb078362f0ae33345a291b186d5c5dc2c78854881423f139c1d497c9b68645"
+    },
+    "module/vfs/setup.sh": {
+      "role": "index",
+      "sha256": "7a19ebc14c57c49d92b9769e198568473730a45af03269ca4946c3e2622ed014",
+      "size": 6015,
+      "normalized_sha256": "7a19ebc14c57c49d92b9769e198568473730a45af03269ca4946c3e2622ed014"
+    },
+    "module/vfs/src/Kconfig": {
+      "role": "index",
+      "sha256": "f237071466f0e6132b09c04ed3e7151925b533225f5bedc61733dcfc47872219",
+      "size": 456,
+      "normalized_sha256": "f237071466f0e6132b09c04ed3e7151925b533225f5bedc61733dcfc47872219"
+    },
+    "module/vfs/src/LICENSE": {
+      "role": "index",
+      "sha256": "189b1af95d661151e054cea10c91b3d754e4de4d3fecfb074c1fb29476f7167b",
+      "size": 18431,
+      "normalized_sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+    },
+    "module/vfs/src/Makefile": {
+      "role": "index",
+      "sha256": "c71d79be1f5fbd3e2af6d04d8ad58d1737537cfb033e4ec29d7df248c9f02a8c",
+      "size": 1879,
+      "normalized_sha256": "c71d79be1f5fbd3e2af6d04d8ad58d1737537cfb033e4ec29d7df248c9f02a8c"
+    },
+    "module/vfs/src/PROVENANCE": {
+      "role": "index",
+      "sha256": "6316ef0f67b61b2a56845b4cbd999b554474fa6a1870cf3e214d1039dffb6790",
+      "size": 14850,
+      "normalized_sha256": "ba14ba16e7f79772fe5a42880e97fad12046e6212e366c9d57ae098fa2e69787"
+    },
+    "module/vfs/src/UPSTREAM_README.md": {
+      "role": "index",
+      "sha256": "ffba5d5907079c6e470a75c85211e579c3b0e4cfe602120fa854efb014687901",
+      "size": 2804,
+      "normalized_sha256": "c42cad879c216d643444b448e8bd461a757cc2754e716520c9d36da6e799324f"
+    },
+    "module/vfs/src/hybridmount.c": {
+      "role": "index",
+      "sha256": "59396bff2aa9b8280f0716093a9e16fdb72e94fbce6633782005ba3d70dcc24a",
+      "size": 105866,
+      "normalized_sha256": "59396bff2aa9b8280f0716093a9e16fdb72e94fbce6633782005ba3d70dcc24a"
+    },
+    "module/vfs/src/hybridmount.h": {
+      "role": "index",
+      "sha256": "4ba36d69e2c58ccb0e4ae4bb587b6008fe4b039c166d01e1ad1a172c321b55b7",
+      "size": 25714,
+      "normalized_sha256": "4ba36d69e2c58ccb0e4ae4bb587b6008fe4b039c166d01e1ad1a172c321b55b7"
+    },
+    "rust-toolchain.toml": {
+      "role": "index",
+      "sha256": "8a197e20d377e13e1e04e02da315db88bc38d1330101d5f8475f4ea09ecc464f",
+      "size": 235,
+      "normalized_sha256": "a7fe4b6138d5395b471dbbaefe9666fe3ceef9f50a72277f6ee438345a5c7629"
+    },
+    "src/boot_hook.rs": {
+      "role": "index",
+      "sha256": "10f6fd2d4bd88c0d3dca84f50f084875a3986802467ef9b3801a40d57596f863",
+      "size": 5465,
+      "normalized_sha256": "b05d16d3f74fbff16712f443a7aeb7e89f6e834e74c1c55d8fcf5cb0d7c8a7c4"
+    },
+    "src/cli.rs": {
+      "role": "index",
+      "sha256": "c546b33ccf4d938c25b23c875744bf4c7f6ba4be4b5053a97a3fa81713fc3434",
+      "size": 2595,
+      "normalized_sha256": "7e74ec1e9276732f6a37f8cd51854e06ac02848b7ec6431551789e1e172d7ab5"
+    },
+    "src/config.rs": {
+      "role": "index",
+      "sha256": "29a2b8c27ae1543b699a0d0c5b8e97852c41b5f13001a17f0de3b1e527c7b59d",
+      "size": 26451,
+      "normalized_sha256": "88b758999f0b2a74866c6908c0880ebb9b2ffe850b1478b58c65754c962afb06"
+    },
+    "src/config_tests.rs": {
+      "role": "index",
+      "sha256": "5ea9099afeac45ab756c4dc3a03540e5b10d6ddd6dc72f3587bb386b3e3e6d3c",
+      "size": 32580,
+      "normalized_sha256": "4751efa9650b8b41620530011d6c9760b8e782d9795715065acf09cd2bfbfcb3"
+    },
+    "src/defs.rs": {
+      "role": "index",
+      "sha256": "a74c89c0f8b05b24563dcbe5d294c607f8502d39c558be4cdfce8e7badf66ea9",
+      "size": 5856,
+      "normalized_sha256": "820cbb9d60011b4afcf1ff29776128a74a47e6dcb7e3ced0846024f33ada0791"
+    },
+    "src/errors.rs": {
+      "role": "index",
+      "sha256": "c80768555e404442b14b5368ee3cc8666c6f2f9f17cc22428b1bc79c71e49da6",
+      "size": 13009,
+      "normalized_sha256": "da98d52857bd86bb893850d53c59e7a52aa0af1574f96629d6627bc2d4cb8141"
+    },
+    "src/errors_tests.rs": {
+      "role": "index",
+      "sha256": "4502849284d40b301653d60d5943630495e6c64c4a622ad6ad683bdd66f598b9",
+      "size": 5091,
+      "normalized_sha256": "e9361c376d386028947f613d818468c2d7a7448e5a918cedf4e470db393f281c"
+    },
+    "src/logging.rs": {
+      "role": "index",
+      "sha256": "4d037caf08c104df67397c83807e171c7565b23b8dcf797406ab59d51af59b96",
+      "size": 2995,
+      "normalized_sha256": "d804aec15f2af6dadda307d9bdfba0479f76f1751611c3f34d54fbf333c18b17"
+    },
+    "src/magic_mount/exec.rs": {
+      "role": "index",
+      "sha256": "a6deea185bc9f1b2f5cd37a9fce3549f56274fcf5e2487dfb088a4d28aadd774",
+      "size": 28380,
+      "normalized_sha256": "6df684d53c52072fe61884ab773b6d8ba01cbb782d04f33bc4de66c48eb34130"
+    },
+    "src/magic_mount/exec_tests.rs": {
+      "role": "index",
+      "sha256": "cdae34616f076544fee8aa466c149f1889d44d25e5be91173850d157aa04c752",
+      "size": 21099,
+      "normalized_sha256": "7c3f8db3be0e94c6fa58c862624d4533bb8c2203b155a9f5e82b5a064b121f1a"
+    },
+    "src/magic_mount/mod.rs": {
+      "role": "index",
+      "sha256": "7947d114d6821c6781dfbee56555b3d8cbbc37caac5bdf099c2187d51f2ffdb7",
+      "size": 417,
+      "normalized_sha256": "8f79ff81a505cbbccdd4e419d0918059c9106e121745d35be46fecc6533011a1"
+    },
+    "src/main.rs": {
+      "role": "index",
+      "sha256": "e7c3fb1e2d32329d779b548a3ae121af1152ca71205f032e9f585a4e99fd48f3",
+      "size": 992,
+      "normalized_sha256": "cc1e640c14d48b37b42c424472bbb7c4c47184396d9f66a0b569887785a5246f"
+    },
+    "src/module_id.rs": {
+      "role": "index",
+      "sha256": "ec469a885f8f12e4da074d0d3fcfe26bbe1ade22921b11b07557ceddb7f96fff",
+      "size": 5602,
+      "normalized_sha256": "e15f6aad1e8f5a67a1fd09b504fb047b2bd6cd2fb516afe005ae9824e4c6c680"
+    },
+    "src/module_status.rs": {
+      "role": "index",
+      "sha256": "dcee2ca9805894e3387a7c785c3982fab2436d89b2e3f0e1534a8bd752206278",
+      "size": 7750,
+      "normalized_sha256": "ac9d2283f4120e50d4e593b17abb1190930594a5ea08acf87cc14907b6136f7e"
+    },
+    "src/mount_tree.rs": {
+      "role": "index",
+      "sha256": "54056c3d5d13aaded090589674195b5183567606652dc82c2640a2edf1c508cd",
+      "size": 15858,
+      "normalized_sha256": "25169cc5c989d5e5d9428663a50bc45c28279dde66496f2f7fe4ba15d5045543"
+    },
+    "src/overlayfs/mod.rs": {
+      "role": "index",
+      "sha256": "80f475f78111efe2fedba5cb210bc72f53ba582a904de69123a6215ed061a929",
+      "size": 429,
+      "normalized_sha256": "d5ad48ad746313fc89b6b35491dcd99ab97216932b3f54a9b32b55a6a2cf9358"
+    },
+    "src/overlayfs/overlayfs.rs": {
+      "role": "index",
+      "sha256": "455d26f76b52c99ef6bb49f5cf9e384b1901d38cc8319f02afaf329371610190",
+      "size": 22882,
+      "normalized_sha256": "455d26f76b52c99ef6bb49f5cf9e384b1901d38cc8319f02afaf329371610190"
+    },
+    "src/overlayfs/utils.rs": {
+      "role": "index",
+      "sha256": "6430c2f303232fba0cce3b9f4b043ac9adba160480620e863d0ff3079c1853d2",
+      "size": 6804,
+      "normalized_sha256": "3247b4bb7e1a56525d5484307f5321c1991c5ea8e56484beb72e840384f95981"
+    },
+    "src/partitions.rs": {
+      "role": "index",
+      "sha256": "3998a255ea45db7ef9303d44876674b38f6b8836b77fccfc7a6cc9ce7991719e",
+      "size": 16923,
+      "normalized_sha256": "a519742b29987ec338d4be887f47791c15f4b723bb915892a862dffb1dd86996"
+    },
+    "src/partitions/tests.rs": {
+      "role": "index",
+      "sha256": "4719b58a99f741b6f6b655791d46802d4a461406173ba080ac80b54dfed920c9",
+      "size": 5971,
+      "normalized_sha256": "9e2d484558d5ebf7c5d155a3a2d1d0c1fa4099f727f96f71401aa14c772b3610"
+    },
+    "src/pipeline.rs": {
+      "role": "index",
+      "sha256": "1832a564bc04a9bbadeda50797f503722dd1142604daf999bf27626e866d8ffa",
+      "size": 95124,
+      "normalized_sha256": "ff117456ba36d42bf11a6e90c4d422a0855facea25b6ffc348bd0aaf09c78ac1"
+    },
+    "src/plan/mod.rs": {
+      "role": "index",
+      "sha256": "ba89609040c2c557d1fdfaa063521e86aa3a4ccf6500edd29ff89239adfa8c4a",
+      "size": 80731,
+      "normalized_sha256": "79b1c59eb875ff6446d99354dc401e41a577e57d7a968282f7cde754f69b33f4"
+    },
+    "src/runtime/boot.rs": {
+      "role": "index",
+      "sha256": "f8d9bfa30a918300431815f4dff7011eadbcd5648e1e115e2d3b907ce0fa8d38",
+      "size": 11178,
+      "normalized_sha256": "b401a7eab895d7958f18235b201fc57e8a7df42b66bc6e956a3264e9e04d91ea"
+    },
+    "src/runtime/device.rs": {
+      "role": "index",
+      "sha256": "c79e4b80b6ec388688a03fd0f18c3c12691aac88eefa6ec36c4b0625a7c1f2f2",
+      "size": 5374,
+      "normalized_sha256": "3d8eb775ebb5caef6f568bb70ba01d928a707282018e0116d646fdd283220bc2"
+    },
+    "src/runtime/hot.rs": {
+      "role": "index",
+      "sha256": "59048b4b9e9b5b4d6329ea731384e99ecbdbf8d71570fa85d31a2b913df5600c",
+      "size": 11205,
+      "normalized_sha256": "ce33bc8fda5b87b9e08460ce0368e4af5ca216799444103bcfc2779b1f2aa721"
+    },
+    "src/runtime/ledger.rs": {
+      "role": "index",
+      "sha256": "ec4ec458fc4b8b62bc33109c7c75286bbfd0772e52e82624c4555b2de11ee721",
+      "size": 12011,
+      "normalized_sha256": "613a216de66ee54f41b68f036dcd826da0b5b5564575d96ef088c174384430e9"
+    },
+    "src/runtime/lifecycle.rs": {
+      "role": "index",
+      "sha256": "c37bd0a851700e338be98caab2391dbaead5798cadc7b9de92beb2ee84f3716b",
+      "size": 9103,
+      "normalized_sha256": "b8d1dbedc06310869b8890e83144a25ee9dcb001a3824591e7f967df351b9f2d"
+    },
+    "src/runtime/mod.rs": {
+      "role": "index",
+      "sha256": "4c7e01b5518e3cedccca29ec0065e460a395fa0a74f93acd52f7adddbf713e31",
+      "size": 2287,
+      "normalized_sha256": "30134d720a8e1f7367d8ee54309862decd344bef4347ca6ce396f292fae1e6c1"
+    },
+    "src/runtime/mounts.rs": {
+      "role": "index",
+      "sha256": "55705ea1d8992663b792386b0d145d6f9ce11bccaf0823de41386f2dc8cbb1be",
+      "size": 17999,
+      "normalized_sha256": "14929072f846462ff06e2db3b52a5a2541184e8d5625020e0f16cb1549627ede"
+    },
+    "src/runtime/policy.rs": {
+      "role": "index",
+      "sha256": "817a455e153999ab40e46f0cbcae14b2fe52cd4afca12cda45525a9a488e3ac3",
+      "size": 11548,
+      "normalized_sha256": "e9f018aa04ec49d51ee9e6efd3121369d6261cb54a2a989caaf22cc1c2f24ba2"
+    },
+    "src/runtime/rules.rs": {
+      "role": "index",
+      "sha256": "ab76dad1e4e1d478bb031ae0c13f9f0f247fb3c8150b480c208e69d8aa4a2e98",
+      "size": 25888,
+      "normalized_sha256": "552ce08a665706418dc5c1c94d38d4e75df366a69148dacc9d99bf2449e48c1a"
+    },
+    "src/runtime/transaction.rs": {
+      "role": "index",
+      "sha256": "8a105837268151f34db5121c054d4f37532da4d4020b0e23a328fae759987539",
+      "size": 14377,
+      "normalized_sha256": "f739152b54066e59cc13beab9db6919bb67744889c2a9d06bc16cc281ea65e47"
+    },
+    "src/scanner.rs": {
+      "role": "index",
+      "sha256": "da89514d81785ec2f54f8ae401f25d6cda39ccc33dec84240a763c11f513d18b",
+      "size": 26869,
+      "normalized_sha256": "68506773fcc1111138277d62ed1628cbfceaeceed25aae1ff8c8682fadeee2e0"
+    },
+    "src/state.rs": {
+      "role": "index",
+      "sha256": "92fddbf7d00dcccd65dc2d29e354d57d0b800915302bea87479f56efce0492c7",
+      "size": 68809,
+      "normalized_sha256": "c4ceaa3978d6a9fb59f3e4d9cb8fa764797d385e05218701e0f55270c10550ce"
+    },
+    "src/storage/ext4.rs": {
+      "role": "index",
+      "sha256": "1a51e34efe8b1bb39e636857c35a2714936af2c278306e45c89fdd24d7dbd481",
+      "size": 16904,
+      "normalized_sha256": "2d219b965e12417dab7a6d7363871113b2af956a5853d8259c589b20b3c8d0b0"
+    },
+    "src/storage/mod.rs": {
+      "role": "index",
+      "sha256": "3efee4d075e17b352b34f4f724456c5451a2a5467ca927adce1c0dd2bad2d554",
+      "size": 13338,
+      "normalized_sha256": "be0e960b2c1bbeba6e7f663f16bc3de5a9e152d26189d62953390e502ce29140"
+    },
+    "src/sys/faults.rs": {
+      "role": "index",
+      "sha256": "9fbf6e453fcc2a353b97bdf04663bc0f946bf9ade3adf5c18c684ee8047f55bb",
+      "size": 9366,
+      "normalized_sha256": "200bccff24fd3ba52f6cdce1d4f8ac06fb44310bb00f2051e8ff3c18649434ab"
+    },
+    "src/sys/fs.rs": {
+      "role": "index",
+      "sha256": "df993a8b0fed104fedb1658424ca5d19f5afe33d1532fc6ab27f8e5902c2c9d5",
+      "size": 32153,
+      "normalized_sha256": "26a8296bf55415989f685872a0120a2ff5c4963a373095d18c2fc8901b388e4c"
+    },
+    "src/sys/lkm.rs": {
+      "role": "index",
+      "sha256": "5a55165703ae27886391506500e16ec0de1b18e995a7c82233eb3a417c931fe6",
+      "size": 18416,
+      "normalized_sha256": "6425e6e3b98043c1a0622311b452d6e7eeb54dc4f29c0746da3e2f53e76570ea"
+    },
+    "src/sys/lkm_compat.rs": {
+      "role": "index",
+      "sha256": "e10231eef4513ef0e6b3a2394e0b85816b84f25e9bfec94172cc9157fbb01ced",
+      "size": 5704,
+      "normalized_sha256": "8957bef60f72937620ccc198eca9b9a73160e59100e91486299c412f9eb63fa5"
+    },
+    "src/sys/lkm_image.rs": {
+      "role": "index",
+      "sha256": "76db538818fd36354bcad7c523f54b1e352d5a609e553c53d2052509805a2fb0",
+      "size": 10232,
+      "normalized_sha256": "f13cfd13cb5121b3b1dd5312b1488b4913fbe4006cdc5cd1bc7ddce4b95b7622"
+    },
+    "src/sys/lkm_image_tests.rs": {
+      "role": "index",
+      "sha256": "da224c350e89b10f734a2c5c2535d78be272e2d89482eea7a3f593060cf793d7",
+      "size": 8599,
+      "normalized_sha256": "d690d16010333cde7bbc92cf59d58a7a1b4addb120b1224df531a548ad677565"
+    },
+    "src/sys/mod.rs": {
+      "role": "index",
+      "sha256": "1900a76cde108e65f268bd18a6992d0bd4f42c561cc848e1369cbbf659bcc70a",
+      "size": 527,
+      "normalized_sha256": "3fcb83fd9f84ef6dfdd467cc9972da0d41d6bd19abe51d79f1afe17c9ac7e4ec"
+    },
+    "src/sys/mount.rs": {
+      "role": "index",
+      "sha256": "868197d63ec7100b50ed775b9b0534f4410b1aa217ab4b63d24a56b59fb7c5ed",
+      "size": 8850,
+      "normalized_sha256": "bfff5f5aef2b7b0da03dcfe57fed6ca35fbb6891981ecd74d7b63bfd7e1526da"
+    },
+    "src/sys/mountinfo.rs": {
+      "role": "index",
+      "sha256": "2d9f17fa05b06853b35791bf858c157c055623cbd4a789144fa427bbcbb54fad",
+      "size": 12282,
+      "normalized_sha256": "27c539c7ae89bc1fed6935fa05237e7590ae6b5f9dc8177b596c670183f0414d"
+    },
+    "src/sys/nuke.rs": {
+      "role": "index",
+      "sha256": "5f70312caf13c274d64d91da0936b1cc5dddf1b0936375cc24d374f44542d8c6",
+      "size": 12165,
+      "normalized_sha256": "f311b7de2addcc054579f9ec5341c9604fdd385537db36b34da33949dd88671f"
+    },
+    "src/sys/process.rs": {
+      "role": "index",
+      "sha256": "ec53ca8456e1ced16284926f37593c692aeda3fa7572e3dfe0773e321783bc0b",
+      "size": 21679,
+      "normalized_sha256": "b16f6ee7c7d1aea92bf7f3670fa002d91ae3a037dcf6f8f86d02007d9567bdb6"
+    },
+    "src/sys/process_tests.rs": {
+      "role": "index",
+      "sha256": "9eebe80b01e15160f3ed41656d643a15ec94c30fb870482ce553800d73d98093",
+      "size": 4749,
+      "normalized_sha256": "f5a022e332811ea8979f041dfc93d388eeb04abb5b17a8cb02a821948ec3626a"
+    },
+    "src/sys/temp.rs": {
+      "role": "index",
+      "sha256": "b71e46c2c7519943b2defe7bf2df69a3372ffc1132a9a08e2bd5091c93c343cf",
+      "size": 9971,
+      "normalized_sha256": "92466660c33a5aa991048ad16e785bbfc28469bdbe3f460212c31d75a06d7c00"
+    },
+    "src/sys/transaction.rs": {
+      "role": "index",
+      "sha256": "4ed569ff7e67a06b69e55077773873ca82469412df83a4fd2111998dc1ab2145",
+      "size": 12252,
+      "normalized_sha256": "7b80716d68c77379e22e4f20181582b2dcca6d0dea1f1b640f031ce0b4b14731"
+    },
+    "src/test_support.rs": {
+      "role": "index",
+      "sha256": "d0686d713ed407698f0825986aa7900b39062be3b9a356c5e20fade05a6839e7",
+      "size": 2744,
+      "normalized_sha256": "ff380c675503810aec67940c1a64e80e1ac9af8c8ba73d2f833d5a37849a3db5"
+    },
+    "src/timing.rs": {
+      "role": "index",
+      "sha256": "d708bb6452f712ac4ffd3f6bd0ce85426a81bfeb936be472cd1dffd1ab1887e1",
+      "size": 3667,
+      "normalized_sha256": "cc38074025eb86e381b276b7f794efc5451062c96910a9a331c4f891c7ef4ca6"
+    },
+    "src/utils/ksu.rs": {
+      "role": "index",
+      "sha256": "c6540d6d5d1a211419c2f246fdef81fc8ea8fa39988aa04370d8c1e2d7eef82c",
+      "size": 6216,
+      "normalized_sha256": "680a1e97a09e2781687182bdbf94ebff2115049eafc00ab591f347d602ae0825"
+    },
+    "src/utils/ksu_driver.rs": {
+      "role": "index",
+      "sha256": "e00c6e945e25a7ebe2a2365c97b91454b8a3381c553ccab1d4b09ef3f0f74b5f",
+      "size": 4299,
+      "normalized_sha256": "9dfe22b6c11960e7e98c6979573580461ace77b33c2b51b81773185ee945ed15"
+    },
+    "src/utils/ksu_driver_tests.rs": {
+      "role": "index",
+      "sha256": "cbc1e85056f77b3a2f90fd0d814864d74b0989a4ddf00b307df8693228d01fbe",
+      "size": 2955,
+      "normalized_sha256": "3f370609b1baeef434ad15c98976e7d9300d6011d216ee36585e6e00450ada48"
+    },
+    "src/utils/ksu_protocol.rs": {
+      "role": "index",
+      "sha256": "8268f06b1ae791be8dea2ea5ad08358f8ace416610af1b2cab1ea6ca8ebe66e9",
+      "size": 6896,
+      "normalized_sha256": "7a019dea606908625f15fbe1891e1ca16c9068bedab8a54a9abfbb3695e6a64d"
+    },
+    "src/utils/ksu_umount.rs": {
+      "role": "index",
+      "sha256": "017ccbd1c4b194620985ee42b1221c74b62fa0f8b2c16fa8f44d0fb719267b1a",
+      "size": 8466,
+      "normalized_sha256": "189c4f56e7b5235e1c19892c03cbfaee68c6703ac4e00ed250e460a83b773788"
+    },
+    "src/utils/mod.rs": {
+      "role": "index",
+      "sha256": "af02f838aa8e1fee80b5dd49d1b1d1b53b0edb80a3c85ed36684f71ab30260dd",
+      "size": 12160,
+      "normalized_sha256": "e452f880f2bb1488f92fc12b96e7cca012059aed322e3c154850ca1ecc08c65c"
+    },
+    "src/vfs/backend.rs": {
+      "role": "index",
+      "sha256": "27037d6c52434f662cbab10224ceea940df940c0c573c12626e125aa343a9ae7",
+      "size": 9495,
+      "normalized_sha256": "b3d31f0dcff56d0ab5b25b46b19546e01bb6db5a801572e744ed999b00d9d0ab"
+    },
+    "src/vfs/backend_tests.rs": {
+      "role": "index",
+      "sha256": "d769986d3de12578c4879d956f258d2555e2e50f51f8cea791550a84776990a8",
+      "size": 5486,
+      "normalized_sha256": "7e0faec10ea280d167894fbd20104a3e58810681ba7431cde2163b3a0a4b13f7"
+    },
+    "src/vfs/boot_guard.rs": {
+      "role": "index",
+      "sha256": "9d237c60e7b2af3d02a5756a03b39fc0e9a9702ff30f5ae941065013ac383631",
+      "size": 19972,
+      "normalized_sha256": "d16c47a349ae937b8494c294502172722061e5fc6a7e3bac71c95ddc6ac12317"
+    },
+    "src/vfs/boot_guard_tests.rs": {
+      "role": "index",
+      "sha256": "e1e96c3b21d40ef9347017a3ea80aa4f8747f81cc9e1f7a7310a7645a4b3dffb",
+      "size": 8139,
+      "normalized_sha256": "6156b3f98563571ffab89d397bfb5be26bd803f23be14f5b131a7a957f38a054"
+    },
+    "src/vfs/cli.rs": {
+      "role": "index",
+      "sha256": "118229375de028efe951053ef0fce330a66b0350544c7b2a2c9669981eb63ba1",
+      "size": 26114,
+      "normalized_sha256": "81509b999630627cd2afdf61c3767c6bf5926034f481d5482affcf4e92f2f603"
+    },
+    "src/vfs/cli_tests.rs": {
+      "role": "index",
+      "sha256": "f1c22b3a48344dfc280dd121e1f7f18b09a2c0eb3cd784a275dfda4527ffc011",
+      "size": 13590,
+      "normalized_sha256": "f1c22b3a48344dfc280dd121e1f7f18b09a2c0eb3cd784a275dfda4527ffc011"
+    },
+    "src/vfs/control.rs": {
+      "role": "index",
+      "sha256": "1ede29c088ccb36405f51f16ef6857325caf6e5b9cb2e195b323b4fb88b696a7",
+      "size": 11382,
+      "normalized_sha256": "1ede29c088ccb36405f51f16ef6857325caf6e5b9cb2e195b323b4fb88b696a7"
+    },
+    "src/vfs/control_tests.rs": {
+      "role": "index",
+      "sha256": "3b1dd1f88b0e40b831f81a34ff745c0f191f7352bca05574baf96ab827a5759c",
+      "size": 17694,
+      "normalized_sha256": "3b1dd1f88b0e40b831f81a34ff745c0f191f7352bca05574baf96ab827a5759c"
+    },
+    "src/vfs/doctor.rs": {
+      "role": "index",
+      "sha256": "15319b2833f5d5e2f79de9668b52a99245d3d5f68753916095d421cbf4c3489c",
+      "size": 11721,
+      "normalized_sha256": "679cb7bdfc9c2ee9a748518c59ac84b97368ee6aa439bc9c182eed151ac87634"
+    },
+    "src/vfs/doctor_tests.rs": {
+      "role": "index",
+      "sha256": "e635b5f5ffe222acb7a99b34cbd613eeea0475cf570ed0d65f67b24633246668",
+      "size": 6479,
+      "normalized_sha256": "110cfac85e25bcbc293aee24f76164b520a35c1eb4928f3b5fc091689cd0915c"
+    },
+    "src/vfs/exec.rs": {
+      "role": "index",
+      "sha256": "bd4a128bef91b4197b9db22ee29220dba07948245f010cf996d4c49416d843da",
+      "size": 6229,
+      "normalized_sha256": "de69826c267a97bee800c9f2475918ebf1e594acecd5b4fdfc830d591874e197"
+    },
+    "src/vfs/exec_tests.rs": {
+      "role": "index",
+      "sha256": "cd909b1f00067cd7ddc4da9be7c76d209071fd01b368abab55a6494e0ffd872e",
+      "size": 7073,
+      "normalized_sha256": "54aa9999a135e030899a382925d9cfb0d853b3a02eeabfd070abe0baff6f5357"
+    },
+    "src/vfs/guard.rs": {
+      "role": "index",
+      "sha256": "590d006d2ef76848386c1d487aab68903155ed7d4b91155c14d554b241b3ea2b",
+      "size": 2956,
+      "normalized_sha256": "af7ca2eb87c40d7540dd4ab12062f91c1c492a7482221f005238fc0b980dfc30"
+    },
+    "src/vfs/lkm.rs": {
+      "role": "index",
+      "sha256": "5d906fd0bd3eb7baa3bfdce3440f2725b396a792616f5ee9dcebd510c52448dc",
+      "size": 7820,
+      "normalized_sha256": "2cc4945be89dfd0ab73472e0092fd33deaed535efeb53218f09e690349c62973"
+    },
+    "src/vfs/lkm_packages.rs": {
+      "role": "index",
+      "sha256": "e23bd59c94e96172497bc71d09953fd9a6b993523b0ba88540a53dbbc9483473",
+      "size": 597,
+      "normalized_sha256": "9b4803c23ce20e42ad3e6673dc02d17868e9326a19cec34443fb4da39b313f6a"
+    },
+    "src/vfs/lkm_target.rs": {
+      "role": "index",
+      "sha256": "62e3b55160d1ab5921064be886512d325eff356d5f99cf7b454dd09a5f7b8ce0",
+      "size": 7952,
+      "normalized_sha256": "85b7d6093f0c7743e8e9356a0de038baf8ccf88ed854e89d30e60c3cb873bf9b"
+    },
+    "src/vfs/mod.rs": {
+      "role": "index",
+      "sha256": "ded6f5a685f98c25eba6a88bb3eac874a872d749900ffac3788968feaa73f8f2",
+      "size": 7804,
+      "normalized_sha256": "94ddd25143781915b67f75cc4abf678a7ba6eaa4a9451693b7105310bbef160a"
+    },
+    "src/vfs/protocol.rs": {
+      "role": "index",
+      "sha256": "98fec8cb5dcd69792b2a9f997be20d9f121de0bcec1e2391899923831e5e7cc3",
+      "size": 18566,
+      "normalized_sha256": "91de896b919c47ea078def1be75e407ba019acaa9d3bedcdedfe3c12795d2e90"
+    },
+    "src/vfs/protocol_tests.rs": {
+      "role": "index",
+      "sha256": "aff979a80a7393b2f357b8236094aafb08ebe7859de67c70157ab80db98d871f",
+      "size": 18471,
+      "normalized_sha256": "aff979a80a7393b2f357b8236094aafb08ebe7859de67c70157ab80db98d871f"
+    },
+    "src/vfs/rule.rs": {
+      "role": "index",
+      "sha256": "55a455ce54a87b05e20c7bd0fdcb9d07b865ec776704be85dcf9b4eb0543940d",
+      "size": 3668,
+      "normalized_sha256": "09187a2505c582216c409087a31c3e3d5d3875f4f0dd3bcfe2374143f6d16c4e"
+    },
+    "src/vfs/rule_tests.rs": {
+      "role": "index",
+      "sha256": "7c1aff6992300a94e62652ef56a0209487ffe7ed29b9912d089674afd2e69503",
+      "size": 5532,
+      "normalized_sha256": "d2ac0f4303d11cf8271063150dc0c05d96c5e977f4a2f795b574611ece04658d"
+    },
+    "src/vfs/sys.rs": {
+      "role": "index",
+      "sha256": "d8eef28d857c0c56fca2e09775de64cae3b7b50e58044098b0ef93f3bcf15ab6",
+      "size": 5617,
+      "normalized_sha256": "e27361ab05b30afc016fa59ef30bfc95dad8bcfb8a155939a4a8066a5ba0d409"
+    },
+    "tests/device/vfs_parent_delete.sh": {
+      "role": "observe",
+      "sha256": "b6fdabe8f2c47423f56ccb7ec6bb88e7f607e1fa8e5947512e71b3576a079dce",
+      "size": 1568,
+      "normalized_sha256": "b6fdabe8f2c47423f56ccb7ec6bb88e7f607e1fa8e5947512e71b3576a079dce"
+    },
+    "tests/device/vfs_parent_lifetime.sh": {
+      "role": "observe",
+      "sha256": "cbbf0a493d284da8a86173b53fdc16ebb04c7b09efb7ef2d1954f90fe4997d65",
+      "size": 8289,
+      "normalized_sha256": "cbbf0a493d284da8a86173b53fdc16ebb04c7b09efb7ef2d1954f90fe4997d65"
+    },
+    "tests/device/vfs_probe.py": {
+      "role": "observe",
+      "sha256": "4988c2674c00301e2b838427aa3f659b0ce35c0d3450f758691fbc3cca204af1",
+      "size": 6803,
+      "normalized_sha256": "7bbd957477501907d7e07ed5bf5be02b6401d0019390d43d59a0a1bc14979653"
+    },
+    "tests/device/vfs_source_identity.sh": {
+      "role": "observe",
+      "sha256": "e3c40790030cc0b8702cb2c19005d7a583cde67e8d3763536a712caf3f4d3bcb",
+      "size": 186,
+      "normalized_sha256": "e3c40790030cc0b8702cb2c19005d7a583cde67e8d3763536a712caf3f4d3bcb"
+    },
+    "tests/device/vfs_uid_directory_view.sh": {
+      "role": "observe",
+      "sha256": "bdb542ea7ab2fcc181369f19e176d6d2b8fc27d7b5dbda50e3a7a28ab8c6d08e",
+      "size": 185,
+      "normalized_sha256": "bdb542ea7ab2fcc181369f19e176d6d2b8fc27d7b5dbda50e3a7a28ab8c6d08e"
+    },
+    "tests/kernel/child_rules.c": {
+      "role": "observe",
+      "sha256": "39cd0e52c0e978258b94ea5e08153df0eee0105256fce9a97f1b27ee20b1bea6",
+      "size": 6492,
+      "normalized_sha256": "f775c7f620adc0366cc68b4dfb562899391df213d67017a22712f1ad7663e4e4"
+    },
+    "tests/kernel/child_rules.py": {
+      "role": "observe",
+      "sha256": "f7891e611d22e64e9881fdb6e6b6c22f5009e7e80d5c0f9899bc5f5fd998b69f",
+      "size": 1669,
+      "normalized_sha256": "8ced330f35bb32d553e2cbfa47b0dfb9720d5700f6164e764c3711b7d40d3df1"
+    },
+    "tests/kernel/hook_transaction.c": {
+      "role": "observe",
+      "sha256": "ac70a9596803c33f7c396169b204a7727b805ff12edaa552ebc2099826292b4b",
+      "size": 11687,
+      "normalized_sha256": "8c7c87b7b216957df3932a4267c60d4fea0d7e0b2fa1ffb27de6b291239d1430"
+    },
+    "tests/kernel/hook_transaction.py": {
+      "role": "observe",
+      "sha256": "9d17a0e0b0acd94073f7ab4e92b5c1dd8820c699f000ad7437295f7d4a704666",
+      "size": 1861,
+      "normalized_sha256": "473ea0cd70bd054a36121d9d8615c700b79ba6e13d18ca8fa14ef1ead6b202b4"
+    },
+    "tests/kernel/inode_lifecycle.c": {
+      "role": "observe",
+      "sha256": "25540e872221ea6558d2e7e14fd4131c3ef6f4eaa4d9d9a55a9a593727040f7c",
+      "size": 32739,
+      "normalized_sha256": "50085e946ccf24de46b84638038e4bc57064ee87a47928089053e04740273e4c"
+    },
+    "tests/kernel/inode_lifecycle.py": {
+      "role": "observe",
+      "sha256": "0e197854647a0bc64df52b6f417d2815a42ee984a6bfbf53d1bb916e030d38a2",
+      "size": 3286,
+      "normalized_sha256": "b2d8b490eb76ade1ba014f159b234ccb1cd92b291b166d106e2e5a6c4f022179"
+    },
+    "tests/kernel/reader_lifetime.c": {
+      "role": "observe",
+      "sha256": "1d195b894b542ffee33ad0a86e4bcd716ca58ce4b304fc3495ee27f8c9c2437c",
+      "size": 11371,
+      "normalized_sha256": "6c51ee03399817efa1da9ecfc7545972dac6e4ee633473be7aecd9d03d541494"
+    },
+    "tests/kernel/reader_lifetime.py": {
+      "role": "observe",
+      "sha256": "5657abc704e23ed3be9b3482f66562de5d0e0d864031ea6829414eb5d7739f59",
+      "size": 1909,
+      "normalized_sha256": "c80682431e0b1eb6fba56d0e5e6be59f72d3207e6a1d3358d84c4a57f97b3c11"
+    },
+    "tests/kernel/uid_cursor.py": {
+      "role": "observe",
+      "sha256": "5ef05a55649647c168f6c53f61fa8caf17be27f20fcc60cf8feb2af16b5b565f",
+      "size": 2347,
+      "normalized_sha256": "ae681fdfccb33abbae52cbca478fbaa8bbc7abdd8e70e60eb38a16b53ff595bb"
+    },
+    "tests/kernel/vfs_lookup_bench.c": {
+      "role": "observe",
+      "sha256": "7cfa69999e1687dbaa7b843c440a447ae35bf3c415b53140fc045cc436efab0f",
+      "size": 7806,
+      "normalized_sha256": "a16347036b02a129d81e42bd59111c906b4036dbe57dcac53c92004f66ce78ae"
+    },
+    "tests/kernel/vfs_lookup_bench.py": {
+      "role": "observe",
+      "sha256": "856f1244887ce4283f4fe5bee433d3bcd71fa6727956d318a480c954547641ba",
+      "size": 1533,
+      "normalized_sha256": "35730da8372cac933ec1a792ecb72bb3eaaa0a3f84e08e2c49f87e913614ea6b"
+    },
+    "tests/kernel/vfs_semantics.c": {
+      "role": "observe",
+      "sha256": "239b996ff592eee00407e6884bdb96e7776c030c59923c2900d0769e0c23e410",
+      "size": 17139,
+      "normalized_sha256": "11602a47407294994a3a33d5041dd00290078372186ee4274b0a3f1400ae24a3"
+    },
+    "tests/kernel/vfs_semantics.py": {
+      "role": "observe",
+      "sha256": "e1d5e665356793fac0eb55dbab569e6ae48b76cd2dd0c4112895fa7811213865",
+      "size": 3784,
+      "normalized_sha256": "70bbaafc7105f55f67d66cf8ca314ad617e6c57e0219b4ab75c6d5f5798e2b3e"
+    },
+    "tests/linux/partition_mount_boundaries.sh": {
+      "role": "observe",
+      "sha256": "b2373a5bbd27fafe4b5f2c57bad114503698bd1fab2b1c2f0c63fa183961de71",
+      "size": 553,
+      "normalized_sha256": "b2373a5bbd27fafe4b5f2c57bad114503698bd1fab2b1c2f0c63fa183961de71"
+    },
+    "tests/shell/boot_lock.sh": {
+      "role": "observe",
+      "sha256": "11aafb873ccbbd5601fda59ae4f2ea1be84dad29eef10f2df265f54c6d0195fe",
+      "size": 730,
+      "normalized_sha256": "11aafb873ccbbd5601fda59ae4f2ea1be84dad29eef10f2df265f54c6d0195fe"
+    },
+    "tests/shell/customize_lkm.sh": {
+      "role": "observe",
+      "sha256": "5a7fe5e17807b98b5bb3fc55493163d0400a4d57f97c260478297b55992fa1dc",
+      "size": 1374,
+      "normalized_sha256": "5a7fe5e17807b98b5bb3fc55493163d0400a4d57f97c260478297b55992fa1dc"
+    },
+    "tests/shell/runtime_hooks.sh": {
+      "role": "observe",
+      "sha256": "1a92d80ba9ac32c84ffbc26a79c1aaf40c8d8af89d4e41a1e83a44f200f905cd",
+      "size": 602,
+      "normalized_sha256": "1a92d80ba9ac32c84ffbc26a79c1aaf40c8d8af89d4e41a1e83a44f200f905cd"
+    },
+    "tests/shell/vfs_setup.sh": {
+      "role": "observe",
+      "sha256": "b345ad43b7ee76d2337895c052c139eaf6223a7fd8ea78fd24123bfba547f48c",
+      "size": 3566,
+      "normalized_sha256": "b345ad43b7ee76d2337895c052c139eaf6223a7fd8ea78fd24123bfba547f48c"
+    },
+    "tests/shell/vfs_sources_digest.sh": {
+      "role": "observe",
+      "sha256": "7bd288290df4530e671f7cf77b5fca1d0cc897c423ea8dfdc5d5ffc2dda1b6c9",
+      "size": 1538,
+      "normalized_sha256": "7bd288290df4530e671f7cf77b5fca1d0cc897c423ea8dfdc5d5ffc2dda1b6c9"
+    },
+    "tests/shell/vfs_sources_digest_test.sh": {
+      "role": "observe",
+      "sha256": "038984c6d8bf71d9526cff0fd81f4bdb28818392f6cc68684e2ae51b9b3c9992",
+      "size": 2276,
+      "normalized_sha256": "038984c6d8bf71d9526cff0fd81f4bdb28818392f6cc68684e2ae51b9b3c9992"
+    },
+    "tests/shell/vfs_xattr_feature.sh": {
+      "role": "observe",
+      "sha256": "e56dca3c66c5cc5c2f839541739d8c5f725d8b01329c9014cc4f27b7e9908c9f",
+      "size": 2137,
+      "normalized_sha256": "e56dca3c66c5cc5c2f839541739d8c5f725d8b01329c9014cc4f27b7e9908c9f"
+    },
+    "tests/vfs_cli.rs": {
+      "role": "observe",
+      "sha256": "a3944102f9215d33c782439b9a318bc7a8714496fe44ce3dd52def19d999a8d7",
+      "size": 2636,
+      "normalized_sha256": "ed9f42f1e0a7fca99b1ce14c5fadc6c9d7810bbe977960eb7d639563c523f73a"
+    },
+    "tools/notify/Cargo.toml": {
+      "role": "index",
+      "sha256": "f75886143085bd1586381b18cc3bb5397e26fcec7426479932180cdc5f692075",
+      "size": 1067,
+      "normalized_sha256": "48a9d4a139de271a1aed602012f9d668ad709edf221e29b0f6242f4b4ac77646"
+    },
+    "tools/notify/src/lib.rs": {
+      "role": "index",
+      "sha256": "74dcb7ee4f3d12be20b785c68560adde02e33e4fcd7f7d8059b100ff3b6c423e",
+      "size": 19709,
+      "normalized_sha256": "ce94016ef3222362ecf9aa32d328bc8cc3f6fd50e5a6f7d07f672b02d9429333"
+    },
+    "tools/notify/src/main.rs": {
+      "role": "index",
+      "sha256": "944b4b4147e1b054cf75d62f58fe2f43082127bb7799f770ec0adecf25d7b200",
+      "size": 713,
+      "normalized_sha256": "af86921156ae363d417e18b8e6b877a8fbcff63559e0246ffe92740ea30e222b"
+    },
+    "tools/notify/tests/cli.rs": {
+      "role": "observe",
+      "sha256": "2b6ba513e8d5e7b7398b7640e1c9628da710cbe1cfd4538b70aec67047f02848",
+      "size": 1101,
+      "normalized_sha256": "c9bf2bafd8b48adc8748ff0fcc493f103a210001d6370e9a14dac0b8fb92ce53"
+    },
+    "update.json": {
+      "role": "index",
+      "sha256": "02c0f82126756665169c57afe38b0c79ad70bcce88076430ea2c7a9827423d6e",
+      "size": 278,
+      "normalized_sha256": "3f96a0555c000c99a9348df2e61dd0abf14f1cbaffe18b78557de7f57c198c71"
+    },
+    "webui/.gitignore": {
+      "role": "index",
+      "sha256": "c8395e91b56fd831c5f67fbe81f365cce75e85084ae6f0e2c8a2d97e878460e7",
+      "size": 43,
+      "normalized_sha256": "18a994b98219ef7654a4d388cde50901856ec7687fe82f64949c6dcbe0c3f490"
+    },
+    "webui/.prettierignore": {
+      "role": "index",
+      "sha256": "69b23eb500d35e80c29d324ee579e7425291fcf3906f6d40a54eac51fbf76a4b",
+      "size": 375,
+      "normalized_sha256": "4e5cb073bee5844f4da2b41c55c4972b67ff1a1a694ac4d54353d07845095377"
+    },
+    "webui/LICENSE": {
+      "role": "index",
+      "sha256": "906ff4b587aa61ba7e9ba6d009dfb525d7393fd317052deedcb6e96bf07228c0",
+      "size": 11558,
+      "normalized_sha256": "56358221e4cf44b7f68142b9ccf97459e5341dab8c6e5c976c8d99d477ce34b7"
+    },
+    "webui/eslint.config.js": {
+      "role": "index",
+      "sha256": "2b81eb109a857a45aa23a4bd50876988a7adf3ffc9846e931cc1967953438ac0",
+      "size": 1573,
+      "normalized_sha256": "a573aa009f7c3d3642065553e809fd317961523c1c8dd1280d4a117c7f658ec5"
+    },
+    "webui/index.html": {
+      "role": "index",
+      "sha256": "18ac78888bf64df50553f01be7792c6c6be238730d3b4182ea0cf3c1d26b72c7",
+      "size": 414,
+      "normalized_sha256": "24bf2e021f3e129225aa962a4b0728ff33635afb74769493c6e8e3225f14b03c"
+    },
+    "webui/package.json": {
+      "role": "index",
+      "sha256": "1fbd769bcefc656633719fbad744eaaf6e0accf354795569a0c57fd2145a46dd",
+      "size": 1187,
+      "normalized_sha256": "17fbf038461718b1d5fee8f1bfa263d7e2bb1ae4db97f14ee602aaac579ece9c"
+    },
+    "webui/pnpm-lock.yaml": {
+      "role": "observe",
+      "sha256": "d2042f259372b2158ba74d1a32797bb2811a908409cf5533732d2db2eeea3e15",
+      "size": 76032,
+      "normalized_sha256": "0552ad80b6a5946d0f768149c416d764b1d3b65db466d9253f92944efbef9cbd"
+    },
+    "webui/prettier.config.js": {
+      "role": "index",
+      "sha256": "f79af8aec83363108a3a87a7c3f65397a219f6c05ee114774af4cb82c9743758",
+      "size": 168,
+      "normalized_sha256": "d6353af22f4a8490d8feebce0d73c836c69b2f46b25ee3195a4ee3a998d47916"
+    },
+    "webui/src/App.vue": {
+      "role": "index",
+      "sha256": "c216fad5353ef2f6a52f0cdde9b3a4117367c45ab64abf8213a22a444628bcde",
+      "size": 480,
+      "normalized_sha256": "69e26c0e5aca0fdf8c0dc4e2a68166dbc5d9e1d59907fef55cc453bf40e7df13"
+    },
+    "webui/src/components/DynamicLogo.vue": {
+      "role": "index",
+      "sha256": "32896532a4801eb2d6a6b3cabf0d6ddebeb2b1714946f4655585c03910d69e60",
+      "size": 3782,
+      "normalized_sha256": "c37651bcb1a4c7eaab3cb206b6a33039c8e413fc3e8a63decaef0e7ccd39cb38"
+    },
+    "webui/src/lib/api.mock.ts": {
+      "role": "index",
+      "sha256": "475f762169c2ae944cfb1e8a40a64f92292a7feb4e0c57ea99142a00ed494635",
+      "size": 8950,
+      "normalized_sha256": "5b0200da20d4056cef6c241a49264494303c6fe22646db0058ce919c312fb033"
+    },
+    "webui/src/lib/api.test.ts": {
+      "role": "observe",
+      "sha256": "59c12d61346daf0d9d9d433f07d801cbb71b39635348e4c3d78870bd67d5fcb1",
+      "size": 16537,
+      "normalized_sha256": "400f9a019755b130ab9996d15d02ca68b5aed2e5a9d92c610e887204b60b5a99"
+    },
+    "webui/src/lib/api.ts": {
+      "role": "index",
+      "sha256": "4c17efdad26f4423f97188437fad6b3abb13a95ac97fa4b1209d69b9115a1554",
+      "size": 18616,
+      "normalized_sha256": "19356f009bc1ef11be08bab348a51a895747dc92fff161809ff2ec313a56bf20"
+    },
+    "webui/src/lib/bootGuard.test.ts": {
+      "role": "observe",
+      "sha256": "6f122052da6d3a2ae9bbd08ad3adcab5ff58dff16ab997ea0cda22b09b9c534a",
+      "size": 2692,
+      "normalized_sha256": "e71ee0b2bf6faf23fea4e459b15e8710b095ba57f4209a15b984319ef28c4b66"
+    },
+    "webui/src/lib/bootGuard.ts": {
+      "role": "index",
+      "sha256": "f88f1a9e44ebc02f70f6604716b3f25dee96c902bb4503a4a78a1c3c9622633e",
+      "size": 2000,
+      "normalized_sha256": "4d166452ab107abd0f6440a5588056a19c4b9b08d65e89a89281ac9706565f80"
+    },
+    "webui/src/lib/config.test.ts": {
+      "role": "observe",
+      "sha256": "bcaf700ffa523d004191fc355fcc66a87a82adf6df477457d6a5b560bd48582b",
+      "size": 1432,
+      "normalized_sha256": "a2670d61835f4f79c47c043f4571be29ac5918c6bf7f14801ecf768d9a931a78"
+    },
+    "webui/src/lib/config.ts": {
+      "role": "index",
+      "sha256": "54471bf930029ad1ea1d08a02f45c1f43e7c3f1ae0273c8415443f81a0203613",
+      "size": 612,
+      "normalized_sha256": "b4a3b32ce076bacdd244d76399ef8f4e4b8ac1d4be59340b5f44cec97fef4ac5"
+    },
+    "webui/src/lib/constants.ts": {
+      "role": "index",
+      "sha256": "4f8b891d5ba6a9cc2a83ec16b77b0ebd3be98bb579580238cc2556949a414c12",
+      "size": 606,
+      "normalized_sha256": "ece3a3ddedc733c1c492ebb3c9d9d69689eaf2a9d24d68a6e6cd3b05cd677040"
+    },
+    "webui/src/lib/contributors.test.ts": {
+      "role": "observe",
+      "sha256": "7635c847b2f98d8c7bb3ec4c6b214a26a3b55f3ae79cde47d3ba795295ac24fd",
+      "size": 1842,
+      "normalized_sha256": "a71288d52226d0f80e076de03143f510c86db83b3bcabee05608401e2b034062"
+    },
+    "webui/src/lib/contributors.ts": {
+      "role": "index",
+      "sha256": "c66f04cb1b4784faaac67b9c4c9f7bc10e6a3b9bb654fc670ab2d3d1b3e5b086",
+      "size": 2316,
+      "normalized_sha256": "57eb4f128f705057be1cfc623f6ce55baaea34b3e5b54ed405879cd21b7f6d66"
+    },
+    "webui/src/lib/moduleFilter.test.ts": {
+      "role": "observe",
+      "sha256": "8863f1c7783ff0be77d8d6579e4c93a14aff6b26fdd2919b67e0ddb65ed66a39",
+      "size": 912,
+      "normalized_sha256": "3d8dcc8b6a4dfadaf54e7b0b45375ec1cf7015c735f3cb7459d107cf5b8663d7"
+    },
+    "webui/src/lib/moduleFilter.ts": {
+      "role": "index",
+      "sha256": "d707869af2f75694c830b468c1d15e3a862889f61ab1737740779e3994fbabbf",
+      "size": 471,
+      "normalized_sha256": "f3bcff8876eda6a6497b2082df4ff0eff584e02c235f2beb9ee20ed0a1050664"
+    },
+    "webui/src/lib/mountDiagnostics.ts": {
+      "role": "index",
+      "sha256": "5dcdcec0418b8363077923fbf784076afd04dd3be9686d6c68863e7640371bac",
+      "size": 1575,
+      "normalized_sha256": "9b686c2d2f5d398edf7a2a452ae05e4ff99bd0295239299caa0186da05596c00"
+    },
+    "webui/src/lib/reboot.test.ts": {
+      "role": "observe",
+      "sha256": "fe2fd35a117c984840010ad203489b090a69d67be86b890e670ea151accef144",
+      "size": 1659,
+      "normalized_sha256": "e4924e2472c0d72ceaf7d11a5345c79a061955483271227273e3a427b1b62e61"
+    },
+    "webui/src/lib/reboot.ts": {
+      "role": "index",
+      "sha256": "633137ef91cde512ae5a06ae05c36453c309b45b7e69ee1588d19ec2ccb04b3e",
+      "size": 1289,
+      "normalized_sha256": "db78d6fced203297f75c9c93bb86b65c0cd27bcac280901b680ea2664bf62b0d"
+    },
+    "webui/src/lib/runtimeApi.test.ts": {
+      "role": "observe",
+      "sha256": "4726648daf811bfe8427039eb56ef2b31972a31a006012f87a33aee0bf5da0d9",
+      "size": 2380,
+      "normalized_sha256": "0377bec10a8088da1dd79e83e76dccfed6c73f0df11920752931f4a6f1cb8244"
+    },
+    "webui/src/lib/runtimeApi.ts": {
+      "role": "index",
+      "sha256": "e309df705678337cca8b1eff3afbd207c77e2a52524aee1816fe7256cd2c7ff3",
+      "size": 2150,
+      "normalized_sha256": "db03404bab8754994c258195793d0d051883e3623a8cdf16d718b3dc79b064f3"
+    },
+    "webui/src/lib/shell.ts": {
+      "role": "index",
+      "sha256": "79de8733c5a4c45bccb2662a6cd8e9f49cab705b635a8d8be70b246d33d5a0c5",
+      "size": 147,
+      "normalized_sha256": "e8b94b80f9386c97d1a5dc3026fa9470fd03dcef5353b8a94560dd5eb186f363"
+    },
+    "webui/src/lib/statusMounts.test.ts": {
+      "role": "observe",
+      "sha256": "a8683b63444e8f4f181ae8e9443fa3cf1f60a7cf7eede52ad5808b9708396041",
+      "size": 9780,
+      "normalized_sha256": "3ae2bf917f84f04f1d7a260905211271ad627afa65a1bbf6b06f5b3982ac1bec"
+    },
+    "webui/src/lib/statusMounts.ts": {
+      "role": "index",
+      "sha256": "ca7b2847dfa12cade07eef7e26ec5a5fe6fb2b445552e76a464adae6d4124813",
+      "size": 10920,
+      "normalized_sha256": "17030e141a83fd288ab012fe8fdf32ca58ee2ee59691f4a120a22fbaea6c3f59"
+    },
+    "webui/src/lib/stores/configStore.test.ts": {
+      "role": "observe",
+      "sha256": "bbd0adf9b16cd3b3584bd55800058c5a5bad78019def319d0d7213ccd9677a6d",
+      "size": 1923,
+      "normalized_sha256": "4c7be3f4be511678409306504cc9450a47a8f13aaaa0e905641a2f1dc4cd4ea6"
+    },
+    "webui/src/lib/stores/configStore.ts": {
+      "role": "index",
+      "sha256": "54cdfc4934cfd649415d0591f2d9a8918e39f5df1d7f09a07bcc7cdb2567a3ac",
+      "size": 2247,
+      "normalized_sha256": "20079ccbadec12b82a6c2d2e4ec8531913a15bcae7d867c3b19ea39879d188a5"
+    },
+    "webui/src/lib/stores/moduleStore.test.ts": {
+      "role": "observe",
+      "sha256": "dcc1a4811388f0e6268e2694881b3bc0832f5af288e775f60b06d984382ed710",
+      "size": 1051,
+      "normalized_sha256": "1594e8f7bf28922570e3372e0e7ca3a608add3bb6653d5eefe6ac6666602bca3"
+    },
+    "webui/src/lib/stores/moduleStore.ts": {
+      "role": "index",
+      "sha256": "137cc20f07c5bfccfaf76c9da76458d0c6fa99635597fa76437a19ec3adf1a6f",
+      "size": 2285,
+      "normalized_sha256": "e879d27c0e5d84434f3282b140b423f15c4f2f0c34b5f826e349b2f0700faf99"
+    },
+    "webui/src/lib/stores/runtimeStore.test.ts": {
+      "role": "observe",
+      "sha256": "ee45f38a3c7c6651c1143a2fabc40ed8749ce4a6ad78656ff4a3ac29975fe6d6",
+      "size": 7001,
+      "normalized_sha256": "e8cb378298a81fec6e7cb506c2630128f9602bd00267904cd1635c70a3de94ee"
+    },
+    "webui/src/lib/stores/runtimeStore.ts": {
+      "role": "index",
+      "sha256": "88e0250937ba27852be0c3b26dc3b35b8a4746d28f7c8016d4a4d8a31880d16e",
+      "size": 3976,
+      "normalized_sha256": "01aa343d1a8c038ad4dc93bc11efa3248644ffb92adda3b29cddf286222eaae5"
+    },
+    "webui/src/lib/stores/sysStore.ts": {
+      "role": "index",
+      "sha256": "190660d068247b140be13bd12c5531f244a39f4f9274f5e690c6fa08c6abf52f",
+      "size": 4732,
+      "normalized_sha256": "3c31336bbaf36ea5f66035708a10d57cccfe321ad46c142b42a09a43c2c68b48"
+    },
+    "webui/src/lib/stores/uiStore.ts": {
+      "role": "index",
+      "sha256": "4424807335d19fa2167bdd06242d1b249f357dda0696039b9b4f6ec68617fd32",
+      "size": 2800,
+      "normalized_sha256": "ac1f99211d6685a63e7498acd50a5601161f448152713ebf5455cdad9cf79aa6"
+    },
+    "webui/src/lib/types.ts": {
+      "role": "index",
+      "sha256": "06f610f352f0a660188cce9c0b0c7994c5d552897d76650b1353767d5863d537",
+      "size": 5325,
+      "normalized_sha256": "8310a16d9cee126af55b13d2ada05ead61b5d5e8f554a8f99565b4fcd84a8106"
+    },
+    "webui/src/lib/useRuntimeModule.ts": {
+      "role": "index",
+      "sha256": "2ba3691cdd5fc8b755b007b4b03d1659ef3c40fd77beb6aa26d6257fc9c8ff03",
+      "size": 1982,
+      "normalized_sha256": "514b95a9594db1b2dcd188216e43aa05cb448d15de00004d75203ece97358c6d"
+    },
+    "webui/src/lib/wearLayout.test.ts": {
+      "role": "observe",
+      "sha256": "10398c9162f0ea0ba9ba66efe31177426989933034425dd81a458a71b212a202",
+      "size": 1472,
+      "normalized_sha256": "563962be5ef09bb6c87310c4e235b671884f32b3b76a0fd3b225f05dcbf6b253"
+    },
+    "webui/src/lib/wearLayout.ts": {
+      "role": "index",
+      "sha256": "bb57d52e2cf8bb1fc1426fb57f2666717ce5c7d9af3c03b7565b07bbfda3bb5a",
+      "size": 687,
+      "normalized_sha256": "90f7584cae17311542222ff511f95e6f6bba0fc31dd9825f180af6e093863de3"
+    },
+    "webui/src/locales/en-US.json": {
+      "role": "index",
+      "sha256": "309dc9f19c03fd5013d790b35b33d6d1bc5a2543f17ee65a61dbaa4ab319a177",
+      "size": 7575,
+      "normalized_sha256": "c78740470262710a4ae0d59f8538bbca51d3f290a4d99ff97ef534e5ef3d4203"
+    },
+    "webui/src/locales/es-ES.json": {
+      "role": "index",
+      "sha256": "76b876980b56982ae16a9000a2e64e60f733b5a6aa4e2804f31e91585b872a9e",
+      "size": 6984,
+      "normalized_sha256": "b98fb1b4fd5d492fd3e691286cc8832d56fdff666c7026d9a2107c28a85830d0"
+    },
+    "webui/src/locales/fr-FR.json": {
+      "role": "index",
+      "sha256": "e129c509a64e85fdf2df091df582913d33426ef550385ce8d4f0b91b30c8a2a9",
+      "size": 8918,
+      "normalized_sha256": "7f520fd9cea721d7a27f9761bac89e4b5177abad78fb95f6591117bcc9802fc6"
+    },
+    "webui/src/locales/id-ID.json": {
+      "role": "index",
+      "sha256": "22272b6b1d5110d6b5814cedad8e40ac180cfcb5e1d59ead1e21b9d9397f92fd",
+      "size": 6695,
+      "normalized_sha256": "b2062dc55d28cafddf92e431164841afa97c6a2bfa38a0b5c3e4f3b64030ea8d"
+    },
+    "webui/src/locales/index.ts": {
+      "role": "index",
+      "sha256": "34c81ec4a4dddd2224381850d14ff7100f44ed82111206d2d6ed3bb7e000e234",
+      "size": 2756,
+      "normalized_sha256": "0c99087d758e94c3628e94ebe74c9c4f43179f99d535a63ffdde7784e861a0f1"
+    },
+    "webui/src/locales/it-IT.json": {
+      "role": "index",
+      "sha256": "ce96b3148a842daa5d70e5ce1653cedeac67804ba0efeda877a6e25dea4bd9e4",
+      "size": 7064,
+      "normalized_sha256": "602824a3ff43400d29eb3c1059643bf2afa897e6dd6210d76ae0c37f28b3c308"
+    },
+    "webui/src/locales/ja-JP.json": {
+      "role": "index",
+      "sha256": "c80b862f9863314e58aee40acbd047d889c85a50db3f4f537b02f413d297fcc0",
+      "size": 7689,
+      "normalized_sha256": "817d701ae19835f501ea8e7289799ad3ab6488dc23c5e74f20ea6709ebfcaaa1"
+    },
+    "webui/src/locales/pluralization.test.ts": {
+      "role": "observe",
+      "sha256": "547b534f2e91c767725313efe42097513ad4450fab231bd3c90dcb6036018bb4",
+      "size": 7536,
+      "normalized_sha256": "d3b5173d8707d3e2fbe6e4a819cf83a16b964f1dd050b2812c50ad2482496b2b"
+    },
+    "webui/src/locales/pt-BR.json": {
+      "role": "index",
+      "sha256": "5cf1b67b6622784508354b4c64d30349a478dc443b113b4b50633380ccfbdabf",
+      "size": 8386,
+      "normalized_sha256": "4b73a6f961b638c3c495f0f08c743a26b50389c4063e9eec2607e8561c68bddb"
+    },
+    "webui/src/locales/ru-RU.json": {
+      "role": "index",
+      "sha256": "60a7743291bd84c08d1866f69cb5ee027f9fd3af873d528df1baf450f567d862",
+      "size": 8683,
+      "normalized_sha256": "f6bd1f7b9242b37d88257fc6222568efd211761a63c1f7f46589b7b384078596"
+    },
+    "webui/src/locales/tr-TR.json": {
+      "role": "index",
+      "sha256": "f33671b6297dd2af80ea6ffbbe7854ac0a9d986cf654ea2a5462c097a0f0d4ba",
+      "size": 7744,
+      "normalized_sha256": "0636ed17fd4ccfde5157ca82b01ec684bc483d70c34c9951d9ca3095f895ee34"
+    },
+    "webui/src/locales/uk-UA.json": {
+      "role": "index",
+      "sha256": "8b9939ee2be10e690b39a967277d73483f284183ad0290cb6d3e48fdd2229ed0",
+      "size": 9979,
+      "normalized_sha256": "bf1ee8fb3008210f4b2b76508f193b29f0f7c43385c42a96d0934f51030a4b67"
+    },
+    "webui/src/locales/vi-VN.json": {
+      "role": "index",
+      "sha256": "8c9776188997fc6b83e644eaa04da0d6e87f515c2f2f5ee6357de4b7d99d061f",
+      "size": 7405,
+      "normalized_sha256": "ba47a1f74b31dcfdc96703e62600a4d972ed2466055df14b22566218762c8e7f"
+    },
+    "webui/src/locales/zh-CN.json": {
+      "role": "index",
+      "sha256": "0d54a7d2c1d45b0a4a1c78312b2d1a81eed6133cf837348a86fec2642b47eece",
+      "size": 7297,
+      "normalized_sha256": "bf92c7c64ed64c1af9c9571285c06cee35b91187d69f3d261fccbc0ac251e9bf"
+    },
+    "webui/src/locales/zh-TW.json": {
+      "role": "index",
+      "sha256": "c0e93f050f9e76997814f412bbbec270dfec1e8e75cd1f54376e1a047e4a90bc",
+      "size": 6973,
+      "normalized_sha256": "8130f7032e2a20f97b95a40e4b12eb8ba91c763aa8ecaa4b3910764e667c3c03"
+    },
+    "webui/src/main.ts": {
+      "role": "index",
+      "sha256": "52ea99ef74028607de6b9da140b01a5355d728fb5cdde3815ea64bee32309d6b",
+      "size": 1401,
+      "normalized_sha256": "dba89555b14722f4aa40c491fd615afdec0d33d895186812782f7133999fa379"
+    },
+    "webui/src/style.css": {
+      "role": "index",
+      "sha256": "170b5c232f540c2db8f09f5cfaa7015157bd508997d4fc3c6b792a85ab2d4652",
+      "size": 940,
+      "normalized_sha256": "08c429893684623e9f1026caa7fa36bfad4e2cb6da00308c349160f8babca36c"
+    },
+    "webui/src/ui/md3/App.vue": {
+      "role": "index",
+      "sha256": "bb55b6b66e1a5593a2d1a8686bbb49a91ffa4076f37d90c73041e07517aab60c",
+      "size": 1077,
+      "normalized_sha256": "1117af2e1b31e866abeb4a3e0ebc9758411828b82a449cc5e2b5d9a03400c073"
+    },
+    "webui/src/ui/md3/Md3Layout.vue": {
+      "role": "index",
+      "sha256": "485e0622468c3f37194c5e40f2a0fb4d235d984601c99818742a995d9a38348d",
+      "size": 4375,
+      "normalized_sha256": "047a6426fa5525bd8fea82ffaeae414213f9b0f8038aebd77599d54b2287858b"
+    },
+    "webui/src/ui/md3/components/Md3BottomActions.vue": {
+      "role": "index",
+      "sha256": "765e9fb55982afd7e02c5a680429d2f4f74d45daf99401496664dd40c4267d2f",
+      "size": 211,
+      "normalized_sha256": "48567091036dd96131fb6ed36df2c4d0c165fbe5194c96bc104f20169b35f401"
+    },
+    "webui/src/ui/md3/components/Md3RuntimeControls.vue": {
+      "role": "index",
+      "sha256": "a643b08a9a5f3fbf5a55a0308d1f71215a01b467834c7540caff97aeae1861a7",
+      "size": 4729,
+      "normalized_sha256": "ccd3a62911eb76655a779ebb9c110fbbc01fcc3f5c6c31dfc54bc2eb60c0e411"
+    },
+    "webui/src/ui/md3/components/Md3SelectField.vue": {
+      "role": "index",
+      "sha256": "202a2128170e689ebc4b787340baef04087487e308a3d742a567c5a9bc011066",
+      "size": 5411,
+      "normalized_sha256": "bbe3cf31f0d95004d7ed4bcc5169c07e0b425866b6b58bc545eefc865932c270"
+    },
+    "webui/src/ui/md3/components/StatusErrorBanner.vue": {
+      "role": "index",
+      "sha256": "a05027dcd090efaad219f864562f0b463c502b6d8af42169e0e6f5774157d914",
+      "size": 2063,
+      "normalized_sha256": "e23cbd1fa4888d55b54747a13afc3e764949dea78ec3ea625f38ca0597bd0a6c"
+    },
+    "webui/src/ui/md3/icons.ts": {
+      "role": "index",
+      "sha256": "c099d43dc266c0e0924c7f518d5ec04c38b7c144870bdfbde57ae64be7c0d23e",
+      "size": 6875,
+      "normalized_sha256": "97773a918fc43266dc121d16b9e16c5338fbf485d6bfd2eb45ffef3b42606b69"
+    },
+    "webui/src/ui/md3/material.ts": {
+      "role": "index",
+      "sha256": "81a552c3f471dea8430fef7f803ea0001512041202fd2b6c5e4575d7d26b73cf",
+      "size": 483,
+      "normalized_sha256": "ed2b65af82d6d382e4b7a6053cb46d1ea1131003743f002fafc97a4e2cd19e23"
+    },
+    "webui/src/ui/md3/pages/config.vue": {
+      "role": "index",
+      "sha256": "32ab49c30ce9ea28e6d595c40af78be32ab805fb50274cae8e0f9145a8b10f56",
+      "size": 7731,
+      "normalized_sha256": "98bf15118192937edaa7571311dc93cb35fc607849e8f40646717acbf4d10d0f"
+    },
+    "webui/src/ui/md3/pages/info.vue": {
+      "role": "index",
+      "sha256": "1b276e7bd8efdd29836b5c8f3ec66c62b8e2dca27485c36549ed2c55d6ac3c8b",
+      "size": 6020,
+      "normalized_sha256": "f275689196fde2bb8a7f600131f01f7a655b7a8242fab1a2e71ee9125296afed"
+    },
+    "webui/src/ui/md3/pages/modules.vue": {
+      "role": "index",
+      "sha256": "ac806d5c5cebc8ca73a4664bb0ae89a765ec7bdb87053c32a26511ff850d9564",
+      "size": 14210,
+      "normalized_sha256": "0996cdf88bf9abedf3a9aca11e8593b6bae60b3848b8fa50619fc7af3c9f563a"
+    },
+    "webui/src/ui/md3/pages/status.vue": {
+      "role": "index",
+      "sha256": "943168371be0079798d83f10455b7b48d291a01365e7dc68aa63c5b0d927ea2d",
+      "size": 11420,
+      "normalized_sha256": "08e75e9c546cff779d164e3592b8215a521e7d63144912b65ee77ba9ab309335"
+    },
+    "webui/src/ui/md3/theme.css": {
+      "role": "index",
+      "sha256": "572f1e8ea2da9014a0dbe5f0792917ca3099013e656fc204c21989d6a17cec76",
+      "size": 6280,
+      "normalized_sha256": "7b1bcf1204743cdf9b37fdd26b7173088b02f5a4796fbe612fa75c22d2a03b9a"
+    },
+    "webui/src/ui/md3/v420/app.css": {
+      "role": "index",
+      "sha256": "e1e8842f1a8beb438df367dd82b104e9c148f1c3c8e69af2a6c48a4301604868",
+      "size": 12258,
+      "normalized_sha256": "58b49689d150bcee0fb2229377d4cbb3a36cc6a74b5fbd837b5464084c20cdd1"
+    },
+    "webui/src/ui/md3/v420/config.css": {
+      "role": "index",
+      "sha256": "e32df3f0de874b106e9929392faa4d3d6b9a5f5d3ea52240fbf4f5f5201b00f0",
+      "size": 7959,
+      "normalized_sha256": "4d27e0c48856d99f3afd38d2d8dbcccfcdfd39de2d11def4ed35ee1579c1fad3"
+    },
+    "webui/src/ui/md3/v420/info.css": {
+      "role": "index",
+      "sha256": "fdac401340a34db2365d628ba78b77591cf2c6d7944d7bff7aff944d586c415c",
+      "size": 7096,
+      "normalized_sha256": "4a1ef0fa260e65b5f6f17b28be274d50ad813331cd2347c4a52a4d28697fd142"
+    },
+    "webui/src/ui/md3/v420/layout.css": {
+      "role": "index",
+      "sha256": "668c79fafed446eadd6815c81980e823e7c57c2e14858b1fcbe5a291c514309b",
+      "size": 2751,
+      "normalized_sha256": "957b81c43530a54ea3121d9946f67afb6fc2d2448d7212a17fe90b0bd2edfc03"
+    },
+    "webui/src/ui/md3/v420/modules.css": {
+      "role": "index",
+      "sha256": "0b6828ca7892357bc1610ec6ab89f10728234f0ea447d0027f5a4eedf94c7a58",
+      "size": 9522,
+      "normalized_sha256": "21b1b459f29615aa7a9a94fe79d8d1c1b6a2b3fd3aabd457b2ddcd7005b3b717"
+    },
+    "webui/src/ui/md3/v420/navbar.css": {
+      "role": "index",
+      "sha256": "e23fe0f96c9f3d5ec890db5f14ff4353c67a81fa9d104254bbda4752b024cd20",
+      "size": 2130,
+      "normalized_sha256": "a90c38f31dcd8d433bfd9223831aca174943e798995026a39ae5c518d61fc1ad"
+    },
+    "webui/src/ui/md3/v420/status.css": {
+      "role": "index",
+      "sha256": "1737f4b926b3ae320dc50f14fa0d33748147e3b1acedf3891c4ed3490ee80096",
+      "size": 8446,
+      "normalized_sha256": "dd948de78702b9e24f4e07d9ffc30b2c6d6b81a667937a03897129de72d4213d"
+    },
+    "webui/src/ui/md3/v420/topbar.css": {
+      "role": "index",
+      "sha256": "78df3666bc9d0cbcca93305b3ffb90624092d99001b25989b620dce702bd710f",
+      "size": 2108,
+      "normalized_sha256": "058607706eafb11796d33d0e05e5ca3ed3e5727249b1fb9ba742e7fdb0503196"
+    },
+    "webui/src/ui/miuix/App.vue": {
+      "role": "index",
+      "sha256": "fcd2f389e4d6455a1a164b8614963eadd405935c20834aff7ad6396672a65c3c",
+      "size": 1056,
+      "normalized_sha256": "8dfb8ebb43b5b392a76ffc29daeb924105df7ad1d881713c1f58c1d841e052c5"
+    },
+    "webui/src/ui/miuix/MiuixLayout.vue": {
+      "role": "index",
+      "sha256": "fa0a474bf6d17047efbbb72aec1e2e8422e12a05e70d25e940d8e459289e71a8",
+      "size": 5983,
+      "normalized_sha256": "a1b0d81c4a5de3bc72cd58ed65fc9b130c5d382580ebfc612d528a200b36886c"
+    },
+    "webui/src/ui/miuix/components/MiuixRuntimeControls.vue": {
+      "role": "index",
+      "sha256": "26aad14082e98b5f2196ef35b01a7ef3051bf7357f51f1fca1494df529b8023f",
+      "size": 3763,
+      "normalized_sha256": "1521ea54dbb4fb343c6125baff364eaf613ba59bfb3eb5a6dd35c5ec6611392e"
+    },
+    "webui/src/ui/miuix/components/MiuixSelectField.vue": {
+      "role": "index",
+      "sha256": "813af27dcabccbea63684138b86c113a89d99502e6705e2205442aecff8f7a47",
+      "size": 2764,
+      "normalized_sha256": "db71a51d6c288e9dd4db148edb2d8ee6bfd0645f9cc4c6499d38b07acf08e385"
+    },
+    "webui/src/ui/miuix/components/StatusCard.vue": {
+      "role": "index",
+      "sha256": "cbacf204b09383f08d19e53928a3a5a49aea29cd5825a1f4a4571dce2a643363",
+      "size": 3965,
+      "normalized_sha256": "1df9c9af5d837aa751894e18ddbeab2779df45fad25570feba7eab0497dad7fd"
+    },
+    "webui/src/ui/miuix/components/StatusErrorBanner.vue": {
+      "role": "index",
+      "sha256": "31848d2634af488929a79c42a74a4fa105fff0a56bc528f3c2e02d1b700ed198",
+      "size": 3977,
+      "normalized_sha256": "349e5b140497c57c22dee418498748c70916d2ab1db9a6d82a5f52d1ac97a283"
+    },
+    "webui/src/ui/miuix/pages/config.vue": {
+      "role": "index",
+      "sha256": "8d97769be411a0793cfa19a3d2ac0d8a1488d50ae68e127d005cf38a46e12521",
+      "size": 9708,
+      "normalized_sha256": "da1186da27791c349390a792713c2e6dacb1f827c8f64a536fff90cc9f13d857"
+    },
+    "webui/src/ui/miuix/pages/info.vue": {
+      "role": "index",
+      "sha256": "80caad5c9036e8cbc2cf3bfe80bc4c7ebe46d304c3ab5d5363868fcdfc974907",
+      "size": 5724,
+      "normalized_sha256": "ea3151ef39bc9185d1ea779ca4b26383038cbf4a1d5d30053a7d2fda02f1d0db"
+    },
+    "webui/src/ui/miuix/pages/modules.vue": {
+      "role": "index",
+      "sha256": "fbcf9ecd31e7c827c19c585f3a5899fc6a4880e8a7e2b99944c5e42b4bf5b94a",
+      "size": 23749,
+      "normalized_sha256": "80f8bb32136ab2bb33dea2863253d176d895ddd7582954a79fa664defb6cd143"
+    },
+    "webui/src/ui/miuix/pages/status.vue": {
+      "role": "index",
+      "sha256": "f30ba9c04cde28ec7e4a32356ba800dc3647bbd5cd057e1d086b5da8dc188682",
+      "size": 13553,
+      "normalized_sha256": "1502eb02d9548260cafbed4ee0823df4e5b84a47e13f17ad8fa9cccf276d1268"
+    },
+    "webui/src/ui/miuix/theme.css": {
+      "role": "index",
+      "sha256": "9e3da79591cc1ad502ff30bc798abf0227151e9386b7b59b20b094ba3b79aa13",
+      "size": 8156,
+      "normalized_sha256": "1d9eade9ab67aec63d6cae95ad71c4bd2969ef67dbcb165ed8194905f01563b2"
+    },
+    "webui/src/ui/useSwipePager.ts": {
+      "role": "index",
+      "sha256": "e12203ee6b1ab728e4c088349eca5726afb9acc7fdb4941eb2b56a19fe14838e",
+      "size": 6420,
+      "normalized_sha256": "de48402699924bbd13d198c8977e29c5d63e52627b106e7afe365eb6825eb81b"
+    },
+    "webui/src/ui/wear/WearLayout.vue": {
+      "role": "index",
+      "sha256": "b4b58c1bef07d4093a3a6da8c3a6066a794ea9322daf387cfa58fd336ea0d26a",
+      "size": 4521,
+      "normalized_sha256": "52d12653f8fb3fe68c2a95bb8f12052b67a2197c8f724076aabc8bfbf60d40e2"
+    },
+    "webui/src/ui/wear/wear.css": {
+      "role": "index",
+      "sha256": "a5e09490040a805ea6ade60a6f24d586fb46098a46c4f41b50d0e291471060be",
+      "size": 6312,
+      "normalized_sha256": "00f43fe8d74189f681d45ced945feeba8a080641d87e878fc919d1d6058e2f74"
+    },
+    "webui/src/vite-env.d.ts": {
+      "role": "index",
+      "sha256": "fd1660a09e9f397fbec5ac3c863095c25adc65fc47bdb2db7487c9c556897ea6",
+      "size": 271,
+      "normalized_sha256": "df3370b386518538990e6b6242c300853878ee80332120e87502726f8d7936aa"
+    },
+    "webui/tsconfig.app.json": {
+      "role": "index",
+      "sha256": "e98af81144c0fe0c216d482590e4fb4c8df6e2fa3b93fa1a36c7be722c0938cd",
+      "size": 417,
+      "normalized_sha256": "ab906993a1e71cd4f85473d2db11634aa8f673bafc5b22755f9f896ef0aab762"
+    },
+    "webui/tsconfig.json": {
+      "role": "index",
+      "sha256": "ddfbd4be8ba0c63cb46e9ea6d68f68e929f270bc23f2f64ec9aa13dc5057c78c",
+      "size": 111,
+      "normalized_sha256": "e8d6f7b50828db3953e21c7e92584f9206b3cd2551b4012507372afbb7fe9ce3"
+    },
+    "webui/tsconfig.node.json": {
+      "role": "index",
+      "sha256": "54ac4313f3c62cbd3ae13b2415569a2835e4168dd9d769000fbd3149d6028992",
+      "size": 293,
+      "normalized_sha256": "2a79b82d11ef214f269ea122b4d71c0cd9e7c37798aa9e1a6036fca094021ebe"
+    },
+    "webui/vite.config.ts": {
+      "role": "index",
+      "sha256": "ee0ca3161758f20fe7cd54ac713e19e36270e3d262760386e572b7fac3d9c1ab",
+      "size": 623,
+      "normalized_sha256": "d9b2b040523de1bdf47c3ca9f4a125efbafa795ddf272a9338fc25a92c636d7e"
+    },
+    "xtask/Cargo.toml": {
+      "role": "index",
+      "sha256": "061184052615e6ccf72da2919a32923c2b0fbfb849e968982da0068d5cae4d9c",
+      "size": 446,
+      "normalized_sha256": "0e84ebd7cfd5751024adbee138382287da032c5d73bb025243ce0e9e561fa542"
+    },
+    "xtask/src/main.rs": {
+      "role": "index",
+      "sha256": "c0e40f59e3e72df1de2478405612d0ef1d44673052534c1109e9f41f56123a86",
+      "size": 34667,
+      "normalized_sha256": "41808180911b162011d2fa459396fb9dd03da925ac2d6f5aedf7da00f898196f"
+    },
+    "xtask/src/vfs_package.rs": {
+      "role": "index",
+      "sha256": "9781a15cdb6ee40a46df2e089db4f6778542b1ba0905c948d305e1ad59572290",
+      "size": 3229,
+      "normalized_sha256": "c2fdc4f7966d9dd3bf922f38a5494b5dcfaf053be5e0509056e45226d412124f"
+    },
+    "xtask/src/zip_ext.rs": {
+      "role": "index",
+      "sha256": "5013174a567285c701f9df22155bab35e258e8ee923b8379c5363f9997074b7e",
+      "size": 4446,
+      "normalized_sha256": "fa799f24b86f23d42ef6a3fc8c09783002483a06c3af105fec99833b38a68930"
+    },
+    "xtask/tests/notify_cli.rs": {
+      "role": "observe",
+      "sha256": "04780a4c6fb9d43972f0301b1604768beed9c513e6e1b8d46359db5d2aa175e1",
+      "size": 1140,
+      "normalized_sha256": "4be77a6dc9d784a8acda34868e6a7c98b6289d020f0e8ce777d18d175105a95b"
+    }
+  },
+  "managed_scope": {
+    "version": "managed-scope-baseline/v1",
+    "policy_identity": "e0f548d87fe5462c412a1c54409871a60ddf2ae5c30609258ff8739fdfcc8e76",
+    "observe_change_policy": "review_required",
+    "budget_policy_identity": "15e9b37a6c57e9bf03c9df3d0d049eb5b9a7f5540f9d34960408114e2538a32d",
+    "budget_policy": {
+      "version": "cognition-budget-policy/v1",
+      "mode": "enforce",
+      "whole_index": {
+        "target_tokens": 200000,
+        "warning_tokens": 300000,
+        "max_tokens": 400000
+      },
+      "r": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 25,
+          "max_tokens": 50
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 45,
+          "max_tokens": 90
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 90,
+          "max_tokens": 180
+        }
+      ],
+      "s": [
+        {
+          "min_c": 1,
+          "max_c": 4,
+          "target_tokens": 20,
+          "max_tokens": 40
+        },
+        {
+          "min_c": 5,
+          "max_c": 7,
+          "target_tokens": 40,
+          "max_tokens": 80
+        },
+        {
+          "min_c": 8,
+          "max_c": 8,
+          "target_tokens": 70,
+          "max_tokens": 140
+        },
+        {
+          "min_c": 9,
+          "max_c": 9,
+          "target_tokens": 100,
+          "max_tokens": 200
+        }
+      ]
+    },
+    "apply_authorization_mode": "auto"
+  }
+}

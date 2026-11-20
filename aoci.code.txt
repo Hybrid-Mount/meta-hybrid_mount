@@ -1,0 +1,779 @@
+#AOCI-CODE-VOLUME: 1
+
+===/<repository>/===
+.gitattributes[FV5T]: F:固定 shell、内核产物摘要和哈希输入的 LF 策略，并保留 ko 原始二进制 | R:code:tests/shell/vfs_sources_digest.sh | A:- | S:-
+.gitignore[FV4T]: F:排除 Rust、WebUI、内核构建产物、本机诊断和宿主接入文件 | R:code:.codex/config.toml | A:- | S:-
+AGENTS.md[SQ5S]: F:定义 AOCI 的模型证据、Overview 验证、批次收尾与恢复规则 | R:- | A:AOCI 仓库接入约定 | S:专门任务顺序由实时 Guide 决定
+CLAUDE.md[SQ5S]: F:记录 Hybrid Mount 的验证入口、平台隔离、代码约束和仓内技能导航 | R:code:.dsh/skills/hybrid-mount-overview/SKILL.md,code:Cargo.toml | A:- | S:-
+CONTRIBUTING.md[SQ4T]: F:规定问题复现信息、敏感日志处理和贡献 PR 的验证与分支路径 | R:code:USAGE_NOTICE.md,code:docs/README_ZH.md | A:- | S:-
+Cargo.toml[FV7T]: F:声明 Rust 工作区成员、主程序版本、依赖平台边界和发布构建配置 | R:code:xtask/Cargo.toml,code:tools/notify/Cargo.toml,code:src/main.rs | A:hybrid-mount Package | S:成员从工作区继承禁用 panic 类便捷宏的 lint 策略
+LICENSE[SG3L]: F:收录主仓库在 GPL 第三版下的版权、复制、修改与分发条件 | R:- | A:- | S:-
+README.md[SB5T]: F:介绍 KernelSU 和 APatch 用户的安装、挂载后端和 TOML 配置规则 | R:code:USAGE_NOTICE.md,code:docs/README_ZH.md | A:- | S:-
+THIRD_PARTY.md[SG4T]: F:记录派生内核与用户态实现、随附技能和相关第三方许可来源 | R:code:LICENSE,code:module/vfs/src/PROVENANCE | A:- | S:-
+USAGE_NOTICE.md[SR4T]: F:说明模块对系统挂载行为的影响及异常时禁用或卸载后重启的恢复路径 | R:code:README.md | A:- | S:-
+changelog.md[SV4L]: F:按发布版本保存功能变更、修复、测试和维护记录，供升级和回归定位 | R:code:cliff.toml | A:- | S:-
+cliff.toml[FV4T]: F:配置 git-cliff 的标签和提交分组、清理规则及预发布警示 | R:code:.github/workflows/release.yml,code:changelog.md | A:- | S:-
+clippy.toml[FQ3T]: F:为测试代码启用 Clippy 的 expect 和 unwrap 测试例外 | R:code:Cargo.toml | A:- | S:-
+module.yaml[FV4T]: F:声明 KernelSU 模块目录中的稳定 ID、版本之外的目录元数据及最低 API | R:code:docs/KERNELSU_MODULES.md,code:README.md | A:- | S:-
+rust-toolchain.toml[FV4T]: F:选择 nightly Rust 工具链并提供格式、lint 和自建 Android 标准库所需组件 | R:code:xtask/src/main.rs | A:- | S:riscv64 没有预编译标准库，保留 rust-src
+update.json[FV4T]: F:向模块更新消费者提供当前版本、递增版本号、ZIP 和 changelog URL | R:code:xtask/src/main.rs,code:.github/workflows/release.yml | A:- | S:-
+
+===/<repository>/.cargo/===
+config.toml[FV4T]: F:将 cargo xtask 映射到工作区 xtask 包的 Cargo 运行入口 | R:code:xtask/Cargo.toml | A:cargo xtask | S:-
+
+===/<repository>/.dsh/skills/hm-build-release/===
+SKILL.md[SV5T]: F:说明 Android 模块 ZIP 构建、发布 tag 校验、更新元数据及通知流程 | R:code:xtask/src/main.rs,code:.github/workflows/release.yml | A:- | S:正式版 versionCode 槽位高于同版本的预发布槽位，确保预发布设备能升级到正式版
+
+===/<repository>/.dsh/skills/hm-ci/===
+SKILL.md[SV5S]: F:解释 GitHub Actions 检查的触发、权限、缓存和产物回写路径 | R:code:.github/workflows/lints.yml,code:.github/workflows/kernel-module.yml,code:.github/workflows/release.yml | A:- | S:VFS 源码推送与产物刷新之间的摘要失败属预期，按最终分支状态判断
+
+===/<repository>/.dsh/skills/hm-module-scripts/===
+SKILL.md[SW5T]: F:梳理 Android 模块安装、开机、软重启和卸载脚本的调用与退出状态约定 | R:code:module/customize.sh,code:module/metainstall.sh,code:module/metamount.sh | A:- | S:安装阶段可写模块目标，运行阶段 staging 必须在运行目录；启动包装器透传实际退出码
+
+===/<repository>/.dsh/skills/hm-mount-safety-review/===
+SKILL.md[SR5T]: F:审查挂载调用、只读输入、暂存资源和失败回滚的完整性 | R:code:src/pipeline.rs,code:src/errors.rs | A:- | S:回滚按创建逆序清理资源，并保留供 WebUI 查询的失败快照
+
+===/<repository>/.dsh/skills/hm-planner-debug/===
+SKILL.md[SB5T]: F:按路径规则和节点类型定位多后端、替换目录和文件目录冲突 | R:code:src/plan/mod.rs,code:src/mount_tree.rs,code:src/state.rs | A:- | S:新增冲突判定放在计划阶段并由规划器单测覆盖
+
+===/<repository>/.dsh/skills/hm-runtime/===
+SKILL.md[SR5S]: F:说明运行期账本、启动锁、热挂载、回滚和 WebUI 状态快照的契约 | R:code:src/runtime/ledger.rs,code:src/runtime/hot.rs,code:src/runtime/transaction.rs | A:- | S:账本绑定 boot_id 和 PID 1 挂载命名空间；操作锁文件必须保留同一 inode
+
+===/<repository>/.dsh/skills/hm-rust-android/===
+SKILL.md[SV4T]: F:给出 Rust 的 Android 交叉检查、平台条件和真机验证分工 | R:code:rust-toolchain.toml,code:xtask/src/main.rs | A:- | S:宿主测试不会编译 Linux 或 Android 专用分支
+
+===/<repository>/.dsh/skills/hm-rust-lsp/===
+SKILL.md[SQ3T]: F:规定 DSH 中 Rust LSP 的诊断、符号导航与改名检查方式 | R:- | A:- | S:初次索引未完成或超时时，空结果不能证明无错误
+
+===/<repository>/.dsh/skills/hm-verify/===
+SKILL.md[SQ5S]: F:汇总本地 Rust、Android、Shell、LKM 与 WebUI 检查并约定失败报告 | R:code:.github/workflows/lints.yml,code:tests/shell/vfs_sources_digest.sh | A:- | S:仅在预编译 VFS 产物存在时核对产物摘要
+
+===/<repository>/.dsh/skills/hm-vfs/===
+SKILL.md[SB5S]: F:说明 VFS 用户态控制面、内核 Provider、运行态 CLI、构建产物和证据门禁 | R:code:docs/VFS_CLI.md,code:module/vfs/README.md,code:src/vfs/protocol.rs | A:- | S:规划时 Provider 不可用会把 VFS 规则降为 ignore，探测和加载须在规划前完成
+
+===/<repository>/.dsh/skills/hm-webui/===
+SKILL.md[SU5T]: F:定义 WebUI 开发和打包路径，列出管理器与 Rust CLI 的 JSON 通信接口 | R:code:src/cli.rs,code:webui/package.json,code:xtask/src/main.rs | A:- | S:面向前端的 JSON 独占 stdout，保存配置需重启生效
+
+===/<repository>/.dsh/skills/hybrid-mount-overview/===
+SKILL.md[SB5T]: F:给出挂载流水线、规则优先级、目录职责和 CLI 的项目导航 | R:code:src/pipeline.rs,code:src/plan/mod.rs,code:src/cli.rs | A:- | S:同一文件路径只能归属一个后端；共享目录可作结构节点，类型冲突须在规划阶段报错
+
+===/<repository>/.dsh/skills/kernel-development-skills/===
+LICENSE[SG2T]: F:记录随仓库分发的 Linux 内核开发指南的 MIT 许可和版权声明 | R:code:.dsh/skills/kernel-development-skills/SKILL.md | A:- | S:-
+SKILL.md[SB5S]: F:为维护随附内核模块选择 Linux 驱动、补丁、调试和验证材料 | R:code:.dsh/skills/hm-vfs/SKILL.md,code:module/vfs/src/PROVENANCE | A:- | S:本仓协议与上游署名约束优先；通用指南中的板级设备树流程不适用于本模块
+
+===/<repository>/.dsh/skills/kernel-development-skills/references/===
+advanced-tooling.md[SQ3T]: F:按补丁、构建、实验室、静态分析与运行追踪任务选择内核工具 | R:- | A:- | S:工具缺失时优先采用现成的仓库检查
+ci-regression.md[SQ4T]: F:用产物身份和首个故障证据分诊内核 CI、实验室、稳定分支与偶发回归 | R:- | A:- | S:后续错误可能由首次失败引发，保留原始告警
+debugging-testing.md[SQ4M]: F:按风险选择内核运行诊断、追踪、Sanitizer、KUnit、kselftest 和硬件验证 | R:- | A:- | S:KUnit 验证内核内部逻辑，kselftest 验证用户可见接口
+device-tree-drivers.md[SH4S]: F:说明设备树绑定、DTS、驱动匹配、构建集成及用户态 ABI 审阅 | R:- | A:- | S:绑定属于 ABI；保持旧属性兼容并先验证绑定
+doc-routes.md[SQ3S]: F:提供内核文档导航以及针对具体 checkout 生成和检索文档索引的用法 | R:code:.dsh/skills/kernel-development-skills/scripts/index_kernel_docs.py | A:- | S:生成索引随 checkout 变化，应按树重建且不提交
+driver-api-cookbook.md[SH4S]: F:汇总 Linux 驱动资源生命周期、嵌入式 API、子系统选型、运行电源管理及诊断 | R:- | A:- | S:设备托管资源仍需保证注销、回调和异步工作释放顺序
+driver-review-checklists.md[SQ4S]: F:按编辑前、构建、硬件验证、维护及回移植阶段审阅驱动改动 | R:code:.dsh/skills/kernel-development-skills/references/driver-api-cookbook.md | A:- | S:静态扫描是建议，保留失败日志与明确的运行证据
+kernel-workflow.md[SW4S]: F:指引内核补丁拆分、提交与维护者路由、回归跟踪和稳定分支修复 | R:- | A:- | S:稳定分支优先选择已进主线、已验证且对应真实问题的小修复
+
+===/<repository>/.dsh/skills/kernel-development-skills/scripts/===
+check_kernel_api_patterns.py[XQ4M]: F:检查显式路径或 Git 变更文件中的高风险内核 API 写法并打印位置 | R:- | A:paths,--against,--strict | S:默认告警不阻断；strict 有发现时退出 1；显式缺失路径退出 2
+index_kernel_docs.py[XQ4M]: F:从指定内核文档树生成含版本的 Markdown 导航和可选 JSONL 文件索引 | R:code:.dsh/skills/kernel-development-skills/references/doc-routes.md | A:kernel_root,output,--jsonl | S:对文件记录截断 SHA-256，Markdown 不写入绝对 checkout 路径
+triage_kernel_change.py[XQ4M]: F:按显式路径或 Git diff 分类内核改动，输出适用参考、验证目标与审阅约束 | R:code:.dsh/skills/kernel-development-skills/references/kernel-workflow.md | A:paths,--against | S:输出供人工整理验证方案，主流程按建议模式返回成功
+
+===/<repository>/.dsh/skills/rust-best-practices/===
+LICENSE[SG2T]: F:记录 Apollo Rust 最佳实践手册的 MIT 许可及版权声明 | R:code:.dsh/skills/rust-best-practices/SKILL.md | A:- | S:-
+SKILL.md[SQ4T]: F:索引 Apollo Rust 工程实践章节并补充 Hybrid Mount 的审阅约束 | R:code:Cargo.toml,code:CLAUDE.md | A:- | S:仓库 lint 优先于手册示例，沿用 thiserror 类型
+
+===/<repository>/.dsh/skills/rust-best-practices/references/===
+chapter_01.md[SQ4L]: F:以 Rust 示例说明借用与复制、错误分支、延迟分配、迭代、注释和函数提取 | R:- | A:- | S:只抽取共享知识，外观相同但独立变化的代码可保留
+chapter_02.md[SQ4S]: F:介绍 Clippy 检查范围、工作区 lint 配置和需要解释的误报例外 | R:- | A:- | S:-
+chapter_03.md[SP4M]: F:用基准和火焰图定位 Rust 热点，再用优化构建复测改动 | R:- | A:- | S:-
+chapter_04.md[SR4S]: F:说明可恢复错误的类型分层、传播和上下文，限定 panic 的角色 | R:- | A:- | S:-
+chapter_05.md[SQ4M]: F:以行为命名和窄断言编写测试，区分单测、集成测试和文档示例 | R:- | A:- | S:-
+chapter_06.md[SP4S]: F:比较单态化的静态分派和 vtable 动态分派，解释性能及异质容器选型 | R:- | A:- | S:-
+chapter_07.md[SD4M]: F:用类型编码文件、构建器和协议状态，令非法转换无法编译 | R:- | A:- | S:-
+chapter_08.md[SQ4M]: F:区分解释设计原因的实现注释和描述公开契约的 rustdoc | R:- | A:- | S:-
+chapter_09.md[SR4M]: F:按所有权、跨线程共享与内部可变性选择 Rust 指针和容器 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-guidelines/===
+LICENSE.md[SG2T]: F:保留 Microsoft Rust Guidelines 的 MIT 许可及版权 | R:- | A:- | S:-
+SKILL.md[SQ4T]: F:为 Hybrid Mount 审阅挑选 Microsoft 的 panic、健全性、FFI 与 lint 条款 | R:code:src/errors.rs,code:CLAUDE.md | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-guidelines/guidelines/===
+README.md[SQ3T]: F:界定 Microsoft Rust Guidelines 的适用范围、选题原则与收录条件 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-guidelines/guidelines/checklist/===
+README.md[SQ3M]: F:以清单汇集通用、正确性和其他 Rust 设计规则的书内引用 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-guidelines/guidelines/correctness/===
+M-PANIC-CONTINUATION.md[SR4T]: F:限定 catch_unwind 后继续运行属于最后手段，恢复通常应受控重启 | R:- | A:- | S:-
+M-PANIC-IS-STOP.md[SR4T]: F:把 panic 定义为停止请求，要求最小 panic 安全并禁作上游错误通道 | R:- | A:- | S:-
+M-PANIC-MESSAGE.md[SO3T]: F:要求主动 panic 或断言附带原因和适用的实际值以帮助诊断 | R:- | A:- | S:-
+M-PANIC-ON-BUG.md[SR4T]: F:将不可恢复的不变量违规视为需停止的编程错误，避免伪装成可处理错误 | R:- | A:- | S:-
+M-UNSAFE-IMPLIES-UB.md[SS4T]: F:只在误用可能造成未定义行为的函数或 trait 上用 unsafe 标记 | R:- | A:- | S:-
+M-UNSAFE.md[SS4T]: F:将 unsafe 限于有理由的抽象、性能和 FFI，并要求审阅正确性依据 | R:- | A:- | S:-
+M-UNSOUND.md[SS4T]: F:通过安全调用是否可能触发未定义行为判定 Rust 接口和实现的健全性 | R:- | A:- | S:-
+README.md[SS3T]: F:为文档构建聚合 panic、unsafe、健全性与错误语义规则 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-guidelines/guidelines/ffi/===
+M-FFI-NAMING.md[SI3T]: F:约定 -sys 表示 C 库导入绑定、-ffi 表示向 C 调用方导出的桥接 | R:- | A:- | S:-
+M-FFI-TRANSLATES.md[SI4T]: F:在核心 crate 保存可测试的业务逻辑，FFI glue 负责 Rust 和 C 数据转换 | R:- | A:- | S:-
+M-ISOLATE-DLL-STATE.md[SI4T]: F:限制 Rust DLL 共享数据为便携 ABI 表示，排除依赖本地 static 和 TypeId 的状态 | R:- | A:- | S:-
+README.md[SI3T]: F:在书内整合 FFI crate 命名、胶水职责和 DLL 状态隔离规则 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-guidelines/guidelines/universal/===
+M-DOCUMENTED-MAGIC.md[SC3T]: F:用命名常量及注释记录魔法值的来源、改变后的影响和外部交互 | R:- | A:- | S:-
+M-LINT-OVERRIDE-EXPECT.md[SQ4T]: F:用 expect 限定局部 lint 例外，预期未出现时暴露陈旧覆盖 | R:- | A:- | S:-
+M-LOG-STRUCTURED.md[SO4S]: F:用命名事件、结构化字段及模板保留日志过滤能力，并净化敏感数据 | R:- | A:- | S:-
+M-PUBLIC-DEBUG.md[SO4T]: F:要求公开 Rust 类型支持 Debug，同时为敏感值实现安全表示 | R:- | A:- | S:-
+M-PUBLIC-DISPLAY.md[SU3T]: F:为读者消费的错误和文本包装提供惯用 Display，并考虑敏感数据 | R:- | A:- | S:-
+M-REGULAR-FN.md[SQ3T]: F:为没有明确接收者的一般计算使用普通函数，主要以关联函数构造实例 | R:- | A:- | S:-
+M-SHORT-NAMES.md[SQ3T]: F:利用模块消歧保持 Rust 标识符简短，避免重复归属信息 | R:- | A:- | S:-
+M-SMALLER-CRATES.md[SV3T]: F:按可独立使用的边界拆分 crate，减少编译耦合并避免依赖环 | R:- | A:- | S:-
+M-STATIC-VERIFICATION.md[SQ4T]: F:将 compiler lint、Clippy、格式、依赖审计和特性组合纳入静态门禁 | R:- | A:- | S:-
+M-UPSTREAM-GUIDELINES.md[SQ3T]: F:把 Microsoft 规则与社区 Rust API、风格、设计模式和 UB 参考衔接 | R:- | A:- | S:-
+M-WEASEL-WORDS.md[SQ3T]: F:删去 Manager、Service 等不能区分实际职责的泛化类型后缀 | R:- | A:- | S:-
+README.md[SQ3T]: F:以文档包含指令组织验证、日志表示、命名和常量等通用指南 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-skills/===
+LICENSE[SG2T]: F:保存 Rust 规则库上游作者的版权声明与 MIT 分发条款 | R:- | A:- | S:-
+SKILL.md[SQ4L]: F:分类组织 Rust 规则并说明 Hybrid Mount 本仓约束优先级 | R:code:Cargo.toml,code:.dsh/skills/rust-skills/checks/validate.py | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-skills/checks/===
+validate.py[XQ4T]: F:验证规则标题摘要、必备小节、互链与技能目录的规则索引一致性 | R:code:.dsh/skills/rust-skills/SKILL.md | A:退出状态 | S:规则索引必须与文件集合完全匹配
+
+===/<repository>/.dsh/skills/rust-skills/rules/===
+anti-clone-excessive.md[SP3S]: F:让只读 Rust 调用采用借用，按独立所有权或写时复制需要控制克隆 | R:- | A:- | S:-
+anti-collect-intermediate.md[SP3S]: F:保持迭代器链惰性，仅在终点收集，避免各阶段分别分配和遍历 | R:- | A:- | S:-
+anti-empty-catch.md[SR3S]: F:要求显式处理或记录错误，避免空错误分支和无意丢弃 Result | R:- | A:- | S:-
+anti-expect-lazy.md[SR3T]: F:对运行中可能发生的错误采用可恢复分支，仅用 expect 表达编程错误 | R:- | A:- | S:-
+anti-format-hot-path.md[SP3S]: F:在循环及频繁调用路径中复用缓冲区或用 write 减少字符串分配 | R:- | A:- | S:-
+anti-index-over-iter.md[SP3S]: F:以迭代器替代手写下标遍历，减少越界风险并改善优化机会 | R:- | A:- | S:-
+anti-lock-across-await.md[SR4S]: F:在暂停前释放 Mutex 或 RwLock guard，避免异步任务阻塞或同步锁死锁 | R:- | A:- | S:-
+anti-over-abstraction.md[SP3S]: F:从具体实现出发，仅在已有用例时引入泛型和 trait，控制编译和理解成本 | R:- | A:- | S:-
+anti-panic-expected.md[SR3S]: F:对文件、网络及输入故障返回 Result，为不变量失效保留 panic | R:- | A:- | S:-
+anti-premature-optimize.md[SP3S]: F:先测量定位真正瓶颈，再投入会增加实现复杂度的优化 | R:- | A:- | S:-
+anti-string-for-str.md[SP3S]: F:用 &str 接收只读字符串，兼容字面量和切片且省去调用方分配 | R:- | A:- | S:-
+anti-stringly-typed.md[SD3S]: F:用枚举表示固定取值，用 newtype 区分含义不同的值 | R:- | A:- | S:-
+anti-type-erasure.md[SP3S]: F:单一实现优先 impl Trait 或泛型，避免不必要的装箱和 vtable 分派 | R:- | A:- | S:-
+anti-unwrap-abuse.md[SR3S]: F:用显式 None 或 Err 处理替换生产路径的 unwrap，保留错误上下文 | R:- | A:- | S:-
+anti-vec-for-slice.md[SP3S]: F:用切片接受只读序列，兼容数组、Vec 及其子区间 | R:- | A:- | S:-
+api-builder-must-use.md[SQ3S]: F:标记返回新构建器的配置方法为 must_use，暴露未消费结果 | R:- | A:- | S:-
+api-builder-pattern.md[SQ3S]: F:用 builder 表达复杂或含多项可选参数的构造，提升调用可读性 | R:- | A:- | S:-
+api-common-traits.md[SQ3S]: F:为公共类型考虑 Debug、Clone 和 PartialEq 等标准互操作 trait | R:- | A:- | S:-
+api-default-impl.md[SC3S]: F:对存在合理默认值的类型实现 Default，支持通用初始化与更新语法 | R:- | A:- | S:-
+api-extension-trait.md[SE3S]: F:用本地扩展 trait 给外部类型增加方法并符合孤儿规则 | R:- | A:- | S:-
+api-from-not-into.md[SE3S]: F:实现 From 以利用标准库 blanket 实现得到反方向的 Into 调用方式 | R:- | A:- | S:-
+api-impl-asref.md[SP3S]: F:以 AsRef 提供廉价借用视图，按需取得所有权时才用 Into | R:- | A:- | S:-
+api-impl-fromiterator.md[SE4S]: F:为自定义集合实现收集、批量追加和 owned、共享及可变迭代 | R:- | A:- | S:-
+api-impl-into.md[SE3S]: F:用 impl Into 让调用方灵活传参，用 From 定义标准转换 | R:- | A:- | S:-
+api-must-use.md[SR3S]: F:为忽略后易出错的返回值、锁及 RAII guard 添加 must_use | R:- | A:- | S:-
+api-newtype-safety.md[SD3S]: F:用可区分的原语包装类型让编译器拒绝交换语义不同的参数 | R:- | A:- | S:-
+api-non-exhaustive.md[SR4S]: F:给可扩展公共枚举和结构体添加 non_exhaustive，以保留兼容演进空间 | R:- | A:- | S:-
+api-operator-overload.md[SQ3S]: F:只为直观语义重载运算符，并考虑引用形式，避免隐式副作用和克隆 | R:- | A:- | S:-
+api-parse-dont-validate.md[SD4S]: F:在边界把原始输入解析成只允许有效值的类型，让内部调用免于重复验证 | R:- | A:- | S:-
+api-sealed-trait.md[SE3S]: F:通过密封约束允许外部使用 trait，同时保持实现者集合由库控制 | R:- | A:- | S:-
+api-serde-optional.md[SV3S]: F:把库的序列化支持设计为可选 Cargo feature，降低无需求调用方的依赖 | R:- | A:- | S:-
+api-typestate.md[SD4S]: F:以不同 Rust 类型承载状态和可用操作，在编译期限制状态转换 | R:- | A:- | S:-
+async-async-fn-bounds.md[SW4S]: F:用 AsyncFn 系列约束表达高阶异步回调并支持 future 借用闭包环境 | R:- | A:- | S:-
+async-bounded-channel.md[SP4S]: F:用有界队列让生产者在满载时等待，限制异步消息积压 | R:- | A:- | S:-
+async-broadcast-pubsub.md[SM3S]: F:为所有订阅者分发事件选择 broadcast，区分 mpsc 的单消费者投递 | R:- | A:- | S:-
+async-cancel-safety.md[SR4S]: F:审查 select 未获胜分支被丢弃时是否保住读取、写入或排队进度 | R:- | A:- | S:-
+async-cancellation-token.md[SR4M]: F:用 CancellationToken 实现协作停止和任务清理，避免把丢弃 JoinHandle 当成取消 | R:- | A:- | S:-
+async-clone-before-await.md[SW3S]: F:在挂起前显式复制共享所有权，减少借用跨 await 带来的生命周期约束 | R:- | A:- | S:-
+async-fn-in-trait.md[SW3S]: F:用原生异步 trait 方法减少宏和装箱，并考虑派生 future 的约束 | R:- | A:- | S:-
+async-join-parallel.md[SW3S]: F:以 join 或 try_join 并发等待互不依赖的 future，使耗时取决于慢分支 | R:- | A:- | S:-
+async-joinset-structured.md[SW4S]: F:用 JoinSet 动态管理 spawned task 集合并按完成顺序收集结果 | R:- | A:- | S:-
+async-mpsc-queue.md[SM3S]: F:用 Tokio mpsc 为异步任务建立多生产者单消费者队列及容量背压 | R:- | A:- | S:-
+async-no-lock-await.md[SR4S]: F:要求临界区在挂起前结束，避免已暂停任务长期占有同步或异步锁 | R:- | A:- | S:-
+async-oneshot-response.md[SM3S]: F:用单次应答通道为 mpsc 请求提供专属返回值，省去多消息缓冲 | R:- | A:- | S:-
+async-select-racing.md[SW3S]: F:用 select 在工作、超时和取消信号间竞速，处理率先完成的分支 | R:- | A:- | S:-
+async-spawn-blocking.md[SP4S]: F:把 CPU 密集或阻塞操作交给 Tokio 的阻塞池，避免占用执行器线程 | R:- | A:- | S:-
+async-tokio-fs.md[SP3S]: F:利用 Tokio 文件接口将文件系统阻塞操作移出异步执行线程 | R:- | A:- | S:-
+async-tokio-runtime.md[SP3S]: F:按 I/O 或 CPU 负载选择 Tokio 运行时和线程配置 | R:- | A:- | S:-
+async-try-join.md[SW3S]: F:并发执行可失败操作，使用 try_join 在任一分支出错时提前返回 | R:- | A:- | S:-
+async-watch-latest.md[SM3S]: F:为只消费最新配置或状态的观察者使用 watch，允许跳过中间值 | R:- | A:- | S:-
+closure-disjoint-capture.md[SP3T]: F:按字段捕获闭包实际引用的数据，需移动单字段时先绑定局部值 | R:- | A:- | S:-
+closure-fn-trait-bounds.md[SE3T]: F:根据回调调用次数和是否修改或消耗捕获选择最宽松的 Fn trait 约束 | R:- | A:- | S:-
+closure-impl-fn-return.md[SP3S]: F:用不透明 impl Fn 返回固定闭包类型，多个实际类型或需存储时考虑 trait object | R:- | A:- | S:-
+closure-move-capture.md[SW3T]: F:对逃逸闭包使用 move 取得捕获值所有权，外部还要使用时先建立副本 | R:- | A:- | S:-
+closure-static-vs-dyn.md[SP3T]: F:按内联、单态化代码大小和异质存储需求选择具体或动态回调 | R:- | A:- | S:-
+coll-binaryheap.md[SP3S]: F:以堆实现反复提取优先项，使用 Reverse 让 BinaryHeap 按最小值出队 | R:- | A:- | S:-
+coll-map-choice.md[SP3S]: F:依据查找、键排序、区间扫描或插入序要求选择哈希、树或有序映射 | R:- | A:- | S:-
+coll-seq-choice.md[SP3T]: F:默认采用连续 Vec，需要两端操作时改用环形 VecDeque | R:- | A:- | S:-
+coll-set-membership.md[SP3T]: F:将重复成员查询交给集合，按排序需求选择树或哈希并考虑小集合成本 | R:- | A:- | S:-
+conc-atomic-ordering.md[SR4S]: F:按同步关系选择正确的最弱原子内存顺序，兼顾 ARM 等平台的屏障成本 | R:- | A:- | S:-
+conc-rayon-par-iter.md[SP3T]: F:用 Rayon 工作窃取并行执行 CPU 密集的迭代计算，I/O 采用异步方案 | R:- | A:- | S:-
+conc-scoped-threads.md[SW3T]: F:用 scoped thread 的作用域退出前 join 保证从父栈借用数据有效 | R:- | A:- | S:-
+conc-thread-local.md[SS4T]: F:以线程局部 Cell 或 RefCell 保存每线程状态，避免共享可变 static 的风险 | R:- | A:- | S:-
+const-block.md[SQ3T]: F:使用内联 const 块在编译期验证常量不变量和初始化非 Copy 数组 | R:- | A:- | S:-
+const-fn.md[SP3T]: F:将符合常量求值限制的纯函数声明为 const fn，供编译期和运行期复用 | R:- | A:- | S:-
+const-generics.md[SD3T]: F:用常量泛型参数化数组长度或其他常量，并按值生成具体实现 | R:- | A:- | S:-
+const-vs-static.md[SD3T]: F:区分按使用位置替换的 const 与具有唯一地址和静态生命周期的 static | R:- | A:- | S:-
+conv-asmut-mutable.md[SE3T]: F:对支持多个输入容器的写入 API 使用 AsMut 取得可变借用视图 | R:- | A:- | S:-
+conv-fromstr-parsing.md[SE3T]: F:为字符串到业务值的解析实现 FromStr，使泛型解析和 CLI 约束可复用 | R:- | A:- | S:-
+conv-tryfrom-fallible.md[SR3T]: F:为可失败的类型转换实现 TryFrom，复用 TryInto、问号传播及通用约束 | R:- | A:- | S:-
+doc-all-public.md[SQ3S]: F:用 rustdoc 文档注释描述所有公开项的使用方法和 API 契约 | R:- | A:- | S:-
+doc-cargo-metadata.md[SV3S]: F:在 Cargo 清单补齐发布元数据，便于索引和评估公开 crate | R:- | A:- | S:-
+doc-crate-readme.md[SV3T]: F:从 README 注入 crate 顶层 rustdoc，并在 Cargo 清单指向同一份文件 | R:- | A:- | S:-
+doc-errors-section.md[SR3S]: F:在可失败接口的 Errors 小节说明何时返回何类错误 | R:- | A:- | S:-
+doc-examples-section.md[SQ3S]: F:以可运行的 Examples 展示公共 API，利用 doctest 防止示例漂移 | R:- | A:- | S:-
+doc-hidden-setup.md[SQ3S]: F:在可运行示例中以井号前缀隐藏初始化细节，保留编译所需代码 | R:- | A:- | S:-
+doc-intra-links.md[SQ3S]: F:用 rustdoc 项内链接指向类型或方法，借文档构建识别失效引用 | R:- | A:- | S:-
+doc-link-types.md[SQ3S]: F:在类型和函数文档间建立可校验导航，避免仅用易陈旧的纯文本名称 | R:- | A:- | S:-
+doc-module-inner.md[SQ3S]: F:以模块级内层文档说明模块边界、组织方式和典型用途 | R:- | A:- | S:-
+doc-panics-section.md[SR3S]: F:在 Panics 小节公开触发条件和调用者应满足的前置要求 | R:- | A:- | S:-
+doc-question-mark.md[SR3S]: F:让示例通过问号传播错误，避免把 unwrap 展示成推荐的调用方式 | R:- | A:- | S:-
+doc-safety-section.md[SS4S]: F:在 Safety 小节列出调用者必须维持的健全性前提 | R:- | A:- | S:-
+err-anyhow-app.md[SR3S]: F:在不要求类型化错误的应用场景用 anyhow 汇聚失败、上下文和回溯 | R:- | A:- | S:-
+err-context-chain.md[SO3S]: F:附加失败操作的语义上下文，同时保留底层原因链 | R:- | A:- | S:-
+err-custom-type.md[SR3S]: F:以领域错误类型公开具体失败模式，允许调用者按变体处理 | R:- | A:- | S:-
+err-doc-errors.md[SR3S]: F:在 Rust API 文档的 Errors 小节写明返回 Err 的实际条件及含义 | R:- | A:- | S:-
+err-expect-bugs-only.md[SR3S]: F:仅在本应成立的程序不变量失效时考虑 expect，消息说明该不变量的依据 | R:- | A:- | S:-
+err-from-impl.md[SR3S]: F:为底层错误提供 From 转换，使问号传播自动包装且各调用点保持一致 | R:- | A:- | S:-
+err-lowercase-msg.md[SO3S]: F:用小写开头且无句末标点的独立错误片段，便于与上下文和原因拼接 | R:- | A:- | S:-
+err-no-unwrap-prod.md[SR3S]: F:通过问号、显式分支或带不变量上下文的失败替换无诊断的 unwrap | R:- | A:- | S:-
+err-question-mark.md[SR3S]: F:以问号返回失败并通过 From 统一转换类型，简化重复 match | R:- | A:- | S:-
+err-result-over-panic.md[SR3S]: F:用 Result 表达可恢复失败，交由调用者重试、回退或传播 | R:- | A:- | S:-
+err-source-chain.md[SO3S]: F:经 Error::source 或 source 属性保留多层失败的根因 | R:- | A:- | S:-
+err-thiserror-lib.md[SR3S]: F:用 thiserror 声明库的类型化错误及 Error 实现，支持调用者匹配 | R:- | A:- | S:-
+lint-cargo-metadata.md[SV3S]: F:为拟发布 crate 启用 Cargo Clippy 检查，找出发布元数据和依赖配置问题 | R:- | A:- | S:-
+lint-cfg-check.md[SQ4T]: F:声明自定义 cfg 并启用 unexpected_cfgs，在编译时发现失效的拼写和特性门禁 | R:- | A:- | S:-
+lint-clippy-nursery-selected.md[SQ3T]: F:挑选可识别长生命周期 guard、冗余克隆等类型的 nursery lint，控制误报 | R:- | A:- | S:-
+lint-deny-correctness.md[SQ4S]: F:将 Clippy correctness 违规设为拒绝项，避免真实逻辑和不安全问题被当成建议 | R:- | A:- | S:-
+lint-missing-docs.md[SQ3S]: F:使用 missing_docs 提醒维护者补充公共接口文档 | R:- | A:- | S:-
+lint-pedantic-selective.md[SQ3S]: F:按项目需求选择能提供明确信号的 pedantic lint，避免整组引入噪声 | R:- | A:- | S:-
+lint-rustfmt-check.md[SQ3S]: F:在 CI 使用 cargo fmt 的仅检查模式统一格式并保持工作树不写入 | R:- | A:- | S:-
+lint-unsafe-doc.md[SS4S]: F:使用 undocumented_unsafe_blocks 要求以 SAFETY 注释说明每块 unsafe 的依据 | R:- | A:- | S:-
+lint-warn-complexity.md[SQ3S]: F:用 Clippy complexity 检查能直接简化的表达与控制流 | R:- | A:- | S:-
+lint-warn-perf.md[SP3S]: F:启用 Clippy perf 识别可避免的分配、拷贝和低效 API 用法 | R:- | A:- | S:-
+lint-warn-style.md[SQ3S]: F:用 Clippy style 保持惯用写法并降低团队维护和评审成本 | R:- | A:- | S:-
+lint-warn-suspicious.md[SQ3S]: F:用 Clippy suspicious 预警语法有效但通常有误的代码模式 | R:- | A:- | S:-
+lint-workspace-lints.md[SQ4S]: F:在 Cargo workspace 定义统一 lint 策略，并让成员 crate 继承 | R:- | A:- | S:-
+macro-export-crate-path.md[SE3T]: F:以 macro_export 将声明宏公开到 crate 根并支持正常路径导入 | R:- | A:- | S:-
+macro-fragment-specifiers.md[SQ3T]: F:用 expr、ident 或 ty 等精确片段匹配宏参数，改进解析和诊断 | R:- | A:- | S:-
+macro-prefer-functions.md[SQ3T]: F:优先可推断、可导航及可传递的普通函数，把宏留给必须处理 token 的情形 | R:- | A:- | S:-
+macro-private-helpers.md[SE3T]: F:让导出宏通过隐藏的公开辅助模块引用跨 crate 可达的实现细节 | R:- | A:- | S:-
+macro-proc-error-spans.md[SQ4S]: F:用带源码 span 的编译错误输出过程宏失败，避免只给宏 panic | R:- | A:- | S:-
+macro-proc-syn-quote.md[SE3S]: F:使用 syn、quote 和 proc-macro2 实现可测试的过程宏解析与生成 | R:- | A:- | S:-
+macro-proc-two-crate.md[SV3S]: F:将过程宏放入仅导出宏的宿主构建 crate，由门面 crate 重导出 | R:- | A:- | S:-
+macro-rules-hygiene.md[SE3T]: F:依赖声明宏的局部卫生，并以 $crate 定位定义方的项 | R:- | A:- | S:-
+mem-arena-allocator.md[SP3S]: F:把生命周期一致的请求或语法树数据放进 arena，以批量释放换取低分配开销 | R:- | A:- | S:-
+mem-arrayvec.md[SP3S]: F:用编译期容量的内联 ArrayVec 保存有硬上界的集合并处理溢出 | R:- | A:- | S:-
+mem-assert-type-size.md[SP3S]: F:对高频类型建立编译期尺寸约束，避免字段变化悄然放大内存占用 | R:- | A:- | S:-
+mem-avoid-format.md[SP3S]: F:为固定文本避免 format 堆分配，需要拼接时写入已有缓冲 | R:- | A:- | S:-
+mem-box-large-variant.md[SP3S]: F:装箱显著较大的枚举变体，减少其余实例的公共尺寸成本 | R:- | A:- | S:-
+mem-boxed-slice.md[SP3S]: F:为长度固定的堆数据保留 Box 切片，移除 Vec 容量字段 | R:- | A:- | S:-
+mem-clone-from.md[SP3S]: F:反复刷新同一目标时用 clone_from 尝试复用已有分配 | R:- | A:- | S:-
+mem-compact-string.md[SP3S]: F:针对大量短字符串评估内联存储的紧凑字符串表示 | R:- | A:- | S:-
+mem-drop-order.md[SR4S]: F:用字段声明顺序和局部逆序释放规则确保 RAII 依赖按正确次序清理 | R:- | A:- | S:-
+mem-reuse-collections.md[SP3S]: F:在频繁循环中清空并重用集合容量，减少分配器周转 | R:- | A:- | S:-
+mem-smaller-integers.md[SP3S]: F:按可表示范围选择整数宽度，降低大量元素的存储和缓存成本 | R:- | A:- | S:-
+mem-smallvec.md[SP3S]: F:把常见的小集合保存在 SmallVec 内联区，超出内联容量后仍可堆扩展 | R:- | A:- | S:-
+mem-take-replace.md[SP3S]: F:用 mem::take 或 replace 补上合法替代值后，从可变引用零拷贝移出原值 | R:- | A:- | S:-
+mem-thinvec.md[SP3S]: F:对大量可选或空集合评估单指针 ThinVec，将长度和容量存放在分配区 | R:- | A:- | S:-
+mem-with-capacity.md[SP3S]: F:按可预测最终长度预分配集合，减少增长时重新分配和移动元素 | R:- | A:- | S:-
+mem-write-over-format.md[SP3S]: F:在反复格式化中向已有字符串写入，保留容量并消除中间字符串 | R:- | A:- | S:-
+mem-zero-copy.md[SP3S]: F:用借用切片或共享 Bytes 直接查看原始缓冲区，减少大数据复制 | R:- | A:- | S:-
+name-acronym-word.md[SQ3T]: F:在复合标识符中按普通单词处理缩写，维持清晰的单词边界 | R:- | A:- | S:-
+name-as-free.md[SQ3S]: F:用 as_ 表示常数时间且无分配的廉价借用转换 | R:- | A:- | S:-
+name-consts-screaming.md[SQ3T]: F:以全大写下划线命名常量和静态项，视觉上区别普通绑定 | R:- | A:- | S:-
+name-crate-no-rs.md[SQ3T]: F:为 Rust crate 使用表达用途的短名称，避免重复语言后缀 | R:- | A:- | S:-
+name-funcs-snake.md[SQ3T]: F:用小写下划线命名函数、方法、变量及模块 | R:- | A:- | S:-
+name-into-ownership.md[SQ3S]: F:用 into_ 提示转换消耗接收者并转移所有权 | R:- | A:- | S:-
+name-is-has-bool.md[SQ3S]: F:为布尔查询使用能表达谓词的 is、has 或 can 等命名 | R:- | A:- | S:-
+name-iter-convention.md[SQ3S]: F:按共享借用、可变借用及消耗所有权区分迭代入口名称 | R:- | A:- | S:-
+name-iter-method.md[SQ3S]: F:让集合迭代方法分别暴露共享、可变和拥有元素的访问契约 | R:- | A:- | S:-
+name-iter-type-match.md[SQ3S]: F:用来源方法为迭代器类型命名，使 Iter、Keys 和 IntoIter 可预测 | R:- | A:- | S:-
+name-lifetime-short.md[SQ3T]: F:生命周期优先短小惯用名称，有领域含义时使用简短提示 | R:- | A:- | S:-
+name-no-get-prefix.md[SQ3S]: F:为直接读取字段的方法省略 get_，让常用调用易读 | R:- | A:- | S:-
+name-to-expensive.md[SQ3S]: F:用 to_ 提醒调用方转换可能分配、克隆或做计算 | R:- | A:- | S:-
+name-type-param-single.md[SQ3T]: F:对常见类型、错误、键和值泛型使用惯用的大写字母 | R:- | A:- | S:-
+name-types-camel.md[SQ3T]: F:以 UpperCamelCase 区分 Rust 类型与 trait 名称和运行时方法 | R:- | A:- | S:-
+name-variants-camel.md[SQ3S]: F:以 UpperCamelCase 命名枚举变体来区分字段和变量 | R:- | A:- | S:-
+num-cast-try-from.md[SR4T]: F:用 From 做无损扩宽，用 TryFrom 显示窄化失败，防止 as 静默截断 | R:- | A:- | S:-
+num-float-compare.md[SR3T]: F:以容差判断浮点近似相等，并用 total_cmp 为含 NaN 的排序定义全序 | R:- | A:- | S:-
+num-nonzero.md[SD3T]: F:用 NonZero 类型在构造时排除零，并利用其零位模式压缩 Option | R:- | A:- | S:-
+num-overflow-explicit.md[SR4T]: F:依据业务语义选择 checked、saturating、wrapping 或 overflowing 运算 | R:- | A:- | S:-
+num-saturating-clamp.md[SR3T]: F:使用 clamp 表达明确上下界，用饱和运算处理类型极值 | R:- | A:- | S:-
+obs-error-chain.md[SO4T]: F:在实际处理错误的边界记录一次完整原因链，其他层仅传播和补上下文 | R:- | A:- | S:-
+obs-instrument-spans.md[SO4T]: F:用 tracing span 关联异步请求事件，以附加 future 保证跨 await 的上下文 | R:- | A:- | S:-
+obs-levels-filter.md[SO3T]: F:按严重程度记录日志，通过 EnvFilter 和 RUST_LOG 按目标控制细节 | R:- | A:- | S:-
+obs-library-facade.md[SO4T]: F:库只发出门面事件，由二进制负责注册进程唯一的订阅器及格式 | R:- | A:- | S:-
+obs-no-sensitive-data.md[SS4T]: F:用 skip 和脱敏包装阻止秘密及身份信息进入事件和追踪字段 | R:- | A:- | S:-
+obs-structured-fields.md[SO3T]: F:把可检索属性写成独立键值字段，消息保留稳定的人类可读描述 | R:- | A:- | S:-
+obs-tracing-over-log.md[SO3T]: F:用 tracing 统一诊断级别、结构化键值和跨异步操作的 span | R:- | A:- | S:-
+opt-bounds-check.md[SP3S]: F:在热循环中通过迭代或可验证的切片结构减少重复边界检查 | R:- | A:- | S:-
+opt-cache-friendly.md[SP3S]: F:根据扫描字段及访问顺序比较连续布局、结构体数组和字段数组 | R:- | A:- | S:-
+opt-codegen-units.md[SP3S]: F:评估 release 单 codegen unit 的跨单元优化收益及编译成本 | R:- | A:- | S:-
+opt-cold-unlikely.md[SP3S]: F:用 cold 标注确实罕见的函数，帮助编译器把冷代码移离热路径 | R:- | A:- | S:-
+opt-inline-always-rare.md[SP3S]: F:仅在 profiling 和基准显示收益的关键路径强制内联 | R:- | A:- | S:-
+opt-inline-never-cold.md[SP3S]: F:用 inline never 和 cold 把罕见错误处理从热指令流抽离 | R:- | A:- | S:-
+opt-inline-small.md[SP3S]: F:评估为小型热函数跨 crate 提示内联的调用开销收益 | R:- | A:- | S:-
+opt-likely-hint.md[SP3S]: F:以控制流布局表达常见分支，并按工具链选择可用的编译器提示 | R:- | A:- | S:-
+opt-lto-release.md[SP3S]: F:启用发布链接时优化以支持跨 crate 内联、消除死代码和去虚拟化 | R:- | A:- | S:-
+opt-pgo-profile.md[SP3S]: F:用代表性运行数据训练 PGO，使编译器优先安排真实热路径 | R:- | A:- | S:-
+opt-simd-portable.md[SP3S]: F:比较可移植 SIMD、自动向量化和平台实现以选择跨架构向量计算 | R:- | A:- | S:-
+opt-target-cpu.md[SP3S]: F:仅在部署 CPU 明确时启用 native 指令优化，通用分发要保留兼容基线 | R:- | A:- | S:-
+own-arc-shared.md[SP3S]: F:用原子引用计数的 Arc 在线程间共享所有权，并区分内部数据的同步 | R:- | A:- | S:-
+own-borrow-over-clone.md[SP3T]: F:当接口只读取数据时用共享借用减少克隆和拷贝 | R:- | A:- | S:-
+own-clone-explicit.md[SP3S]: F:以显式 Clone 表示可能有分配或深拷贝成本的复制 | R:- | A:- | S:-
+own-copy-small.md[SP3S]: F:为便于复制且具有简单值语义的小类型考虑 Copy | R:- | A:- | S:-
+own-cow-conditional.md[SP3S]: F:用 Cow 在借用和自有表示间按需转换，为常见只读路径省去分配 | R:- | A:- | S:-
+own-lifetime-elision.md[SQ3S]: F:利用编译器生命周期省略规则，仅在需要说明多个引用关系时显式命名 | R:- | A:- | S:-
+own-move-large.md[SP3S]: F:优先移动大型值，按实际重定位成本评估单指针 Box 方案 | R:- | A:- | S:-
+own-mutex-interior.md[SR3S]: F:以 Mutex 为跨线程共享可变数据提供排他访问，用 guard 管理持有期 | R:- | A:- | S:-
+own-rc-single-thread.md[SP3T]: F:用 Rc 在单线程间共享所有权，避免不必要的原子计数 | R:- | A:- | S:-
+own-refcell-interior.md[SR3S]: F:用 RefCell 为单线程共享引用提供运行期借用检查和内部可变性 | R:- | A:- | S:-
+own-rwlock-readers.md[SP3S]: F:评估读多写少状态的 RwLock，以共享读取和写入独占换取并发 | R:- | A:- | S:-
+own-slice-over-vec.md[SP3S]: F:用序列和字符串切片接收借用数据，允许数组、字面量和子片段 | R:- | A:- | S:-
+pat-at-bindings.md[SQ3T]: F:用 at 绑定在同一模式里保留完整匹配值并检查其形态 | R:- | A:- | S:-
+pat-exhaustive-enum.md[SR4T]: F:对自有枚举写穷尽匹配，让新增变体触发编译检查，外部非穷尽枚举仍需兜底 | R:- | A:- | S:-
+pat-if-let-chains.md[SQ3T]: F:用 let chain 以同层级表达多模式绑定和布尔前置条件 | R:- | A:- | S:-
+pat-let-else.md[SQ3T]: F:用 let else 平铺提取成功路径，并让失败分支明确退出当前控制流 | R:- | A:- | S:-
+pat-matches-macro.md[SQ3S]: F:使用 matches 表达布尔模式判断和可选守卫，省去只返回真假值的分支 | R:- | A:- | S:-
+perf-ahash.md[SS4T]: F:按键的信任边界选择哈希器，外部不可信键保留抗碰撞攻击的实现 | R:- | A:- | S:-
+perf-black-box-bench.md[SP3S]: F:用 black_box 约束基准中输入和结果，减少无用计算被优化移除 | R:- | A:- | S:-
+perf-chain-avoid.md[SP3S]: F:对已确认极热的循环比较合并迭代器与 chain 的分支成本 | R:- | A:- | S:-
+perf-collect-into.md[SP3S]: F:将迭代结果写入已有集合以复用其分配 | R:- | A:- | S:-
+perf-collect-once.md[SP3S]: F:把迭代计算保留到最终收集，减少中间集合和反复遍历 | R:- | A:- | S:-
+perf-drain-reuse.md[SP3S]: F:用 drain 移出集合元素，同时留下容量供下一轮复用 | R:- | A:- | S:-
+perf-entry-api.md[SP3S]: F:用 map Entry 合并查询和插入或更新，减少重复查找 | R:- | A:- | S:-
+perf-extend-batch.md[SP3S]: F:用 extend 批量增补元素，使集合按迭代器信息提前规划容量 | R:- | A:- | S:-
+perf-io-buffering.md[SP3T]: F:对大量小读写使用缓冲包装器以合并文件或套接字系统调用 | R:- | A:- | S:-
+perf-iter-lazy.md[SP3S]: F:延迟迭代求值以支持融合和短路，只在确需集合时收集 | R:- | A:- | S:-
+perf-iter-over-index.md[SP3S]: F:用迭代遍历替代下标计数，减少范围检查、越界与向量化障碍 | R:- | A:- | S:-
+perf-profile-first.md[SP3S]: F:通过 profiling 先确定时间实际消耗的位置，再决定实施优化 | R:- | A:- | S:-
+perf-release-profile.md[SP3S]: F:按发布负载调整 Cargo 优化配置并权衡二进制与编译开销 | R:- | A:- | S:-
+proj-bin-dir.md[SV3S]: F:将独立可执行入口放入 src/bin 以使用 Cargo 自动发现 | R:- | A:- | S:-
+proj-build-rs-minimal.md[SV4T]: F:限制 build.rs 为确定性和幂等操作，声明精确输入变更以保留缓存 | R:- | A:- | S:-
+proj-feature-additive.md[SV4T]: F:让 Cargo feature 只增加能力，保持依赖图合并后调用者的既有语义 | R:- | A:- | S:-
+proj-flat-small.md[SQ3S]: F:小项目先维持扁平目录，有真实导航压力时再拆层 | R:- | A:- | S:-
+proj-lib-main-split.md[SQ3S]: F:保留薄 main 入口，把可复用的逻辑放进能被集成测试访问的库 | R:- | A:- | S:-
+proj-mod-by-feature.md[SQ3S]: F:按功能聚合相关模块，使一次功能修改尽量局限于同一处 | R:- | A:- | S:-
+proj-mod-rs-dir.md[SQ3S]: F:在多文件模块中使用一致的 mod.rs 组织方式展示边界 | R:- | A:- | S:-
+proj-msrv-declare.md[SV4T]: F:在清单声明最低 Rust 版本并用 CI 验证，避免依赖提升后破坏兼容 | R:- | A:- | S:-
+proj-prelude-module.md[SE3S]: F:以 prelude 收拢最常用的库类型和扩展 trait，供调用者选择导入 | R:- | A:- | S:-
+proj-pub-crate-internal.md[SE3S]: F:用 pub(crate) 公开 crate 内契约而限制外部依赖 | R:- | A:- | S:-
+proj-pub-super-parent.md[SE3S]: F:用 pub(super) 把子模块辅助项限定在父模块能访问的范围 | R:- | A:- | S:-
+proj-pub-use-reexport.md[SE3S]: F:通过 pub use 保持稳定而扁平的公共导入路径 | R:- | A:- | S:-
+proj-workspace-deps.md[SV3S]: F:在工作区统一声明依赖，再由成员继承以减少版本分歧 | R:- | A:- | S:-
+proj-workspace-large.md[SV3S]: F:通过 Cargo workspace 协调多个 crate 的锁文件、构建缓存和共同版本 | R:- | A:- | S:-
+serde-custom-with.md[SD3T]: F:用字段级自定义 Serde 转换适配线格式，保留领域原生类型 | R:- | A:- | S:-
+serde-default-compat.md[SR3T]: F:为新增兼容字段声明 Serde 默认值，使旧负载缺键时仍可读取 | R:- | A:- | S:-
+serde-deny-unknown-fields.md[SC4T]: F:对严格配置或协议拒绝未知键，使拼写错误变成显式故障 | R:- | A:- | S:-
+serde-enum-representation.md[SD3T]: F:根据外部鉴别字段和数据形态选择 enum 的 Serde tagging 策略 | R:- | A:- | S:-
+serde-flatten.md[SD3T]: F:用 flatten 内联公共字段或保存额外键，同时保留代码里的嵌套结构 | R:- | A:- | S:-
+serde-rename-all.md[SD3T]: F:为整个容器配置 Serde 大小写或分隔符格式以匹配外部命名 | R:- | A:- | S:-
+serde-skip-empty.md[SD3T]: F:按条件省略空值和空集合，同时区分不参与序列化和反序列化的字段 | R:- | A:- | S:-
+serde-try-from-validate.md[SD4S]: F:通过 Serde 的原始表示到 TryFrom 转换在构造前验证不变量 | R:- | A:- | S:-
+test-arrange-act-assert.md[SQ3S]: F:用准备、执行和断言三段组织测试，使失败定位更直接 | R:- | A:- | S:-
+test-cfg-test-module.md[SQ3S]: F:把仅测试编译的子模块与单元实现放在相邻位置 | R:- | A:- | S:-
+test-criterion-bench.md[SQ3S]: F:借助 Criterion 的预热、重复采样和统计比较验证性能改动 | R:- | A:- | S:-
+test-descriptive-names.md[SQ3S]: F:按期望行为命名测试，使失败输出能直接说明契约哪里破坏 | R:- | A:- | S:-
+test-doctest-examples.md[SQ3S]: F:将 API 用例作为可执行 doctest，随实现变化及时发现示例失效 | R:- | A:- | S:-
+test-fixture-raii.md[SR3S]: F:用 Drop 自动清理临时资源和测试环境，覆盖 panic 等提前退出路径 | R:- | A:- | S:-
+test-integration-dir.md[SQ3S]: F:用 tests 目录里的独立 crate 从调用方视角覆盖公共接口 | R:- | A:- | S:-
+test-loom-concurrency.md[SQ4S]: F:用 Loom 枚举模型范围内的调度及重排，补足随机压力测试的覆盖局限 | R:- | A:- | S:-
+test-mock-traits.md[SQ3S]: F:在依赖边界以 trait 注入替身，隔离外部系统并命中故障路径 | R:- | A:- | S:-
+test-mockall-mocking.md[SQ3M]: F:使用 Mockall 生成 trait 替身，指定交互预期并在单测验证 | R:- | A:- | S:-
+test-proptest-properties.md[SQ3S]: F:以 Proptest 生成多样输入，验证属性并找出手写样例遗漏的边界 | R:- | A:- | S:-
+test-should-panic.md[SQ3S]: F:用 should_panic 校验确实应终止的条件及可选的匹配消息 | R:- | A:- | S:-
+test-snapshot-testing.md[SQ3T]: F:用 Insta 保存和评审复杂结构输出的预期快照 | R:- | A:- | S:-
+test-tokio-async.md[SW3S]: F:使用 Tokio 的测试属性为异步函数提供可配置运行时 | R:- | A:- | S:-
+test-use-super.md[SQ3S]: F:在测试子模块导入父级项，访问内部实现并保持测试局部化 | R:- | A:- | S:-
+trait-associated-type-vs-generic.md[SE3S]: F:每个实现只有一种输出时用关联类型，一个类型需支持多种实现时用泛型参数 | R:- | A:- | S:-
+trait-blanket-impl.md[SE4T]: F:用 blanket impl 将能力授予满足约束的类型，并检查一致性与下游兼容 | R:- | A:- | S:-
+trait-coherence-newtype.md[SE3T]: F:用本地 newtype 为外部类型提供外部 trait 行为并遵守孤儿规则 | R:- | A:- | S:-
+trait-default-methods.md[SE3S]: F:从少量必需方法组合可覆盖的默认实现，降低 trait 实现方负担 | R:- | A:- | S:-
+trait-dyn-vs-generic.md[SP3T]: F:按内联、代码规模与异质需求选择静态单态化或动态分派 | R:- | A:- | S:-
+trait-object-safety.md[SE4S]: F:维护 trait object 的 vtable 兼容条件，按需用 Self Sized 排除泛型方法 | R:- | A:- | S:-
+type-deref-coercion.md[SE3T]: F:只为智能指针和透明容器提供 Deref 传统，不将其当继承机制 | R:- | A:- | S:-
+type-display-vs-debug.md[SO3T]: F:分别用 Display 和 Debug 面向用户输出与内部诊断，控制实现细节披露 | R:- | A:- | S:-
+type-enum-states.md[SD3S]: F:用枚举表达彼此排斥的状态，排除多个布尔标志形成无效组合 | R:- | A:- | S:-
+type-generic-bounds.md[SE3S]: F:将 trait 约束放到真正使用的实现或方法并用 where 保持可读性 | R:- | A:- | S:-
+type-never-diverge.md[SD3S]: F:用 never 类型标记无正常返回的路径，让编译器准确推断分支类型 | R:- | A:- | S:-
+type-newtype-ids.md[SD3S]: F:用不同 newtype 包装原始 ID，使错用标识符在编译期失败 | R:- | A:- | S:-
+type-newtype-validated.md[SD4S]: F:用只能经验证构造的 newtype 保存有效值，业务层复用构造时不变量 | R:- | A:- | S:-
+type-no-stringly.md[SD3S]: F:用枚举或验证类型代替自由文本 API 参数，使错误更靠近输入边界 | R:- | A:- | S:-
+type-numeric-fmt.md[SE3T]: F:为数值 newtype 转发十六进制、八进制和二进制格式化 trait | R:- | A:- | S:-
+type-option-nullable.md[SD3S]: F:以 Option 明确表示缺失，避免散落的空值和哨兵检查 | R:- | A:- | S:-
+type-phantom-marker.md[SD3S]: F:通过零大小 PhantomData 表达未存储类型的方差、所有权和生命周期关系 | R:- | A:- | S:-
+type-repr-transparent.md[SI4S]: F:用 repr transparent 给 FFI newtype 保证与内部值兼容的布局 | R:- | A:- | S:-
+type-result-fallible.md[SR3S]: F:用 Result 将可失败性放进接口，便于调用者分支处理或传播 | R:- | A:- | S:-
+unsafe-extern-block.md[SI4T]: F:在 Rust 2024 对外部声明块标 unsafe，并按每项 FFI 调用前提决定其安全性 | R:- | A:- | S:-
+unsafe-maybeuninit.md[SS4T]: F:用 MaybeUninit 管理未初始化存储，避免构造比特模式无效的 Rust 值 | R:- | A:- | S:-
+unsafe-minimize-scope.md[SS4T]: F:把 unsafe 块限于实际越过安全边界的操作，便于逐项审查前提 | R:- | A:- | S:-
+unsafe-miri-ci.md[SQ4T]: F:用 Miri 在测试中动态检查 unsafe 代码的越界、别名和内存有效性 | R:- | A:- | S:-
+unsafe-no-mangle-unsafe.md[SI4T]: F:将导出符号和链接段标记的安全承诺显式化，检查链接名冲突与 ABI | R:- | A:- | S:-
+unsafe-safety-comment.md[SS4T]: F:在 unsafe 块上方写具体 SAFETY 依据，在调用契约写 Safety 章节 | R:- | A:- | S:-
+unsafe-send-sync-manual.md[SS4T]: F:优先自动推导 Send 和 Sync，手工实现时证明多线程访问与字段不变量 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/rust-unsafe-review/===
+LICENSE.md[SG2M]: F:保留随附 unsafe 审阅技能的 Apache 2.0 使用与分发条款 | R:- | A:- | S:-
+SKILL.md[SS5L]: F:把 unsafe 文档视为证明义务，按 Rust 规范、依赖承诺和仓库不变量核对 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/vue-best-practices/===
+LICENSE[SG2T]: F:保留随附 Vue 实践指南的 MIT 版权与分发条款 | R:- | A:- | S:-
+SKILL.md[SU5S]: F:指导 Vue 3 WebUI 的组件设计、类型化数据流和响应式边界 | R:code:webui/src/App.vue | A:- | S:-
+
+===/<repository>/.dsh/skills/vue-best-practices/references/===
+animation-class-based-technique.md[SU3M]: F:用响应式类和 CSS 动画驱动一直留在 DOM 中的元素，区分过渡组件的进出场场景 | R:- | A:- | S:-
+animation-state-driven-technique.md[SU3M]: F:通过 Vue 状态和样式绑定驱动 CSS 过渡，并在数值动画场景使用观察者 | R:- | A:- | S:-
+component-async.md[SP3T]: F:按可见性、空闲或交互延迟异步组件的 SSR hydration，并保持加载状态稳定 | R:- | A:- | S:-
+component-data-flow.md[SU4M]: F:定义 props 下行、事件上行以及 v-model 与依赖注入的适用边界 | R:- | A:- | S:-
+component-fallthrough-attrs.md[SU3S]: F:正确读取和转发表面属性与监听器，记住 useAttrs 读取值不作响应式观察源 | R:- | A:- | S:-
+component-keep-alive.md[SP4S]: F:用 KeepAlive 保留切换视图实例，按生命周期与缓存边界防止陈旧状态 | R:- | A:- | S:-
+component-slots.md[SU3M]: F:设计具名及作用域 slot 的类型和回退，仅在提供可选 slot 时渲染包装节点 | R:- | A:- | S:-
+component-suspense.md[SU4M]: F:用 Suspense 协调异步依赖和回退视图，并为两个插槽分别保留单根 | R:- | A:- | S:-
+component-teleport.md[SU3S]: F:用 Teleport 把覆盖层渲染到局部变换容器之外，处理目标和响应式布局 | R:- | A:- | S:-
+component-transition-group.md[SU3S]: F:用带稳定键的 TransitionGroup 表达列表项进场、离场及位置移动 | R:- | A:- | S:-
+component-transition.md[SU3S]: F:为单根视图切换提供 Transition，给同类型但不同实例的元素合适的键 | R:- | A:- | S:-
+composables.md[SU4M]: F:从小型逻辑单元组合 composable，用选项对象和只读返回值形成稳定接口 | R:- | A:- | S:-
+directives.md[SU3S]: F:把自定义指令限制于元素级 DOM 行为，避免可变绑定和组件根依赖 | R:- | A:- | S:-
+perf-avoid-component-abstraction-in-lists.md[SP3S]: F:减少重复列表渲染中的微型组件包装，按可维护性和测量决定是否保留抽象 | R:- | A:- | S:-
+perf-v-once-v-memo-directives.md[SP3S]: F:用 v-once 跳过永久静态内容的更新，用 v-memo 按依赖缓存子树 | R:- | A:- | S:-
+perf-virtualize-large-lists.md[SP4S]: F:为大型列表仅渲染可视范围以限制 DOM 和内存成本 | R:- | A:- | S:-
+plugins.md[SE3S]: F:以 app.use 安装 Vue 插件并用类型化注入键提供上下文，避免全局碰撞 | R:- | A:- | S:-
+reactivity.md[SU4M]: F:选择 ref、reactive 或 shallowRef 保存状态，用 computed 推导值和观察者处理副作用 | R:- | A:- | S:-
+render-functions.md[SU3M]: F:优先模板，在动态渲染函数中显式提供键、事件、模型绑定和指令 | R:- | A:- | S:-
+sfc.md[SU3M]: F:整理单文件组件的模板、脚本和样式，明确模板条件和样式作用域 | R:- | A:- | S:-
+state-management.md[SU4S]: F:按共享范围选择 composable 或 store，避免可变模块状态跨 SSR 请求泄漏 | R:- | A:- | S:-
+updated-hook-performance.md[SP3S]: F:避免 updated 钩子承担重计算或写入自身渲染依赖，改用有明确依赖的机制 | R:- | A:- | S:-
+
+===/<repository>/.dsh/skills/vue-testing-best-practices/===
+LICENSE[SG2T]: F:保留随仓库分发的 Vue 测试指南的 MIT 版权及许可 | R:- | A:- | S:-
+SKILL.md[SQ4T]: F:给 Hybrid Mount WebUI 测试选择 Vitest、组件工具和异步等待策略 | R:code:webui/package.json | A:- | S:-
+
+===/<repository>/.dsh/skills/vue-testing-best-practices/reference/===
+async-component-testing.md[SQ3S]: F:在测试 defineAsyncComponent 时等待 Promise 解析后断言加载、回退及错误状态 | R:- | A:- | S:-
+teleport-testing-complexity.md[SQ3S]: F:测试 Teleport 时处理目标节点和包装组件以外的查询边界 | R:- | A:- | S:-
+testing-async-await-flushpromises.md[SQ4S]: F:分别使用异步交互方法、nextTick 和 flushPromises 等待 Vue 更新与外部请求 | R:- | A:- | S:-
+testing-browser-vs-node-runners.md[SQ3M]: F:按样式、浏览器原生事件和可见行为选择真实浏览器或 Node DOM 模拟运行器 | R:- | A:- | S:-
+testing-component-blackbox-approach.md[SQ4S]: F:从 DOM、用户操作、公开事件和 props 测试组件契约，减少重构导致的误报 | R:- | A:- | S:-
+testing-composables-helper-wrapper.md[SQ3M]: F:用挂载容器为依赖生命周期或 provide/inject 的 composable 建立测试上下文 | R:- | A:- | S:-
+testing-e2e-playwright-recommended.md[SQ3M]: F:介绍用 Playwright 配置多个浏览器项目并诊断端到端失败 | R:- | A:- | S:-
+testing-no-snapshot-only.md[SQ3S]: F:用行为断言验证功能，按需保留稳定结构或复杂 SVG 的快照 | R:- | A:- | S:-
+testing-pinia-store-setup.md[SQ3M]: F:用 createTestingPinia 或 setActivePinia 安装测试 store，并按需求选择执行或模拟 action | R:- | A:- | S:-
+testing-suspense-async-components.md[SQ3M]: F:把异步 setup 组件包进 Suspense 挂载，等待渲染后再断言 | R:- | A:- | S:-
+testing-vitest-recommended-for-vue.md[SQ3M]: F:利用 Vitest 和 Vite 共用的转换配置建立 Vue 测试入口与环境 | R:- | A:- | S:-
+
+===/<repository>/.dsh/===
+validate-skills.mjs[XQ5S]: F:检查 DSH 技能 frontmatter、目录名称与相对文件链接 | R:code:.github/workflows/lints.yml | A:可选技能目录参数 | S:无第三方依赖，仅支持仓库技能使用的 frontmatter 子集
+
+===/<repository>/.github/ISSUE_TEMPLATE/===
+blacklist_request.yml[FW4T]: F:收集模块黑名单申请的模块标识、样本与证据供自动审核 | R:code:.github/scripts/issue-policy.cjs,code:.github/workflows/auto-blacklist-pr.yml | A:- | S:-
+bug_report.yml[FW4S]: F:收集设备及内核环境、实际预期行为、复现步骤和诊断附件 | R:code:.github/scripts/issue-policy.cjs | A:- | S:-
+config.yml[FU3T]: F:关闭空白 issue，并把一般讨论与使用咨询引向 Telegram 社群 | R:- | A:- | S:-
+feature_request.yml[FW3T]: F:以标准表单收集功能需求及其预期行为供 issue 审核 | R:code:.github/scripts/issue-policy.cjs | A:- | S:-
+
+===/<repository>/.github/===
+dependabot.yml[FV4T]: F:按 Cargo、WebUI npm 和 Actions 分组安排 Dependabot 更新并投向 dev | R:- | A:- | S:-
+
+===/<repository>/.github/scripts/===
+issue-policy.cjs[AW6M]: F:解析和验证双语 issue 表单并维护标签、机器人评论及政策关闭状态 | R:code:.github/workflows/auto-label.yml,code:.github/workflows/auto-blacklist-pr.yml | A:validateIssue,enforceIssuePolicy,acceptedBlacklistIssue | S:重新打开前必须验证关闭原因、机器人身份和带标记的评论
+issue-policy.test.cjs[TW5M]: F:测试 issue 验证、报告修正后的恢复、真实表单解析和黑名单工作流入口 | R:code:.github/scripts/issue-policy.cjs | A:node:test | S:-
+notify-artifact.cjs[IS6T]: F:按通知程序源码哈希寻找可重用 artifact，并核对产物与来源运行身份 | R:code:.github/workflows/notify-tool.yml | A:findArtifact | S:只接受指定 workflow 及可信同仓来源的有效产物
+notify-artifact.test.cjs[TS5T]: F:测试通知产物匹配、过期过滤、工作流信任与 API 失败路径 | R:code:.github/scripts/notify-artifact.cjs | A:node:test | S:-
+notify_source.py[XV5T]: F:对通知工具工作区源码和锁文件中的传递依赖计算构建身份 | R:code:tools/notify/Cargo.toml,code:.github/workflows/notify-tool.yml | A:fingerprint | S:-
+
+===/<repository>/.github/workflows/===
+auto-blacklist-pr.yml[OW5T]: F:验证黑名单 issue 后从 dev 构造增补默认黑名单的自动 PR | R:code:.github/scripts/issue-policy.cjs,code:module/module_blacklist.toml | A:issue 事件 | S:-
+auto-label.yml[OW4T]: F:在 issue 新建、编辑或重开时串行应用表单、标签和关闭策略 | R:code:.github/scripts/issue-policy.cjs | A:issue 事件 | S:-
+build.yml[OV6M]: F:构建和上传 Hybrid Mount 安装包，协调用于后续发布的缓存预热与通知工具 | R:code:xtask/src/main.rs,code:.github/workflows/notify-tool.yml | A:push,pull_request,workflow_dispatch | S:main 构建预热发布缓存且不发送构建通知
+dependency-audit.yml[OQ5T]: F:在依赖清单变化时分别执行 Rust 及 WebUI 生产依赖的审计 | R:code:Cargo.toml,code:webui/package.json | A:- | S:-
+kernel-module.yml[OV6S]: F:在 DDK 矩阵构建 VFS 模块、生成并校验两类摘要，按事件条件刷新预编译文件 | R:code:module/vfs/src/Makefile,code:tests/shell/vfs_sources_digest.sh | A:workflow_dispatch commit_binaries | S:-
+lints.yml[OQ6M]: F:在 CI 跑 Rust、设备目标、Shell 和 WebUI 检查，以及预编译产物与政策脚本的验证 | R:code:.dsh/validate-skills.mjs,code:tests/shell/vfs_sources_digest.sh,code:webui/package.json | A:- | S:-
+notify-tool.yml[OV5T]: F:按源码身份复用可信的通知程序产物，未命中则在 stable 下测试并构建 musl 二进制 | R:code:.github/scripts/notify-artifact.cjs,code:.github/scripts/notify_source.py | A:workflow_call artifact-id,run-id | S:-
+release.yml[OV7M]: F:由 tag 解析版本并构建发布包，生成 changelog 和更新元数据，发布后向 dev 同步 | R:code:xtask/src/main.rs,code:.github/workflows/notify-tool.yml,code:cliff.toml | A:tag,workflow_dispatch | S:通知产物在使用前验证摘要，手动运行不执行 tag 专属同步
+
+===/<repository>/docs/===
+ARCHITECTURE.md[SB6T]: F:说明 CLI 的输入输出、分区诊断与目录 whiteout 在规划和三种后端的行为 | R:code:src/cli.rs,code:src/plan/mod.rs,code:src/partitions.rs | A:- | S:目录 .remove 优先于 .replace；冲突在执行前报告，源目录保留
+KERNELSU_MODULES.md[SV5T]: F:说明 KernelSU Modules 的固定模块身份、目录注册和从发布 ZIP 取得版本的规则 | R:code:module.yaml,code:xtask/src/main.rs | A:- | S:riscv64 发布二进制的最低 API 高于其他三种架构
+README_ES.md[SL3S]: F:为西语用户介绍模块安装、规则优先级、存储模式和 VFS 后端 | R:- | A:- | S:-
+README_FR.md[SL3S]: F:为法语用户说明安装与配置，以及按模块路径选择后端和反馈问题 | R:- | A:- | S:-
+README_ID.md[SL3S]: F:为印尼语用户介绍混合挂载特性、模块安装、规则配置和反馈路径 | R:- | A:- | S:-
+README_IT.md[SL3S]: F:为意大利语用户介绍安装、挂载规则和 VFS 使用说明及问题反馈 | R:- | A:- | S:-
+README_JA.md[SL3S]: F:提供日语安装、模块和路径规则、VFS 与使用反馈指南 | R:- | A:- | S:-
+README_RU.md[SL3S]: F:提供俄语版安装后端、配置优先级、VFS 和报告问题说明 | R:- | A:- | S:-
+README_TR.md[SL3S]: F:为土耳其语用户说明安装、存储支持、规则优先级和 VFS 后端 | R:- | A:- | S:-
+README_UK.md[SL3S]: F:提供乌克兰语版的模块安装、挂载后端配置、VFS 和反馈入口 | R:- | A:- | S:-
+README_VI.md[SL3S]: F:以越南语介绍按路径择取挂载后端、初始安装和 VFS 配置 | R:- | A:- | S:-
+README_ZH.md[SL4T]: F:为简体中文用户说明 ZIP 安装、配置 TOML、后端选择和规则优先关系 | R:code:USAGE_NOTICE.md,code:module/config.toml | A:- | S:-
+README_ZH_TW.md[SL3S]: F:提供繁体中文的挂载后端、安装与配置、VFS 和意见回馈指南 | R:- | A:- | S:-
+RUNTIME.md[SR6S]: F:定义运行时挂载、热操作及软重启的命令与所有权和恢复边界 | R:code:src/runtime/ledger.rs,code:src/runtime/hot.rs,code:module/emulated-soft-reboot.sh | A:- | S:启动、软重启和热操作共享同一账本与操作锁；清理须重新验证挂载身份
+VFS_CLI.md[SB6M]: F:描述设备 VFS 控制命令、应答与运行态规则生命周期 | R:code:src/vfs/cli.rs,code:src/vfs/backend.rs | A:- | S:当前实现可对接兼容的外部 NoMount Provider，控制命令与开机配置持久化是不同路径
+
+===/<repository>/docs/reviews/===
+2026-11-05-vfs-source-identity.md[SD4T]: F:对照 VFS 规则固定源对象和按路径重新查找在重命名、替换及已打开节点上的差异 | R:code:module/vfs/src/hybridmount.c | A:- | S:-
+2026-11-05-vfs-upstream-lifetime.md[SR4T]: F:记录为何保留 VFS 超级块活跃引用与回调保留保护及尚缺的设备验证 | R:code:module/vfs/src/hybridmount.c | A:- | S:-
+2026-11-06-implementation-verification.md[SQ4T]: F:保存分区映射和 VFS 改动的宿主、集成、内核矩阵证据及设备验证缺口 | R:- | A:- | S:-
+2026-11-06-prerelease-511.md[SR5T]: F:记录 rustix 升级后扩展属性长度读取失配及相应回归验证 | R:code:src/sys/fs.rs | A:- | S:保留必需目录元数据失败门禁，避免发布缺少正确标签的根
+2026-11-06-vfs-uid-directory.md[SR5T]: F:记录隔离规则变化后已持有代理目录读取的原生路径回退修复及验证 | R:code:module/vfs/src/hybridmount.c | A:- | S:原生回退资源独立于模块源引用，并与对象生命周期配套
+
+===/<repository>/module/===
+boot-completed.sh[OR3T]: F:开机完成后尝试移除旧版本信号量目录，清理失败不影响启动结果 | R:- | A:- | S:-
+config.toml[FC5T]: F:为新安装提供模块源目录、后端、存储和附加分区的配置种子 | R:code:src/config.rs,code:module/customize.sh | A:- | S:-
+customize.sh[OV6S]: F:校验设备和管理器、按架构安装主二进制并在首次安装选默认配置 | R:code:module/config.toml,code:xtask/src/main.rs | A:- | S:现有运行配置不覆盖，非 arm64 去掉不兼容的 VFS 二进制但保留源码
+emulated-soft-reboot.sh[OR4T]: F:把 ksud 的软重启阶段交给相邻 Hybrid Mount 二进制清理运行期资源 | R:code:src/runtime/mod.rs | A:runtime prepare-reboot | S:-
+metainstall.sh[OW6T]: F:调用管理器安装普通模块并将 system 下必要分区以顶层符号链接暴露 | R:code:xtask/src/main.rs | A:install_module,handle_partition,mark_replace | S:已有布局不移动或复制，两个动态安装钩子需要保留
+metamount.sh[OW4T]: F:将模块管理器的 metamount 启动阶段直接转交给相邻 Hybrid Mount 二进制 | R:code:src/boot_hook.rs | A:boot metamount | S:-
+module_blacklist.toml[FC4T]: F:维护安装时补入的已知不兼容模块默认名单 | R:code:.github/workflows/auto-blacklist-pr.yml,code:module/customize.sh | A:- | S:-
+post-mount.sh[OW4T]: F:将模块管理器的 post-mount 阶段直接转交给相邻 Hybrid Mount 二进制 | R:code:src/boot_hook.rs | A:boot post-mount | S:-
+uninstall.sh[OR4T]: F:卸载时清理本模块的运行目录并返回成功，模块源目录由管理器处置 | R:- | A:- | S:-
+
+===/<repository>/module/lkm/===
+README.md[SB4T]: F:说明 ext4 兼容内核模块的来源、设备匹配与 KernelSU ioctl 分流 | R:code:module/lkm/src/nuke.c,code:src/sys/nuke.rs | A:- | S:-
+
+===/<repository>/module/lkm/binaries/===
+list.txt[FV4T]: F:按 Android 内核目标记录 ext4 兼容 ko 文件的 SHA-256 值 | R:code:module/lkm/README.md | A:- | S:-
+
+===/<repository>/module/lkm/src/===
+Kconfig[FV3T]: F:声明依赖模块支持且默认以模块构建的 NUKE_EXT4_SYSFS 选项 | R:code:module/lkm/src/nuke.c | A:- | S:-
+LICENSE[SG3M]: F:保存随附 ext4 兼容内核源码的 GPL 第二版许可条款 | R:code:module/lkm/src/nuke.c | A:- | S:-
+Makefile[FV3T]: F:定义 nuke 的外置模块构建目标、尺寸优化和编译标志 | R:code:module/lkm/src/nuke.c | A:- | S:-
+UPSTREAM_README.md[SB3T]: F:保留来自 Mountify 的 ext4 sysfs 兼容模块原始使用说明与来源上下文 | R:code:module/lkm/src/nuke.c | A:- | S:-
+nuke.c[IB6S]: F:为 ext4 staging 提供非 KernelSU 内核端兼容模块，检查目标文件系统并验证结果 | R:code:src/sys/nuke.rs,code:module/lkm/src/Makefile | A:nuke_entry | S:初始化有意返回非零以避免留下常驻模块，进程退出状态单独不能证明操作结果
+
+===/<repository>/module/vfs/===
+README.md[SB6M]: F:说明 Hybrid Mount VFS 模块的来源、规则生命周期、兼容性、控制和构建 | R:code:module/vfs/src/PROVENANCE,code:src/vfs/backend.rs,code:module/vfs/setup.sh | A:- | S:对照本仓 hm1 和外部 NoMount 的线协议，不能把二者配置直接混用
+setup.sh[OV5S]: F:将 VFS 源码及构建声明接入内核 fs 树，支持移除接入 | R:code:module/vfs/src/Kconfig,code:tests/shell/vfs_setup.sh | A:--cleanup | S:发现已集成 NoMount 的内核树即停止，避免两个实现同时接管对象
+
+===/<repository>/module/vfs/binaries/===
+list.txt[FV4T]: F:记录各 Android GKI 目标的 VFS 二进制摘要，供预编译文件完整性检查 | R:code:.github/workflows/kernel-module.yml | A:- | S:-
+sources.txt[FV4T]: F:保存构建 VFS 预编译模块的一组源文件综合摘要 | R:code:.github/workflows/kernel-module.yml,code:tests/shell/vfs_sources_digest.sh | A:- | S:-
+
+===/<repository>/module/vfs/src/===
+Kconfig[FV4T]: F:定义内核内建 VFS 路径重定向子系统开关及默认值 | R:code:module/vfs/src/hybridmount.c | A:- | S:-
+LICENSE[SG3M]: F:保存 NoMount 派生内核 VFS 源码的 GPL 第二版许可 | R:code:module/vfs/src/PROVENANCE | A:- | S:-
+Makefile[FV4T]: F:通过 DDK 或已准备的 KDIR 编译外置 hybridmount 模块 | R:code:module/vfs/src/hybridmount.c,code:module/vfs/setup.sh | A:- | S:-
+PROVENANCE[SV5M]: F:记录 NoMount 基线提交、文件哈希、Hybrid Mount 分歧及同步检查 | R:code:module/vfs/src/hybridmount.c,code:module/vfs/src/hybridmount.h | A:- | S:-
+UPSTREAM_README.md[SV3T]: F:保留上游 NoMount 的内建与外置模块集成说明，以供来源对照 | R:code:module/vfs/src/PROVENANCE | A:- | S:-
+hybridmount.c[RB8L]: F:实现内核 VFS 规则发布、目录解析和代理对象生命周期，并注册受权限约束的控制入口 | R:code:module/vfs/src/hybridmount.h,code:src/vfs/protocol.rs | A:hybridmount_init,hybridmount_exit | S:规则替换发布新的不可变世代；已打开对象保留原路径引用，并在读者宽限期后释放退出资源
+hybridmount.h[RB7L]: F:定义 VFS 控制 ABI、代理对象表示、规则拓扑和同步及内核兼容辅助 | R:code:module/vfs/src/hybridmount.c,code:src/vfs/protocol.rs | A:HYBRIDMOUNT_VERSION,HYBRIDMOUNT_MAGIC_SIG | S:代理 ops 表首成员布局用于 VFS 分派；线协议身份与用户态实现保持一致
+
+===/<repository>/src/===
+boot_hook.rs[EW6S]: F:分派手动启动与两个管理器挂载阶段并发送满足条件的 KernelSU 完成通知 | R:code:src/pipeline.rs,code:module/metamount.sh,code:module/post-mount.sh | A:handle | S:挂载失败直接返回，不发送完成通知
+cli.rs[EB6T]: F:分派无参数启动和配置、状态、VFS、运行时等 CLI 命令 | R:code:src/pipeline.rs,code:src/state.rs,code:src/runtime/mod.rs | A:run | S:WebUI 消费标准输出的 JSON，诊断由日志通道承载
+config.rs[PC8L]: F:解析验证 TOML 配置及局部更新，处理模块规则、黑名单和 WebUI 表示 | R:code:src/module_id.rs,code:module/config.toml,code:src/sys/fs.rs | A:Config,ConfigPatch,load_for_boot,handle_save_config | S:启动保留对缺失和其他不可读状态的区别；独立黑名单不属于 WebUI 可写配置
+config_tests.rs[TC5L]: F:测试配置默认值、兼容持久化、部分更新、附加分区和黑名单边界 | R:code:src/config.rs,code:src/test_support.rs | A:- | S:-
+defs.rs[CC5S]: F:集中定义固定模块标识、设备运行路径、环境及挂载资源约定 | R:code:src/config.rs,code:src/state.rs | A:MODULE_ID | S:-
+errors.rs[CR6M]: F:提供运行期统一错误、结构化概况、原因链和恢复分类 | R:code:src/sys/process.rs | A:Error,ErrorClass,Result | S:重试策略消费结构化类别，不能从 Display 文字推断
+errors_tests.rs[TR4S]: F:检验 Rust 错误的路径和底层来源保留、重试分类及进程失败约定 | R:code:src/errors.rs,code:src/sys/process.rs | A:- | S:-
+logging.rs[RO5T]: F:初始化 Android logcat 或宿主 stderr 日志并安装 panic hook | R:code:src/main.rs | A:init,install_panic_hook | S:RUST_LOG 可覆盖默认级别
+main.rs[EG5T]: F:装配二进制模块与日志入口，将进程实参转交 CLI 并报告失败 | R:code:src/cli.rs,code:src/logging.rs | A:main | S:-
+module_id.rs[DS6M]: F:以验证类型承载用于扫描、配置和计划的模块 ID，保持原有序列化形状 | R:code:src/config.rs,code:src/scanner.rs,code:src/plan/mod.rs | A:ModuleId,TryFrom | S:构造时验证；线上 TOML 与 JSON 继续使用纯字符串
+module_status.rs[IU5M]: F:按本次挂载结果更新 root 管理器显示的模块描述 | R:code:src/defs.rs,code:src/sys/process.rs | A:update_description | S:-
+mount_tree.rs[DB8L]: F:在单一目标节点树记录各模块内容及独立结构来源，按后端提供执行视图 | R:code:src/scanner.rs,code:src/plan/mod.rs,code:src/magic_mount/exec.rs | A:MountTree,MountNode,MountSource | S:结构目录可按后端共用，实际内容贡献与借用的目录元数据要分开
+partitions.rs[DB7L]: F:读取挂载与路径证据，把模块逻辑分区统一映射到可见设备目标 | R:code:src/sys/mountinfo.rs,code:src/config.rs,code:src/plan/mod.rs | A:PartitionLayout,discover_layout,detect | S:解析后的根身份以同一可见命名空间为准，各后端不得自行重映射
+pipeline.rs[AW9L]: F:编排只读扫描、布局发现、规则规划、存储与各挂载后端，并提交结果或回滚 | R:code:src/plan/mod.rs,code:src/scanner.rs,code:src/runtime/boot.rs,code:src/storage/mod.rs | A:run_mount_pipeline,run_boot_pipeline | S:规划前探测 VFS；失败时按事务清理已产生资源，并写出确认状态与失败证据
+scanner.rs[ID7L]: F:只读扫描模块元数据、禁用和删除标记及分区节点，产出规划和显示记录 | R:code:src/module_id.rs,code:src/mount_tree.rs,code:src/plan/mod.rs | A:ModuleRecord,ModuleEntry,list_modules | S:目录删除标记终止后代扫描并优先于替换标记
+state.rs[PD8L]: F:保存模块列表、安装和启动状态快照，为 WebUI 提供状态查询与清理 | R:code:src/pipeline.rs,code:src/runtime/hot.rs,code:src/sys/fs.rs | A:RunState,AppModule,InstallState,write_scan_ret | S:快照表示已确认效果，不是实时挂载服务，计划目标不等于活动挂载
+test_support.rs[TQ4S]: F:为挂载树、临时文件和需命名空间的测试提供夹具与能力检查 | R:code:src/mount_tree.rs | A:Fixture,mount_source,require_mount_namespace | S:-
+timing.rs[RO5S]: F:对开机各阶段记录低开销计时与显式完成或中止状态 | R:code:src/pipeline.rs | A:PhaseTimer | S:提前离开作用域记录中止；日志不携带路径或环境值
+
+===/<repository>/src/magic_mount/===
+exec.rs[RB8L]: F:消费统一节点树执行 Magic Mount 的只读文件绑定、目录镜像、链接和 whiteout | R:code:src/mount_tree.rs,code:src/pipeline.rs,code:src/sys/transaction.rs | A:magic_mount,MagicMountResult | S:源模块目录只读；临时 staging 项和 whiteout 不计为已确认活动挂载
+exec_tests.rs[TB5L]: F:验证 Magic 真实与 staging 挂载、原生子挂载保留及失败后的状态统计 | R:code:src/magic_mount/exec.rs,code:src/sys/faults.rs | A:- | S:-
+mod.rs[RB3T]: F:声明 Linux 或 Android 专用 Magic Mount 执行模块，统一树由调用方提供 | R:code:src/magic_mount/exec.rs,code:src/mount_tree.rs | A:- | S:-
+
+===/<repository>/src/overlayfs/===
+mod.rs[RB3T]: F:组织 OverlayFS 的可移植纯逻辑与 Linux 或 Android 挂载操作 | R:code:src/overlayfs/overlayfs.rs,code:src/overlayfs/utils.rs | A:- | S:-
+overlayfs.rs[RB8L]: F:编排 OverlayFS 根和子挂载，拼接受限下层、回退挂载接口并记录实际效果 | R:code:src/overlayfs/utils.rs,code:src/sys/mountinfo.rs,code:src/pipeline.rs | A:mount_overlayfs,MountEffect | S:根失败交给事务清理；子挂载失败的状态必须与确认效果区分
+utils.rs[IB6M]: F:为 OverlayFS 和 ext4 提供 fsopen、重试和 loop 挂载底层操作 | R:code:src/overlayfs/overlayfs.rs,code:src/storage/ext4.rs | A:fsopen_mount,mount_ext4 | S:EBUSY 按有界重试处理
+
+===/<repository>/src/partitions/===
+tests.rs[TB5S]: F:测试分区别名、系统子目录、真实根挂载和可见性证据的选择 | R:code:src/partitions.rs | A:- | S:-
+
+===/<repository>/src/plan/===
+mod.rs[DB9L]: F:根据路径、模块和全局优先级构建共享树及后端操作，并拒绝不兼容的组合 | R:code:src/config.rs,code:src/mount_tree.rs,code:src/partitions.rs | A:build_plan,MountPlan,PlanInput | S:不可用 VFS 在规划时降级；真实文件和 whiteout 冲突在任何执行前裁决
+
+===/<repository>/src/runtime/===
+boot.rs[AR8M]: F:管理启动和软重启时的规则、UID 与真实挂载所有权快照 | R:code:src/runtime/ledger.rs,code:src/runtime/rules.rs,code:src/runtime/mounts.rs | A:start,stage_plan,finish,cleanup | S:不可用账本阶段拒绝清理；挂载清理成功后才能释放 KernelSU 注册
+device.rs[IR6S]: F:把运行期设备事实、init 挂载命名空间和 VFS Provider 封装为事务接口 | R:code:src/runtime/ledger.rs,code:src/vfs/backend.rs | A:boot_id,enter_init_namespace,load,Kernel | S:-
+hot.rs[AW8M]: F:根据设备、账本和模块资格分派纯 VFS 模块状态、加载、更新及卸载 | R:code:src/runtime/policy.rs,code:src/runtime/transaction.rs,code:src/state.rs | A:handle,refresh_snapshots | S:VFS 意图与锁保护变更；成功落盘后经 syncing 刷新快照再推进状态
+ledger.rs[PR8M]: F:持久化带阶段、代次、规则及真实挂载证据的运行账本，提供操作锁和恢复门禁 | R:code:src/runtime/device.rs,code:src/runtime/boot.rs,code:src/sys/fs.rs | A:Ledger,OperationLock,ledger_for_boot,save | S:账本绑定本次启动和挂载命名空间；同一操作锁文件保持固定 inode
+lifecycle.rs[DR6M]: F:纯函数检查旧状态可达性、原挂载冲突、规则确认和本次新增隔离 UID | R:code:src/runtime/boot.rs,code:src/runtime/rules.rs | A:legacy_mount_conflicts,legacy_snapshot_reachable,owned_uids,confirm_boot_rules | S:-
+mod.rs[EW4T]: F:组装运行时模块并面向设备 CLI 分派状态、热操作和软重启准备 | R:code:src/runtime/hot.rs,code:src/runtime/boot.rs | A:handle | S:-
+mounts.rs[DR8L]: F:从前后挂载快照捕获所有权，验证当前目标后按最深优先卸载 | R:code:src/runtime/ledger.rs,code:src/sys/mountinfo.rs,code:src/runtime/boot.rs | A:capture,validate,cleanup | S:任何卸载前先检查全部根和外部漂移，逐项验证卸载效果
+policy.rs[DB7M]: F:选择符合热操作条件的纯 VFS 模块并检查瞬时计划和已挂载布局冲突 | R:code:src/plan/mod.rs,code:src/runtime/ledger.rs,code:src/scanner.rs | A:plan_hot_module,ensure_layout_unchanged | S:已归账的实际挂载不能在运行时换后端，路径重叠按组件边界判断
+rules.rs[DR8L]: F:计算规则差异、验证所有权和外部规则保存，并对部分写入进行对账恢复 | R:code:src/runtime/transaction.rs,code:src/vfs/protocol.rs | A:SavedRule,RuleKernel,reconcile,verify_owned | S:先深后浅删旧规则，先浅后深发布期望规则，并回读确认作用域
+transaction.rs[AR8L]: F:在运行时协调 UID 状态与规则事务，并记录失败回滚和可重试账本 | R:code:src/runtime/ledger.rs,code:src/runtime/rules.rs | A:UidKernel,reconcile | S:仅在规则回滚得到验证后才撤销本次引入的隔离 UID
+
+===/<repository>/src/storage/===
+ext4.rs[RP7L]: F:依据暂存数据量和 inode 需求准备、格式化及检查 ext4 环回镜像 | R:code:src/storage/mod.rs,code:src/overlayfs/utils.rs,code:src/sys/mount.rs | A:- | S:首次挂载前需要检查；挂载失败时走有界修复重试
+mod.rs[RP7M]: F:依据配置及内核能力建立 tmpfs 或 ext4 暂存挂载并管理句柄 | R:code:src/storage/ext4.rs,code:src/sys/mount.rs,code:src/pipeline.rs | A:setup,setup_with_sources,StorageHandle | S:tmpfs 要求 xattr 支持，挂载传播和回收需按实际设备模式处理
+
+===/<repository>/src/sys/===
+faults.rs[TQ4M]: F:提供测试专用的一次性失败门和互斥辅助，覆盖挂载执行与回滚异常 | R:code:src/pipeline.rs,code:src/magic_mount/exec_tests.rs | A:- | S:-
+fs.rs[CR8L]: F:提供原子写入、路径清理、暂存复制、目录元数据与内核能力探测 | R:code:src/mount_tree.rs,code:src/runtime/ledger.rs | A:atomic_write,stage_overlay_tree,clone_directory_metadata | S:目标 rename 可见后父目录同步仍能失败；必需元数据错误应传播
+lkm.rs[IR7L]: F:统一选择适配的预编译内核模块并调用设备可能支持的加载器，按功能复核成功 | R:code:src/sys/process.rs,code:src/sys/nuke.rs,code:src/vfs/lkm.rs | A:LoadAttemptGuard,select_bundled_lkm_path,load_with_candidates | S:尝试前持久化熔断证据，正常退出才清除；成功依据调用方验收而非单个退出码
+lkm_compat.rs[IR5S]: F:提供由子命令触发的设备内核模块兼容加载入口及诊断处理 | R:code:src/sys/lkm_image.rs,code:src/sys/lkm.rs | A:handle | S:-
+lkm_image.rs[IR5M]: F:解析和校验内存中的内核模块 ELF，支持受约束的兼容性重试 | R:code:src/sys/lkm_compat.rs,code:src/sys/lkm_image_tests.rs | A:ModuleImage,load_with_vermagic_retry | S:随包 ko 不被改写
+lkm_image_tests.rs[TR4M]: F:验证 ELF 输入边界、符号解析和兼容重试的诊断匹配约束 | R:code:src/sys/lkm_image.rs | A:- | S:-
+mod.rs[CG3T]: F:组织挂载、文件、内核模块、进程和事务系统辅助并设置平台门禁 | R:- | A:- | S:-
+mount.rs[IR6M]: F:提供挂载点探测、tmpfs、即时卸载回滚和 e2fsck 修复接口 | R:code:src/sys/mountinfo.rs,code:src/sys/process.rs | A:is_mounted,mount_tmpfs,rollback_mount_target,repair_image | S:系统卸载立即发生，与 KernelSU try-umount 注册的语义不同
+mountinfo.rs[ID7M]: F:抽取当前命名空间挂载表并提供解码、目标查询、基线比较和排序 | R:code:src/runtime/mounts.rs,code:src/partitions.rs | A:MountEntry,MountSnapshot,mount_entries | S:-
+nuke.rs[IB5M]: F:为 ext4 暂存提供按管理器选择的可选内核集成，并记录支持与失败状态 | R:code:src/sys/lkm.rs,code:src/utils/ksu_driver.rs | A:nuke_ext4_sysfs | S:可选集成失败时保留已成功建立的暂存文件系统
+process.rs[RR7L]: F:执行结构化子进程请求并管理退出策略、超时和有界标准流捕获 | R:code:src/errors.rs,code:src/sys/process_tests.rs | A:run_command,CommandSpec,CaptureMode,ExitPolicy | S:输出到上限后持续排空防止子进程阻塞，直接子进程退出与管道收尾各有截止时间
+process_tests.rs[TR4S]: F:覆盖子进程输出截留、非 UTF8、退出状态和超时行为 | R:code:src/sys/process.rs | A:- | S:-
+temp.rs[RS6M]: F:分配不可预测且权限受限的运行暂存目录，按所有权清理 | R:code:src/pipeline.rs,code:src/magic_mount/exec.rs | A:RuntimeTempDir,create_random_dir | S:-
+transaction.rs[RR7M]: F:登记挂载副作用并以提交、主动回滚或析构兜底管理清理 | R:code:src/pipeline.rs | A:MountTransaction,RollbackReport | S:按逆序清理，区分始终清理、允许提交保留和仅失败回滚
+
+===/<repository>/src/utils/===
+ksu.rs[IR6S]: F:面向挂载流程暴露 KernelSU 能力探测、路径注册和释放 | R:code:src/utils/ksu_driver.rs,code:src/utils/ksu_umount.rs | A:init,send_unmountable,committed_unmounts,release_unmounts | S:注册只更新 KernelSU 清单，不执行立即卸载
+ksu_driver.rs[II6S]: F:发现、复制并持有 KernelSU 驱动描述符，为协议层提交类型化请求 | R:code:src/utils/ksu_protocol.rs,code:src/utils/ksu_driver_tests.rs | A:- | S:优先已有会话描述符，复制后单独拥有，失败发现可重试
+ksu_driver_tests.rs[TI4T]: F:验证 KernelSU 驱动描述符的筛选、优先级、复制所有权和缓存重试 | R:code:src/utils/ksu_driver.rs | A:- | S:-
+ksu_protocol.rs[II6M]: F:定义不依赖驱动发现的 KernelSU UAPI 布局及兼容请求 | R:code:src/utils/ksu_driver.rs | A:get_info_with,kpm_with,nuke_with | S:兼容 fallback 前重置部分写入的应答缓冲
+ksu_umount.rs[IR6M]: F:实现 KernelSU try-umount 注册记录、提交和仅本次拥有项的回滚 | R:code:src/utils/ksu.rs,code:src/runtime/ledger.rs | A:UmountCommand,Registrations,release | S:-
+mod.rs[CI6M]: F:提供目录与路径判断、SELinux 上下文读取及设置 | R:code:src/sys/fs.rs | A:ensure_dir_exists,lgetfilecon,getfilecon,lsetfilecon | S:先查实际扩展属性长度，分别处理随链接和不随链接
+
+===/<repository>/src/vfs/===
+backend.rs[IB7M]: F:协商 Hybrid Mount 或兼容 NoMount Provider 及应答版本，并统一规则与 UID 访问 | R:code:src/vfs/sys.rs,code:src/vfs/protocol.rs,code:src/vfs/lkm.rs | A:VfsProvider,KeyringKernel,select_provider | S:能应答但版本不兼容时不会触发加载替代实现
+backend_tests.rs[TB5S]: F:模拟 Provider 验证采纳、静默后一次加载、版本拒绝及失败诊断 | R:code:src/vfs/backend.rs | A:- | S:-
+boot_guard.rs[RR8L]: F:记录 VFS 内核变更和模块加载的持久守卫，并按构建、设备和对象身份解释残留标记 | R:code:src/vfs/lkm.rs,code:src/runtime/hot.rs,code:src/vfs/cli.rs | A:VfsBootGuard,inspect,arm_for_mutation | S:正常返回清除本次所建标记，异常退出保留证据以阻止重演；已存在标记不能被覆盖
+boot_guard_tests.rs[TR5M]: F:验证守卫的创建清理、已有标记保护和构建及模块身份归属 | R:code:src/vfs/boot_guard.rs | A:- | S:-
+cli.rs[EB7L]: F:解析设备 VFS 查询、规则及 UID 变更、守卫管理和显式加载命令 | R:code:src/vfs/control.rs,code:src/vfs/doctor.rs,code:src/vfs/boot_guard.rs | A:handle | S:参数验证先于 Provider 调用；危险清空要求明确范围和确认
+cli_tests.rs[TB5L]: F:校验 VFS CLI 参数规范化、旧别名、批量 UID 范围与清空确认 | R:code:src/vfs/cli.rs | A:- | S:-
+control.rs[AB7M]: F:以可替换传输执行运行态 VFS 批量操作，读回记录并输出逐项验证结果 | R:code:src/vfs/protocol.rs,code:src/vfs/backend.rs | A:Controller,Mutation,MutationReport | S:提交和读回分别有结果；部分确认和查询故障不能当全部成功
+control_tests.rs[TB5L]: F:用脚本化应答验证 VFS 控制器编码、分页及读回的路径、UID 和语义匹配 | R:code:src/vfs/control.rs,code:src/vfs/protocol.rs | A:- | S:-
+doctor.rs[IO6M]: F:以模块表、sysfs 和只读协议查询报告 VFS 存在方式、响应与状态 | R:code:src/vfs/backend.rs,code:src/vfs/cli.rs | A:VfsDoctorReport,classify_presence,summarize | S:诊断不会加载或卸载模块，失败探测通过报告字段表达
+doctor_tests.rs[TO4M]: F:验证内建、加载和缺失分类，以及模块表解析和诊断应答 | R:code:src/vfs/doctor.rs | A:- | S:-
+exec.rs[AB7S]: F:把规划树转成批量 VFS 规则与 UID 请求，并按策略解释读回差异 | R:code:src/plan/mod.rs,code:src/vfs/rule.rs,code:src/pipeline.rs | A:plan_rules,apply_rules,apply_rules_with_policy_diagnosed | S:整批回滚信息在设备调用前由流水线登记；严格模式与降级路径区分
+exec_tests.rs[TB5M]: F:以记录型内核检查规则和 UID 请求、统计、回滚输入与非严格降级 | R:code:src/vfs/exec.rs | A:- | S:-
+guard.rs[IS6T]: F:探测既存外部 VFS Provider 以及诊断基础设施错误，供加载安全决策 | R:code:src/vfs/lkm.rs,code:src/vfs/backend.rs | A:detect_foreign_nomount | S:探测失败也阻止自动加载第二个 Provider
+lkm.rs[IB7S]: F:选择随包 VFS 模块候选并以受保护的加载和协议验收建立 Provider | R:code:src/vfs/lkm_packages.rs,code:src/sys/lkm.rs,code:src/vfs/boot_guard.rs | A:load_hm_vfs,load_explicit | S:候选由当前内核线限制，最终以支持版本的应答验收
+lkm_packages.rs[FV4T]: F:记录 GKI 标签、内核主次版本和随包 VFS 文件名的确定性候选序 | R:code:.github/workflows/kernel-module.yml,code:src/vfs/lkm_target.rs | A:- | S:-
+lkm_target.rs[DB6M]: F:解析内核版本和 Android 标签，为当前内核选择本机兼容候选 | R:code:src/vfs/lkm_packages.rs,code:src/sys/lkm.rs | A:lkm_candidates,kernel_major_minor,select_lkm_filename | S:以 GKI 内核标签和主次版本为准，设备用户态版本只作诊断线索
+mod.rs[AB7M]: F:组织 VFS 用户态后端，按配置需求、Provider 状态和防护决定规划前可用性 | R:code:src/vfs/guard.rs,code:src/vfs/lkm.rs,code:src/plan/mod.rs | A:available,ensure_loaded_for_plan_with_guard,unavailable_is_fatal | S:先于计划探测；仅在请求 VFS 且严格模式启用时把不可用视为致命
+protocol.rs[IN8L]: F:以字节编解码实现内核命令页、规则记录及 UID 范围和分页解析 | R:code:module/vfs/src/hybridmount.h,code:src/vfs/backend.rs | A:RuleFormat,NmCommand,EncodedRule,build_payload | S:本仓协议身份和布局与内核头一致；外部 Provider 的格式能力按协商版本区分
+protocol_tests.rs[TN5L]: F:测试协议页字节布局、内核头一致性、规则分批及响应校验 | R:code:src/vfs/protocol.rs,code:module/vfs/src/hybridmount.h | A:- | S:-
+rule.rs[DB6S]: F:将统一树中的 VFS 贡献映射为插入、隐藏或不透明目录规则 | R:code:src/mount_tree.rs,code:src/vfs/protocol.rs | A:VfsRule,VfsAction,build_vfs_rules | S:普通目录提供结构；替换目录下的目录需保留不透明语义
+rule_tests.rs[TB4S]: F:验证节点树的文件、链接、whiteout、替换子树以及跨后端过滤规则 | R:code:src/vfs/rule.rs | A:- | S:-
+sys.rs[IN6S]: F:为 VFS 控制请求提供内核通道和页对齐缓冲，并处理平台返回 | R:code:src/vfs/protocol.rs,code:src/vfs/backend.rs | A:PageBuffer,KeyringChannel,add_key | S:-
+
+===/<repository>/tools/notify/===
+Cargo.toml[FV5T]: F:声明独立通知工具二进制及其发布依赖，并锁定 Telegram 客户端兼容版本 | R:code:tools/notify/src/lib.rs,code:.github/workflows/notify-tool.yml | A:- | S:客户端升级须用原始 multipart 的 wire 测试确认 parse_mode
+
+===/<repository>/tools/notify/src/===
+lib.rs[IN6L]: F:查找构建 ZIP，生成通知内容并按附件数向 Telegram 投递 | R:code:tools/notify/src/main.rs,code:.github/workflows/notify-tool.yml | A:NotifyRequest,maybe_send_output_dir_notification | S:缺少配置走跳过路径；多个附件按 API 批量上限拆分
+main.rs[EV4T]: F:解析通知工具的产物目录、发布标签和话题参数并调用通知库 | R:code:tools/notify/src/lib.rs | A:hybrid-mount-notify | S:-
+
+===/<repository>/webui/===
+.gitignore[FV2T]: F:从 Git 排除 WebUI 的依赖、构建目录、本地环境文件和 lint 缓存 | R:- | A:- | S:-
+.prettierignore[FQ3T]: F:让 Prettier 跳过 pnpm 自己写入的锁文件，保留包管理器生成格式 | R:- | A:- | S:-
+LICENSE[SG3M]: F:记录 WebUI 的 Apache 2.0 许可、版权及分发条款 | R:- | A:- | S:-
+eslint.config.js[FQ4T]: F:定义 Vue 单文件组件和 TypeScript 的 ESLint 扁平配置及例外 | R:code:webui/package.json | A:- | S:-
+index.html[EU4T]: F:声明 Android WebView 中应用挂载节点、视口条件和 Vite 模块入口 | R:code:webui/src/main.ts | A:- | S:-
+package.json[FV5T]: F:定义 WebUI 包、Node 和 pnpm 要求及构建、lint、类型与 Vitest 检查入口 | R:code:webui/vite.config.ts,code:.github/workflows/lints.yml | A:dev,build,lint,test,typecheck | S:-
+prettier.config.js[FQ3T]: F:统一 WebUI Prettier 的行宽、引号、分号、尾逗号和换行处理 | R:code:webui/package.json | A:- | S:-
+tsconfig.app.json[FV4T]: F:描述 Vue DOM 应用源码的严格类型检查、Vite 类型和增量缓存位置 | R:code:webui/tsconfig.json | A:- | S:-
+tsconfig.json[FV3T]: F:以项目引用组合浏览器应用和 Node 构建工具的 TypeScript 检查 | R:code:webui/tsconfig.app.json,code:webui/tsconfig.node.json | A:- | S:-
+tsconfig.node.json[FV3T]: F:以 ESNext 和 bundler 解析类型检查 Node 侧 Vite 配置，禁止产出 | R:code:webui/vite.config.ts | A:- | S:-
+vite.config.ts[FV6T]: F:配置 Vue 插件、相对资源地址和模块内 WebUI 输出，注入模块 ID | R:code:xtask/src/main.rs,code:webui/src/lib/constants.ts | A:- | S:安装包从 module/webroot 取产物，独立开发可用默认 ID
+
+===/<repository>/webui/src/===
+App.vue[AU5T]: F:根据 UI 偏好延迟加载 Miuix 或 Material 3 根组件并传入设备形态 | R:code:webui/src/lib/stores/uiStore.ts,code:webui/src/ui/md3/App.vue,code:webui/src/ui/miuix/App.vue | A:wear | S:-
+main.ts[EU6T]: F:初始化 Vue、i18n、用户偏好和穿戴探测并挂载前端 | R:code:webui/index.html,code:webui/src/App.vue,code:webui/src/lib/wearLayout.ts | A:init | S:管理器的可选配色加载失败时移除外部样式引用
+style.css[FU4T]: F:设置主题共用的字体、滚动和根布局基础 | R:code:webui/src/main.ts | A:- | S:页面间距由各主题负责，公共样式不叠加页面 padding
+vite-env.d.ts[FU4T]: F:声明 Vite 注入的模块标识与 Vue 文件类型，使 TypeScript 能解析入口与组件 | R:code:webui/vite.config.ts | A:- | S:-
+
+===/<repository>/webui/src/components/===
+DynamicLogo.vue[DU3S]: F:渲染 SVG 品牌图形，按开发模式切换内部图案和动画样式 | R:- | A:- | S:-
+
+===/<repository>/webui/src/lib/===
+api.mock.ts[TU5M]: F:以状态化模拟 API 支持浏览器开发时的配置、模块、状态及运行时操作 | R:code:webui/src/lib/api.ts,code:webui/src/lib/types.ts | A:MockAPI | S:可注入状态读取故障以验证错误提示
+api.ts[IU8L]: F:在 WebUI 命令接口、真实管理器 bridge 与开发模拟之间选择实现，规范化设备负载 | R:code:webui/src/lib/shell.ts,code:webui/src/lib/types.ts,code:src/cli.rs | A:API,createApi,normalizeConfigPayload,normalizeModule,normalizeStatus | S:生产 bridge 缺失时报告不可用，配置写入用独立的稳定负载
+bootGuard.ts[DR4T]: F:归一化设备守卫报告并筛选有实体且可供用户清理的范围 | R:code:webui/src/lib/types.ts,code:webui/src/lib/api.ts | A:normalizeGuardReport,clearableGuards | S:-
+config.ts[DD4T]: F:复制配置表单中会被编辑的数组和逐模块规则，使草稿与已载入对象独立 | R:code:webui/src/lib/types.ts | A:cloneAppConfig | S:兼容没有 structuredClone 的旧 Android WebView
+constants.ts[CC4T]: F:集中提供注入的模块 ID、设备二进制路径、默认配置和项目链接 | R:code:webui/vite.config.ts,code:webui/src/lib/types.ts | A:MODULE_ID,PATHS,DEFAULT_CONFIG | S:-
+contributors.ts[IN4T]: F:筛选并补全 GitHub 人类贡献者信息，向信息页复用单次请求 | R:code:webui/src/ui/md3/pages/info.vue,code:webui/src/ui/miuix/pages/info.vue | A:loadGitHubContributors,fetchGitHubContributors | S:-
+moduleFilter.ts[DU4T]: F:按模块模式选择全部、活跃或单后端列表，并确保黑名单项仍可见 | R:code:webui/src/lib/types.ts | A:matchesModuleFilter | S:-
+mountDiagnostics.ts[DU4T]: F:过滤并规范化分区和操作诊断，生成可供模块详情显示的错误摘要 | R:code:webui/src/lib/types.ts | A:normalizePartitionErrors,normalizeOperationErrors,moduleDiagnosticSummary | S:-
+reboot.ts[DR5T]: F:验证重启前的管理器环境和 late-load 应答，区分无法确认的状态 | R:code:webui/src/lib/api.ts | A:parseLateLoad,parseRootManager,isKernelPatchVersionResponse | S:-
+runtimeApi.ts[IU5T]: F:把运行态查询和热操作映射为设备命令，验证操作回执和世代号 | R:code:webui/src/lib/shell.ts,code:src/runtime/mod.rs | A:createRuntimeApi | S:-
+shell.ts[CS4T]: F:为拼入双引号的 shell 参数转义特殊字符 | R:code:webui/src/lib/api.ts,code:webui/src/lib/runtimeApi.ts | A:shellEscapeDoubleQuoted | S:-
+statusMounts.ts[DU6M]: F:把启动、挂载和扫描状态转成可翻译的错误行、原因、操作和分组统计 | R:code:webui/src/lib/types.ts,code:src/state.rs | A:collectStatusErrors,statusErrorDetails,statusErrorRows | S:-
+types.ts[CU6M]: F:定义 WebUI 配置、规则、设备诊断、快照、运行态和 AppAPI 类型 | R:code:webui/src/lib/api.ts,code:src/state.rs | A:AppConfig,Module,RunState,RuntimeStatus,AppAPI | S:-
+useRuntimeModule.ts[AU5T]: F:为不同主题共享热操作资格、错误和忙碌状态，并统一调用运行态 store | R:code:webui/src/lib/stores/runtimeStore.ts | A:useRuntimeModule | S:-
+wearLayout.ts[DU4T]: F:使用显式布局参数或有超时的设备探测选择穿戴布局 | R:code:webui/src/main.ts | A:useWearLayout | S:查询参数优先，设备探测失败回退到手机布局
+
+===/<repository>/webui/src/lib/stores/===
+configStore.ts[PU5T]: F:持有 WebUI 配置及读取、保存和重置状态，统一暴露加载与写入入口 | R:code:webui/src/lib/api.ts,code:webui/src/lib/config.ts | A:configStore | S:-
+moduleStore.ts[PU5T]: F:持有模块列表快照及加载错误，处理逐模块规则保存和挂载错误状态 | R:code:webui/src/lib/api.ts,code:webui/src/lib/types.ts | A:moduleStore | S:-
+runtimeStore.ts[AU6S]: F:同步运行态快照并协调单模块热操作的忙碌、诊断和后续刷新 | R:code:webui/src/lib/runtimeApi.ts,code:webui/src/lib/stores/moduleStore.ts,code:webui/src/lib/stores/sysStore.ts | A:runtimeStore | S:-
+sysStore.ts[AU6S]: F:向界面提供设备、版本、可用后端和启动状态，并封装重启及守卫处理 | R:code:webui/src/lib/api.ts,code:webui/src/lib/bootGuard.ts | A:sysStore | S:-
+uiStore.ts[PU5S]: F:持久化语言、主题与动态色偏好，管理导航及主题可接管的提示 | R:code:webui/src/locales/index.ts | A:uiStore | S:-
+
+===/<repository>/webui/src/locales/===
+en-US.json[FL5S]: F:提供英语界面消息及其他语言缺项的默认回退，包含运行时模块操作文本 | R:code:webui/src/locales/index.ts | A:- | S:-
+es-ES.json[FL3S]: F:提供西班牙语浏览标签、状态提示、配置和模块管理文本 | R:code:webui/src/locales/index.ts | A:- | S:-
+fr-FR.json[FL3S]: F:提供法语界面菜单、配置、模块与热操作消息 | R:code:webui/src/locales/index.ts | A:- | S:-
+id-ID.json[FL3S]: F:提供印度尼西亚语的状态、配置、模块和界面导航消息 | R:code:webui/src/locales/index.ts | A:- | S:-
+index.ts[IL6T]: F:发现并按需加载本地化消息，设置英语回退、复数规则和持久化选项 | R:code:webui/src/lib/stores/uiStore.ts,code:webui/src/locales/en-US.json | A:getSupportedLocales,loadLocale,switchLocale | S:俄语与乌克兰语共享东斯拉夫复数规则
+it-IT.json[FL3S]: F:提供意大利语页面、设备状态、配置和模块交互翻译 | R:code:webui/src/locales/index.ts | A:- | S:-
+ja-JP.json[FL3S]: F:提供日语状态、配置、模块和项目信息按钮文本 | R:code:webui/src/locales/index.ts | A:- | S:-
+pt-BR.json[FL3S]: F:提供巴西葡萄牙语界面消息及运行时模块操作翻译 | R:code:webui/src/locales/index.ts | A:- | S:-
+ru-RU.json[FL3S]: F:提供俄语的状态、配置、模块、图标标签关联和项目信息文本 | R:code:webui/src/locales/index.ts | A:- | S:-
+tr-TR.json[FL3S]: F:提供土耳其语的状态、配置、模块和信息翻译及内容描述 | R:code:webui/src/locales/index.ts | A:- | S:-
+uk-UA.json[FL3S]: F:提供乌克兰语页面导航、设备状态、模块管理和配置文本 | R:code:webui/src/locales/index.ts | A:- | S:-
+vi-VN.json[FL3S]: F:提供越南语导航、设备状态、挂载配置和模块界面消息 | R:code:webui/src/locales/index.ts | A:- | S:-
+zh-CN.json[FL4S]: F:提供简体中文的设备状态、挂载配置、模块、运行操作和诊断消息 | R:code:webui/src/locales/index.ts | A:- | S:-
+zh-TW.json[FL3S]: F:提供繁体中文的状态、配置、模块和项目信息消息 | R:code:webui/src/locales/index.ts | A:- | S:-
+
+===/<repository>/webui/src/ui/md3/===
+App.vue[AU4T]: F:为 Material 3 汇聚状态、配置、模块和信息页并按设备形态选布局 | R:code:webui/src/ui/md3/Md3Layout.vue,code:webui/src/ui/wear/WearLayout.vue | A:- | S:-
+Md3Layout.vue[AU5S]: F:实现 Material 3 页面外壳、顶部及标签导航、提示与重启界面 | R:code:webui/src/ui/md3/App.vue,code:webui/src/lib/stores/uiStore.ts,code:webui/src/lib/useSwipePager.ts | A:- | S:-
+icons.ts[CU3T]: F:集中存放 Material 3 导航和操作按钮使用的 SVG 路径 | R:code:webui/src/ui/md3/Md3Layout.vue | A:ICONS | S:-
+material.ts[IU3T]: F:以副作用导入注册界面用到的 Material Web 自定义元素 | R:code:webui/src/ui/md3/Md3Layout.vue | A:- | S:-
+theme.css[FU5M]: F:组装 Material 3 主题样式及设备内边距，覆盖页面、控件和错误布局 | R:code:webui/src/ui/md3/Md3Layout.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/md3/components/===
+Md3BottomActions.vue[DU3T]: F:为 Material 3 页面底部操作提供带间隔的弹性栏容器 | R:code:webui/src/ui/md3/pages/config.vue | A:默认插槽 | S:-
+Md3RuntimeControls.vue[DU4S]: F:在 Material 3 模块卡片显示热操作状态、提示及可用操作 | R:code:webui/src/lib/useRuntimeModule.ts | A:moduleId | S:-
+Md3SelectField.vue[DU5M]: F:提供基于 Material Dialog 的可复用选择字段，显示选项及描述并提交选择 | R:code:webui/src/ui/md3/material.ts | A:SelectOption | S:-
+StatusErrorBanner.vue[DU4T]: F:展示 Material 3 状态错误的原因、详细项及可供页面处理的操作 | R:code:webui/src/lib/statusMounts.ts,code:webui/src/ui/md3/pages/status.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/md3/pages/===
+config.vue[AU5M]: F:用 Material 3 控件编辑挂载配置与外观设置并处理保存、重置 | R:code:webui/src/lib/stores/configStore.ts,code:webui/src/ui/md3/components/Md3SelectField.vue | A:- | S:-
+info.vue[AU4S]: F:显示 Material 3 项目、设备、VFS 类型和开源贡献者信息 | R:code:webui/src/lib/contributors.ts,code:webui/src/lib/stores/sysStore.ts | A:- | S:-
+modules.vue[AU6M]: F:实现 Material 3 模块搜索、筛选、规则表单、诊断和热操作入口 | R:code:webui/src/lib/stores/moduleStore.ts,code:webui/src/lib/moduleFilter.ts,code:webui/src/ui/md3/components/Md3RuntimeControls.vue | A:- | S:-
+status.vue[AU6M]: F:在 Material 3 展示启动结果和挂载统计，并提供刷新、重启和守卫操作 | R:code:webui/src/lib/statusMounts.ts,code:webui/src/lib/stores/sysStore.ts,code:webui/src/ui/md3/components/StatusErrorBanner.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/md3/v420/===
+app.css[FU4M]: F:定义 Material 3 明暗配色及共享按钮、卡片、输入和弹窗样式 | R:code:webui/src/ui/md3/theme.css | A:- | S:-
+config.css[FU4M]: F:为 Material 3 配置页设置卡片分组、选项网格和表单布局 | R:code:webui/src/ui/md3/pages/config.vue | A:- | S:-
+info.css[FU4M]: F:定义 Material 3 项目信息、外链、贡献者及徽标区域的样式 | R:code:webui/src/ui/md3/pages/info.vue | A:- | S:-
+layout.css[FU4S]: F:设置 Material 3 内容、滑动轨道、页面滚动、加载态和减弱动效 | R:code:webui/src/ui/md3/Md3Layout.vue | A:- | S:-
+modules.css[FU4L]: F:样式化 Material 3 模块列表、搜索筛选和展开的规则编辑卡片 | R:code:webui/src/ui/md3/pages/modules.vue | A:- | S:-
+navbar.css[FU3T]: F:定义 Material 3 底部导航的标签排布、图标背景和选中态 | R:code:webui/src/ui/md3/Md3Layout.vue | A:- | S:-
+status.css[FU4L]: F:样式化 Material 3 状态总览卡片、错误明细、统计分组和操作控件 | R:code:webui/src/ui/md3/pages/status.vue | A:- | S:-
+topbar.css[FU3T]: F:定义 Material 3 顶栏的标题、操作布局和语言对话框 | R:code:webui/src/ui/md3/Md3Layout.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/miuix/===
+App.vue[AU4T]: F:装配 Miuix 状态、配置、模块和信息页及导航标题，并接入 Snackbar | R:code:webui/src/ui/miuix/MiuixLayout.vue,code:webui/src/lib/stores/uiStore.ts | A:- | S:-
+MiuixLayout.vue[AU5M]: F:管理 Miuix 应用外壳、手势分页、Snackbar 安全边距和重启确认 | R:code:webui/src/ui/useSwipePager.ts,code:webui/src/lib/stores/sysStore.ts | A:- | S:-
+theme.css[FU4S]: F:定义 Miuix 页面与卡片排布、补充圆角、明暗和可选动态配色 | R:code:webui/src/ui/miuix/MiuixLayout.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/miuix/components/===
+MiuixRuntimeControls.vue[DU4S]: F:以 Miuix 控件显示单模块运行状态、错误和热操作按钮 | R:code:webui/src/lib/useRuntimeModule.ts | A:moduleId | S:-
+MiuixSelectField.vue[DU4S]: F:用 Miuix 对话框展示选择项、当前值和描述，并通知调用方选择 | R:code:webui/src/ui/miuix/pages/config.vue | A:MiuixSelectOption | S:-
+StatusCard.vue[DU4S]: F:用颜色、图标和文本呈现正常、检查中或异常状态卡片 | R:code:webui/src/ui/miuix/pages/status.vue | A:- | S:-
+StatusErrorBanner.vue[DU4S]: F:渲染 Miuix 错误卡片的错误行、诊断详情与带忙状态的操作 | R:code:webui/src/lib/statusMounts.ts,code:webui/src/ui/miuix/pages/status.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/miuix/pages/===
+config.vue[AU5M]: F:以 Miuix 表单编辑挂载设置、语言和主题偏好，协调配置保存和重置 | R:code:webui/src/lib/stores/configStore.ts,code:webui/src/ui/miuix/components/MiuixSelectField.vue | A:- | S:-
+info.vue[AU4S]: F:显示 Miuix 项目、设备支持状态、外链与 GitHub 贡献者 | R:code:webui/src/lib/contributors.ts,code:webui/src/lib/stores/sysStore.ts | A:- | S:-
+modules.vue[AU6L]: F:实现 Miuix 模块列表、筛选与刷新、路径规则编辑、诊断及热操作 | R:code:webui/src/lib/stores/moduleStore.ts,code:webui/src/lib/moduleFilter.ts,code:webui/src/ui/miuix/components/MiuixRuntimeControls.vue | A:- | S:-
+status.vue[AU6L]: F:在 Miuix 汇总挂载状态、启动诊断和守卫，并提供展开及刷新交互 | R:code:webui/src/lib/statusMounts.ts,code:webui/src/lib/stores/sysStore.ts,code:webui/src/ui/miuix/components/StatusCard.vue | A:- | S:-
+
+===/<repository>/webui/src/ui/===
+useSwipePager.ts[DU6M]: F:将指针与触摸滑动转为页面进度、标签提交和访问范围 | R:code:webui/src/ui/miuix/MiuixLayout.vue | A:useSwipePager | S:越界使用阻尼；取消或卸载时收尾指针和待执行动画
+
+===/<repository>/webui/src/ui/wear/===
+WearLayout.vue[AU5S]: F:为穿戴设备提供 Material 页面菜单、纵向内容和轻量提示布局 | R:code:webui/src/ui/md3/App.vue,code:webui/src/lib/stores/sysStore.ts | A:- | S:按首次访问才挂载页面，之后保留已访问组件
+wear.css[FU4M]: F:设置穿戴端紧凑导航、内容宽度、滚动和触摸控件，并复用 Material 色彩 | R:- | A:- | S:-
+
+===/<repository>/xtask/===
+Cargo.toml[FV4T]: F:声明 xtask 的包、工作区 lint 和模块构建分发依赖 | R:code:Cargo.toml,code:xtask/src/main.rs | A:- | S:-
+
+===/<repository>/xtask/src/===
+main.rs[XV8L]: F:编排 WebUI 与 Android 交叉构建、模块暂存、ZIP、发布版本计算和更新元数据 | R:code:xtask/src/vfs_package.rs,code:xtask/src/zip_ext.rs,code:module/config.toml,code:.github/workflows/release.yml | A:build,release-version,update-json,notify | S:riscv64 直接使用 NDK 与 nightly 标准库构建；正式版版本码高于同版本预发布
+vfs_package.rs[XV6T]: F:在打包前核对 VFS 模块的源摘要、产物摘要与加载候选矩阵 | R:code:src/vfs/lkm_packages.rs,code:module/vfs/binaries/sources.txt,code:module/vfs/binaries/list.txt | A:verify | S:拒绝额外、缺失、重复或摘要不匹配的产物
+zip_ext.rs[XV5S]: F:递归生成模块 ZIP，在路径层选择压缩和文件选项并按名称排序 | R:code:xtask/src/main.rs | A:zip_create_from_directory_with_options | S:-

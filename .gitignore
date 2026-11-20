@@ -48,3 +48,7 @@ KernelSU_bugreport_*
 # Python bytecode from skill helper scripts (.dsh/skills/*/scripts)
 __pycache__/
 *.pyc
+
+# AOCI agent host integration (machine-bound; do not commit)
+.codex/config.toml
+.codex/config.toml.backup.*

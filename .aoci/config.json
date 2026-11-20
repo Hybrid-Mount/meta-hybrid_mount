@@ -1,0 +1,360 @@
+{
+  "version": 2,
+  "locale": "zh-CN",
+  "index_path": "aoci.txt",
+  "exclude_dirs": [
+    "node_modules",
+    ".next",
+    ".output",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    "htmlcov"
+  ],
+  "exclude_root_dirs": [
+    "backup",
+    "backups",
+    "build",
+    "cache",
+    "coverage",
+    "dist",
+    "target",
+    "tmp",
+    "uploads",
+    "artifacts",
+    "vendor",
+    "logs",
+    "run"
+  ],
+  "exclude_files": [
+    "*.backup.*",
+    "*.bak",
+    ".coverage"
+  ],
+  "exclude_exts": [],
+  "sensitive_name_rules": "v2",
+  "curation_exclude": [],
+  "hook_strict": false,
+  "ledger_enabled": true,
+  "line_ending_tolerance": true,
+  "cognition_refresh_threshold": 30,
+  "overview_delivery": {
+    "chunk_tokens": 7000
+  },
+  "managed_scope": {
+    "version": "managed-scope-policy/v2",
+    "profile": "production",
+    "observe_change_policy": "review_required",
+    "approval_mode": "inherit",
+    "approval_thresholds": {
+      "entry_removal_count": 25,
+      "entry_removal_percent": 25
+    },
+    "rules": [
+      {
+        "rule_id": "starter-vendored-static-libs",
+        "action": "observe",
+        "pattern": "**/static/**/libs/**",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 100,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-static-lib",
+        "action": "observe",
+        "pattern": "**/static/**/lib/**",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 101,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-static-plugins",
+        "action": "observe",
+        "pattern": "**/static/**/plugins/**",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 102,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-min-js",
+        "action": "observe",
+        "pattern": "**/*.min.js",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 103,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-min-css",
+        "action": "observe",
+        "pattern": "**/*.min.css",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 104,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-source-map",
+        "action": "observe",
+        "pattern": "**/*.map",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 105,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-fonts",
+        "action": "observe",
+        "pattern": "**/fonts/**",
+        "pattern_kind": "glob",
+        "reason": "vendored static assets and generated bundles are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 106,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-third-party",
+        "action": "observe",
+        "pattern": "**/third_party/**",
+        "pattern_kind": "glob",
+        "reason": "third-party source trees are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 107,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-third-party-dash",
+        "action": "observe",
+        "pattern": "**/third-party/**",
+        "pattern_kind": "glob",
+        "reason": "third-party source trees are observed, not indexed; delete this rule before the first scan if the path holds your own code",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 108,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-svg",
+        "action": "observe",
+        "pattern": "**/*.svg",
+        "pattern_kind": "glob",
+        "reason": "vector images and public certificates are observed, not indexed; delete this rule before the first scan to author Entries for them",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 109,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-certificate-crt",
+        "action": "observe",
+        "pattern": "**/*.crt",
+        "pattern_kind": "glob",
+        "reason": "vector images and public certificates are observed, not indexed; delete this rule before the first scan to author Entries for them",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 110,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-certificate-cer",
+        "action": "observe",
+        "pattern": "**/*.cer",
+        "pattern_kind": "glob",
+        "reason": "vector images and public certificates are observed, not indexed; delete this rule before the first scan to author Entries for them",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 111,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-npm-lock",
+        "action": "observe",
+        "pattern": "**/package-lock.json",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 112,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-yarn-lock",
+        "action": "observe",
+        "pattern": "**/yarn.lock",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 113,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-pnpm-lock",
+        "action": "observe",
+        "pattern": "**/pnpm-lock.yaml",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 114,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-cargo-lock",
+        "action": "observe",
+        "pattern": "**/Cargo.lock",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 115,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-poetry-lock",
+        "action": "observe",
+        "pattern": "**/poetry.lock",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 116,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-gemfile-lock",
+        "action": "observe",
+        "pattern": "**/Gemfile.lock",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 117,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-composer-lock",
+        "action": "observe",
+        "pattern": "**/composer.lock",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 118,
+        "enabled": true
+      },
+      {
+        "rule_id": "starter-vendored-go-sum",
+        "action": "observe",
+        "pattern": "**/go.sum",
+        "pattern_kind": "glob",
+        "reason": "dependency lockfiles are generated pins and are observed, not indexed; the manifest beside each one carries its semantics",
+        "source": "builtin",
+        "created_by": "aoci-init",
+        "order": 119,
+        "enabled": true
+      }
+    ]
+  },
+  "cognition_budget": {
+    "version": "cognition-budget-policy/v1",
+    "mode": "enforce",
+    "whole_index": {
+      "target_tokens": 200000,
+      "warning_tokens": 300000,
+      "max_tokens": 400000
+    },
+    "r": [
+      {
+        "min_c": 1,
+        "max_c": 4,
+        "target_tokens": 25,
+        "max_tokens": 50
+      },
+      {
+        "min_c": 5,
+        "max_c": 7,
+        "target_tokens": 45,
+        "max_tokens": 90
+      },
+      {
+        "min_c": 8,
+        "max_c": 8,
+        "target_tokens": 70,
+        "max_tokens": 140
+      },
+      {
+        "min_c": 9,
+        "max_c": 9,
+        "target_tokens": 90,
+        "max_tokens": 180
+      }
+    ],
+    "s": [
+      {
+        "min_c": 1,
+        "max_c": 4,
+        "target_tokens": 20,
+        "max_tokens": 40
+      },
+      {
+        "min_c": 5,
+        "max_c": 7,
+        "target_tokens": 40,
+        "max_tokens": 80
+      },
+      {
+        "min_c": 8,
+        "max_c": 8,
+        "target_tokens": 70,
+        "max_tokens": 140
+      },
+      {
+        "min_c": 9,
+        "max_c": 9,
+        "target_tokens": 100,
+        "max_tokens": 200
+      }
+    ]
+  },
+  "installed_agents": [
+    "codex"
+  ],
+  "automation": {
+    "mode": "auto"
+  },
+  "ai": {
+    "enabled": false,
+    "provider": "openai-compatible",
+    "base_url": "",
+    "model": "",
+    "api_key_env": "",
+    "timeout_seconds": 0,
+    "max_concurrency": 0,
+    "max_input_tokens": 0,
+    "token_accounting": "auto",
+    "prompt_snapshot": "redacted"
+  }
+}
