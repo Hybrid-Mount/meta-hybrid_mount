@@ -81,4 +81,4 @@ jobs:
       - name: Install and audit
         run: |
           pnpm install --frozen-lockfile
-          pnpm audit --prod
+          pnpm audit
