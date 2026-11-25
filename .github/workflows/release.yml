@@ -171,18 +171,15 @@ jobs:
           rm -rf output
           cargo xtask build --release
 
-          ZIP_PATH="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
-          test -n "$ZIP_PATH"
-          ZIP_FILENAME="$(basename "$ZIP_PATH")"
-          STAGED_ZIP="/tmp/$ZIP_FILENAME"
-          cp "$ZIP_PATH" "$STAGED_ZIP"
-          echo "STAGED_ZIP=$STAGED_ZIP" >> "$GITHUB_ENV"
+          python3 .github/scripts/package_artifacts.py output
+          mkdir -p /tmp/release-packages
+          cp output/*.zip /tmp/release-packages/
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
           name: package
-          path: ${{ env.STAGED_ZIP }}
+          path: /tmp/release-packages/*.zip
           compression-level: 0
           if-no-files-found: error
 
@@ -244,11 +241,7 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          ZIP="$(find packages -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
-          test -n "$ZIP" && test -s "$ZIP"
-          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
-          echo "name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
-          echo "sha256=$(sha256sum "$ZIP" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+          python3 .github/scripts/package_artifacts.py packages --github-output "$GITHUB_OUTPUT"
 
       - name: Generate changelog
         id: git-cliff
@@ -263,13 +256,23 @@ jobs:
 
       - name: Precheck release package
         # The official action normally renames assets. Use it only for validation;
-        # its broad precheck pattern accepts the generated validator filename.
+        # Match its normalized hybrid_mount-<code>-<version>.zip and the original
+        # normal release asset, while excluding Wear from previous-version lookup.
         uses: KernelSU-Modules/tools/actions/module-release@ca1187c92135b3c31e48d37e008d61153120a08b
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          zip: ${{ steps.paths.outputs.zip }}
+          zip: ${{ steps.paths.outputs.normal_path }}
           prerelease: ${{ env.PRERELEASE }}
-          asset-pattern: "*.zip"
+          asset-pattern: "*ount-*-*.zip"
+          dry-run: true
+
+      - name: Precheck Wear release package
+        uses: KernelSU-Modules/tools/actions/module-release@ca1187c92135b3c31e48d37e008d61153120a08b
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          zip: ${{ steps.paths.outputs.wear_path }}
+          prerelease: ${{ env.PRERELEASE }}
+          asset-pattern: "*ount-*-*.zip"
           dry-run: true
 
       - name: Upload release draft
@@ -279,7 +282,9 @@ jobs:
         with:
           draft: true
           prerelease: ${{ env.PRERELEASE }}
-          files: ${{ steps.paths.outputs.zip }}
+          files: |
+            ${{ steps.paths.outputs.normal_path }}
+            ${{ steps.paths.outputs.wear_path }}
           body_path: /tmp/changelog.md
           fail_on_unmatched_files: true
           overwrite_files: false
@@ -289,23 +294,21 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           RELEASE_ID: ${{ steps.release-draft.outputs.id }}
-          ZIP_NAME: ${{ steps.paths.outputs.name }}
-          ZIP_SHA256: ${{ steps.paths.outputs.sha256 }}
+          ZIP_NAME: ${{ steps.paths.outputs.normal_name }}
+          ZIP_SHA256: ${{ steps.paths.outputs.normal_sha256 }}
+          WEAR_ZIP_NAME: ${{ steps.paths.outputs.wear_name }}
+          WEAR_ZIP_SHA256: ${{ steps.paths.outputs.wear_sha256 }}
         with:
           script: |
             const { owner, repo } = context.repo;
             const release_id = Number(process.env.RELEASE_ID);
             const { data: draft } = await github.rest.repos.getRelease({ owner, repo, release_id });
             const assets = await github.paginate(github.rest.repos.listReleaseAssets, { owner, repo, release_id });
-            if (!draft.draft || draft.tag_name !== context.ref.replace('refs/tags/', '')) {
-              throw new Error('Expected a draft for the current release tag; refusing to publish');
-            }
-            if (assets.length !== 1 || assets[0].name !== process.env.ZIP_NAME || assets[0].state !== 'uploaded') {
-              throw new Error('Expected exactly one uploaded module ZIP with its original filename');
-            }
-            if (assets[0].digest !== `sha256:${process.env.ZIP_SHA256}`) {
-              throw new Error('Uploaded ZIP digest differs from the validated package');
-            }
+            const { validateReleaseAssets } = require('./.github/scripts/release-assets.cjs');
+            validateReleaseAssets(draft, assets, context.ref.replace('refs/tags/', ''), [
+              { name: process.env.ZIP_NAME, sha256: process.env.ZIP_SHA256 },
+              { name: process.env.WEAR_ZIP_NAME, sha256: process.env.WEAR_ZIP_SHA256 },
+            ]);
             await github.rest.repos.updateRelease({ owner, repo, release_id, draft: false });
             // GitHub can briefly lag when exposing immutable after publication.
             let published;
@@ -317,14 +320,15 @@ jobs:
             if (published.draft || published.immutable !== true) {
               throw new Error('Published release is not immutable; check repository settings');
             }
-            core.info(`Published immutable ${published.tag_name}: ${assets[0].name}`);
+            core.info(`Published immutable ${published.tag_name}: ${assets.map(asset => asset.name).join(", ")}`);
 
       - name: Prepare release metadata
         # Needs the tag-derived versionCode, which only exists for a tag: a manual dispatch builds
         # and notifies without publishing, so there is no metadata to prepare.
         if: startsWith(github.ref, 'refs/tags/')
         env:
-          ZIP_NAME: ${{ steps.paths.outputs.name }}
+          ZIP_NAME: ${{ steps.paths.outputs.normal_name }}
+          WEAR_ZIP_NAME: ${{ steps.paths.outputs.wear_name }}
         run: |
           set -euo pipefail
           TAG="${{ github.ref_name }}"
@@ -336,7 +340,12 @@ jobs:
             "$TAG" \
             "$VERSION_CODE" \
             "https://github.com/${{ github.repository }}/releases/download/$TAG/$ZIP_NAME"
-          cp update.json /tmp/update.json
+          cargo xtask update-json \
+            "$TAG" \
+            "$VERSION_CODE" \
+            "https://github.com/${{ github.repository }}/releases/download/$TAG/$WEAR_ZIP_NAME" \
+            --flavor wear
+          cp update.json update-wear.json /tmp/
 
       - name: Sync version back to dev
         if: startsWith(github.ref, 'refs/tags/')
@@ -349,6 +358,7 @@ jobs:
           git checkout dev
 
           mv /tmp/update.json update.json
+          mv /tmp/update-wear.json update-wear.json
           cat /tmp/changelog.md | cat - changelog.md > temp && mv temp changelog.md
 
           # The same semver-checked version the package was built with, so a tag that Cargo would
@@ -357,7 +367,7 @@ jobs:
           grep -q "^version = \"$RELEASE_VERSION\"$" Cargo.toml
           cargo update
 
-          git add update.json changelog.md Cargo.toml Cargo.lock
+          git add update.json update-wear.json changelog.md Cargo.toml Cargo.lock
 
           if ! git diff --staged --quiet; then
             git commit -m "chore(release): sync version ${{ github.ref_name }} [skip ci]"
@@ -375,7 +385,8 @@ jobs:
           NOTIFY_DIR="/tmp/hybrid-mount-release-notify"
           rm -rf "$NOTIFY_DIR"
           mkdir -p "$NOTIFY_DIR"
-          cp "${{ steps.paths.outputs.zip }}" "$NOTIFY_DIR/"
+          python3 .github/scripts/package_artifacts.py packages
+          cp "${{ steps.paths.outputs.normal_path }}" "${{ steps.paths.outputs.wear_path }}" "$NOTIFY_DIR/"
           "$RUNNER_TEMP/notify-tool/hybrid-mount-notify" \
             --output "$NOTIFY_DIR" \
             --label "丰收 (Harvest) - ${{ github.ref_name }}" \

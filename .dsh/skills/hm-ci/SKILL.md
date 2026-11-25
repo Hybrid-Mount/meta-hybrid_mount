@@ -31,7 +31,7 @@ whenToUse: 需要改 workflow、确认某个改动会不会触发或被门禁拦
 两处提交回写，都是「源码提交在前、产物提交在后」的两段式：
 
 1. `kernel-module.yml` → `package-binaries`：push 到 `dev` 且改动 `module/vfs/**` 时，重建并提交 `module/vfs/binaries/`（7 个 `.ko` + `list.txt` + `sources.txt`），message `chore(vfs): refresh the prebuilt hybridmount modules [skip ci]`，`git push origin "HEAD:${GITHUB_REF_NAME}"`；`GITHUB_REF_TYPE != branch` 直接 exit 1；`git diff --cached --quiet` 时跳过。手动运行时只在 `commit_binaries=true` 才提交。
-2. `release.yml` → `release` job 的 `Sync version back to dev`：`git fetch origin dev && git checkout dev`，覆盖 `update.json`、把 changelog 前插到 `changelog.md`、`sed` 版本进 `Cargo.toml` 并 `cargo update`，有 staged diff 才提交 `chore(release): sync version <tag> [skip ci]` 并 push `dev`。它落在**当时的 dev**，不是 tag 指向的 commit 上。
+2. `release.yml` → `release` job 的 `Sync version back to dev`：`git fetch origin dev && git checkout dev`，覆盖 `update.json`、`update-wear.json`、把 changelog 前插到 `changelog.md`、`sed` 版本进 `Cargo.toml` 并 `cargo update`，有 staged diff 才提交 `chore(release): sync version <tag> [skip ci]` 并 push `dev`。它落在**当时的 dev**，不是 tag 指向的 commit 上。
 
 **两个提交之间的中间态是预期的失败**：源码提交之后、`package-binaries` 落地之前，`tests/shell/vfs_sources_digest.sh` 必然 FAIL（`lints.yml` 的 `Verify prebuilt VFS modules still match their sources`、`release.yml` 的 `Verify the prebuilt VFS modules match their sources` 都调它）。不要把它当回归修，等自动提交，或手动重建：
 
@@ -48,13 +48,13 @@ gh workflow run 'Build VFS kernel module' --ref dev -f commit_binaries=true
 
 1. `cargo xtask release-version "$RELEASE_TAG"` → `version` / `version_code` / `prerelease` 三行写进 `$GITHUB_OUTPUT`，同时校验 semver（非法 tag 在任何构建前就失败）。仅在 `refs/tags/` 下执行。
 2. `sh tests/shell/vfs_sources_digest.sh`：tag 可指向任意 commit，所以发布前再挡一次源码/产物漂移。
-3. `sed` 把 version 写进 `Cargo.toml` 并 `grep -q` 反查；`cargo xtask build --release`；上传 artifact（固定名 `package`）。
-4. release job 下载 artifact，`cargo xtask notify --label "丰收 (Harvest) - <tag>" --topic-id 6`。
-5. 仅 tag：`cargo xtask update-json <tag> <version_code> https://github.com/<repo>/releases/download/<tag>/<zip>`（changelog 默认指向 dev 的 `changelog.md`），再 `cp update.json /tmp/update.json`。
-6. `orhun/git-cliff-action@v4`（`cliff.toml`，args `--current`，`OUTPUT=/tmp/changelog.md`）生成 changelog。
-7. `softprops/action-gh-release@v3`：`draft: false`、`prerelease: ${{ env.PRERELEASE }}`、`body_path: /tmp/changelog.md`。
-8. KernelSU-Modules-Repo 的远程发布步骤**已整段注释停用**（含 `secrets.RELEASE_TOKEN`）；hm-build-release 已同步标注为停用，两处描述一致，以 workflow 为准。
-9. `Sync version back to dev`（见上一节）。
+3. `sed` 把 version 写进 `Cargo.toml` 并反查；`cargo xtask build --release` 默认生成普通版和 Wear 双包，上传 artifact（固定名 `package`）。
+4. release job 下载双包，用 `package_artifacts.py` 验证 flavor、版本、架构、更新渠道及哈希；生成 changelog。
+5. 仅 tag：两个包分别官方 dry-run precheck；原文件名上传同一个 draft，`release-assets.cjs` 检查恰好两个已上传附件与各自 SHA256 后发布并验证 immutable。
+6. 分别 `cargo xtask update-json <tag> <version_code> <zip_url>`，Wear 加 `--flavor wear`；保存两个 JSON 到 /tmp，再同步回 dev。
+7. 同步完成后，将两个包交给预编译 `hybrid-mount-notify`，topic 6。每个附件有版本类型和架构文案，长 commit 截断时仍保留类型。
+
+普通包 `Hybrid-Mount-<version>-<commit_count>.zip`，Wear 包 `Hybrid-Mount_Wear-<version>-<commit_count>.zip`。两包共用模块 ID，更新地址分别为 `update.json`、`update-wear.json`。build.yml 的日常产物及 topic 37 通知同样包含双包；main 构建仍只预热，不通知。通知工具源码指纹变化自动淘汰旧可复用 bot artifact。
 
 versionCode 换算：`(major*100000 + minor*1000 + patch) * 1000 + 槽位`；正式版槽位 `999`，预发布槽位 = stage 序号 ×100 + number，stage 固定顺序 `alpha` → `beta` → `rc`，number 取 1–99。所以 `v6.2.1-rc.1` = 602001301 **低于** `v6.2.1` = 602001999。带 `+build` 元数据、非 semver、patch 前导零、未列出的 stage 一律被 `release-version` 拒绝。
 `workflow_dispatch` 触发时没有 tag：版本解析、写版本、`update-json`、建 release、同步回 dev 全部跳过，只构建 + 发通知。

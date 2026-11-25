@@ -24,6 +24,7 @@ on:
       - ".github/workflows/build.yml"
       - ".github/workflows/notify-tool.yml"
       - ".github/scripts/notify*"
+      - ".github/scripts/package_artifacts.py"
   pull_request:
     branches: ["dev"]
     paths:
@@ -37,6 +38,7 @@ on:
       - ".github/workflows/build.yml"
       - ".github/workflows/notify-tool.yml"
       - ".github/scripts/notify*"
+      - ".github/scripts/package_artifacts.py"
   workflow_dispatch:
     inputs:
       notify_only:
@@ -172,18 +174,14 @@ jobs:
           restore-keys: |
             riscv64-sysroot-${{ runner.os }}-${{ steps.rust-toolchain.outputs.id }}-
 
-      - name: Build package
+      - name: Build normal and Wear packages
+        id: packages
         run: |
           set -euo pipefail
           rm -rf output
           cargo xtask build --ci
 
-          ZIP_PATH="$(find output -maxdepth 1 -type f -name '*.zip' | sort | head -n 1)"
-          test -n "$ZIP_PATH"
-          ZIP_FILENAME="$(basename "$ZIP_PATH")"
-          ARTIFACT_NAME="${ZIP_FILENAME%.*}"
-          echo "ARTIFACT_ZIP=$ZIP_PATH" >> "$GITHUB_ENV"
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
+          python3 .github/scripts/package_artifacts.py output --github-output "$GITHUB_OUTPUT"
 
       - name: Save the riscv64 sysroot
         # Saved from an ordinary step rather than from a post step on purpose: this has to run
@@ -201,8 +199,8 @@ jobs:
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.ARTIFACT_NAME }}
-          path: ${{ env.ARTIFACT_ZIP }}
+          name: Hybrid-Mount-packages-${{ github.sha }}
+          path: output/*.zip
           compression-level: 0
           if-no-files-found: error
 
@@ -229,7 +227,8 @@ jobs:
           chmod +x "$RUNNER_TEMP/notify-tool/hybrid-mount-notify"
           rm -rf notify-output
           mkdir notify-output
-          cp "$ARTIFACT_ZIP" notify-output/
+          python3 .github/scripts/package_artifacts.py output
+          cp "${{ steps.packages.outputs.normal_path }}" "${{ steps.packages.outputs.wear_path }}" notify-output/
           "$RUNNER_TEMP/notify-tool/hybrid-mount-notify" \
             --output notify-output \
             --label "日常耕作 🌱 (Daily Tilling) - ${{ github.ref_name }}" \

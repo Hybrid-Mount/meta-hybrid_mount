@@ -8,6 +8,14 @@ if [ -z "$APATCH" ] && [ -z "$KSU" ]; then
   abort "! unsupported root platform"
 fi
 
+PACKAGE_FLAVOR=$(sed -n 's/^packageFlavor=//p' "$MODPATH/module.prop")
+if [ "$PACKAGE_FLAVOR" = "wear" ]; then
+  case "$ARCH" in
+  arm64 | arm) ;;
+  *) abort "! Wear package supports arm64 and armv7 only: $ARCH" ;;
+  esac
+fi
+
 case "$ARCH" in
 arm64)
   BIN_FILE="hybrid-mount-arm64"

@@ -48,8 +48,8 @@ WebUI 通过管理器提供的 `kernelsu.exec`（`kernelsu` npm 包）调用**�
 
 ## 构建产物与注入
 
-- `cargo xtask build` 会先 `pnpm build`，再通过 Vite 注入 `MODULE_ID`，输出到 `module/webroot`。
-- `webui/dist/`、`module/webroot/` 均为生成物，不要手改或提交。
+- `cargo xtask build` 默认构建普通/Wear 双包，注入 `MODULE_ID` 与 `WEBUI_FLAVOR`，前端分别输出到 `output/webui-normal/`、`output/webui-wear/`。Wear 入口固定手表布局，普通入口不再探测设备类型。
+- `output/` 是生成物，不要手改或提交。直接预览 Wear：`WEBUI_FLAVOR=wear pnpm dev`（在 webui 目录执行）。
 
 ## 修改 WebUI 的推荐流程
 

@@ -38,7 +38,7 @@ whenToUse: 要改 customize.sh、metainstall.sh、metamount.sh、boot-completed.
 3. **退出码**：`metamount.sh` 必须原样抛出二进制退出码（`tests/shell/boot_lock.sh` 专测失败不被吞）；`boot-completed.sh` 必须永远返回 0（用 `|| :`），清理失败不得挡住开机；`emulated-soft-reboot.sh` 用 `exec` 继承退出码（`tests/shell/runtime_hooks.sh`）；`uninstall.sh` 显式 `exit 0`。
 4. **stdout 纪律**：诊断与错误走 stderr（照 `metamount.sh`、`vfs/setup.sh` 的 `>&2` 写法）。二进制面向 WebUI 的 JSON 只走 stdout，包装脚本多打一行字就会让 `kernelsu.exec` 解析失败。
 5. **metainstall 只做符号链接**：唯一允许的操作是 `ln -sf "./system/$partition" "$MODPATH/$partition"`，不得 `cp -a` + `rm -rf`、不得 `mv system/<partition>`；`ln` 之前必须先判 `-e`/`-L`，否则会往已存在的目录里再建一层链接。`handle_partition` 被刻意留成空实现、`mark_replace` 改写 opaque xattr，这两处是安装器动态解析的钩子，不要删。
-6. **别手改生成物**：`module/module.prop` 被 `.gitignore` 忽略，由 `cargo xtask build` 生成到 `output/stage/module.prop`（`id=hybrid_mount`、`metamodule=1`，取自 `xtask/src/main.rs` 的 `MODULE_ID`）；打包时整份 `module/` 复制进 stage 再补二进制。改 id 或 metamodule 标记要改 xtask，并同步 `metainstall.sh` 的两个 `*_METAMODULE`。
+6. **别手改生成物**：`module/module.prop` 被 `.gitignore` 忽略，由 `cargo xtask build` 生成到 `output/stage-<flavor>/module.prop`（`id=hybrid_mount`、`metamodule=1`，取自 `xtask/src/main.rs` 的 `MODULE_ID`）；打包时整份 `module/` 复制进 stage 再补二进制。改 id 或 metamodule 标记要改 xtask，并同步 `metainstall.sh` 的两个 `*_METAMODULE`。
 7. `module/module_blacklist.toml` 头部写明由 `auto-blacklist-pr.yml` 自动维护，不要手工加条目。
 8. `module/config.toml` 只是全新安装的种子：新增字段要同步 `src/config.rs` 的解析与默认值；向导只在 `/data/adb/hybrid-mount/config.toml` 不存在时运行，别改成覆盖已有配置。
 9. **平台裁剪分支不能反**：`KSU=true` 时删 `lkm/`（改用官方 nuke ioctl），非 KSU 保留；`vfs/binaries/` 只在非 arm64 删，arm64 的 KernelSU 也保留（可经 ksud 加载），`vfs/src` 在任何平台都保留（GPL 完整性）。

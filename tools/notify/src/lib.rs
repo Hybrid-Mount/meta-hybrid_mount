@@ -162,7 +162,10 @@ impl NotificationContext<'_> {
             self.safe_commit_msg,
             self.commit_link,
         );
-        let caption = truncate_caption(&raw_caption, self.commit_link);
+        let last = artifacts.last().context("cannot caption an empty group")?;
+        let raw_caption = format!("{}\n\n{}", raw_caption, last.variant_label());
+        let fallback = format!("{}\n\n{}", last.variant_label(), self.commit_link);
+        let caption = truncate_caption(&raw_caption, &fallback);
         let media = MediaGroup::new(self.build_media_group_items(artifacts, &caption).await?)?;
         let mut action = SendMediaGroup::new(self.chat_id.to_owned(), media);
         if let Some(topic_id) = self.request.topic_id {
@@ -184,9 +187,14 @@ impl NotificationContext<'_> {
             .split_last()
             .context("cannot build an empty Telegram media group")?;
 
-        for artifact in leading {
+        for (index, artifact) in leading.iter().enumerate() {
             let file = InputFile::path(artifact.path.clone()).await?;
-            let document = InputMediaDocument::default().with_disable_content_type_detection(true);
+            let caption =
+                build_extra_caption(self.request, index + 1, self.artifact_count, artifact);
+            let document = InputMediaDocument::default()
+                .with_disable_content_type_detection(true)
+                .with_caption_parse_mode(ParseMode::Html)
+                .with_caption(truncate_caption_extra(&caption, &artifact.file_name));
             items.push(MediaGroupItem::for_document(file, document));
         }
 
@@ -214,7 +222,9 @@ impl NotificationContext<'_> {
         };
 
         if index == 0 {
-            truncate_caption(&caption, self.commit_link)
+            let caption = format!("{}\n\n{}", caption, artifact.variant_label());
+            let fallback = format!("{}\n\n{}", artifact.variant_label(), self.commit_link);
+            truncate_caption(&caption, &fallback)
         } else {
             truncate_caption_extra(&caption, &artifact.file_name)
         }
@@ -226,6 +236,16 @@ struct Artifact {
     path: PathBuf,
     file_name: String,
     size_bytes: u64,
+}
+
+impl Artifact {
+    fn variant_label(&self) -> &'static str {
+        if self.file_name.starts_with("Hybrid-Mount_Wear-") {
+            "⌚ Wear OS · arm64 / armv7"
+        } else {
+            "📱 普通版 / Standard · arm64 / armv7 / x86_64 / riscv64"
+        }
+    }
 }
 
 fn find_zip_files(output_dir: &Path) -> Result<Vec<Artifact>> {
@@ -299,11 +319,13 @@ fn build_extra_caption(
         "🌾 <b>Hybrid Mount: {}</b>\n\n\
         📦 <b>产物 (Artifact):</b> {}/{}\n\n\
         <pre>{}</pre>\n\n\
+        {}\n\n\
         ⚖️ <b>重量 (Weight):</b> {:.2} MB",
         escape_html(&request.event_label),
         index,
         artifact_count,
         escape_html(&artifact.file_name),
+        artifact.variant_label(),
         bytes_to_mib(artifact.size_bytes)
     )
 }
@@ -473,9 +495,12 @@ mod tests {
 #[cfg(test)]
 mod wire_tests {
     use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::{io::Read, thread, time::Duration};
 
-    fn capture_upload(count: usize) -> Result<String> {
+    static WIRE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    fn capture_upload(count: usize, commit: &str) -> Result<String> {
         let server =
             tiny_http::Server::http("127.0.0.1:0").map_err(|err| anyhow::anyhow!("{err}"))?;
         let host = format!("http://{}", server.server_addr());
@@ -499,10 +524,18 @@ mod wire_tests {
             )))?;
             Ok(body)
         });
-        let dir = env::temp_dir().join(format!("notify-wire-{}-{count}", std::process::id()));
+        let sequence = WIRE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let dir = env::temp_dir().join(format!(
+            "notify-wire-{}-{count}-{sequence}",
+            std::process::id()
+        ));
         fs::create_dir_all(&dir)?;
         for index in 0..count {
-            fs::write(dir.join(format!("artifact-{index}.zip")), b"zip fixture")?;
+            let suffix = if index == 0 { "" } else { "_Wear" };
+            fs::write(
+                dir.join(format!("Hybrid-Mount{suffix}-6.2.6-2000.zip")),
+                b"zip fixture",
+            )?;
         }
         let artifacts = find_zip_files(&dir)?;
         let request = NotifyRequest::new(&dir, "wire test").with_topic_id(Some(37));
@@ -520,7 +553,7 @@ mod wire_tests {
                 request: &request,
                 branch_name: "dev",
                 artifact_count: count,
-                safe_commit_msg: "fix &amp; verify",
+                safe_commit_msg: commit,
                 commit_link: "https://example.com/commit/test",
             };
             if count == 1 {
@@ -548,7 +581,7 @@ mod wire_tests {
 
     #[test]
     fn single_upload_sends_plain_html_parse_mode() -> Result<()> {
-        let body = capture_upload(1)?;
+        let body = capture_upload(1, "fix &amp; verify")?;
         assert_eq!(field(&body, "parse_mode"), "HTML");
         assert_eq!(field(&body, "message_thread_id"), "37");
         assert_eq!(field(&body, "chat_id"), "123");
@@ -559,18 +592,34 @@ mod wire_tests {
             "fix &amp; verify",
             "https://example.com/commit/test",
         );
-        assert_eq!(field(&body, "caption"), expected);
-        assert!(body.contains("filename=\"artifact-0.zip\""));
+        assert_eq!(
+            field(&body, "caption"),
+            format!("{expected}\n\n📱 普通版 / Standard · arm64 / armv7 / x86_64 / riscv64")
+        );
+        assert!(body.contains("filename=\"Hybrid-Mount-6.2.6-2000.zip\""));
         assert!(body.contains("zip fixture"));
         Ok(())
     }
 
     #[test]
     fn group_upload_sends_html_mode_inside_media_json() -> Result<()> {
-        let body = capture_upload(2)?;
+        let body = capture_upload(2, "fix &amp; verify")?;
         let media: serde_json::Value = serde_json::from_str(field(&body, "media"))?;
         assert_eq!(media.as_array().unwrap().len(), 2);
-        assert!(media[0].get("caption").is_none());
+        assert!(
+            media[0]["caption"]
+                .as_str()
+                .unwrap()
+                .contains("普通版 / Standard")
+        );
+        assert!(
+            media[1]["caption"]
+                .as_str()
+                .unwrap()
+                .contains("Wear OS · arm64 / armv7")
+        );
+        assert!(body.contains("filename=\"Hybrid-Mount-6.2.6-2000.zip\""));
+        assert!(body.contains("filename=\"Hybrid-Mount_Wear-6.2.6-2000.zip\""));
         assert_eq!(media[1]["parse_mode"], "HTML");
         assert!(
             media[1]["caption"]
@@ -580,6 +629,18 @@ mod wire_tests {
         );
         assert_eq!(field(&body, "message_thread_id"), "37");
         assert_eq!(field(&body, "chat_id"), "123");
+        Ok(())
+    }
+
+    #[test]
+    fn long_commit_keeps_wear_caption_and_both_uploads() -> Result<()> {
+        let body = capture_upload(2, &"long commit ".repeat(200))?;
+        let media: serde_json::Value = serde_json::from_str(field(&body, "media"))?;
+        let caption = media[1]["caption"].as_str().context("caption")?;
+        assert!(caption.contains("Wear OS · arm64 / armv7"));
+        assert!(caption.contains("https://example.com/commit/test"));
+        assert!(caption.chars().count() <= 1024);
+        assert_eq!(media.as_array().context("media")?.len(), 2);
         Ok(())
     }
 }

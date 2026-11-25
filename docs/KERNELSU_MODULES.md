@@ -24,15 +24,29 @@ Integrate `dev` into `main` and wait for **Build Hybrid Mount** to pass before
 tagging. The release workflow resolves the tag through `cargo xtask release-version`,
 builds all four Android binaries, and verifies the prebuilt VFS source digests.
 The official `KernelSU-Modules/tools/actions/module-release` action is pinned to a
-full commit SHA. It validates the ZIP and `module.yaml` with `dry-run: true`. The existing
-release action then creates a draft and uploads the original ZIP. Before
-publishing, the workflow verifies its filename, SHA256 and single-asset layout,
+full commit SHA. It validates each ZIP and `module.yaml` with `dry-run: true`. The precheck pattern
+`*ount-*-*.zip` accepts normalized validator filenames and selects only the normal
+asset from previous releases, preserving the upstream versionCode downgrade guard. The existing
+release action then creates a draft and uploads the normal and Wear ZIPs. Before
+publishing, the workflow verifies both filenames, SHA256 digests and the exact two-asset layout,
 then publishes and checks `immutable: true`.
 
 The asset name remains `Hybrid-Mount-{version}-{commit_count}.zip`, for example
-`Hybrid-Mount-6.2.3-rc.3-2083.zip`. The manifest matches `Hybrid-Mount-*.zip`,
-and the workflow uses the verified original filename in `update.json`, so manager updates
-resolve to the same uploaded file. Telegram notification runs after version sync
+`Hybrid-Mount-6.2.3-rc.3-2083.zip`. The catalog manifest matches `Hybrid-Mount-*.zip` (normal package only),
+and the workflow uses the verified original filename in `update.json`.
+The Wear asset is `Hybrid-Mount_Wear-{version}-{commit_count}.zip`, with only arm64
+and armv7 userspace binaries and a dedicated watch WebUI. Its `module.prop` points
+to `update-wear.json`, which resolves to that Wear asset in the same release.
+Both flavors use module ID `hybrid_mount` and share backend configuration: they
+replace one another when installed. Switching flavors is a manual installation;
+subsequent manager updates preserve the selected flavor.
+
+`cargo xtask build --release` builds both packages. Use `--flavor normal` or
+`--flavor wear` to build one locally. Frontend outputs and staging directories
+are isolated under `output/`; `WEBUI_FLAVOR=wear pnpm build` selects the Wear
+frontend when working directly in `webui/`. CI uploads both ZIPs together, validates
+the pair through `.github/scripts/package_artifacts.py`, and delivers both to
+Telegram with per-flavor captions. Release metadata sync writes both update files. Telegram notification runs after version sync
 so a notification failure cannot leave manager updates pointing at the previous release.
 Keep the existing self-hosted `updateJson`
 until catalog registration has completed.

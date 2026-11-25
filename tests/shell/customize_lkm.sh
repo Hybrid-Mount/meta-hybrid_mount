@@ -14,6 +14,7 @@ run_case() {
   arch_value="${5:-arm64}"
   expect_vfs="${6:-yes}"
   case_dir=$(mktemp -d)
+  printf 'packageFlavor=normal\n' > "$case_dir/module.prop"
   mkdir "$case_dir/lkm"
   mkdir -p "$case_dir/vfs/src" "$case_dir/vfs/binaries"
   : > "$case_dir/vfs/src/hybridmount.c"
@@ -47,6 +48,7 @@ run_case() {
     { echo "FAIL: $case_name dropped vfs/src" >&2; exit 1; }
   rm -rf "$case_dir/vfs/src"
   rmdir "$case_dir/vfs"
+  rm "$case_dir/module.prop"
   rmdir "$case_dir"
   printf '%s installer branch: ok\n' "$case_name"
 }
@@ -55,3 +57,25 @@ run_case "KernelSU arm64" "true" "" "no"
 run_case "APatch arm64" "" "true" "yes"
 run_case "APatch armv7" "" "true" "yes" "arm" "no"
 run_case "APatch riscv64" "" "true" "yes" "riscv64" "no"
+
+for wear_arch in arm64 arm x64 riscv64; do
+  case_dir=$(mktemp -d)
+  printf 'packageFlavor=wear\n' > "$case_dir/module.prop"
+  message=$(
+    MODPATH="$case_dir"
+    ARCH="$wear_arch"
+    KSU=true
+    APATCH=
+    ui_print() { :; }
+    abort() { printf '%s\n' "$*"; exit 0; }
+    . "$ROOT_DIR/module/customize.sh"
+  )
+  case "$wear_arch:$message" in
+  arm64:*Binary\ not\ found* | arm:*Binary\ not\ found*) ;;
+  x64:*Wear\ package\ supports* | riscv64:*Wear\ package\ supports*) ;;
+  *) echo "FAIL: Wear architecture gate: $wear_arch: $message" >&2; exit 1 ;;
+  esac
+  rm "$case_dir/module.prop"
+  rmdir "$case_dir"
+done
+printf 'Wear installer architecture gate: ok\n'

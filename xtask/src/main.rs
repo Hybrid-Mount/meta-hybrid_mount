@@ -15,7 +15,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use fs_extra::dir::CopyOptions;
 use semver::Version;
 use zip::write::FileOptions;
@@ -29,6 +29,34 @@ const MODULE_DESCRIPTION: &str =
     "Hybrid Mount: mixed OverlayFS, Magic Mount, and VFS for KernelSU and APatch";
 const UPDATE_JSON_URL: &str =
     "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/update.json";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum Flavor {
+    Normal,
+    Wear,
+}
+
+impl Flavor {
+    fn slug(self) -> &'static str {
+        match self {
+            Self::Normal => "normal",
+            Self::Wear => "wear",
+        }
+    }
+
+    fn archs(self) -> impl Iterator<Item = &'static AndroidArch> {
+        ANDROID_ARCHS
+            .iter()
+            .filter(move |arch| self == Self::Normal || matches!(arch.suffix, "arm64" | "armv7"))
+    }
+
+    fn update_file(self) -> &'static str {
+        match self {
+            Self::Normal => "update.json",
+            Self::Wear => "update-wear.json",
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(name = "xtask", about = "Hybrid Mount build automation")]
@@ -47,6 +75,9 @@ enum Commands {
         /// CI mode, equivalent to release
         #[arg(long)]
         ci: bool,
+        /// Build only this flavor; by default build both packages
+        #[arg(long, value_enum)]
+        flavor: Option<Flavor>,
     },
     /// Sends the output directory zip to Telegram (topic 6 = release, 37 = dev)
     Notify {
@@ -76,13 +107,24 @@ enum Commands {
             default_value = "https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/changelog.md"
         )]
         changelog: String,
+        #[arg(long, value_enum, default_value = "normal")]
+        flavor: Flavor,
     },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Commands::Build { release, ci } => build(release || ci),
+        Commands::Build {
+            release,
+            ci,
+            flavor,
+        } => {
+            for selected in flavor.map_or_else(|| vec![Flavor::Normal, Flavor::Wear], |f| vec![f]) {
+                build(release || ci, selected)?;
+            }
+            Ok(())
+        }
         Commands::Notify {
             output,
             label,
@@ -94,7 +136,8 @@ fn main() -> Result<()> {
             version_code,
             zip_url,
             changelog,
-        } => write_update_json(&version, version_code, &zip_url, &changelog),
+            flavor,
+        } => write_update_json(&version, version_code, &zip_url, &changelog, flavor),
     }
 }
 
@@ -361,7 +404,7 @@ fn remove_file_if_exists(path: &Path) -> Result<()> {
     }
 }
 
-fn build_webui() -> Result<()> {
+fn build_webui(flavor: Flavor) -> Result<()> {
     let root = workspace_root()?;
     let webui = root.join("webui");
 
@@ -370,6 +413,7 @@ fn build_webui() -> Result<()> {
         .args(["run", "build"])
         .current_dir(&webui)
         .env("MODULE_ID", MODULE_ID)
+        .env("WEBUI_FLAVOR", flavor.slug())
         .status()
         .context("failed to run pnpm run build")?;
     if !status.success() {
@@ -433,27 +477,27 @@ const ANDROID_ARCHS: &[AndroidArch] = &[
 ];
 
 /// The architectures cargo-ndk builds in one multitarget invocation.
-fn cargo_ndk_archs() -> impl Iterator<Item = &'static AndroidArch> {
-    ANDROID_ARCHS.iter().filter(|arch| arch.cargo_ndk)
+fn cargo_ndk_archs(flavor: Flavor) -> impl Iterator<Item = &'static AndroidArch> {
+    flavor.archs().filter(|arch| arch.cargo_ndk)
 }
 
 /// The architectures the NDK is driven for directly, because cargo-ndk has no ABI for them.
-fn direct_ndk_archs() -> impl Iterator<Item = &'static AndroidArch> {
-    ANDROID_ARCHS.iter().filter(|arch| !arch.cargo_ndk)
+fn direct_ndk_archs(flavor: Flavor) -> impl Iterator<Item = &'static AndroidArch> {
+    flavor.archs().filter(|arch| !arch.cargo_ndk)
 }
 
-fn rustup_target_args() -> Vec<&'static str> {
+fn rustup_target_args(flavor: Flavor) -> Vec<&'static str> {
     let mut args = vec!["target", "add"];
     // riscv64 is Tier 3 with no downloadable `std`, so it is left out here; its
     // standard library comes from `-Z build-std` against the rust-src component.
-    args.extend(cargo_ndk_archs().map(|arch| arch.rust_target));
+    args.extend(cargo_ndk_archs(flavor).map(|arch| arch.rust_target));
     args.extend(["--toolchain", "nightly"]);
     args
 }
 
-fn cargo_ndk_args(release: bool) -> Vec<&'static str> {
+fn cargo_ndk_args(release: bool, flavor: Flavor) -> Vec<&'static str> {
     let mut args = vec!["+nightly", "ndk"];
-    for arch in cargo_ndk_archs() {
+    for arch in cargo_ndk_archs(flavor) {
         args.extend(["-t", arch.ndk_abi]);
     }
     args.extend(["--platform", "26", "build", "--bin", "hybrid-mount"]);
@@ -518,17 +562,17 @@ fn compile_through_ndk(root: &Path, release: bool, arch: &AndroidArch) -> Result
     Ok(())
 }
 
-fn compile_binaries(release: bool) -> Result<Vec<(String, PathBuf)>> {
+fn compile_binaries(release: bool, flavor: Flavor) -> Result<Vec<(String, PathBuf)>> {
     let root = workspace_root()?;
     let profile = if release { "release" } else { "debug" };
-    run_command("rustup", &rustup_target_args(), &root)?;
-    run_command("cargo", &cargo_ndk_args(release), &root)?;
-    for arch in direct_ndk_archs() {
+    run_command("rustup", &rustup_target_args(flavor), &root)?;
+    run_command("cargo", &cargo_ndk_args(release, flavor), &root)?;
+    for arch in direct_ndk_archs(flavor) {
         compile_through_ndk(&root, release, arch)?;
     }
 
     let mut binaries = Vec::new();
-    for arch in ANDROID_ARCHS {
+    for arch in flavor.archs() {
         let binary = root
             .join("target")
             .join(arch.rust_target)
@@ -543,34 +587,29 @@ fn compile_binaries(release: bool) -> Result<Vec<(String, PathBuf)>> {
     Ok(binaries)
 }
 
-fn render_module_prop(version: &str, version_code: u64) -> String {
+fn render_module_prop(version: &str, version_code: u64, flavor: Flavor) -> String {
+    let name = if flavor == Flavor::Wear {
+        "Hybrid Mount Wear"
+    } else {
+        MODULE_NAME
+    };
+    let update_url = UPDATE_JSON_URL.replace("update.json", flavor.update_file());
     format!(
         "id={MODULE_ID}\n\
-         name={MODULE_NAME}\n\
+         name={name}\n\
          version={version}\n\
          versionCode={version_code}\n\
          author={MODULE_AUTHOR}\n\
          description={MODULE_DESCRIPTION}\n\
-         updateJson={UPDATE_JSON_URL}\n\
-         metamodule=1\n"
+         updateJson={update_url}\n\
+         packageFlavor={}\n\
+         metamodule=1\n",
+        flavor.slug()
     )
 }
 
-fn build(release: bool) -> Result<()> {
-    let root = workspace_root()?;
-    vfs_package::verify(&root)?;
-    let version = package_version()?;
-    // The manifest version is already semver, so the shared encoder is the only part that has to
-    // agree with the one the workflow uses for a tag.
-    let parsed = Version::parse(&version)
-        .with_context(|| format!("package.version '{version}' in Cargo.toml is not semver"))?;
-    let version_code = version_code(&parsed)?;
-    let commit_count = git_commit_count()?;
-
-    build_webui()?;
-    let binaries = compile_binaries(release)?;
-
-    let stage = root.join("output").join("stage");
+fn stage_module(root: &Path, flavor: Flavor, binaries: &[(String, PathBuf)]) -> Result<PathBuf> {
+    let stage = root.join("output").join(format!("stage-{}", flavor.slug()));
     remove_dir_if_exists(&stage)?;
     fs::create_dir_all(stage.join("binaries"))?;
 
@@ -580,6 +619,18 @@ fn build(release: bool) -> Result<()> {
         &CopyOptions::new().content_only(true),
     )
     .context("failed to stage module files")?;
+
+    // Generated files are always selected explicitly; never inherit stale files
+    // from a previous local build of another flavor or architecture.
+    remove_dir_if_exists(&stage.join("webroot"))?;
+    fs::create_dir_all(stage.join("webroot"))?;
+    fs_extra::dir::copy(
+        root.join("output").join(format!("webui-{}", flavor.slug())),
+        stage.join("webroot"),
+        &CopyOptions::new().content_only(true),
+    )?;
+    remove_dir_if_exists(&stage.join("binaries"))?;
+    fs::create_dir_all(stage.join("binaries"))?;
 
     // The kernel sources ship with the package so installs stay GPL-complete, and so do
     // the prebuilt modules. A working tree that was built in place must not carry its
@@ -591,15 +642,35 @@ fn build(release: bool) -> Result<()> {
         let staged_binary = stage
             .join("binaries")
             .join(format!("hybrid-mount-{suffix}"));
-        fs::copy(&binary, &staged_binary)?;
+        fs::copy(binary, &staged_binary)?;
     }
 
-    let prop = render_module_prop(&version, version_code);
+    Ok(stage)
+}
+
+fn build(release: bool, flavor: Flavor) -> Result<()> {
+    let root = workspace_root()?;
+    vfs_package::verify(&root)?;
+    let version = package_version()?;
+    // The manifest version is already semver, so the shared encoder is the only part that has to
+    // agree with the one the workflow uses for a tag.
+    let parsed = Version::parse(&version)
+        .with_context(|| format!("package.version '{version}' in Cargo.toml is not semver"))?;
+    let version_code = version_code(&parsed)?;
+    let commit_count = git_commit_count()?;
+
+    build_webui(flavor)?;
+    let binaries = compile_binaries(release, flavor)?;
+
+    let stage = stage_module(&root, flavor, &binaries)?;
+
+    let prop = render_module_prop(&version, version_code, flavor);
     fs::write(stage.join("module.prop"), prop)?;
 
     let output_dir = root.join("output");
     fs::create_dir_all(&output_dir)?;
-    let zip_name = format!("Hybrid-Mount-{version}-{commit_count}.zip");
+    let suffix = if flavor == Flavor::Wear { "_Wear" } else { "" };
+    let zip_name = format!("Hybrid-Mount{suffix}-{version}-{commit_count}.zip");
     let zip_path = output_dir.join(&zip_name);
     remove_file_if_exists(&zip_path)?;
 
@@ -641,6 +712,7 @@ fn write_update_json(
     version_code: u64,
     zip_url: &str,
     changelog: &str,
+    flavor: Flavor,
 ) -> Result<()> {
     let root = workspace_root()?;
     let payload = serde_json::json!({
@@ -650,16 +722,62 @@ fn write_update_json(
         "changelog": changelog,
     });
     fs::write(
-        root.join("update.json"),
+        root.join(flavor.update_file()),
         format!("{}\n", serde_json::to_string_pretty(&payload)?),
     )?;
-    println!("update.json written for {version}");
+    println!("{} written for {version}", flavor.update_file());
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wear_build_has_only_arm_targets_and_its_own_update_channel() {
+        let args = cargo_ndk_args(true, Flavor::Wear);
+        assert!(args.contains(&"arm64-v8a"));
+        assert!(args.contains(&"armeabi-v7a"));
+        assert!(!args.contains(&"x86_64"));
+        assert_eq!(Flavor::Wear.archs().count(), 2);
+        let prop = render_module_prop("6.2.6", 602006999, Flavor::Wear);
+        assert!(prop.contains("id=hybrid_mount\n"));
+        assert!(prop.contains("name=Hybrid Mount Wear\n"));
+        assert!(prop.contains("/update-wear.json\n"));
+        assert!(prop.contains("packageFlavor=wear\n"));
+        assert!(
+            !render_module_prop("6.2.6", 602006999, Flavor::Normal).contains("update-wear.json")
+        );
+    }
+
+    #[test]
+    fn staging_isolates_frontends_and_removes_stale_binaries() {
+        let root = tempfile::tempdir().expect("root");
+        fs::create_dir_all(root.path().join("module/binaries")).expect("module");
+        fs::create_dir_all(root.path().join("module/webroot")).expect("old frontend");
+        fs::write(
+            root.path().join("module/binaries/hybrid-mount-x86_64"),
+            b"stale",
+        )
+        .expect("old binary");
+        fs::write(root.path().join("module/webroot/phone.js"), b"stale").expect("old frontend");
+        for flavor in [Flavor::Normal, Flavor::Wear] {
+            let frontend = root.path().join(format!("output/webui-{}", flavor.slug()));
+            fs::create_dir_all(&frontend).expect("frontend");
+            fs::write(frontend.join("index.html"), flavor.slug()).expect("entry");
+        }
+        let binary = root.path().join("arm");
+        fs::write(&binary, b"arm fixture").expect("binary");
+        let stage =
+            stage_module(root.path(), Flavor::Wear, &[("arm64".into(), binary)]).expect("stage");
+        assert_eq!(
+            fs::read_to_string(stage.join("webroot/index.html")).expect("entry"),
+            "wear"
+        );
+        assert!(!stage.join("webroot/phone.js").exists());
+        assert!(!stage.join("binaries/hybrid-mount-x86_64").exists());
+        assert!(stage.join("binaries/hybrid-mount-arm64").is_file());
+    }
 
     #[test]
     fn a_tag_with_a_leading_zero_patch_is_rejected() {
@@ -812,7 +930,7 @@ mod tests {
     #[test]
     fn android_build_uses_one_multitarget_cargo_ndk_invocation() {
         assert_eq!(
-            rustup_target_args(),
+            rustup_target_args(Flavor::Normal),
             [
                 "target",
                 "add",
@@ -824,7 +942,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            cargo_ndk_args(true),
+            cargo_ndk_args(true, Flavor::Normal),
             [
                 "+nightly",
                 "ndk",
@@ -854,8 +972,8 @@ mod tests {
         assert_eq!(riscv.suffix, "riscv64");
         assert_eq!(riscv.api_level, "35");
         assert_eq!(riscv.clang_prefix, "riscv64-linux-android");
-        assert!(!rustup_target_args().contains(&"riscv64-linux-android"));
-        assert!(!cargo_ndk_args(false).contains(&"riscv64"));
+        assert!(!rustup_target_args(Flavor::Normal).contains(&"riscv64-linux-android"));
+        assert!(!cargo_ndk_args(false, Flavor::Normal).contains(&"riscv64"));
     }
 
     #[test]
