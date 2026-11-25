@@ -11,14 +11,17 @@ import { uiStore } from "../../lib/stores/uiStore";
 import { backendDisplayKeys, collectStatusErrors } from "../../lib/statusMounts";
 import { ICONS } from "../md3/icons";
 
-const props = defineProps<{ pages: Component[]; titles: string[] }>();
+const props = defineProps<{
+  pages: { component: Component; props?: { wear: boolean } }[];
+  titles: string[];
+}>();
 const { t } = useI18n();
 const activePage = ref<number | null>(null);
 const visitedPages = ref(new Set<number>());
 const scroller = ref<HTMLElement | null>(null);
 const title = ref<HTMLElement | null>(null);
 let menuScrollTop = 0;
-let menuTrigger: HTMLElement | null = null;
+let menuTriggerId = "";
 const previewToast = ref("");
 let previewToastTimer = 0;
 const icons = [ICONS.storage, ICONS.settings, ICONS.modules, ICONS.info];
@@ -41,7 +44,7 @@ const hasErrors = computed(
 
 async function openPage(page: number, event: MouseEvent): Promise<void> {
   menuScrollTop = scroller.value?.scrollTop ?? 0;
-  menuTrigger = event.currentTarget as HTMLElement;
+  menuTriggerId = (event.currentTarget as HTMLElement).id;
   visitedPages.value.add(page);
   activePage.value = page;
   await nextTick();
@@ -54,9 +57,9 @@ async function returnToMenu(): Promise<void> {
   await nextTick();
   scroller.value?.scrollTo(0, menuScrollTop);
   // The menu is remounted when returning from a detail screen.
-  const trigger = menuTrigger?.id ? document.getElementById(menuTrigger.id) : null;
+  const trigger = document.getElementById(menuTriggerId);
   (trigger ?? title.value)?.focus({ preventScroll: true });
-  menuTrigger = null;
+  menuTriggerId = "";
 }
 
 onMounted(() => {
@@ -84,20 +87,22 @@ onBeforeUnmount(() => {
 <template>
   <div class="wear-root">
     <main ref="scroller" class="page-scroller wear-scroll">
-      <button
-        v-if="activePage !== null"
-        type="button"
-        class="wear-home"
-        @click="returnToMenu"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z" />
-        </svg>
-        {{ t("common.appName") }}
-      </button>
-      <h1 ref="title" class="wear-title" tabindex="-1">
-        {{ activePage === null ? t("common.appName") : props.titles[activePage] }}
-      </h1>
+      <header class="wear-header" :class="{ 'wear-detail-header': activePage !== null }">
+        <button
+          v-if="activePage !== null"
+          type="button"
+          class="wear-home"
+          :aria-label="t('common.appName')"
+          @click="returnToMenu"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z" />
+          </svg>
+        </button>
+        <h1 ref="title" class="wear-title" tabindex="-1">
+          {{ activePage === null ? t("common.appName") : props.titles[activePage] }}
+        </h1>
+      </header>
       <template v-if="activePage === null">
         <div v-if="backend || showMountedCount" class="wear-summary">
           <strong v-if="backend">{{ backend }}</strong>
@@ -115,21 +120,17 @@ onBeforeUnmount(() => {
             @click="openPage(index, $event)"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true"><path :d="icons[index]" /></svg>
-            <span>{{ label }}</span>
+            <span class="wear-destination-label">
+              {{ label }}
+              <small v-if="index === 0 && hasErrors">{{
+                t("common.statusErrors")
+              }}</small>
+            </span>
             <svg class="wear-chevron" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M9 18l6-6-6-6-1.41 1.41L12.17 12l-4.58 4.59L9 18z" />
             </svg>
           </button>
         </nav>
-        <button
-          v-if="hasErrors"
-          type="button"
-          class="wear-button wear-error"
-          id="wear-status-error"
-          @click="openPage(0, $event)"
-        >
-          {{ t("common.statusErrors") }}
-        </button>
       </template>
       <div
         v-for="(page, index) in props.pages"
@@ -137,16 +138,12 @@ onBeforeUnmount(() => {
         :key="index"
         class="wear-page"
       >
-        <component :is="page" v-if="visitedPages.has(index)" />
+        <component
+          :is="page.component"
+          v-if="visitedPages.has(index)"
+          v-bind="page.props"
+        />
       </div>
-      <button
-        v-if="activePage !== null"
-        type="button"
-        class="wear-button"
-        @click="returnToMenu"
-      >
-        {{ t("common.appName") }}
-      </button>
     </main>
     <div v-if="previewToast" class="md3-toast wear-preview-toast" role="status">
       {{ previewToast }}

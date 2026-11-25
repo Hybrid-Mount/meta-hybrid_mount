@@ -9,9 +9,11 @@
 }
 
 .md3-active .wear-root .wear-scroll {
-  gap: 10px;
+  gap: 8px;
   max-width: 320px;
-  padding: max(30px, 17vh) var(--wear-gutter);
+  padding: max(26px, 14vh) var(--wear-gutter) max(34px, 18vh);
+  scroll-padding-block: 24px;
+  overflow-anchor: none;
   overflow-x: hidden;
 }
 
@@ -25,6 +27,17 @@
   display: contents;
 }
 
+.wear-header {
+  align-self: center;
+  max-width: min(100%, 142px);
+}
+
+.wear-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .wear-title,
 .wear-summary {
   text-align: center;
@@ -32,19 +45,24 @@
 
 .wear-title {
   margin: 0;
-  font-size: 17px;
-  line-height: 1.25;
+  font-size: 18px;
+  line-height: 1.2;
   outline: none;
+}
+
+.wear-detail-header .wear-title {
+  text-align: start;
 }
 
 .wear-summary {
   display: grid;
   gap: 3px;
-  padding: 10px 8px;
+  padding: 7px 8px;
   border-radius: 24px;
   font-size: 12px;
-  color: var(--md-sys-color-on-secondary-container);
-  background: var(--md-sys-color-secondary-container);
+  line-height: 1.25;
+  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-primary-container);
 }
 
 .wear-summary strong {
@@ -72,6 +90,7 @@
   font: inherit;
   font-size: 14px;
   font-weight: 600;
+  white-space: normal;
   cursor: pointer;
 }
 
@@ -84,8 +103,8 @@
 }
 
 .wear-home {
-  max-width: 100%;
-  align-self: center;
+  flex: 0 0 48px;
+  padding: 0;
 }
 
 /* M3 Expressive button group: separate touch targets with a shared silhouette. */
@@ -105,9 +124,16 @@
   border-end-end-radius: 24px;
 }
 
-.wear-menu .wear-button span {
+.wear-destination-label {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.wear-destination-label small {
+  display: block;
+  margin-block-start: 2px;
+  color: var(--md-sys-color-error);
+  font-size: 11px;
 }
 
 .wear-menu .wear-chevron {
@@ -163,28 +189,20 @@
   }
 }
 
-.wear-root .wear-error {
-  color: var(--md-sys-color-on-error-container);
-  background: var(--md-sys-color-error-container);
-}
-
 .wear-root .wear-preview-toast {
-  bottom: 16vh;
+  bottom: 12vh;
   justify-content: center;
-  max-width: min(250px, 72vw);
-  padding: 8px 12px;
+  min-height: 0;
+  max-width: min(250px, 68vw);
+  padding: 6px 10px;
+  font-size: 12px;
   text-align: center;
   pointer-events: none;
-}
-
-.wear-root .phone-style-field {
-  display: none;
 }
 
 .md3-active
   .wear-root
   :is(
-    .dashboard-grid,
     .metrics-row,
     .field-grid,
     .rule-path-row,
@@ -211,8 +229,78 @@
   border-radius: 18px;
 }
 
+.wear-root :is(.dashboard-grid, .config-container) {
+  gap: 8px;
+  padding-bottom: 0;
+}
+
 .wear-root .hero-card {
   min-height: auto;
+}
+
+.wear-root .metric-card {
+  align-items: center;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.wear-root .hero-card::after,
+.wear-root .metric-icon-bg {
+  display: none;
+}
+
+.wear-root :is(.mode-stats-card, .stats-legend) {
+  gap: 8px;
+}
+
+.wear-root .stats-bar-container {
+  height: 10px;
+}
+
+.wear-root .legend-item {
+  font-size: 12px;
+}
+
+.wear-root .legend-dot {
+  flex-shrink: 0;
+}
+
+.wear-root .mount-details > summary {
+  align-content: center;
+  min-height: 48px;
+}
+
+.wear-root :is(.config-group, .config-card) {
+  gap: 8px;
+}
+
+.wear-root .config-card .card-title {
+  margin: 0;
+}
+
+.wear-root .config-card .mode-item {
+  align-items: center;
+  gap: 6px;
+  min-height: 48px;
+  padding: 6px 8px;
+  text-align: start;
+  white-space: normal;
+}
+
+.wear-root .mode-title {
+  font-size: 14px;
+  text-transform: none;
+}
+
+.wear-root .mode-check {
+  margin: 0;
+  margin-inline-start: auto;
+}
+
+.wear-root .setting-line md-switch {
+  align-self: start;
+  min-height: 48px;
 }
 
 .wear-root :is(.hero-value, .metric-value) {
@@ -220,7 +308,7 @@
   letter-spacing: normal;
 }
 
-.wear-root :is(.info-row, .setting-line, .runtime-actions, .error-banner) {
+.md3-active .wear-root :is(.info-row, .setting-line, .runtime-actions, .error-banner) {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
@@ -310,6 +398,7 @@
 .wear-root :is(.strategy-option, .select-trigger, .select-option, .runtime-action) {
   min-height: 48px;
   padding-inline: 8px;
+  white-space: normal;
 }
 
 .wear-root .bottom-actions-root {
@@ -317,6 +406,7 @@
   justify-content: center;
   padding: 0;
   opacity: 1;
+  pointer-events: auto;
   transform: none;
 }
 
@@ -325,6 +415,7 @@
 }
 
 .wear-root .bottom-action-row {
+  width: 100%;
   flex-wrap: wrap;
   justify-content: center;
   pointer-events: auto;
@@ -337,8 +428,23 @@
   --md-filled-tonal-icon-button-container-height: 48px;
 }
 
-.wear-root .bottom-action-row md-filled-tonal-icon-button {
-  flex-basis: 48px;
+.wear-root .wear-action {
+  display: block;
+  flex: 1 1 70px;
+  min-width: 0;
+  padding-inline: 6px;
+  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-primary-container);
+}
+
+.wear-root .wear-action.destructive-action {
+  color: var(--md-sys-color-on-error-container);
+  background: var(--md-sys-color-error-container);
+}
+
+.wear-root .wear-action:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .wear-root md-dialog {
@@ -370,6 +476,7 @@
 }
 
 .wear-root md-dialog md-text-button {
-  min-height: 44px;
+  --md-text-button-container-height: 48px;
+  min-height: 48px;
   max-width: 100%;
 }
