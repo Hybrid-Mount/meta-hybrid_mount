@@ -40,19 +40,21 @@
 .wear-summary {
   display: grid;
   gap: 3px;
-  padding: 4px 4px 8px;
+  padding: 10px 8px;
+  border-radius: 24px;
   font-size: 12px;
-  color: var(--md-sys-color-on-surface-variant);
+  color: var(--md-sys-color-on-secondary-container);
+  background: var(--md-sys-color-secondary-container);
 }
 
 .wear-summary strong {
-  color: var(--md-sys-color-primary);
+  color: inherit;
   font-size: 15px;
 }
 
 .wear-menu {
   display: grid;
-  gap: 6px;
+  gap: 3px;
 }
 
 .wear-button,
@@ -82,8 +84,46 @@
 }
 
 .wear-home {
-  width: 48px;
+  max-width: 100%;
   align-self: center;
+}
+
+/* M3 Expressive button group: separate touch targets with a shared silhouette. */
+.wear-menu .wear-button {
+  justify-content: start;
+  border-radius: 8px;
+  text-align: start;
+}
+
+.wear-menu .wear-button:first-child {
+  border-start-start-radius: 24px;
+  border-start-end-radius: 24px;
+}
+
+.wear-menu .wear-button:last-child {
+  border-end-start-radius: 24px;
+  border-end-end-radius: 24px;
+}
+
+.wear-menu .wear-button span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.wear-menu .wear-chevron {
+  flex-basis: 14px;
+  width: 14px;
+  height: 14px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.wear-root:dir(rtl) :is(.wear-chevron, .wear-home svg) {
+  transform: scaleX(-1);
+}
+
+.wear-root :is(.wear-button, .wear-home):focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: -3px;
 }
 
 .wear-button:active,
