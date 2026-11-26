@@ -34,8 +34,8 @@ then publishes and checks `immutable: true`.
 The asset name remains `Hybrid-Mount-{version}-{commit_count}.zip`, for example
 `Hybrid-Mount-6.2.3-rc.3-2083.zip`. The catalog manifest matches `Hybrid-Mount-*.zip` (normal package only),
 and the workflow uses the verified original filename in `update.json`.
-The Wear asset is `Hybrid-Mount_Wear-{version}-{commit_count}.zip`, with only arm64
-and armv7 userspace binaries and a dedicated watch WebUI. Its `module.prop` points
+The Wear asset is `Hybrid-Mount_Wear-{version}-{commit_count}.zip`, with arm64,
+armv7 and x86_64 userspace binaries and a dedicated watch WebUI. Its `module.prop` points
 to `update-wear.json`, which resolves to that Wear asset in the same release.
 Both flavors use module ID `hybrid_mount` and share backend configuration: they
 replace one another when installed. Switching flavors is a manual installation;

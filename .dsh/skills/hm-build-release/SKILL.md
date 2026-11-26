@@ -1,6 +1,6 @@
 ---
 name: hm-build-release
-description: 用 cargo xtask 构建 Hybrid Mount 模块包（普通版四架构与 Wear 双 ARM 架构 + module.prop + 双 ZIP），并处理 update.json、changelog、Telegram 通知与发布流程。
+description: 用 cargo xtask 构建 Hybrid Mount 模块包（普通版四架构与 Wear 三架构 + module.prop + 双 ZIP），并处理 update.json、changelog、Telegram 通知与发布流程。
 whenToUse: 需要打包可刷入的 KernelSU/APatch zip、生成 update.json/changelog，或执行与复核发布流程时。
 ---
 
@@ -18,7 +18,7 @@ cargo xtask build --release --flavor wear  # 仅 Wear（normal 为仅普通版�
 `xtask` 构建流程（`xtask/src/main.rs`）：
 
 1. 按 flavor 注入 `MODULE_ID=hybrid_mount`、`WEBUI_FLAVOR=normal|wear`，构建到 `output/webui-<flavor>/`。
-2. 普通版编译 arm64 / armv7 / x86_64（API 26）及 riscv64（API 35，直接 NDK + build-std）；Wear 只编译两个 ARM 目标。
+2. 普通版编译 arm64 / armv7 / x86_64（API 26）及 riscv64（API 35，直接 NDK + build-std）；Wear 编译 arm64 / armv7 / x86_64 三个目标。
 3. 复制 `module/` 到 `output/stage-<flavor>/`，清除继承的 webroot/binaries，复制所选前端与架构，保留内核资产和来源验证。
 4. 生成 `module.prop`：共用 ID、版本与 versionCode，`packageFlavor` 和 `updateJson` 按包区分。
 5. 生成 `output/Hybrid-Mount-<version>-<commit_count>.zip`、`output/Hybrid-Mount_Wear-<version>-<commit_count>.zip`。

@@ -45,9 +45,9 @@ impl Flavor {
     }
 
     fn archs(self) -> impl Iterator<Item = &'static AndroidArch> {
-        ANDROID_ARCHS
-            .iter()
-            .filter(move |arch| self == Self::Normal || matches!(arch.suffix, "arm64" | "armv7"))
+        ANDROID_ARCHS.iter().filter(move |arch| {
+            self == Self::Normal || matches!(arch.suffix, "arm64" | "armv7" | "x86_64")
+        })
     }
 
     fn update_file(self) -> &'static str {
@@ -734,12 +734,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn wear_build_has_only_arm_targets_and_its_own_update_channel() {
+    fn wear_build_has_arm_and_x86_64_targets_and_its_own_update_channel() {
         let args = cargo_ndk_args(true, Flavor::Wear);
         assert!(args.contains(&"arm64-v8a"));
         assert!(args.contains(&"armeabi-v7a"));
-        assert!(!args.contains(&"x86_64"));
-        assert_eq!(Flavor::Wear.archs().count(), 2);
+        assert!(args.contains(&"x86_64"));
+        assert!(!args.contains(&"riscv64"));
+        assert_eq!(Flavor::Wear.archs().count(), 3);
         let prop = render_module_prop("6.2.6", 602006999, Flavor::Wear);
         assert!(prop.contains("id=hybrid_mount\n"));
         assert!(prop.contains("name=Hybrid Mount Wear\n"));
@@ -768,14 +769,23 @@ mod tests {
         }
         let binary = root.path().join("arm");
         fs::write(&binary, b"arm fixture").expect("binary");
-        let stage =
-            stage_module(root.path(), Flavor::Wear, &[("arm64".into(), binary)]).expect("stage");
+        let x86_binary = root.path().join("x86");
+        fs::write(&x86_binary, b"x86 fixture").expect("x86 binary");
+        let stage = stage_module(
+            root.path(),
+            Flavor::Wear,
+            &[("arm64".into(), binary), ("x86_64".into(), x86_binary)],
+        )
+        .expect("stage");
         assert_eq!(
             fs::read_to_string(stage.join("webroot/index.html")).expect("entry"),
             "wear"
         );
         assert!(!stage.join("webroot/phone.js").exists());
-        assert!(!stage.join("binaries/hybrid-mount-x86_64").exists());
+        assert_eq!(
+            fs::read(stage.join("binaries/hybrid-mount-x86_64")).expect("x86 binary"),
+            b"x86 fixture"
+        );
         assert!(stage.join("binaries/hybrid-mount-arm64").is_file());
     }
 

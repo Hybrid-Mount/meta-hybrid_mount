@@ -11,8 +11,8 @@ fi
 PACKAGE_FLAVOR=$(sed -n 's/^packageFlavor=//p' "$MODPATH/module.prop")
 if [ "$PACKAGE_FLAVOR" = "wear" ]; then
   case "$ARCH" in
-  arm64 | arm) ;;
-  *) abort "! Wear package supports arm64 and armv7 only: $ARCH" ;;
+  arm64 | arm | x64) ;;
+  *) abort "! Wear package supports arm64, armv7 and x86_64 only: $ARCH" ;;
   esac
 fi
 

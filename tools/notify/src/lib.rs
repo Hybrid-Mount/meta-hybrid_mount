@@ -241,7 +241,7 @@ struct Artifact {
 impl Artifact {
     fn variant_label(&self) -> &'static str {
         if self.file_name.starts_with("Hybrid-Mount_Wear-") {
-            "⌚ Wear OS · arm64 / armv7"
+            "⌚ Wear OS · arm64 / armv7 / x86_64"
         } else {
             "📱 普通版 / Standard · arm64 / armv7 / x86_64 / riscv64"
         }
@@ -616,7 +616,7 @@ mod wire_tests {
             media[1]["caption"]
                 .as_str()
                 .unwrap()
-                .contains("Wear OS · arm64 / armv7")
+                .contains("Wear OS · arm64 / armv7 / x86_64")
         );
         assert!(body.contains("filename=\"Hybrid-Mount-6.2.6-2000.zip\""));
         assert!(body.contains("filename=\"Hybrid-Mount_Wear-6.2.6-2000.zip\""));
@@ -637,7 +637,7 @@ mod wire_tests {
         let body = capture_upload(2, &"long commit ".repeat(200))?;
         let media: serde_json::Value = serde_json::from_str(field(&body, "media"))?;
         let caption = media[1]["caption"].as_str().context("caption")?;
-        assert!(caption.contains("Wear OS · arm64 / armv7"));
+        assert!(caption.contains("Wear OS · arm64 / armv7 / x86_64"));
         assert!(caption.contains("https://example.com/commit/test"));
         assert!(caption.chars().count() <= 1024);
         assert_eq!(media.as_array().context("media")?.len(), 2);

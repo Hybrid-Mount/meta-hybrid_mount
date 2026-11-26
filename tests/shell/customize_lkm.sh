@@ -71,8 +71,8 @@ for wear_arch in arm64 arm x64 riscv64; do
     . "$ROOT_DIR/module/customize.sh"
   )
   case "$wear_arch:$message" in
-  arm64:*Binary\ not\ found* | arm:*Binary\ not\ found*) ;;
-  x64:*Wear\ package\ supports* | riscv64:*Wear\ package\ supports*) ;;
+  arm64:*Binary\ not\ found* | arm:*Binary\ not\ found* | x64:*Binary\ not\ found*) ;;
+  riscv64:*Wear\ package\ supports*) ;;
   *) echo "FAIL: Wear architecture gate: $wear_arch: $message" >&2; exit 1 ;;
   esac
   rm "$case_dir/module.prop"

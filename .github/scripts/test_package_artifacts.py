@@ -19,7 +19,7 @@ class PackageArtifactsTests(unittest.TestCase):
     def package(self, flavor, archs=None, version="6.2.6", code="602006999"):
         suffix = "_Wear" if flavor == "wear" else ""
         path = self.root / f"Hybrid-Mount{suffix}-{version}-2000.zip"
-        archs = archs or (["arm64", "armv7"] if flavor == "wear" else ["arm64", "armv7", "x86_64", "riscv64"])
+        archs = archs or (["arm64", "armv7", "x86_64"] if flavor == "wear" else ["arm64", "armv7", "x86_64", "riscv64"])
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("module.prop", f"id=hybrid_mount\nversion={version}\nversionCode={code}\npackageFlavor={flavor}\nupdateJson=https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/{'update-wear.json' if flavor == 'wear' else 'update.json'}\n")
             for arch in archs:
@@ -37,7 +37,7 @@ class PackageArtifactsTests(unittest.TestCase):
         self.package("normal")
         with self.assertRaises(ValueError):
             packages.inspect_packages(self.root)
-        wear = self.package("wear", ["arm64", "armv7", "x86_64"])
+        wear = self.package("wear", ["arm64", "armv7", "x86_64", "riscv64"])
         with self.assertRaises(ValueError):
             packages.inspect_packages(self.root)
         wear.unlink()
@@ -48,6 +48,12 @@ class PackageArtifactsTests(unittest.TestCase):
         self.package("wear")
         (self.root / "stale.zip").write_bytes(b"stale")
         with self.assertRaises(ValueError):
+            packages.inspect_packages(self.root)
+
+    def test_wear_without_x86_64_is_rejected(self):
+        self.package("normal")
+        self.package("wear", ["arm64", "armv7"])
+        with self.assertRaisesRegex(ValueError, "incorrect userspace architectures"):
             packages.inspect_packages(self.root)
 
     def test_crossed_update_channel_is_rejected(self):

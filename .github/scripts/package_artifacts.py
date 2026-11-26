@@ -29,7 +29,7 @@ def inspect_packages(directory):
             update = "update-wear.json" if flavor == "wear" else "update.json"
             if prop.get("updateJson") != f"https://raw.githubusercontent.com/Hybrid-Mount/meta-hybrid_mount/dev/{update}":
                 raise ValueError(f"wrong update channel: {path.name}")
-            archs = {"arm64", "armv7"} if flavor == "wear" else {"arm64", "armv7", "x86_64", "riscv64"}
+            archs = {"arm64", "armv7", "x86_64"} if flavor == "wear" else {"arm64", "armv7", "x86_64", "riscv64"}
             binaries = {n for n in names if n.startswith("binaries/") and not n.endswith("/")}
             if binaries != {f"binaries/hybrid-mount-{arch}" for arch in archs}:
                 raise ValueError(f"incorrect userspace architectures: {path.name}")
