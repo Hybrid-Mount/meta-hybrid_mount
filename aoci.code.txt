@@ -1,7 +1,7 @@
 #AOCI-CODE-VOLUME: 1
 
 ===/<repository>/===
-.gitattributes[FV5T]: F:固定 shell、内核产物摘要和哈希输入的 LF 策略，并保留 ko 原始二进制 | R:code:tests/shell/vfs_sources_digest.sh | A:- | S:-
+.gitattributes[FV5T]: F:固定 shell、AOCI Volume 和内核摘要输入的 LF，保留 ko 二进制原始字节 | R:code:tests/shell/vfs_sources_digest.sh | A:- | S:-
 .gitignore[FV4T]: F:排除 Rust、WebUI、内核构建产物、本机诊断和宿主接入文件 | R:code:.codex/config.toml | A:- | S:-
 AGENTS.md[SQ5S]: F:定义 AOCI 的模型证据、Overview 验证、批次收尾与恢复规则 | R:- | A:AOCI 仓库接入约定 | S:专门任务顺序由实时 Guide 决定
 CLAUDE.md[SQ5S]: F:记录 Hybrid Mount 的验证入口、平台隔离、代码约束和仓内技能导航 | R:code:.dsh/skills/hybrid-mount-overview/SKILL.md,code:Cargo.toml | A:- | S:-
@@ -22,13 +22,13 @@ update.json[FV4T]: F:向模块更新消费者提供当前版本、递增版本�
 config.toml[FV4T]: F:将 cargo xtask 映射到工作区 xtask 包的 Cargo 运行入口 | R:code:xtask/Cargo.toml | A:cargo xtask | S:-
 
 ===/<repository>/.dsh/skills/hm-build-release/===
-SKILL.md[SV5T]: F:说明 Android 模块 ZIP 构建、发布 tag 校验、更新元数据及通知流程 | R:code:xtask/src/main.rs,code:.github/workflows/release.yml | A:- | S:正式版 versionCode 槽位高于同版本的预发布槽位，确保预发布设备能升级到正式版
+SKILL.md[SV5T]: F:说明普通与 Wear 双包构建、版本校验、更新渠道及发布通知流程 | R:code:xtask/src/main.rs,code:.github/workflows/release.yml | A:- | S:正式版版本码高于同版本预发布；Wear 构建 arm64、armv7、x86_64
 
 ===/<repository>/.dsh/skills/hm-ci/===
-SKILL.md[SV5S]: F:解释 GitHub Actions 检查的触发、权限、缓存和产物回写路径 | R:code:.github/workflows/lints.yml,code:.github/workflows/kernel-module.yml,code:.github/workflows/release.yml | A:- | S:VFS 源码推送与产物刷新之间的摘要失败属预期，按最终分支状态判断
+SKILL.md[SV5S]: F:解释 Actions 的触发、权限、双包交付、缓存及内核产物回写 | R:code:.github/workflows/build.yml,code:.github/workflows/release.yml | A:- | S:tag 读取 main 预热的发布缓存；VFS 源码与产物刷新间的摘要失败须按最终 tip 判断
 
 ===/<repository>/.dsh/skills/hm-module-scripts/===
-SKILL.md[SW5T]: F:梳理 Android 模块安装、开机、软重启和卸载脚本的调用与退出状态约定 | R:code:module/customize.sh,code:module/metainstall.sh,code:module/metamount.sh | A:- | S:安装阶段可写模块目标，运行阶段 staging 必须在运行目录；启动包装器透传实际退出码
+SKILL.md[SW5T]: F:梳理模块安装、启动、软重启及卸载脚本的时机和验证约定 | R:code:module/customize.sh,code:module/metamount.sh | A:- | S:安装可写模块目标；运行 staging 只能落运行目录；包装器透传二进制退出码
 
 ===/<repository>/.dsh/skills/hm-mount-safety-review/===
 SKILL.md[SR5T]: F:审查挂载调用、只读输入、暂存资源和失败回滚的完整性 | R:code:src/pipeline.rs,code:src/errors.rs | A:- | S:回滚按创建逆序清理资源，并保留供 WebUI 查询的失败快照
@@ -52,7 +52,7 @@ SKILL.md[SQ5S]: F:汇总本地 Rust、Android、Shell、LKM 与 WebUI 检查并�
 SKILL.md[SB5S]: F:说明 VFS 用户态控制面、内核 Provider、运行态 CLI、构建产物和证据门禁 | R:code:docs/VFS_CLI.md,code:module/vfs/README.md,code:src/vfs/protocol.rs | A:- | S:规划时 Provider 不可用会把 VFS 规则降为 ignore，探测和加载须在规划前完成
 
 ===/<repository>/.dsh/skills/hm-webui/===
-SKILL.md[SU5T]: F:定义 WebUI 开发和打包路径，列出管理器与 Rust CLI 的 JSON 通信接口 | R:code:src/cli.rs,code:webui/package.json,code:xtask/src/main.rs | A:- | S:面向前端的 JSON 独占 stdout，保存配置需重启生效
+SKILL.md[SU5T]: F:说明 WebUI 的开发命令、后端 JSON 通信及普通和 Wear 分离构建入口 | R:code:src/cli.rs,code:webui/vite.config.ts,code:xtask/src/main.rs | A:- | S:CLI JSON 独占 stdout；保存配置后需重启生效
 
 ===/<repository>/.dsh/skills/hybrid-mount-overview/===
 SKILL.md[SB5T]: F:给出挂载流水线、规则优先级、目录职责和 CLI 的项目导航 | R:code:src/pipeline.rs,code:src/plan/mod.rs,code:src/cli.rs | A:- | S:同一文件路径只能归属一个后端；共享目录可作结构节点，类型冲突须在规划阶段报错
@@ -472,20 +472,23 @@ issue-policy.test.cjs[TW5M]: F:测试 issue 验证、报告修正后的恢复、
 notify-artifact.cjs[IS6T]: F:按通知程序源码哈希寻找可重用 artifact，并核对产物与来源运行身份 | R:code:.github/workflows/notify-tool.yml | A:findArtifact | S:只接受指定 workflow 及可信同仓来源的有效产物
 notify-artifact.test.cjs[TS5T]: F:测试通知产物匹配、过期过滤、工作流信任与 API 失败路径 | R:code:.github/scripts/notify-artifact.cjs | A:node:test | S:-
 notify_source.py[XV5T]: F:对通知工具工作区源码和锁文件中的传递依赖计算构建身份 | R:code:tools/notify/Cargo.toml,code:.github/workflows/notify-tool.yml | A:fingerprint | S:-
+package_artifacts.py[XV6T]: F:校验普通与 Wear 双 ZIP 的身份、架构、版本和更新渠道并输出摘要路径 | R:code:xtask/src/main.rs,code:.github/workflows/build.yml | A:inspect_packages,--github-output | S:必须恰好两包且版本与来源修订相同；Wear 仅含 arm64、armv7、x86_64
+release-assets.cjs[DV6T]: F:在正式发布前校验当前 tag 草稿的普通和 Wear 附件身份及摘要 | R:code:.github/workflows/release.yml | A:validateReleaseAssets | S:只接受恰好两个名称不同且状态为 uploaded 的附件；预期摘要必须逐件匹配
+release-assets.test.cjs[TV5T]: F:测试双附件发布校验的顺序兼容以及缺失、重复、篡改和错误草稿拒绝 | R:code:.github/scripts/release-assets.cjs | A:node:test | S:-
 
 ===/<repository>/.github/workflows/===
 auto-blacklist-pr.yml[OW5T]: F:验证黑名单 issue 后从 dev 构造增补默认黑名单的自动 PR | R:code:.github/scripts/issue-policy.cjs,code:module/module_blacklist.toml | A:issue 事件 | S:-
 auto-label.yml[OW4T]: F:在 issue 新建、编辑或重开时串行应用表单、标签和关闭策略 | R:code:.github/scripts/issue-policy.cjs | A:issue 事件 | S:-
-build.yml[OV6M]: F:构建和上传 Hybrid Mount 安装包，协调用于后续发布的缓存预热与通知工具 | R:code:xtask/src/main.rs,code:.github/workflows/notify-tool.yml | A:push,pull_request,workflow_dispatch | S:main 构建预热发布缓存且不发送构建通知
-dependency-audit.yml[OQ5T]: F:在依赖清单变化时分别执行 Rust 及 WebUI 生产依赖的审计 | R:code:Cargo.toml,code:webui/package.json | A:- | S:-
+build.yml[OV6M]: F:构建校验普通与 Wear 双包，上传产物并复用通知工具发送开发构建通知 | R:code:xtask/src/main.rs,code:.github/scripts/package_artifacts.py,code:.github/workflows/notify-tool.yml | A:push,pull_request,workflow_dispatch | S:main 构建仅预热发布缓存，不发送通知；通知仅在双包身份校验后执行
+dependency-audit.yml[OQ5T]: F:在依赖变更及手动运行时执行 Cargo 和 WebUI 依赖审计 | R:code:Cargo.lock,code:webui/package.json | A:pull_request,push,workflow_dispatch | S:Rust 审计直接使用 CLI 退出码，不依赖写入 Checks API
 kernel-module.yml[OV6S]: F:在 DDK 矩阵构建 VFS 模块、生成并校验两类摘要，按事件条件刷新预编译文件 | R:code:module/vfs/src/Makefile,code:tests/shell/vfs_sources_digest.sh | A:workflow_dispatch commit_binaries | S:-
 lints.yml[OQ6M]: F:在 CI 跑 Rust、设备目标、Shell 和 WebUI 检查，以及预编译产物与政策脚本的验证 | R:code:.dsh/validate-skills.mjs,code:tests/shell/vfs_sources_digest.sh,code:webui/package.json | A:- | S:-
 notify-tool.yml[OV5T]: F:按源码身份复用可信的通知程序产物，未命中则在 stable 下测试并构建 musl 二进制 | R:code:.github/scripts/notify-artifact.cjs,code:.github/scripts/notify_source.py | A:workflow_call artifact-id,run-id | S:-
-release.yml[OV7M]: F:由 tag 解析版本并构建发布包，生成 changelog 和更新元数据，发布后向 dev 同步 | R:code:xtask/src/main.rs,code:.github/workflows/notify-tool.yml,code:cliff.toml | A:tag,workflow_dispatch | S:通知产物在使用前验证摘要，手动运行不执行 tag 专属同步
+release.yml[OV7M]: F:构建双包并校验发布附件，发布后同步两个更新渠道和版本到 dev | R:code:xtask/src/main.rs,code:.github/scripts/release-assets.cjs,code:.github/scripts/package_artifacts.py | A:tag,workflow_dispatch | S:发布前验证恰好两个附件及摘要，发布后检查 immutable；手动运行不执行 tag 发布和版本回写
 
 ===/<repository>/docs/===
 ARCHITECTURE.md[SB6T]: F:说明 CLI 的输入输出、分区诊断与目录 whiteout 在规划和三种后端的行为 | R:code:src/cli.rs,code:src/plan/mod.rs,code:src/partitions.rs | A:- | S:目录 .remove 优先于 .replace；冲突在执行前报告，源目录保留
-KERNELSU_MODULES.md[SV5T]: F:说明 KernelSU Modules 的固定模块身份、目录注册和从发布 ZIP 取得版本的规则 | R:code:module.yaml,code:xtask/src/main.rs | A:- | S:riscv64 发布二进制的最低 API 高于其他三种架构
+KERNELSU_MODULES.md[SV5T]: F:说明目录注册、普通和 Wear 双包发布、版本与独立更新渠道 | R:code:module.yaml,code:.github/workflows/release.yml | A:- | S:两包共用模块 ID，目录匹配仅选普通包；Wear 支持 arm64、armv7、x86_64
 README_ES.md[SL3S]: F:为西语用户介绍模块安装、规则优先级、存储模式和 VFS 后端 | R:- | A:- | S:-
 README_FR.md[SL3S]: F:为法语用户说明安装与配置，以及按模块路径选择后端和反馈问题 | R:- | A:- | S:-
 README_ID.md[SL3S]: F:为印尼语用户介绍混合挂载特性、模块安装、规则配置和反馈路径 | R:- | A:- | S:-
@@ -510,7 +513,7 @@ VFS_CLI.md[SB6M]: F:描述设备 VFS 控制命令、应答与运行态规则生�
 ===/<repository>/module/===
 boot-completed.sh[OR3T]: F:开机完成后尝试移除旧版本信号量目录，清理失败不影响启动结果 | R:- | A:- | S:-
 config.toml[FC5T]: F:为新安装提供模块源目录、后端、存储和附加分区的配置种子 | R:code:src/config.rs,code:module/customize.sh | A:- | S:-
-customize.sh[OV6S]: F:校验设备和管理器、按架构安装主二进制并在首次安装选默认配置 | R:code:module/config.toml,code:xtask/src/main.rs | A:- | S:现有运行配置不覆盖，非 arm64 去掉不兼容的 VFS 二进制但保留源码
+customize.sh[OV6S]: F:校验管理器与包架构并安装对应二进制，首装时铺配置和默认黑名单 | R:code:module/config.toml,code:xtask/src/main.rs | A:- | S:已有配置不覆盖；Wear 允许 arm64、arm、x64；非 arm64 去掉 VFS 预编译文件但保留源码
 emulated-soft-reboot.sh[OR4T]: F:把 ksud 的软重启阶段交给相邻 Hybrid Mount 二进制清理运行期资源 | R:code:src/runtime/mod.rs | A:runtime prepare-reboot | S:-
 metainstall.sh[OW6T]: F:调用管理器安装普通模块并将 system 下必要分区以顶层符号链接暴露 | R:code:xtask/src/main.rs | A:install_module,handle_partition,mark_replace | S:已有布局不移动或复制，两个动态安装钩子需要保留
 metamount.sh[OW4T]: F:将模块管理器的 metamount 启动阶段直接转交给相邻 Hybrid Mount 二进制 | R:code:src/boot_hook.rs | A:boot metamount | S:-
@@ -652,7 +655,7 @@ sys.rs[IN6S]: F:为 VFS 控制请求提供内核通道和页对齐缓冲，并�
 Cargo.toml[FV5T]: F:声明独立通知工具二进制及其发布依赖，并锁定 Telegram 客户端兼容版本 | R:code:tools/notify/src/lib.rs,code:.github/workflows/notify-tool.yml | A:- | S:客户端升级须用原始 multipart 的 wire 测试确认 parse_mode
 
 ===/<repository>/tools/notify/src/===
-lib.rs[IN6L]: F:查找构建 ZIP，生成通知内容并按附件数向 Telegram 投递 | R:code:tools/notify/src/main.rs,code:.github/workflows/notify-tool.yml | A:NotifyRequest,maybe_send_output_dir_notification | S:缺少配置走跳过路径；多个附件按 API 批量上限拆分
+lib.rs[IN6L]: F:查找构建 ZIP，按普通或 Wear 标注架构并分批发送 Telegram 附件 | R:code:tools/notify/src/main.rs,code:.github/workflows/notify-tool.yml | A:NotifyRequest,maybe_send_output_dir_notification | S:无凭据时跳过；单发和组发及长标题回退都保留包类型，组发按十件上限拆分
 main.rs[EV4T]: F:解析通知工具的产物目录、发布标签和话题参数并调用通知库 | R:code:tools/notify/src/lib.rs | A:hybrid-mount-notify | S:-
 
 ===/<repository>/webui/===
@@ -660,19 +663,21 @@ main.rs[EV4T]: F:解析通知工具的产物目录、发布标签和话题参数
 .prettierignore[FQ3T]: F:让 Prettier 跳过 pnpm 自己写入的锁文件，保留包管理器生成格式 | R:- | A:- | S:-
 LICENSE[SG3M]: F:记录 WebUI 的 Apache 2.0 许可、版权及分发条款 | R:- | A:- | S:-
 eslint.config.js[FQ4T]: F:定义 Vue 单文件组件和 TypeScript 的 ESLint 扁平配置及例外 | R:code:webui/package.json | A:- | S:-
-index.html[EU4T]: F:声明 Android WebView 中应用挂载节点、视口条件和 Vite 模块入口 | R:code:webui/src/main.ts | A:- | S:-
-package.json[FV5T]: F:定义 WebUI 包、Node 和 pnpm 要求及构建、lint、类型与 Vitest 检查入口 | R:code:webui/vite.config.ts,code:.github/workflows/lints.yml | A:dev,build,lint,test,typecheck | S:-
+index.html[EU4T]: F:声明 WebView 挂载节点和视口，并经 flavor 别名入口加载应用 | R:code:webui/src/entry.ts,code:webui/vite.config.ts | A:- | S:-
+package.json[FV5T]: F:声明 WebUI 依赖与 Node、pnpm 要求，以及构建、lint、类型和测试命令 | R:code:webui/vite.config.ts,code:.github/workflows/lints.yml | A:dev,build,lint,test,typecheck | S:-
 prettier.config.js[FQ3T]: F:统一 WebUI Prettier 的行宽、引号、分号、尾逗号和换行处理 | R:code:webui/package.json | A:- | S:-
 tsconfig.app.json[FV4T]: F:描述 Vue DOM 应用源码的严格类型检查、Vite 类型和增量缓存位置 | R:code:webui/tsconfig.json | A:- | S:-
 tsconfig.json[FV3T]: F:以项目引用组合浏览器应用和 Node 构建工具的 TypeScript 检查 | R:code:webui/tsconfig.app.json,code:webui/tsconfig.node.json | A:- | S:-
 tsconfig.node.json[FV3T]: F:以 ESNext 和 bundler 解析类型检查 Node 侧 Vite 配置，禁止产出 | R:code:webui/vite.config.ts | A:- | S:-
-vite.config.ts[FV6T]: F:配置 Vue 插件、相对资源地址和模块内 WebUI 输出，注入模块 ID | R:code:xtask/src/main.rs,code:webui/src/lib/constants.ts | A:- | S:安装包从 module/webroot 取产物，独立开发可用默认 ID
+vite.config.ts[FV6T]: F:按普通版或穿戴版解析入口别名、隔离构建目录并注入模块标识，检查产物依赖未混入另一形态布局 | R:code:xtask/src/main.rs,code:webui/src/entry.ts,code:webui/src/main.ts,code:webui/src/main-wear.ts | A:- | S:穿戴版禁止 Miuix 与普通 Material 3 布局，普通版禁止穿戴布局；检查涵盖完整模块图
 
 ===/<repository>/webui/src/===
-App.vue[AU5T]: F:根据 UI 偏好延迟加载 Miuix 或 Material 3 根组件并传入设备形态 | R:code:webui/src/lib/stores/uiStore.ts,code:webui/src/ui/md3/App.vue,code:webui/src/ui/miuix/App.vue | A:wear | S:-
-main.ts[EU6T]: F:初始化 Vue、i18n、用户偏好和穿戴探测并挂载前端 | R:code:webui/index.html,code:webui/src/App.vue,code:webui/src/lib/wearLayout.ts | A:init | S:管理器的可选配色加载失败时移除外部样式引用
+App.vue[AU5T]: F:按界面偏好延迟加载普通版的 Miuix 或 Material 3 根组件 | R:code:webui/src/lib/stores/uiStore.ts,code:webui/src/ui/md3/App.vue,code:webui/src/ui/miuix/App.vue | A:- | S:-
+entry.ts[EU5T]: F:通过构建期别名导入当前发行形态的前端入口 | R:code:webui/vite.config.ts | A:- | S:-
+main-wear.ts[EU6T]: F:初始化用户偏好并强制 Material 3 样式，挂载独立穿戴版根组件和国际化 | R:code:webui/src/lib/stores/uiStore.ts,code:webui/src/ui/wear/App.vue,code:webui/src/lib/managerColors.ts | A:init | S:强制样式调用会把 md3 写入本地存储，并移除先前 Miuix 动态配色类
+main.ts[EU6T]: F:初始化用户偏好、可选管理器配色与国际化并挂载普通版前端 | R:code:webui/src/App.vue,code:webui/src/lib/stores/uiStore.ts,code:webui/src/lib/managerColors.ts | A:init | S:-
 style.css[FU4T]: F:设置主题共用的字体、滚动和根布局基础 | R:code:webui/src/main.ts | A:- | S:页面间距由各主题负责，公共样式不叠加页面 padding
-vite-env.d.ts[FU4T]: F:声明 Vite 注入的模块标识与 Vue 文件类型，使 TypeScript 能解析入口与组件 | R:code:webui/vite.config.ts | A:- | S:-
+vite-env.d.ts[FU4T]: F:声明模块标识环境变量、Miuix 模块和发行形态入口别名，供 TypeScript 检查使用 | R:code:webui/vite.config.ts | A:- | S:-
 
 ===/<repository>/webui/src/components/===
 DynamicLogo.vue[DU3S]: F:渲染 SVG 品牌图形，按开发模式切换内部图案和动画样式 | R:- | A:- | S:-
@@ -684,6 +689,7 @@ bootGuard.ts[DR4T]: F:归一化设备守卫报告并筛选有实体且可供用�
 config.ts[DD4T]: F:复制配置表单中会被编辑的数组和逐模块规则，使草稿与已载入对象独立 | R:code:webui/src/lib/types.ts | A:cloneAppConfig | S:兼容没有 structuredClone 的旧 Android WebView
 constants.ts[CC4T]: F:集中提供注入的模块 ID、设备二进制路径、默认配置和项目链接 | R:code:webui/vite.config.ts,code:webui/src/lib/types.ts | A:MODULE_ID,PATHS,DEFAULT_CONFIG | S:-
 contributors.ts[IN4T]: F:筛选并补全 GitHub 人类贡献者信息，向信息页复用单次请求 | R:code:webui/src/ui/md3/pages/info.vue,code:webui/src/ui/miuix/pages/info.vue | A:loadGitHubContributors,fetchGitHubContributors | S:-
+managerColors.ts[IU4T]: F:按需加载管理器提供的可选配色样式，避免重复插入并在加载失败时移除链接 | R:- | A:loadOptionalManagerColors | S:-
 moduleFilter.ts[DU4T]: F:按模块模式选择全部、活跃或单后端列表，并确保黑名单项仍可见 | R:code:webui/src/lib/types.ts | A:matchesModuleFilter | S:-
 mountDiagnostics.ts[DU4T]: F:过滤并规范化分区和操作诊断，生成可供模块详情显示的错误摘要 | R:code:webui/src/lib/types.ts | A:normalizePartitionErrors,normalizeOperationErrors,moduleDiagnosticSummary | S:-
 reboot.ts[DR5T]: F:验证重启前的管理器环境和 late-load 应答，区分无法确认的状态 | R:code:webui/src/lib/api.ts | A:parseLateLoad,parseRootManager,isKernelPatchVersionResponse | S:-
@@ -718,7 +724,7 @@ zh-CN.json[FL4S]: F:提供简体中文的设备状态、挂载配置、模块、
 zh-TW.json[FL3S]: F:提供繁体中文的状态、配置、模块和项目信息消息 | R:code:webui/src/locales/index.ts | A:- | S:-
 
 ===/<repository>/webui/src/ui/md3/===
-App.vue[AU4T]: F:为 Material 3 汇聚状态、配置、模块和信息页并按设备形态选布局 | R:code:webui/src/ui/md3/Md3Layout.vue,code:webui/src/ui/wear/WearLayout.vue | A:- | S:-
+App.vue[AU4T]: F:汇聚 Material 3 的状态、配置、模块和信息页，将导航状态与本地化标题传给普通版布局 | R:code:webui/src/ui/md3/Md3Layout.vue,code:webui/src/lib/stores/uiStore.ts | A:- | S:-
 Md3Layout.vue[AU5S]: F:实现 Material 3 页面外壳、顶部及标签导航、提示与重启界面 | R:code:webui/src/ui/md3/App.vue,code:webui/src/lib/stores/uiStore.ts,code:webui/src/lib/useSwipePager.ts | A:- | S:-
 icons.ts[CU3T]: F:集中存放 Material 3 导航和操作按钮使用的 SVG 路径 | R:code:webui/src/ui/md3/Md3Layout.vue | A:ICONS | S:-
 material.ts[IU3T]: F:以副作用导入注册界面用到的 Material Web 自定义元素 | R:code:webui/src/ui/md3/Md3Layout.vue | A:- | S:-
@@ -767,6 +773,7 @@ status.vue[AU6L]: F:在 Miuix 汇总挂载状态、启动诊断和守卫，并�
 useSwipePager.ts[DU6M]: F:将指针与触摸滑动转为页面进度、标签提交和访问范围 | R:code:webui/src/ui/miuix/MiuixLayout.vue | A:useSwipePager | S:越界使用阻尼；取消或卸载时收尾指针和待执行动画
 
 ===/<repository>/webui/src/ui/wear/===
+App.vue[AU5T]: F:复用 Material 3 的状态、配置、模块和信息页，为穿戴版布局提供页面与本地化标题 | R:code:webui/src/ui/wear/WearLayout.vue,code:webui/src/ui/md3/pages/status.vue,code:webui/src/ui/md3/pages/config.vue,code:webui/src/ui/md3/pages/modules.vue,code:webui/src/ui/md3/pages/info.vue | A:- | S:-
 WearLayout.vue[AU5S]: F:为穿戴设备提供 Material 页面菜单、纵向内容和轻量提示布局 | R:code:webui/src/ui/md3/App.vue,code:webui/src/lib/stores/sysStore.ts | A:- | S:按首次访问才挂载页面，之后保留已访问组件
 wear.css[FU4M]: F:设置穿戴端紧凑导航、内容宽度、滚动和触摸控件，并复用 Material 色彩 | R:- | A:- | S:-
 
@@ -774,6 +781,12 @@ wear.css[FU4M]: F:设置穿戴端紧凑导航、内容宽度、滚动和触摸�
 Cargo.toml[FV4T]: F:声明 xtask 的包、工作区 lint 和模块构建分发依赖 | R:code:Cargo.toml,code:xtask/src/main.rs | A:- | S:-
 
 ===/<repository>/xtask/src/===
-main.rs[XV8L]: F:编排 WebUI 与 Android 交叉构建、模块暂存、ZIP、发布版本计算和更新元数据 | R:code:xtask/src/vfs_package.rs,code:xtask/src/zip_ext.rs,code:module/config.toml,code:.github/workflows/release.yml | A:build,release-version,update-json,notify | S:riscv64 直接使用 NDK 与 nightly 标准库构建；正式版版本码高于同版本预发布
+main.rs[XV8L]: F:编排普通版和穿戴版 WebUI、Android 多架构构建、独立暂存与 ZIP，生成版本及更新元数据并调用通知助手 | R:code:xtask/src/vfs_package.rs,code:xtask/src/zip_ext.rs,code:webui/vite.config.ts,code:.github/workflows/release.yml | A:build,release-version,update-json,notify | S:两种包共用模块 ID，穿戴版仅含 arm64、armv7、x86_64 并使用独立更新渠道；暂存清空旧前端和二进制；riscv64 需 NDK r27 与 nightly 源码构建标准库；正式版版本码高于同版预发布
 vfs_package.rs[XV6T]: F:在打包前核对 VFS 模块的源摘要、产物摘要与加载候选矩阵 | R:code:src/vfs/lkm_packages.rs,code:module/vfs/binaries/sources.txt,code:module/vfs/binaries/list.txt | A:verify | S:拒绝额外、缺失、重复或摘要不匹配的产物
 zip_ext.rs[XV5S]: F:递归生成模块 ZIP，在路径层选择压缩和文件选项并按名称排序 | R:code:xtask/src/main.rs | A:zip_create_from_directory_with_options | S:-
+
+===/<repository>/docs/superpowers/plans/===
+2026-11-25-wear-package.md[SV4T]: F:记录首次 Wear 双包拆分的实施步骤、交付约束和当时验证证据 | R:code:docs/superpowers/specs/2026-11-25-wear-package-design.md | A:- | S:其中仅 ARM 与 AOCI 缺失描述是当时执行记录，不能替代当前构建和治理状态
+
+===/<repository>/docs/superpowers/specs/===
+2026-11-25-wear-package-design.md[SV4T]: F:记录首次 Wear 分包设计的共享后端、独立前端和双渠道发布方案 | R:code:xtask/src/main.rs,code:webui/src/main-wear.ts | A:- | S:文档的双 ARM 范围属于初始设计，新增架构以当前构建与安装器为准

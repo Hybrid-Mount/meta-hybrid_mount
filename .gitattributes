@@ -1,4 +1,6 @@
 *.sh text eol=lf
+# AOCI binds Volume bytes to its receipts, so checkout line endings must stay stable.
+aoci*.txt text eol=lf
 # The prebuilt kernel modules and their digests ship verbatim, and the digest
 # manifests are compared byte-for-byte by scripts that assume LF, so pin them
 # against a CRLF checkout on Windows.
