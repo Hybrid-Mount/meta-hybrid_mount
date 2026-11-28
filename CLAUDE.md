@@ -71,13 +71,13 @@ WebUI 修改在 `webui/` 运行 `pnpm lint`、`pnpm test`、`pnpm build`；依�
 
 启动流程先探测内建的 key type `hybridmount`；每次启动在未响应时（不论配置是否选择 `vfs`），从 `module/vfs/binaries/` 优先选择内核 release 中 GKI 标签匹配的模块，再尝试同一内核主次版本的其他候选，加载后再探测；不使用 Android 用户空间版本作为 VFS 的 GKI 标签。加载必须发生在规划之前：planner 会把无后端可用的 `vfs` 规则降级为 `ignore`，执行器随之提前返回而走不到加载分支，等到执行阶段才加载会永远加载不上。`vfs_strict` 的失败判定同样在规划前完成，且仅当确有规则选择 `vfs` 时生效。
 
-加载顺序为 `ksud insmod` → Rust 二进制内置的 `lkm-load` → 普通 `insmod`。`src/sys/lkm_image.rs` 负责 ELF 校验、核心符号解析和内存中的 vermagic 适配，`src/sys/lkm_compat.rs` 负责系统调用；只有本次加载的内核日志明确报告 vermagic 不匹配时才重试一次，成功后不重复加载。nuke 共用加载器，但保留原有精确选型。
+加载顺序为 `ksud insmod` → Rust 二进制内置的 `lkm-load` → 普通 `insmod`。`src/platform/sys/lkm_image.rs` 负责 ELF 校验、核心符号解析和内存中的 vermagic 适配，`src/platform/sys/lkm_compat.rs` 负责系统调用；只有本次加载的内核日志明确报告 vermagic 不匹配时才重试一次，成功后不重复加载。nuke 共用加载器，但保留原有精确选型。
 
 ### 熔断机制
 
-两个模块共用 `src/sys/lkm.rs` 的熔断逻辑：在调用 `insmod` 前持久化熔断标记，加载尝试正常返回时移除标记。若内核在加载期间崩溃，标记会保留，下次启动跳过对应模块但保留 Hybrid Mount 其他功能。
+两个模块共用 `src/platform/sys/lkm.rs` 的熔断逻辑：在调用 `insmod` 前持久化熔断标记，加载尝试正常返回时移除标记。若内核在加载期间崩溃，标记会保留，下次启动跳过对应模块但保留 Hybrid Mount 其他功能。
 
-VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模块加载）由 `src/vfs/boot_guard.rs` 记录写入它的构建（版本 + 可执行文件大小/mtime），LKM 标记再记录候选 `.ko` 的大小/mtime。只有「同一构建写入、且候选集中仍存在同一内核对象」的标记才会阻止下一次自动尝试；其他构建留下的标记、旧版 1 字节标记、以及被新包替换掉的 `.ko` 所留下的标记都会在尝试前自动清除（`prepare_lkm_guard` / `arm_for_mutation`）。`hybrid-mount vfs guard clear --yes`（以及状态页红卡按钮）是唯一的显式清除入口，`vfs guard [--json]` 报告两个标记的判定。
+VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模块加载）由 `src/mount/vfs/boot_guard.rs` 记录写入它的构建（版本 + 可执行文件大小/mtime），LKM 标记再记录候选 `.ko` 的大小/mtime。只有「同一构建写入、且候选集中仍存在同一内核对象」的标记才会阻止下一次自动尝试；其他构建留下的标记、旧版 1 字节标记、以及被新包替换掉的 `.ko` 所留下的标记都会在尝试前自动清除（`prepare_lkm_guard` / `arm_for_mutation`）。`hybrid-mount vfs guard clear --yes`（以及状态页红卡按钮）是唯一的显式清除入口，`vfs guard [--json]` 报告两个标记的判定。
 
 ## Release Process
 
@@ -89,7 +89,7 @@ VFS 的两个标记（`vfs_boot_guard` 规则注入、`vfs_lkm_boot_guard` 模�
 4. 生成 `module.prop`
 5. 打包 zip（包含二进制、脚本、WebUI、LKM）
 
-仓库根目录 `module.yaml` 提供 KernelSU Modules 展示元数据，图标为从 `icon.svg` 导出的 `icon.png`；默认分支 `main` 必须包含这些文件。首次上架流程见 `docs/KERNELSU_MODULES.md`。
+仓库根目录 `module.yaml` 提供 KernelSU Modules 展示元数据，图标为从 `assets/icon.svg` 导出的 `icon.png`；默认分支 `main` 必须包含这些文件。首次上架流程见 `docs/KERNELSU_MODULES.md`。
 
 `.github/workflows/release.yml` 使用固定完整 SHA 的官方 `KernelSU-Modules/tools/actions/module-release` 以 dry-run 预检 ZIP 与元数据，保留 `Hybrid-Mount-{version}-{commit_count}.zip` 原命名，按 draft → 上传 ZIP → 校验名称及 SHA256 → 发布的顺序创建不可变 release，并使用原始 ZIP 名生成 `update.json`，随后更新 `changelog.md` 和版本信息；`cargo xtask update-json` 也可单独生成更新元数据。Telegram 通知由独立的 `cargo xtask notify` 命令发送，构建命令不会自动发送。
 

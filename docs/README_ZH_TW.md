@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
+<img src="../assets/icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount 是面向 KernelSU 與 APatch 的混合掛載元模組。它會在啟動階段掃描其他模組，依照全域、模組和路徑規則，為每一項選擇 OverlayFS、Magic Mount、VFS 或忽略，並且始終把模組來源目錄視為唯讀輸入。
 

@@ -37,7 +37,7 @@ GPL-3.0 text. To compare against the pristine baseline, use the import commit:
 - Internal symbols: nomount_* -> hybridmount_*, nm_* -> hm_*, NM_* -> HM_*.
 - Wire magic: HYBRIDMOUNT_MAGIC_SIG is now the HM-exclusive 0x4859425249444D4F
   (ASCII "HYBRIDMO"), replacing upstream's 0x4E4F4D4F554E54 ("NOMOUNT"). It is also the
-  full_name_hash seed and must match src/vfs/protocol.rs::MAGIC byte for byte.
+  full_name_hash seed and must match src/mount/vfs/protocol.rs::MAGIC byte for byte.
 - Virtual offset signature: HM_SIG_16 is 'hm' (0x686D), replacing 'nm' (0x6E6D). It is
   the high half of the packed virtual loff_t, so it is an in-kernel ABI in its own right.
 - HM_FLAG_OPAQUE (bit 3) is a new flag: an opaque directory replaces its whole subtree,

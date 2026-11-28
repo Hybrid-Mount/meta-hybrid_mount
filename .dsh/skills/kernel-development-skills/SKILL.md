@@ -27,7 +27,7 @@ These rules are generic Linux-kernel defaults. This repository's own contracts w
 - **The kernel C here is a maintained fork, not a driver you are authoring.** `hybridmount.c`/`hybridmount.h` come from NoMount; `nuke.c` comes from Mountify. Keep `MODULE_LICENSE("GPL v2")`, the upstream author attribution, and the `HYBRIDMOUNT_MAGIC_SIG` ↔ `protocol::MAGIC` byte-for-byte agreement. Do not restructure upstream code to satisfy a style rule.
 - **You almost never compile it locally.** The `.ko` files are built by `.github/workflows/kernel-module.yml` in `ghcr.io/ylarod/ddk` images for 7 GKI targets, aarch64 only. Changing `module/vfs/src/**` makes the `sources.txt` digest gate fail **on purpose** until the rebuild commit lands — see `hm-vfs` and `hm-ci`. Never hand-edit `sources.txt` to make a commit green.
 - **Board/devicetree material does not apply.** This module ships no DTS, no defconfig and no vendor board tree; the devicetree and `lapis-rk3576` guidance upstream has was removed here for that reason.
-- **Rust is the caller.** Behaviour that looks like a kernel bug is often the Rust side not reading back state (`src/vfs/control.rs` writes then re-reads). Check both before blaming the module.
+- **Rust is the caller.** Behaviour that looks like a kernel bug is often the Rust side not reading back state (`src/mount/vfs/control.rs` writes then re-reads). Check both before blaming the module.
 
 ## Overview
 

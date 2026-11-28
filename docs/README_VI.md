@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
+<img src="../assets/icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount là siêu mô-đun gắn kết kết hợp dành cho KernelSU và APatch. Trong quá trình khởi động, mô-đun quét các mô-đun khác rồi chọn OverlayFS, Magic Mount, VFS hoặc bỏ qua cho từng mục dựa trên quy tắc toàn cục, quy tắc mô-đun và quy tắc đường dẫn. Thư mục nguồn của mô-đun luôn được xem là dữ liệu đầu vào chỉ đọc.
 

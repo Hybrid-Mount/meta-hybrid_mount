@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
+<img src="../assets/icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount は、KernelSU と APatch 向けのハイブリッドマウントメタモジュールです。起動時に他のモジュールをスキャンし、グローバル、モジュール、パスの各ルールに基づいて、項目ごとに OverlayFS、Magic Mount、VFS、または無視を選択します。モジュールのソースディレクトリは常に読み取り専用の入力として扱われます。
 

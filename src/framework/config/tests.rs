@@ -1,0 +1,1012 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+use super::*;
+use crate::test_support::Fixture;
+
+fn module_id(id: &str) -> ModuleId {
+    ModuleId::try_from(id).unwrap()
+}
+
+#[test]
+fn extra_mount_roundtrips_and_patches_preserve_or_clear_it() {
+    let dir = Fixture::new("extra-mount-config");
+    let path = dir.join("config.toml");
+    let mut config = Config::from_toml("default_mode = 'magic'").unwrap();
+    assert!(config.extra_mount.is_empty());
+    config
+        .apply_patch(serde_json::from_str(r#"{"extra_mount":["my_extra"]}"#).unwrap())
+        .unwrap();
+    config.save(&path).unwrap();
+    let mut loaded = Config::load(&path).unwrap();
+    loaded
+        .apply_patch(serde_json::from_str(r#"{"disable_umount":true}"#).unwrap())
+        .unwrap();
+    assert_eq!(loaded.extra_mount, ["my_extra"]);
+    let json: serde_json::Value =
+        serde_json::from_str(&loaded.to_webui_json(false).unwrap()).unwrap();
+    assert_eq!(json["extra_mount"], serde_json::json!(["my_extra"]));
+    loaded
+        .apply_patch(serde_json::from_str(r#"{"extra_mount":[]}"#).unwrap())
+        .unwrap();
+    assert!(loaded.extra_mount.is_empty());
+}
+
+#[test]
+fn extra_mount_selects_existing_roots_without_system_entries() {
+    let root = Fixture::new("extra-mount-targets");
+    fs::create_dir(root.join("system")).unwrap();
+    for name in ["my_extra", "directory", "file", "apex", "product"] {
+        fs::create_dir(root.join(name)).unwrap();
+    }
+    fs::create_dir(root.join("system/directory")).unwrap();
+    fs::write(root.join("system/file"), b"").unwrap();
+    fs::write(root.join("not_directory"), b"").unwrap();
+    let config = Config {
+        extra_mount: [
+            "my_extra",
+            "my_extra",
+            "directory",
+            "file",
+            "missing",
+            "not_directory",
+            "",
+            ".",
+            "..",
+            "system",
+            "apex",
+            "/my_extra",
+            "../my_extra",
+            "my_extra/",
+            "a/b",
+            "a\\b",
+            "C:my_extra",
+            "a\0b",
+        ]
+        .map(str::to_owned)
+        .to_vec(),
+        ..Config::default()
+    };
+    assert_eq!(config.extra_mount_partitions(&root), ["my_extra"]);
+    let names = config.scan_partition_names(&root);
+    assert!(names.contains(&"my_extra".to_owned()));
+    assert!(names.contains(&"product".to_owned()));
+    assert!(names.contains(&"vendor".to_owned()));
+    assert!(!names.contains(&"apex".to_owned()));
+    assert!(!names.contains(&"missing".to_owned()));
+}
+
+#[cfg(unix)]
+#[test]
+fn extra_mount_rejects_system_symlinks_and_inspection_errors() {
+    use std::os::unix::fs::symlink;
+    let root = Fixture::new("extra-mount-symlinks");
+    fs::create_dir(root.join("system")).unwrap();
+    for name in ["link", "dangling", "loop"] {
+        fs::create_dir(root.join(name)).unwrap();
+    }
+    symlink(root.join("link"), root.join("system/link")).unwrap();
+    symlink("missing", root.join("system/dangling")).unwrap();
+    symlink("loop", root.join("system/loop")).unwrap();
+    let config = Config {
+        extra_mount: ["link", "dangling", "loop"].map(str::to_owned).to_vec(),
+        ..Config::default()
+    };
+    assert!(config.extra_mount_partitions(&root).is_empty());
+    fs::remove_dir_all(root.join("system")).unwrap();
+    symlink("system", root.join("system")).unwrap();
+    assert!(config.extra_mount_partitions(&root).is_empty());
+}
+
+#[test]
+fn defaults_match_contract() {
+    let config = Config::default();
+
+    assert_eq!(config.moduledir, PathBuf::from("/data/adb/modules"));
+    assert_eq!(config.overlay_mode, OverlayMode::Ext4);
+    assert!(!config.disable_umount);
+    assert_eq!(config.default_mode, Mode::Overlay);
+    assert!(config.extra_mount.is_empty());
+    assert!(config.rules.is_empty());
+}
+
+#[test]
+fn parses_empty_toml_as_defaults() {
+    let config = Config::from_toml("").unwrap();
+    assert_eq!(config, Config::default());
+}
+
+#[test]
+fn default_config_toml_snapshot_is_stable() {
+    let expected = r#"moduledir = "/data/adb/modules"
+overlay_mode = "ext4"
+disable_umount = false
+default_mode = "overlay"
+extra_mount = []
+vfs_strict = false
+
+[rules]
+"#;
+
+    assert_eq!(Config::default().to_toml().unwrap(), expected);
+}
+
+#[test]
+fn global_ignore_is_rejected_without_changing_rule_ignore_semantics() {
+    let err = Config::from_toml(
+        r#"
+default_mode = "ignore"
+"#,
+    )
+    .unwrap_err();
+
+    assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
+
+    let config = Config::from_toml(
+        r#"
+default_mode = "overlay"
+
+[rules.demo]
+default_mode = "ignore"
+
+[rules.demo.paths]
+"system/etc/hosts" = "ignore"
+"#,
+    )
+    .unwrap();
+
+    assert_eq!(config.default_mode, Mode::Overlay);
+    assert_eq!(config.rules["demo"].default_mode, Some(Mode::Ignore));
+    assert_eq!(config.rules["demo"].paths["system/etc/hosts"], Mode::Ignore);
+}
+
+#[test]
+fn parses_planned_example() {
+    let text = r#"
+moduledir = "/data/adb/modules"
+overlay_mode = "ext4"
+disable_umount = false
+default_mode = "overlay"
+
+[rules."hosts_redirect"]
+default_mode = "magic"
+
+[rules."hosts_redirect".paths]
+"system/etc/hosts" = "overlay"
+"#;
+
+    let config = Config::from_toml(text).unwrap();
+
+    let rule = config.rules.get("hosts_redirect").unwrap();
+    assert_eq!(rule.default_mode, Some(Mode::Magic));
+    assert_eq!(rule.paths.get("system/etc/hosts"), Some(&Mode::Overlay));
+}
+
+#[test]
+fn accepts_and_drops_obsolete_empty_custom_mounts_during_upgrade() {
+    let config = Config::from_toml(
+        r#"
+moduledir = "/data/adb/modules"
+default_mode = "magic"
+custom_mounts = []
+"#,
+    )
+    .unwrap();
+
+    assert_eq!(config.default_mode, Mode::Magic);
+    assert!(config.legacy_custom_mounts.is_empty());
+    assert!(!config.to_toml().unwrap().contains("custom_mounts"));
+}
+
+#[test]
+fn boot_upgrade_ignores_retired_daemon_mode_without_losing_rules() {
+    let dir = Fixture::new("legacy-daemon-mode");
+    let path = dir.join("config.toml");
+    let original = r#"moduledir = "/data/adb/modules"
+overlay_mode = "tmpfs"
+disable_umount = true
+default_mode = "magic"
+daemon_startup_mode = "persistent"
+custom_mounts = []
+
+[rules.demo]
+default_mode = "ignore"
+[rules.demo.paths]
+"system/etc/hosts" = "overlay"
+"#;
+    fs::write(&path, original).unwrap();
+
+    let loaded = Config::load_for_boot(&path).unwrap();
+
+    assert_eq!(loaded.default_mode, Mode::Magic);
+    assert_eq!(loaded.overlay_mode, OverlayMode::Tmpfs);
+    assert!(loaded.disable_umount);
+    assert_eq!(loaded.rules["demo"].default_mode, Some(Mode::Ignore));
+    assert_eq!(
+        loaded.rules["demo"].paths["system/etc/hosts"],
+        Mode::Overlay
+    );
+    assert!(loaded.legacy_daemon_startup_mode.is_none());
+    assert_eq!(Config::load_or_default(&path).unwrap(), loaded);
+    assert_eq!(fs::read_to_string(&path).unwrap(), original);
+
+    loaded.save(&path).unwrap();
+    assert!(
+        !fs::read_to_string(&path)
+            .unwrap()
+            .contains("daemon_startup_mode")
+    );
+    assert_eq!(Config::load_for_boot(&path).unwrap(), loaded);
+}
+
+#[test]
+fn retired_daemon_mode_does_not_allow_unknown_or_malformed_config() {
+    for (name, text) in [
+        (
+            "unknown",
+            "daemon_startup_mode = \"persistent\"\nunknown_setting = true\n",
+        ),
+        ("wrong-type", "daemon_startup_mode = 42\n"),
+        (
+            "malformed",
+            "daemon_startup_mode = \"persistent\"\nrules = [",
+        ),
+    ] {
+        let dir = Fixture::new(&format!("legacy-daemon-{name}"));
+        let path = dir.join("config.toml");
+        fs::write(&path, text).unwrap();
+
+        assert!(matches!(
+            Config::load_for_boot(&path),
+            Err(Error::ConfigParse { .. })
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+    }
+}
+
+#[test]
+fn boot_upgrade_accepts_retired_partitions_without_losing_settings() {
+    for (name, partitions) in [
+        ("empty-array", "[]"),
+        ("array", "[\"system\", \"vendor\", \"my_old\"]"),
+        ("empty-string", "\"\""),
+        ("string", "\"system, vendor , my_old\""),
+    ] {
+        let dir = Fixture::new(&format!("legacy-partitions-{name}"));
+        let path = dir.join("config.toml");
+        let original = format!(
+            r#"moduledir = "/data/adb/modules"
+mountsource = "KSU"
+partitions = {partitions}
+overlay_mode = "tmpfs"
+disable_umount = true
+default_mode = "magic"
+extra_mount = ["my_extra"]
+custom_mounts = []
+daemon_startup_mode = "persistent"
+
+[rules.demo]
+default_mode = "ignore"
+[rules.demo.paths]
+"system/etc/hosts" = "vfs"
+"#
+        );
+        fs::write(&path, &original).unwrap();
+        fs::write(dir.join("module_blacklist.toml"), "blacklist = ['blocked']").unwrap();
+
+        let loaded = Config::load_for_boot(&path).unwrap();
+        assert_eq!(loaded.overlay_mode, OverlayMode::Tmpfs);
+        assert!(loaded.disable_umount);
+        assert_eq!(loaded.default_mode, Mode::Magic);
+        assert_eq!(loaded.extra_mount, ["my_extra"]);
+        assert_eq!(loaded.rules["demo"].default_mode, Some(Mode::Ignore));
+        assert_eq!(loaded.rules["demo"].paths["system/etc/hosts"], Mode::Vfs);
+        assert!(loaded.is_module_blacklisted("blocked"));
+        assert_eq!(Config::load_or_default(&path).unwrap(), loaded);
+        assert_eq!(fs::read_to_string(&path).unwrap(), original);
+        let json = loaded.to_webui_json(false).unwrap();
+        assert!(!json.contains("partitions"));
+
+        save_patch(
+            &path,
+            serde_json::from_str(r#"{"disable_umount":false}"#).unwrap(),
+        )
+        .unwrap();
+        let saved = Config::load_for_boot(&path).unwrap();
+        assert_eq!(
+            saved,
+            Config {
+                disable_umount: false,
+                ..loaded
+            }
+        );
+        assert!(!fs::read_to_string(&path).unwrap().contains("partitions"));
+    }
+}
+
+#[test]
+fn retired_partitions_keep_invalid_config_and_patch_validation_strict() {
+    for (name, text) in [
+        ("unknown", "partitions = []\nunknown_setting = true\n"),
+        ("wrong-type", "partitions = 42\n"),
+        ("mixed-array", "partitions = ['system', 42]\n"),
+        ("malformed", "partitions = []\nrules = ["),
+    ] {
+        let dir = Fixture::new(&format!("invalid-legacy-partitions-{name}"));
+        let path = dir.join("config.toml");
+        fs::write(&path, text).unwrap();
+        assert!(matches!(
+            Config::load_for_boot(&path),
+            Err(Error::ConfigParse { .. })
+        ));
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+    }
+    assert!(serde_json::from_str::<ConfigPatch>(r#"{"partitions":[]}"#).is_err());
+}
+
+#[test]
+fn invalid_module_id_rule_key_is_rejected_with_context() {
+    let err = Config::from_toml(
+        r#"
+default_mode = "overlay"
+
+[rules."1bad"]
+default_mode = "magic"
+"#,
+    )
+    .unwrap_err();
+
+    let message = err.to_string();
+    assert!(message.contains("Invalid module ID"), "{message}");
+    assert!(message.contains("1bad"), "{message}");
+}
+
+#[test]
+fn toml_roundtrip_preserves_rules() {
+    let mut config = Config {
+        default_mode: Mode::Magic,
+        ..Config::default()
+    };
+    config.rules.insert(
+        module_id("demo"),
+        ModuleRule {
+            default_mode: Some(Mode::Ignore),
+            paths: BTreeMap::from([
+                ("system/etc/hosts".to_owned(), Mode::Overlay),
+                ("system/bin/app".to_owned(), Mode::Magic),
+            ]),
+        },
+    );
+
+    let text = config.to_toml().unwrap();
+    let reparsed = Config::from_toml(&text).unwrap();
+
+    assert_eq!(reparsed, config);
+}
+
+#[test]
+fn rejects_invalid_mode() {
+    let err = Config::from_toml(r#"default_mode = "transparent""#).unwrap_err();
+    let message = err.to_string();
+
+    assert!(message.contains("default_mode"), "{message}");
+}
+
+#[test]
+fn rejects_unknown_top_level_field() {
+    let err = Config::from_toml(
+        r#"
+default_mode = "overlay"
+unknown_option = true
+"#,
+    )
+    .unwrap_err();
+
+    assert!(err.to_string().contains("unknown field"), "{}", err);
+}
+
+#[test]
+fn rejects_unknown_rule_field() {
+    let err = Config::from_toml(
+        r#"
+[rules.demo]
+unknown_option = "overlay"
+"#,
+    )
+    .unwrap_err();
+
+    assert!(err.to_string().contains("unknown field"), "{}", err);
+}
+
+#[test]
+fn json_uses_contract_shape() {
+    let config = Config::default();
+
+    let value: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string_pretty(&config).unwrap()).unwrap();
+
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "moduledir": "/data/adb/modules",
+            "overlay_mode": "ext4",
+            "disable_umount": false,
+            "default_mode": "overlay",
+            "extra_mount": [],
+            "vfs_strict": false,
+            "rules": {}
+        })
+    );
+}
+
+#[test]
+fn webui_json_exposes_tmpfs_capability_without_persisting_it() {
+    let config = Config::default();
+    let value: serde_json::Value =
+        serde_json::from_str(&config.to_webui_json(false).unwrap()).unwrap();
+
+    assert_eq!(value["tmpfs_xattr_supported"], false);
+    assert!(!config.to_toml().unwrap().contains("tmpfs_xattr_supported"));
+}
+
+#[test]
+fn webui_json_exposes_config_missing_but_toml_never_persists_it() {
+    let config = Config {
+        config_missing: true,
+        ..Config::default()
+    };
+
+    let value: serde_json::Value =
+        serde_json::from_str(&config.to_webui_json(false).unwrap()).unwrap();
+
+    assert_eq!(value["config_missing"], true);
+    assert!(!config.to_toml().unwrap().contains("config_missing"));
+}
+
+#[test]
+fn save_creates_parent_and_load_roundtrips() {
+    let dir = Fixture::new("save-load");
+    let path = dir.join("nested").join("config.toml");
+
+    let mut config = Config {
+        disable_umount: true,
+        ..Config::default()
+    };
+    config.rules.insert(
+        module_id("demo"),
+        ModuleRule {
+            default_mode: Some(Mode::Magic),
+            paths: BTreeMap::new(),
+        },
+    );
+
+    config.save(&path).unwrap();
+    let loaded = Config::load(&path).unwrap();
+
+    assert_eq!(loaded, config);
+}
+
+#[test]
+fn write_default_resets_disk_content() {
+    let dir = Fixture::new("write-default");
+    let path = dir.join("config.toml");
+
+    let config = Config {
+        default_mode: Mode::Magic,
+        ..Config::default()
+    };
+    config.save(&path).unwrap();
+
+    let written = Config::write_default(&path).unwrap();
+
+    assert_eq!(written, Config::default());
+    assert_eq!(Config::load(&path).unwrap(), Config::default());
+}
+
+#[test]
+fn save_rejects_global_ignore_and_leaves_existing_file_untouched() {
+    let dir = Fixture::new("save-reject-ignore");
+    let path = dir.join("config.toml");
+    Config::default().save(&path).unwrap();
+    let before = fs::read_to_string(&path).unwrap();
+
+    let invalid = Config {
+        default_mode: Mode::Ignore,
+        ..Config::default()
+    };
+    let err = invalid.save(&path).unwrap_err();
+
+    assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
+    assert_eq!(fs::read_to_string(&path).unwrap(), before);
+}
+
+#[cfg(unix)]
+#[test]
+fn save_refuses_to_replace_symlinked_config() {
+    use std::os::unix::fs::symlink;
+
+    let dir = Fixture::new("save-symlink");
+    let target = dir.join("real.toml");
+    Config::default().save(&target).unwrap();
+    let before = fs::read_to_string(&target).unwrap();
+
+    let link = dir.join("config.toml");
+    symlink(&target, &link).unwrap();
+
+    let err = Config::default().save(&link).unwrap_err();
+
+    assert!(err.to_string().contains("symlinked config"), "{err}");
+    assert_eq!(fs::read_to_string(&target).unwrap(), before);
+    assert!(
+        fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[test]
+fn load_or_default_uses_defaults_and_marks_missing_file() {
+    let dir = Fixture::new("load-or-default");
+    let missing = dir.join("missing.toml");
+
+    let config = Config::load_or_default(&missing).unwrap();
+
+    assert!(config.config_missing);
+    let expected = Config {
+        config_missing: true,
+        ..Config::default()
+    };
+    assert_eq!(config, expected);
+}
+
+#[test]
+fn load_or_default_uses_defaults_for_corrupt_config_without_overwriting_it() {
+    let dir = Fixture::new("load-or-default-corrupt");
+    let path = dir.join("config.toml");
+    let corrupt = "default_mode = not-valid";
+    fs::write(&path, corrupt).unwrap();
+    fs::write(
+        dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
+        r#"blacklist = ["blocked"]"#,
+    )
+    .unwrap();
+
+    let config = Config::load_or_default(&path).unwrap();
+
+    let mut expected = Config::default();
+    expected.module_blacklist.insert(module_id("blocked"));
+    assert_eq!(config, expected);
+    assert_eq!(fs::read_to_string(&path).unwrap(), corrupt);
+}
+
+#[test]
+fn load_or_default_uses_defaults_for_unsupported_config_without_overwriting_it() {
+    let dir = Fixture::new("load-or-default-unsupported");
+    let path = dir.join("config.toml");
+    let unsupported = "default_mode = \"ignore\"\n";
+    fs::write(&path, unsupported).unwrap();
+
+    let config = Config::load_or_default(&path).unwrap();
+
+    assert_eq!(config, Config::default());
+    assert_eq!(fs::read_to_string(&path).unwrap(), unsupported);
+}
+
+#[test]
+fn load_or_default_uses_defaults_when_config_cannot_be_read() {
+    let dir = Fixture::new("load-or-default-read-error");
+    let path = dir.join("unreadable.toml");
+    fs::create_dir_all(&path).unwrap();
+
+    let config = Config::load_or_default(&path).unwrap();
+
+    assert_eq!(config, Config::default());
+    assert!(path.is_dir());
+}
+
+#[test]
+fn load_for_boot_accepts_valid_config() {
+    let dir = Fixture::new("load-for-boot-valid");
+    let path = dir.join("config.toml");
+    let expected = Config {
+        default_mode: Mode::Magic,
+        ..Config::default()
+    };
+    expected.save(&path).unwrap();
+
+    let loaded = Config::load_for_boot(&path).unwrap();
+
+    assert_eq!(loaded, expected);
+}
+
+#[test]
+fn load_for_boot_uses_defaults_only_when_main_config_is_genuinely_missing() {
+    let dir = Fixture::new("load-for-boot-missing");
+    let path = dir.join("config.toml");
+    fs::write(
+        dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
+        r#"blacklist = ["blocked"]"#,
+    )
+    .unwrap();
+
+    let loaded = Config::load_for_boot(&path).unwrap();
+    let mut expected = Config {
+        config_missing: true,
+        ..Config::default()
+    };
+    expected.module_blacklist.insert(module_id("blocked"));
+
+    assert_eq!(loaded, expected);
+}
+
+#[test]
+fn load_for_boot_rejects_missing_config_parent() {
+    let dir = Fixture::new("load-for-boot-missing-parent");
+    let path = dir.join("missing-parent/config.toml");
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(
+            err,
+            Error::ConfigRead {
+                path: ref error_path,
+                ref source,
+            } if error_path == &path && source.kind() == std::io::ErrorKind::NotFound
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn load_for_boot_rejects_corrupt_config_without_overwriting_it() {
+    let dir = Fixture::new("load-for-boot-corrupt");
+    let path = dir.join("config.toml");
+    let corrupt = "default_mode = not-valid";
+    fs::write(&path, corrupt).unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(err, Error::ConfigParse { path: ref error_path, .. } if error_path == &path)
+            && fs::read_to_string(&path).unwrap() == corrupt,
+        "{err}"
+    );
+}
+
+#[test]
+fn load_for_boot_rejects_unsupported_config() {
+    let dir = Fixture::new("load-for-boot-unsupported");
+    let path = dir.join("config.toml");
+    fs::write(&path, "default_mode = \"ignore\"\n").unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
+}
+
+#[test]
+fn load_for_boot_rejects_unreadable_main_config() {
+    let dir = Fixture::new("load-for-boot-unreadable");
+    let path = dir.join("config.toml");
+    fs::create_dir_all(&path).unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(err, Error::ConfigRead { path: ref error_path, .. } if error_path == &path),
+        "{err}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn load_for_boot_rejects_dangling_config_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let dir = Fixture::new("load-for-boot-dangling-symlink");
+    let path = dir.join("config.toml");
+    symlink("missing-target", &path).unwrap();
+
+    let err = Config::load_for_boot(&path).unwrap_err();
+
+    assert!(
+        matches!(
+            err,
+            Error::ConfigRead {
+                path: ref error_path,
+                ref source,
+            } if error_path == &path && source.kind() == std::io::ErrorKind::NotFound
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn load_wraps_read_errors_with_path_context() {
+    let dir = Fixture::new("load-read-error");
+    let path = dir.join("unreadable.toml");
+    fs::create_dir_all(&path).unwrap();
+
+    let err = Config::load(&path).unwrap_err();
+    let message = err.to_string();
+    assert!(message.contains(&path.display().to_string()), "{message}");
+    assert!(message.contains("read config"), "{message}");
+}
+
+#[test]
+fn load_reads_deduplicated_module_blacklist_without_persisting_it_in_config() {
+    let dir = Fixture::new("module-blacklist");
+    let path = dir.join("config.toml");
+    Config::default().save(&path).unwrap();
+    fs::write(
+        dir.join(defs::MODULE_BLACKLIST_FILE_NAME),
+        r#"blacklist = ["blocked", " blocked ", "other", ""]"#,
+    )
+    .unwrap();
+
+    let loaded = Config::load(&path).unwrap();
+
+    assert!(loaded.is_module_blacklisted("blocked"));
+    assert!(loaded.is_module_blacklisted("other"));
+    assert_eq!(loaded.module_blacklist.len(), 2);
+    assert!(!loaded.to_toml().unwrap().contains("module_blacklist"));
+    assert!(!loaded.to_toml().unwrap().contains("blocked"));
+}
+
+#[test]
+fn bundled_blacklist_contains_move_certificate() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("module")
+        .join(defs::MODULE_BLACKLIST_FILE_NAME);
+
+    let blacklist = read_module_blacklist(&path).unwrap();
+
+    assert!(blacklist.contains(&module_id("MoveCertificate")));
+}
+
+#[test]
+fn invalid_blacklist_module_id_fails_closed_with_path_context() {
+    let dir = Fixture::new("module-blacklist-invalid-id");
+    let path = dir.join("config.toml");
+    Config::default().save(&path).unwrap();
+    let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
+    fs::write(&blacklist_path, r#"blacklist = ["1bad"]"#).unwrap();
+
+    let err = Config::load(&path).unwrap_err();
+    let message = err.to_string();
+    assert!(
+        message.contains("Invalid module ID") || message.contains("invalid module id"),
+        "{message}"
+    );
+    assert!(
+        message.contains(&blacklist_path.display().to_string()),
+        "{message}"
+    );
+}
+
+#[test]
+fn missing_main_config_loads_blacklist_but_corrupt_blacklist_fails_closed() {
+    let dir = Fixture::new("module-blacklist-fallback");
+    let path = dir.join("config.toml");
+    let blacklist_path = dir.join(defs::MODULE_BLACKLIST_FILE_NAME);
+    fs::write(&blacklist_path, r#"blacklist = ["blocked"]"#).unwrap();
+
+    let loaded = Config::load_or_default(&path).unwrap();
+    assert!(loaded.config_missing);
+    assert!(loaded.is_module_blacklisted("blocked"));
+    assert_eq!(loaded.default_mode, Mode::Overlay);
+
+    fs::write(&blacklist_path, "blacklist = not-valid").unwrap();
+    let err = Config::load_or_default(&path).unwrap_err();
+    assert!(
+        err.to_string().contains("module blacklist")
+            && err
+                .to_string()
+                .contains(&blacklist_path.display().to_string()),
+        "{err}"
+    );
+
+    fs::write(&path, "default_mode = \"magic\"\n").unwrap();
+    assert!(Config::load_or_default(&path).is_err());
+}
+
+#[test]
+fn patch_merges_while_preserving_untouched_fields() {
+    let mut config = Config {
+        default_mode: Mode::Magic,
+        ..Config::default()
+    };
+    config.rules.insert(
+        module_id("keep"),
+        ModuleRule {
+            default_mode: Some(Mode::Ignore),
+            paths: BTreeMap::from([("system/etc/a".to_owned(), Mode::Overlay)]),
+        },
+    );
+
+    let patch: ConfigPatch = serde_json::from_str(
+        r#"{"disable_umount":true,"rules":{"new":{"default_mode":"overlay","paths":{"system/etc/hosts":"magic"}}}}"#,
+    )
+    .unwrap();
+    config.apply_patch(patch).unwrap();
+
+    assert!(config.disable_umount);
+    assert_eq!(config.default_mode, Mode::Magic);
+    assert_eq!(config.rules["keep"].default_mode, Some(Mode::Ignore));
+    assert_eq!(config.rules["keep"].paths["system/etc/a"], Mode::Overlay);
+    assert_eq!(config.rules["new"].default_mode, Some(Mode::Overlay));
+    assert_eq!(config.rules["new"].paths["system/etc/hosts"], Mode::Magic);
+}
+
+#[test]
+fn patch_rejects_ignore_as_global_default_without_partial_update() {
+    let mut config = Config {
+        default_mode: Mode::Magic,
+        ..Config::default()
+    };
+    let patch: ConfigPatch =
+        serde_json::from_str(r#"{"default_mode":"ignore","disable_umount":true}"#).unwrap();
+
+    let err = config.apply_patch(patch).unwrap_err();
+
+    assert!(matches!(err, Error::UnsupportedGlobalDefaultMode), "{err}");
+    assert_eq!(config.default_mode, Mode::Magic);
+    assert!(!config.disable_umount);
+}
+
+#[test]
+fn patch_null_clears_module_default_mode() {
+    let mut config = Config::default();
+    config.rules.insert(
+        module_id("m"),
+        ModuleRule {
+            default_mode: Some(Mode::Magic),
+            paths: BTreeMap::new(),
+        },
+    );
+
+    let patch: ConfigPatch =
+        serde_json::from_str(r#"{"rules":{"m":{"default_mode":null}}}"#).unwrap();
+    config.apply_patch(patch).unwrap();
+
+    assert_eq!(config.rules["m"].default_mode, None);
+}
+
+#[test]
+fn patch_can_replace_all_rules_for_full_editor_save() {
+    let mut config = Config::default();
+    config
+        .rules
+        .insert(module_id("stale"), ModuleRule::default());
+    config
+        .rules
+        .insert(module_id("keep"), ModuleRule::default());
+
+    let patch: ConfigPatch =
+        serde_json::from_str(r#"{"replace_rules":true,"rules":{"keep":{"default_mode":"magic"}}}"#)
+            .unwrap();
+    config.apply_patch(patch).unwrap();
+
+    assert!(!config.rules.contains_key("stale"));
+    assert_eq!(config.rules.len(), 1);
+    assert_eq!(config.rules["keep"].default_mode, Some(Mode::Magic));
+}
+
+#[test]
+fn boot_loader_ignores_legacy_mountsource_and_preserves_settings() {
+    let dir = Fixture::new("legacy-mountsource");
+    let path = dir.join("config.toml");
+
+    for source in ["MIUI", "KSU", "APatch", "overlay", "/data/adb/custom", ""] {
+        fs::write(
+            &path,
+            format!(
+                r#"
+mountsource = "{source}"
+overlay_mode = "ext4"
+disable_umount = true
+default_mode = "magic"
+[rules.example]
+default_mode = "overlay"
+"#
+            ),
+        )
+        .unwrap();
+        let config = Config::load_for_boot(&path).unwrap();
+        assert!(config.disable_umount);
+        assert_eq!(config.default_mode, Mode::Magic);
+        assert_eq!(config.rules.len(), 1);
+        let saved = config.to_toml().unwrap();
+        assert!(!saved.contains("mountsource"));
+        assert!(!config.to_webui_json(false).unwrap().contains("mountsource"));
+        assert_eq!(Config::from_toml(&saved).unwrap(), config);
+    }
+}
+
+#[test]
+fn config_patch_rejects_retired_mountsource() {
+    assert!(serde_json::from_str::<ConfigPatch>(r#"{"mountsource":"MIUI"}"#).is_err());
+}
+
+#[test]
+fn vfs_is_accepted_as_global_and_path_mode() {
+    let config = crate::framework::config::Config::from_toml(
+        "default_mode = \"vfs\"\n\n[rules.\"mod_a\".paths]\n\"system/etc/hosts\" = \"vfs\"\n",
+    )
+    .unwrap();
+    assert_eq!(config.default_mode, crate::mount::model::Mode::Vfs);
+    assert_eq!(
+        config.rules[&crate::mount::model::ModuleId::try_from("mod_a").unwrap()].paths["system/etc/hosts"],
+        crate::mount::model::Mode::Vfs
+    );
+}
+
+#[test]
+fn vfs_serializes_lowercase() {
+    let toml = crate::framework::config::Config::from_toml("default_mode = \"vfs\"\n")
+        .unwrap()
+        .to_toml()
+        .unwrap();
+    assert!(toml.contains("default_mode = \"vfs\""));
+}
+
+#[test]
+fn vfs_strict_and_isolated_uids_parse_and_roundtrip() {
+    let config = crate::framework::config::Config::from_toml(
+        "vfs_strict = true\nvfs_isolate_uids = [1000, 1001]\n",
+    )
+    .unwrap();
+    assert!(config.vfs_strict);
+    assert_eq!(config.vfs_isolate_uids, vec![1000, 1001]);
+    assert!(config.to_toml().unwrap().contains("vfs_isolate_uids = ["));
+}
+
+#[test]
+fn vfs_fields_default_off() {
+    let config = crate::framework::config::Config::from_toml("").unwrap();
+    assert!(!config.vfs_strict);
+    assert!(config.vfs_isolate_uids.is_empty());
+}
+
+#[test]
+fn wants_vfs_detects_every_place_a_rule_can_select_vfs() {
+    let global = crate::framework::config::Config::from_toml("default_mode = \"vfs\"\n").unwrap();
+    assert!(global.wants_vfs(), "a global vfs default must count");
+
+    let module_default =
+        crate::framework::config::Config::from_toml("[rules.demo]\ndefault_mode = \"vfs\"\n")
+            .unwrap();
+    assert!(module_default.wants_vfs(), "a module-level vfs must count");
+
+    let path_rule = crate::framework::config::Config::from_toml(
+        "[rules.demo.paths]\n\"system/etc/hosts\" = \"vfs\"\n",
+    )
+    .unwrap();
+    assert!(path_rule.wants_vfs(), "a path-level vfs must count");
+}
+
+#[test]
+fn wants_vfs_is_false_when_no_rule_selects_it() {
+    let defaults = crate::framework::config::Config::from_toml("").unwrap();
+    assert!(!defaults.wants_vfs());
+
+    let overlay_and_magic = crate::framework::config::Config::from_toml(
+        "default_mode = \"overlay\"\n\
+         [rules.a]\n\
+         default_mode = \"magic\"\n\
+         [rules.b.paths]\n\
+         \"system/etc/hosts\" = \"ignore\"\n",
+    )
+    .unwrap();
+    assert!(!overlay_and_magic.wants_vfs());
+}
+
+#[test]
+fn wants_vfs_ignores_isolate_uids_alone() {
+    let config = crate::framework::config::Config::from_toml(
+        "vfs_strict = true\nvfs_isolate_uids = [1000]\n",
+    )
+    .unwrap();
+    assert!(!config.wants_vfs());
+}

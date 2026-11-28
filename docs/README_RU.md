@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
+<img src="../assets/icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount — метамодуль гибридного монтирования для KernelSU и APatch. Во время загрузки он сканирует другие модули и для каждого элемента выбирает OverlayFS, Magic Mount, VFS или игнорирование в соответствии с глобальными правилами, правилами модуля и пути. Каталоги исходных файлов модулей всегда используются только для чтения.
 

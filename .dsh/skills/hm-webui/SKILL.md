@@ -24,7 +24,7 @@ pnpm typecheck  # vue-tsc -b
 ## 与 Rust 后端通信
 
 WebUI 通过管理器提供的 `kernelsu.exec`（`kernelsu` npm 包）调用**同一个** Rust 二进制，
-以 JSON 交换数据。命令见 `src/cli.rs`：
+以 JSON 交换数据。命令见 `src/cli/mod.rs`：
 
 | 命令 | 用途 |
 | --- | --- |

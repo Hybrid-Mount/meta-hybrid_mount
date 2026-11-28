@@ -1,12 +1,12 @@
 ---
 name: hm-runtime
-description: 修改或排查 src/runtime/ 运行时层（boot、hot、ledger、transaction、rules、mounts、policy、lifecycle、device）时用：所有权账本阶段机、热挂载与 boot lock 竞态、事务回滚要清理的资源、状态快照契约。
+description: 修改或排查 src/framework/runtime/ 运行时层（boot、hot、ledger、transaction、rules、mounts、policy、lifecycle、device）时用：所有权账本阶段机、热挂载与 boot lock 竞态、事务回滚要清理的资源、状态快照契约。
 whenToUse: 改动启动/热挂载/软重启生命周期、`runtime` 子命令、`run/runtime.json` 结构或回滚路径，或排查「启动成功但 runtime status 报不支持」「prepare-reboot 拒绝执行」时。
 ---
 
-# 运行时层（`src/runtime/`）
+# 运行时层（`src/framework/runtime/`）
 
-`src/pipeline.rs` 决定「怎么挂」，`src/runtime/` 决定「这些资源归谁、什么时候可以放手」。
+`src/framework/boot/mod.rs` 决定「怎么挂」，`src/framework/runtime/` 决定「这些资源归谁、什么时候可以放手」。
 平台代码（boot/device/hot）只在 linux/android 编译，改动前先读 `docs/RUNTIME.md`。
 
 ## 模块职责（名称与真实文件一致）

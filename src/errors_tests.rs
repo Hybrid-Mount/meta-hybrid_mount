@@ -5,7 +5,7 @@ use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::sys::process::{
+use crate::platform::sys::process::{
     CaptureMode, CommandSpec, ExitPolicy, ExitStatus, ProcessError, ProcessErrorKind, run_command,
 };
 
@@ -108,11 +108,13 @@ fn subprocess_unexpected_exit_is_classified_permanent() {
         program: "mke2fs".to_owned(),
         args: vec!["-t".to_owned(), "ext4".to_owned()],
         cwd: None,
-        kind: ProcessErrorKind::UnexpectedExit(Box::new(crate::sys::process::UnexpectedExit {
-            status: ExitStatus::Exited(8),
-            stdout: None,
-            stderr: None,
-        })),
+        kind: ProcessErrorKind::UnexpectedExit(Box::new(
+            crate::platform::sys::process::UnexpectedExit {
+                status: ExitStatus::Exited(8),
+                stdout: None,
+                stderr: None,
+            },
+        )),
     });
 
     assert_eq!(err.classify(), ErrorClass::Permanent);

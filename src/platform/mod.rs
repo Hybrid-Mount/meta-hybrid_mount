@@ -1,0 +1,331 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! Shared utilities: module id validation, directory creation and SELinux context I/O.
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::io;
+use std::path::Path;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::buffer::spare_capacity;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fs::{XattrFlags, getxattr, getxattr_query, lgetxattr, lgetxattr_query, lsetxattr};
+
+use crate::defs;
+use crate::errors::{Error, Result};
+
+pub fn ensure_dir_exists(dir: &Path) -> Result<()> {
+    std::fs::create_dir_all(dir)?;
+    if dir.is_dir() {
+        Ok(())
+    } else {
+        Err(Error::RegularDirectory {
+            path: dir.display().to_string(),
+        })
+    }
+}
+
+/// Reads a path's extended attribute: query the length, then allocate and read it in
+/// one pass, which handles long SELinux contexts without a fixed stack buffer.
+///
+/// `follow` selects the syscall: `false` never follows a symlink in the final component,
+/// `true` resolves it first.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_xattr_with(path: &Path, name: &str, follow: bool) -> io::Result<Vec<u8>> {
+    let size = if follow {
+        getxattr_query(path, name)?
+    } else {
+        lgetxattr_query(path, name)?
+    };
+    if size == 0 {
+        return Ok(Vec::new());
+    }
+
+    let mut value = Vec::with_capacity(size);
+    let filled = if follow {
+        getxattr(path, name, spare_capacity(&mut value))?
+    } else {
+        lgetxattr(path, name, spare_capacity(&mut value))?
+    };
+    value.truncate(filled);
+    Ok(value)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn read_xattr(path: &Path, name: &str) -> io::Result<Vec<u8>> {
+    read_xattr_with(path, name, false)
+}
+
+/// Reads an extended attribute from the final symlink target.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_xattr_following(path: &Path, name: &str) -> io::Result<Vec<u8>> {
+    read_xattr_with(path, name, true)
+}
+
+/// Sets a path's extended attribute without following a symlink in the final component.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) fn write_xattr(path: &Path, name: &str, value: &[u8]) -> io::Result<()> {
+    Ok(lsetxattr(path, name, value, XattrFlags::empty())?)
+}
+
+/// Sets a path's SELinux context, propagating failures for callers that require it.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn lsetfilecon(path: &Path, context: &str) -> Result<()> {
+    log::debug!("file: {}, con: {context}", path.display());
+    write_xattr(path, defs::SELINUX_XATTR, context.as_bytes()).map_err(|err| {
+        Error::msg(format!(
+            "failed to change SELinux context for {}: {err}",
+            path.display()
+        ))
+    })
+}
+
+/// Attempts to set a staging path's SELinux context, keeping its existing label on failure.
+/// OEM labels may be denied by the root manager's policy; Magic Mount must still
+/// finish mirroring the stock tree rather than rolling back every module.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn lsetfilecon_best_effort(path: &Path, context: &str) {
+    if let Err(err) = lsetfilecon(path, context) {
+        log::warn!("{err}; requested context={context}, keeping existing label");
+    }
+}
+
+/// Reads a path's SELinux context.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn lgetfilecon(path: &Path) -> Result<String> {
+    let context = read_xattr(path, defs::SELINUX_XATTR).map_err(|err| {
+        Error::msg(format!(
+            "failed to get SELinux context for {}: {err}",
+            path.display()
+        ))
+    })?;
+    Ok(String::from_utf8_lossy(&context).to_string())
+}
+
+/// Reads a path's SELinux context after following the final symlink.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn getfilecon(path: &Path) -> Result<String> {
+    let context = read_xattr_following(path, defs::SELINUX_XATTR).map_err(|err| {
+        Error::msg(format!(
+            "failed to get target SELinux context for {}: {err}",
+            path.display()
+        ))
+    })?;
+    Ok(String::from_utf8_lossy(&context).to_string())
+}
+
+/// Whether `path` is `prefix` itself or lies below it on a path-segment boundary.
+///
+/// A plain `starts_with` is wrong here: `/system_ext` is not under `/system`. Rule
+/// matching, try-umount partition filtering and sub-mount collection all need that
+/// segment check, so they share this implementation.
+pub fn is_same_or_below(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+/// Whether the path falls in a partition excluded from try-umount registration (v4.2.0 pairip workaround).
+pub fn is_ignored_unmount_partition(path: &str) -> bool {
+    defs::IGNORE_UNMOUNT_PARTITIONS
+        .iter()
+        .any(|ignored| is_same_or_below(path, ignored.trim_end_matches('/')))
+}
+
+pub(crate) fn effective_mount_source(ksu_active: bool) -> &'static str {
+    if ksu_active { "KSU" } else { "APatch" }
+}
+
+pub(crate) mod kernel;
+/// KernelSU try-umount list integration (Linux/Android only).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod ksu;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) mod namespace;
+pub(crate) mod sys;
+
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub(crate) mod ksu_umount;
+
+#[cfg(any(target_os = "linux", target_os = "android", test))]
+pub(crate) mod ksu_protocol;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod ksu_driver;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_mount_source_follows_the_active_root_backend() {
+        assert_eq!(effective_mount_source(true), "KSU");
+        assert_eq!(effective_mount_source(false), "APatch");
+    }
+
+    #[test]
+    fn ensure_dir_exists_creates_missing_parents() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-ensure-dir-{}", std::process::id()));
+        let nested = dir.join("a").join("b");
+
+        ensure_dir_exists(&nested).unwrap();
+        assert!(nested.is_dir());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn same_or_below_matches_only_on_segment_boundaries() {
+        assert!(is_same_or_below("/system", "/system"));
+        assert!(is_same_or_below("/system/etc", "/system"));
+        assert!(is_same_or_below("/system/etc/hosts", "/system"));
+
+        assert!(!is_same_or_below("/system_ext", "/system"));
+        assert!(!is_same_or_below("/systemd", "/system"));
+        assert!(!is_same_or_below("/systematic/etc", "/system"));
+        assert!(!is_same_or_below("/", "/system"));
+        assert!(!is_same_or_below("/system", "/system/etc"));
+    }
+
+    #[test]
+    fn ignored_unmount_partition_matches_exact_path() {
+        assert!(is_ignored_unmount_partition("/system/lib"));
+        assert!(is_ignored_unmount_partition("/system/lib64"));
+        assert!(is_ignored_unmount_partition("/vendor/lib"));
+        assert!(is_ignored_unmount_partition("/vendor/lib64"));
+    }
+
+    #[test]
+    fn ignored_unmount_partition_matches_descendants() {
+        assert!(is_ignored_unmount_partition("/system/lib64/foo"));
+        assert!(is_ignored_unmount_partition("/vendor/lib/arm/libfoo.so"));
+    }
+
+    #[test]
+    fn ignored_unmount_partition_rejects_shared_prefix_siblings() {
+        assert!(!is_ignored_unmount_partition("/system/lib_extra"));
+        assert!(!is_ignored_unmount_partition("/system/lib64_other"));
+        assert!(!is_ignored_unmount_partition("/vendor/library"));
+        assert!(!is_ignored_unmount_partition("/product"));
+        assert!(!is_ignored_unmount_partition("/system/etc"));
+        assert!(!is_ignored_unmount_partition(
+            "/data/adb/hybrid-mount/run/staging_x"
+        ));
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_tests {
+    use super::*;
+
+    #[test]
+    fn selinux_write_failure_is_best_effort_only_when_requested() {
+        let dir = std::env::temp_dir().join(format!(
+            "hybrid-mount-selinux-write-failure-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let path = dir.join("missing");
+        let context = "u:object_r:rootfs:s0";
+        let err = write_xattr(&path, defs::SELINUX_XATTR, context.as_bytes()).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+        assert!(lsetfilecon(&path, context).is_err());
+        lsetfilecon_best_effort(&path, context);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn xattr_unavailable(err: &std::io::Error) -> bool {
+        err.raw_os_error().is_some_and(|code| {
+            code == rustix::io::Errno::NOTSUP.raw_os_error()
+                || code == rustix::io::Errno::OPNOTSUPP.raw_os_error()
+                || code == rustix::io::Errno::PERM.raw_os_error()
+                || code == rustix::io::Errno::NOSPC.raw_os_error()
+        })
+    }
+
+    #[test]
+    fn xattr_roundtrip_preserves_nonempty_label_bytes() {
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-xattr-label-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("source");
+        let destination = dir.join("destination");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::write(&destination, b"destination").unwrap();
+
+        // Use user.* on hosts without SELinux, but preserve the label bytes,
+        // including the trailing NUL, exactly as the Android metadata path does.
+        let name = "user.hybrid_mount_label";
+        let label = b"u:object_r:system_file:s0\0";
+        if let Err(err) = write_xattr(&source, name, label) {
+            if xattr_unavailable(&err) {
+                eprintln!("skipping label xattr test: {err}");
+                std::fs::remove_dir_all(&dir).unwrap();
+                return;
+            }
+            panic!("set label xattr failed: {err}");
+        }
+
+        let copied_label = read_xattr(&source, name).unwrap();
+        assert_eq!(copied_label, label);
+        write_xattr(&destination, name, &copied_label).unwrap();
+        assert_eq!(read_xattr_following(&destination, name).unwrap(), label);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn xattr_roundtrip_handles_long_contexts() {
+        let dir = std::env::temp_dir().join(format!("hybrid-mount-xattr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("probe");
+        std::fs::write(&path, b"data").unwrap();
+
+        let long_value = vec![b'x'; 16 * 1024];
+        if let Err(err) = write_xattr(&path, "user.hybrid_mount_test", &long_value) {
+            if xattr_unavailable(&err) {
+                eprintln!(
+                    "skipping long xattr test: filesystem cannot store the requested xattr: {err}"
+                );
+                let _ = std::fs::remove_dir_all(&dir);
+                return;
+            }
+            panic!("set long xattr failed: {err}");
+        }
+
+        let read_back = read_xattr(&path, "user.hybrid_mount_test").unwrap();
+        assert_eq!(read_back, long_value);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn following_xattr_read_uses_the_symlink_target() {
+        use std::os::unix::fs::symlink;
+
+        let dir =
+            std::env::temp_dir().join(format!("hybrid-mount-follow-xattr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target");
+        let link = dir.join("link");
+        std::fs::write(&target, b"data").unwrap();
+        symlink(&target, &link).unwrap();
+        let value = b"target-context";
+        if let Err(err) = write_xattr(&target, "user.hybrid_mount_follow", value) {
+            if xattr_unavailable(&err) {
+                eprintln!("skipping following xattr test: {err}");
+                let _ = std::fs::remove_dir_all(&dir);
+                return;
+            }
+            panic!("set target xattr failed: {err}");
+        }
+
+        let read_back = read_xattr_following(&link, "user.hybrid_mount_follow").unwrap();
+        assert_eq!(read_back, value);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

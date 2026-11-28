@@ -3,9 +3,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::config::Mode;
-use crate::module_id::ModuleId;
-use crate::mount_tree::{MountSource, NodeFileType};
+use crate::mount::model::Mode;
+use crate::mount::model::ModuleId;
+use crate::mount::model::{MountSource, NodeFileType};
 
 pub fn mount_source(
     module: &str,

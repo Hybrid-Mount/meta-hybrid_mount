@@ -1,10 +1,12 @@
 # Hybrid Mount 接口参考
 
+源码目录和模块依赖见[项目架构](PROJECT_LAYOUT.md)。
+
 目录中的普通 `.remove` 文件规范化为目录路径的 whiteout，扫描停止收集其后代；`.remove` 优先于 `.replace`。规划在原逻辑路径上匹配 ignore，再应用实际分区映射与根/子挂载保护。跨模块 whiteout 与内容贡献冲突在执行前报错。Overlay staging 创建 0:0 字符设备，Magic 父镜像省略目标，VFS 发出已有 Whiteout 动作；不删除原目录，不改变协议。
 
 ## Lua 扩展与挂载顺序
 
-1. 启动流程探测分区后，`src/extensions/` 按文件名加载 `/data/adb/hybrid-mount/lua/` 下的 Lua 5.5.1 脚本，先收集 API 1 的 `before()` 请求。
+1. 启动流程探测分区后，`src/framework/extension/` 按文件名加载 `/data/adb/hybrid-mount/lua/` 下的 Lua 5.5.1 脚本，先收集 API 1 的 `before()` 请求。
 2. 扫描每个符合条件的模块时，先运行匹配该 ID 的 API 2 `load()`。规划器合并 `change_mount` 与 TOML 路径规则，按最长路径匹配，相同路径取最后一次 Lua 声明。`remove(path)` 在有效目标上排除其他模块对同一子树的贡献，再由所选后端处理 whiteout。
 3. 计划就绪后，依次执行 `before()` 请求、常规模块挂载，再调用 `after()` 并执行其请求。全局挂载与常规模块挂载共用启动事务，执行阶段失败会触发回滚。[Lua 脚本示例与 API 说明](CUSTOM_MOUNT.md)
 
@@ -55,4 +57,3 @@ WebUI 使用同一 CLI；状态快照由启动或成功的热操作更新，详�
 模块列表中的同名诊断字段仅在非空时输出，旧快照缺失字段按空列表读取。`is_mounted` 仍表示至少一个真实效果已确认，部分挂载会同时展示错误，不自动设置 `suggest_ignore`。
 
 启动账本保存名单内全部分区的路径和身份。热加载核对相关分区；只有身份验证通过的本模块挂载可解释预期变化，未知覆盖不会被忽略。无布局基线的旧账本拒绝 load/reload，unload 仍按保存的规则与目标清理。
-

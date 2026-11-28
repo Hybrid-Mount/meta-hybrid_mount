@@ -3,7 +3,7 @@
 //! Build and release automation: WebUI build with MODULE_ID injection, Rust cross-compilation,
 //! module.prop generation, zip packaging, update.json and Telegram notifications.
 
-#[path = "../../src/vfs/lkm_packages.rs"]
+#[path = "../../src/mount/vfs/lkm_packages.rs"]
 mod lkm_packages;
 mod vfs_package;
 mod zip_ext;

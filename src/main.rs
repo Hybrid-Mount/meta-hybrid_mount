@@ -2,32 +2,16 @@
 
 #![cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]
 
-mod boot_hook;
 mod cli;
-mod config;
 mod defs;
 mod errors;
-mod extensions;
+mod framework;
 mod logging;
-mod magic_mount;
-mod module_id;
-#[cfg(any(target_os = "linux", target_os = "android", test))]
-mod module_status;
-mod mount_tree;
-mod overlayfs;
-mod partitions;
-mod pipeline;
-mod plan;
-mod runtime;
-mod scanner;
-mod state;
-mod storage;
-mod sys;
+mod mount;
+mod platform;
 #[cfg(test)]
 mod test_support;
 mod timing;
-mod utils;
-mod vfs;
 
 use std::env;
 use std::process;

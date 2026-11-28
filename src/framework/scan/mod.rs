@@ -1,0 +1,899 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! Read-only scan of the module list, used by the planner and the CLI.
+//!
+//! It only reads and records, and never writes back to a module directory.
+//! It recognises `module.prop`, the disable/remove/skip_mount markers and system/extra partition contents.
+
+pub(crate) mod partitions;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+use crate::defs;
+use crate::errors::{Error, Result};
+use crate::framework::extension::ModuleEdits;
+use crate::mount::model::ModuleId;
+use crate::mount::model::NodeFileType;
+
+/// A mountable entry inside a module: `relative` is relative to the module root
+/// (such as `system/etc/hosts`) and always uses `/`, so it compares across platforms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleEntry {
+    pub relative: String,
+    pub file_type: NodeFileType,
+    pub replace: bool,
+    /// Read-only evidence used to distinguish a module layout alias from content.
+    pub link_target: Option<PathBuf>,
+    pub directory_remove: bool,
+    pub marker_error: Option<String>,
+}
+
+/// A module record produced by the read-only scan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleRecord {
+    pub id: ModuleId,
+    pub name: String,
+    pub version: String,
+    pub author: String,
+    pub description: String,
+    pub disabled: bool,
+    pub skip_mount: bool,
+    pub has_mount_files: bool,
+    pub source_path: PathBuf,
+    pub entries: Vec<ModuleEntry>,
+    pub edits: ModuleEdits,
+}
+
+impl ModuleRecord {
+    /// Whether it takes part in mounting, for the planner and the WebUI module list.
+    pub fn mountable(&self) -> bool {
+        self.has_mount_files && !self.disabled && !self.skip_mount
+    }
+}
+
+/// Scans the module directory and returns records sorted by id.
+///
+/// Failure semantics:
+/// - An unreadable module root is fatal (`Error::ScanReadDir`) rather than a silent empty list.
+/// - A single entry that cannot be read or checked is warned about and skipped.
+/// - Auxiliary directories, a missing/non-regular/unreadable `module.prop`, missing required
+///   fields, an invalid id, or a directory name that disagrees with the declared id are warned about and skipped, keeping non-modules out.
+/// - Two accepted directories declaring the same module id is fatal, so they cannot overwrite each other's staging paths.
+pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Vec<ModuleRecord>> {
+    list_modules_with(module_dir, extra_partitions, |_, _| {
+        Ok(ModuleEdits::default())
+    })
+}
+
+pub fn list_modules_with(
+    module_dir: &Path,
+    extra_partitions: &[String],
+    mut before_scan: impl FnMut(&ModuleId, bool) -> Result<ModuleEdits>,
+) -> Result<Vec<ModuleRecord>> {
+    let mut modules = Vec::new();
+    let mut declared_ids: BTreeMap<ModuleId, PathBuf> = BTreeMap::new();
+
+    let entries = module_dir.read_dir().map_err(|source| Error::ScanReadDir {
+        path: module_dir.to_path_buf(),
+        source,
+    })?;
+
+    let mut partitions = BTreeSet::from(["system".to_owned()]);
+    partitions.extend(extra_partitions.iter().cloned());
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                log::warn!(
+                    "failed to read module directory entry in {}: {err}",
+                    module_dir.display()
+                );
+                continue;
+            }
+        };
+        let path = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            log::warn!(
+                "failed to inspect module directory entry: {}",
+                path.display()
+            );
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        let prop_path = path.join(defs::MODULE_PROP_FILE_NAME);
+        let prop_metadata = match fs::symlink_metadata(&prop_path) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                log::warn!("failed to inspect {}: {err}", prop_path.display());
+                continue;
+            }
+        };
+        if !prop_metadata.file_type().is_file() {
+            log::warn!("{} is not a regular module.prop file", prop_path.display());
+            continue;
+        }
+        let prop_text = match fs::read_to_string(&prop_path) {
+            Ok(text) => text,
+            Err(err) => {
+                log::warn!("failed to read {}: {err}", prop_path.display());
+                continue;
+            }
+        };
+        let prop = parse_prop(&prop_text);
+
+        let Some(id) = prop.get("id") else {
+            log::warn!("{} missing module id", path.display());
+            continue;
+        };
+        let Some(name) = prop.get("name") else {
+            log::warn!("{} missing module name", path.display());
+            continue;
+        };
+        let Some(version) = prop.get("version") else {
+            log::warn!("{} missing module version", path.display());
+            continue;
+        };
+        let Some(author) = prop.get("author") else {
+            log::warn!("{} missing module author", path.display());
+            continue;
+        };
+        let Some(description) = prop.get("description") else {
+            log::warn!("{} missing module description", path.display());
+            continue;
+        };
+
+        let module_id = match ModuleId::try_from(id.as_str()) {
+            Ok(module_id) => module_id,
+            Err(_) => {
+                log::warn!(
+                    "module directory {} skipped: invalid module id={id:?}",
+                    path.display()
+                );
+                continue;
+            }
+        };
+
+        let dir_name = entry.file_name().to_string_lossy().into_owned();
+        // The name check comes before the duplicate check: a directory that is
+        // skipped for a name mismatch must not reserve its declared id, or a
+        // later, correctly named directory with that id would fail the boot.
+        if dir_name != module_id.as_str() {
+            log::warn!(
+                "module directory {} skipped: directory name={dir_name:?} does not match declared id={}",
+                path.display(),
+                module_id
+            );
+            continue;
+        }
+
+        if let Some(first_path) = declared_ids.get(&module_id) {
+            return Err(Error::DuplicateModuleId {
+                module_id: id.clone(),
+                first: first_path.clone(),
+                second: path,
+            });
+        }
+        declared_ids.insert(module_id.clone(), path.clone());
+
+        let disabled = path.join(defs::DISABLE_FILE_NAME).exists()
+            || path.join(defs::REMOVE_FILE_NAME).exists();
+        let marked = path.join(defs::SKIP_MOUNT_FILE_NAME).exists();
+        let edits = before_scan(&module_id, !disabled && !marked)?;
+        let skip_mount = marked || edits.skip;
+
+        let mut has_mount_files = false;
+        let mut entries = Vec::new();
+        for partition in &partitions {
+            let relative = Path::new(partition);
+            if edits.skip || edits.excludes(relative) || edits.replacements.contains_key(relative) {
+                continue;
+            }
+            let partition_dir = path.join(partition);
+            // `Path::is_dir` follows symlinks.  Magisk-style modules commonly
+            // expose aliases such as `product -> ./system/product`; following
+            // that alias here scans the same subtree once as `product/*` and
+            // again as `system/product/*`.  Besides producing duplicate plan
+            // sources, this can make the prepared OverlayFS tree much larger
+            // than the ext4 size scan (which deliberately does not follow
+            // symlinks).  Only real partition directories are scan roots;
+            // promoted content under `system/<partition>` is already found by
+            // the `system` walk and mapped to the correct target later.
+            match fs::symlink_metadata(&partition_dir) {
+                Ok(metadata) if metadata.file_type().is_dir() => {}
+                Ok(_) => continue,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    log::debug!(
+                        "module {} has no partition subtree: partition={partition}",
+                        module_id
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    log::warn!(
+                        "failed to inspect partition subtree {} of module {}: {err}",
+                        partition_dir.display(),
+                        module_id
+                    );
+                    continue;
+                }
+            }
+            has_mount_files = true;
+            // A partition-root .replace can intentionally contain no children.
+            // Keep it as directory metadata so all backends see the replacement.
+            let (directory_remove, marker_error) = remove_marker(&partition_dir);
+            if directory_remove
+                || marker_error.is_some()
+                || (partition != "system" && is_replace_dir(&partition_dir))
+            {
+                entries.push(ModuleEntry {
+                    relative: partition.clone(),
+                    file_type: if directory_remove {
+                        NodeFileType::Whiteout
+                    } else {
+                        NodeFileType::Directory
+                    },
+                    replace: !directory_remove && is_replace_dir(&partition_dir),
+                    link_target: None,
+                    directory_remove,
+                    marker_error,
+                });
+            }
+            if !directory_remove {
+                entries.extend(collect_partition_entries(
+                    &partition_dir,
+                    partition,
+                    &edits,
+                )?);
+            }
+        }
+        add_lua_entries(&edits, &mut entries)
+            .map_err(|err| Error::msg(format!("module {module_id}: {err}")))?;
+        has_mount_files |= !entries.is_empty();
+        entries.sort_by(|left, right| left.relative.cmp(&right.relative));
+
+        modules.push(ModuleRecord {
+            id: module_id,
+            name: name.clone(),
+            version: version.clone(),
+            author: author.clone(),
+            description: description.clone(),
+            disabled,
+            skip_mount,
+            has_mount_files,
+            source_path: path,
+            entries,
+            edits,
+        });
+    }
+
+    modules.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(modules)
+}
+
+/// Lightweight `key=value` parsing: blank lines and `#` comments are skipped and both sides are trimmed.
+fn parse_prop(text: &str) -> BTreeMap<String, String> {
+    text.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                return None;
+            }
+            let (key, value) = line.split_once('=')?;
+            Some((key.trim().to_owned(), value.trim().to_owned()))
+        })
+        .collect()
+}
+
+fn add_lua_entries(edits: &ModuleEdits, entries: &mut Vec<ModuleEntry>) -> Result<()> {
+    for (target, source) in &edits.replacements {
+        if edits.excludes(target) {
+            continue;
+        }
+        let kind = source
+            .symlink_metadata()
+            .map_err(|err| Error::msg(format!("replace source {}: {err}", source.display())))?
+            .file_type();
+        if !kind.is_dir() && (!kind.is_file() || target.components().count() == 1) {
+            return Err(Error::msg(format!(
+                "invalid replacement {} for {}",
+                source.display(),
+                target.display()
+            )));
+        }
+        let relative = target.to_string_lossy().into_owned();
+        if kind.is_dir() {
+            entries.extend(collect_partition_entries(source, &relative, edits)?);
+        }
+        entries.push(ModuleEntry {
+            relative,
+            file_type: if kind.is_dir() {
+                NodeFileType::Directory
+            } else {
+                NodeFileType::RegularFile
+            },
+            replace: kind.is_dir(),
+            link_target: None,
+            directory_remove: false,
+            marker_error: None,
+        });
+    }
+    for path in &edits.removed {
+        entries.push(ModuleEntry {
+            relative: path.to_string_lossy().into_owned(),
+            file_type: NodeFileType::Whiteout,
+            replace: false,
+            link_target: None,
+            directory_remove: true,
+            marker_error: None,
+        });
+    }
+    if !edits.replacements.is_empty() || !edits.removed.is_empty() {
+        let leaves: BTreeSet<_> = entries
+            .iter()
+            .filter(|entry| entry.file_type != NodeFileType::Directory)
+            .map(|entry| Path::new(&entry.relative))
+            .collect();
+        for path in edits
+            .replacements
+            .keys()
+            .filter(|path| !edits.excludes(path))
+            .chain(&edits.removed)
+        {
+            if path
+                .ancestors()
+                .skip(1)
+                .any(|parent| leaves.contains(parent) && !edits.removed.contains(parent))
+            {
+                return Err(Error::msg(format!(
+                    "Lua target {} has a non-directory ancestor",
+                    path.display()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_partition_entries(
+    partition_dir: &Path,
+    partition: &str,
+    edits: &ModuleEdits,
+) -> Result<Vec<ModuleEntry>> {
+    fn walk(
+        dir: &Path,
+        root: &Path,
+        partition: &str,
+        edits: &ModuleEdits,
+        replacement: bool,
+        out: &mut Vec<ModuleEntry>,
+    ) -> Result<()> {
+        let entries = match dir.read_dir() {
+            Ok(entries) => entries,
+            Err(err) if replacement => {
+                return Err(Error::msg(format!(
+                    "read replacement {}: {err}",
+                    dir.display()
+                )));
+            }
+            Err(err) => {
+                log::warn!(
+                    "failed to read module partition directory {}: {err}",
+                    dir.display()
+                );
+                return Ok(());
+            }
+        };
+
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(err) if replacement => {
+                    return Err(Error::msg(format!(
+                        "read replacement entry in {}: {err}",
+                        dir.display()
+                    )));
+                }
+                Err(err) => {
+                    log::warn!("failed to read module entry in {}: {err}", dir.display());
+                    continue;
+                }
+            };
+            let path = entry.path();
+            if entry.file_name() == defs::REPLACE_DIR_FILE_NAME
+                || entry.file_name() == defs::REMOVE_DIR_FILE_NAME
+            {
+                continue;
+            }
+            let Ok(relative) = path.strip_prefix(root) else {
+                continue;
+            };
+            let Some(relative) = relative_path_to_string(relative) else {
+                if replacement {
+                    return Err(Error::msg(format!(
+                        "replacement path requires UTF-8: {}",
+                        path.display()
+                    )));
+                }
+                log::warn!(
+                    "module entry path is not valid UTF-8 and will be skipped: {}",
+                    path.display()
+                );
+                continue;
+            };
+            if relative.is_empty() {
+                continue;
+            }
+            let relative = format!("{partition}/{relative}");
+            let logical = Path::new(&relative);
+            if edits.excludes(logical) || edits.replacements.contains_key(logical) {
+                continue;
+            }
+
+            let metadata = match fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(err) if replacement => {
+                    return Err(Error::msg(format!(
+                        "inspect replacement {}: {err}",
+                        path.display()
+                    )));
+                }
+                Err(err) => {
+                    log::warn!("failed to inspect module entry {}: {err}", path.display());
+                    continue;
+                }
+            };
+            let Some(file_type) = classify_file_type(&metadata) else {
+                if replacement {
+                    return Err(Error::msg(format!(
+                        "unsupported replacement entry {}",
+                        path.display()
+                    )));
+                }
+                log::warn!("unsupported module entry type: {}", path.display());
+                continue;
+            };
+            let (directory_remove, marker_error) = if file_type == NodeFileType::Directory {
+                remove_marker(&path)
+            } else {
+                (false, None)
+            };
+            let replace =
+                file_type == NodeFileType::Directory && !directory_remove && is_replace_dir(&path);
+
+            out.push(ModuleEntry {
+                relative,
+                file_type: if directory_remove {
+                    NodeFileType::Whiteout
+                } else {
+                    file_type
+                },
+                replace,
+                link_target: if file_type == NodeFileType::Symlink {
+                    fs::read_link(&path).ok()
+                } else {
+                    None
+                },
+                directory_remove,
+                marker_error,
+            });
+
+            if file_type == NodeFileType::Directory && !directory_remove {
+                walk(&path, root, partition, edits, replacement, out)?;
+            }
+        }
+        Ok(())
+    }
+
+    let mut out = Vec::new();
+    walk(
+        partition_dir,
+        partition_dir,
+        partition,
+        edits,
+        edits.replacements.contains_key(Path::new(partition)),
+        &mut out,
+    )?;
+    Ok(out)
+}
+
+fn relative_path_to_string(path: &Path) -> Option<String> {
+    path.components()
+        .map(|component| component.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>()
+        .map(|components| components.join("/"))
+}
+
+fn classify_file_type(metadata: &fs::Metadata) -> Option<NodeFileType> {
+    #[cfg(unix)]
+    if metadata.file_type().is_char_device() && metadata.rdev() == 0 {
+        return Some(NodeFileType::Whiteout);
+    }
+
+    NodeFileType::from_file_type(metadata.file_type())
+}
+
+fn remove_marker(path: &Path) -> (bool, Option<String>) {
+    let marker = path.join(defs::REMOVE_DIR_FILE_NAME);
+    match fs::symlink_metadata(&marker) {
+        Ok(metadata) if metadata.file_type().is_file() => (true, None),
+        Ok(_) => (
+            false,
+            Some(".remove must be a regular marker file, not a symlink or directory".into()),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (false, None),
+        Err(error) => (
+            false,
+            Some(format!("cannot inspect .remove marker: {error}")),
+        ),
+    }
+}
+
+fn is_replace_dir(path: &Path) -> bool {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if crate::platform::read_xattr(path, defs::REPLACE_DIR_XATTR)
+        .is_ok_and(|value| String::from_utf8_lossy(&value) == "y")
+    {
+        return true;
+    }
+
+    path.join(defs::REPLACE_DIR_FILE_NAME).exists()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn module_dir(tag: &str) -> crate::test_support::Fixture {
+        crate::test_support::Fixture::new(&format!("scanner-{tag}"))
+    }
+
+    fn write_module(root: &Path, id: &str) -> PathBuf {
+        let path = root.join(id);
+        fs::create_dir_all(path.join("system/etc")).unwrap();
+        fs::write(
+            path.join("module.prop"),
+            format!("id={id}\nname=N\nversion=1\nauthor=A\ndescription=D\n"),
+        )
+        .unwrap();
+        fs::write(path.join("system/etc/hosts"), "127.0.0.1 localhost").unwrap();
+        path
+    }
+
+    fn scan(root: &Path, extra_partitions: &[String]) -> Vec<ModuleRecord> {
+        list_modules(root, extra_partitions).unwrap()
+    }
+
+    #[test]
+    fn lists_modules_sorted_with_prop_and_entries() {
+        let root = module_dir("list");
+        write_module(&root, "b_mod");
+        write_module(&root, "a_mod");
+
+        let modules = scan(&root, &[]);
+
+        assert_eq!(modules.len(), 2);
+        assert_eq!(modules[0].id, "a_mod");
+        assert_eq!(modules[1].id, "b_mod");
+        assert!(modules[0].mountable());
+
+        let hosts = modules[0]
+            .entries
+            .iter()
+            .find(|entry| entry.relative == "system/etc/hosts")
+            .unwrap();
+        assert_eq!(hosts.file_type, NodeFileType::RegularFile);
+        assert!(
+            modules[0]
+                .entries
+                .iter()
+                .any(|entry| entry.relative == "system/etc"
+                    && entry.file_type == NodeFileType::Directory)
+        );
+    }
+
+    #[test]
+    fn disable_remove_and_skip_mount_mark_module() {
+        let root = module_dir("state");
+        let path = write_module(&root, "off");
+        fs::write(path.join("disable"), "").unwrap();
+        let modules = scan(&root, &[]);
+        assert!(modules[0].disabled);
+        assert!(!modules[0].mountable());
+
+        fs::remove_file(path.join("disable")).unwrap();
+        fs::write(path.join("skip_mount"), "").unwrap();
+        let modules = scan(&root, &[]);
+        assert!(modules[0].skip_mount);
+        assert!(!modules[0].mountable());
+
+        fs::remove_file(path.join("skip_mount")).unwrap();
+        fs::write(path.join("remove"), "").unwrap();
+        let modules = scan(&root, &[]);
+        assert!(modules[0].disabled);
+    }
+
+    #[test]
+    fn module_without_system_or_extra_partition_has_no_mount_files() {
+        let root = module_dir("empty");
+        let path = root.join("plain");
+        fs::create_dir_all(&path).unwrap();
+        fs::write(
+            path.join("module.prop"),
+            "id=plain\nname=N\nversion=1\nauthor=A\ndescription=D\n",
+        )
+        .unwrap();
+
+        let modules = scan(&root, &[]);
+        assert!(!modules[0].has_mount_files);
+
+        fs::create_dir_all(path.join("product")).unwrap();
+        let modules = scan(&root, &["product".to_owned()]);
+        assert!(modules[0].has_mount_files);
+    }
+
+    #[test]
+    fn missing_required_prop_field_skips_module() {
+        let root = module_dir("prop");
+        let path = root.join("bad");
+        fs::create_dir_all(path.join("system")).unwrap();
+        fs::write(path.join("module.prop"), "id=bad\n").unwrap();
+
+        assert!(scan(&root, &[]).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_module_directory_and_prop_are_not_scanned() {
+        use std::os::unix::fs::symlink;
+
+        let root = module_dir("symlink-module");
+        let outside = module_dir("symlink-module-outside");
+        let real_module = write_module(&outside, "real");
+        symlink(&real_module, root.join("linked_module")).unwrap();
+
+        let linked_prop = root.join("linked_prop");
+        fs::create_dir_all(linked_prop.join("system")).unwrap();
+        symlink(
+            real_module.join("module.prop"),
+            linked_prop.join("module.prop"),
+        )
+        .unwrap();
+
+        assert!(scan(&root, &[]).is_empty());
+    }
+
+    #[test]
+    fn extra_partitions_are_included_with_their_root_name() {
+        let root = module_dir("extra");
+        let path = write_module(&root, "x");
+        fs::create_dir_all(path.join("product/app")).unwrap();
+        fs::write(path.join("product/app/x.apk"), "x").unwrap();
+
+        let modules = scan(&root, &["product".to_owned()]);
+        assert!(modules[0].has_mount_files);
+        assert!(
+            modules[0]
+                .entries
+                .iter()
+                .any(|entry| entry.relative == "product/app/x.apk")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn partition_root_symlink_does_not_duplicate_promoted_system_subtree() {
+        use std::os::unix::fs::symlink;
+
+        let root = module_dir("partition-alias");
+        let path = write_module(&root, "alias");
+        fs::create_dir_all(path.join("system/product/media")).unwrap();
+        fs::write(
+            path.join("system/product/media/bootanimation.zip"),
+            "payload",
+        )
+        .unwrap();
+        symlink("./system/product", path.join("product")).unwrap();
+
+        let modules = scan(&root, &["product".to_owned()]);
+        let entries = &modules[0].entries;
+
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.relative == "system/product/media/bootanimation.zip")
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|entry| !entry.relative.starts_with("product/"))
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.file_type == NodeFileType::RegularFile)
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlink_remove_marker_is_reported_without_hiding_contents() {
+        let root = module_dir("invalid-remove");
+        let path = write_module(&root, "invalid");
+        let target = path.join("system/app/Foo");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(path.join("marker"), "").unwrap();
+        std::os::unix::fs::symlink(path.join("marker"), target.join(".remove")).unwrap();
+        fs::write(target.join("keep"), "module").unwrap();
+        let modules = scan(&root, &[]);
+        let entry = modules[0]
+            .entries
+            .iter()
+            .find(|e| e.relative == "system/app/Foo")
+            .unwrap();
+        assert!(entry.marker_error.is_some());
+        assert!(!entry.directory_remove);
+        assert!(
+            modules[0]
+                .entries
+                .iter()
+                .any(|e| e.relative == "system/app/Foo/keep")
+        );
+        assert!(
+            !modules[0]
+                .entries
+                .iter()
+                .any(|e| e.relative.ends_with("/.remove"))
+        );
+    }
+
+    #[test]
+    fn remove_marker_hides_a_directory_and_overrides_replace() {
+        let root = module_dir("directory-remove");
+        let path = write_module(&root, "hide");
+        let hidden = path.join("system/app/Foo");
+        fs::create_dir_all(&hidden).unwrap();
+        fs::write(hidden.join(".remove"), "").unwrap();
+        fs::write(hidden.join(".replace"), "").unwrap();
+        fs::write(hidden.join("ignored"), "module").unwrap();
+        fs::write(path.join("system/app/ordinary.remove"), "ordinary").unwrap();
+        let modules = scan(&root, &[]);
+        let entries = &modules[0].entries;
+        let removed = entries
+            .iter()
+            .find(|e| e.relative == "system/app/Foo")
+            .unwrap();
+        assert_eq!(removed.file_type, NodeFileType::Whiteout);
+        assert!(!removed.replace);
+        assert!(
+            !entries
+                .iter()
+                .any(|e| e.relative.starts_with("system/app/Foo/"))
+        );
+        assert!(
+            entries
+                .iter()
+                .any(|e| e.relative == "system/app/ordinary.remove"
+                    && e.file_type == NodeFileType::RegularFile)
+        );
+    }
+
+    #[test]
+    fn replace_marker_is_directory_metadata_not_a_mount_node() {
+        let root = module_dir("replace");
+        let path = write_module(&root, "replace_mod");
+        fs::write(path.join("system/etc/.replace"), "").unwrap();
+
+        let modules = scan(&root, &[]);
+        let etc = modules[0]
+            .entries
+            .iter()
+            .find(|entry| entry.relative == "system/etc")
+            .unwrap();
+
+        assert!(etc.replace);
+        assert!(
+            modules[0]
+                .entries
+                .iter()
+                .all(|entry| entry.relative != "system/etc/.replace")
+        );
+    }
+
+    #[test]
+    fn directory_name_must_match_declared_module_id() {
+        let root = module_dir("mismatch");
+        let path = root.join("actual_dir");
+        fs::create_dir_all(path.join("system/etc")).unwrap();
+        fs::write(
+            path.join("module.prop"),
+            "id=different_id\nname=N\nversion=1\nauthor=A\ndescription=D\n",
+        )
+        .unwrap();
+
+        assert!(scan(&root, &[]).is_empty());
+    }
+
+    #[test]
+    fn directory_name_mismatch_does_not_reserve_the_declared_id() {
+        let root = module_dir("duplicate");
+        let accepted = root.join("shared");
+        let mismatched = root.join("other_dir");
+        for path in [&accepted, &mismatched] {
+            fs::create_dir_all(path.join("system")).unwrap();
+            fs::write(
+                path.join("module.prop"),
+                "id=shared\nname=N\nversion=1\nauthor=A\ndescription=D\n",
+            )
+            .unwrap();
+        }
+
+        let modules = list_modules(&root, &[]).unwrap();
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "shared");
+        assert_eq!(modules[0].source_path, accepted);
+    }
+
+    #[test]
+    fn invalid_declared_module_id_skips_only_that_directory() {
+        let root = module_dir("invalid-id");
+        let bad = root.join("bad1");
+        fs::create_dir_all(bad.join("system")).unwrap();
+        fs::write(
+            bad.join("module.prop"),
+            "id=1bad\nname=N\nversion=1\nauthor=A\ndescription=D\n",
+        )
+        .unwrap();
+        write_module(&root, "good");
+
+        let modules = scan(&root, &[]);
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].id, "good");
+    }
+
+    #[test]
+    fn directory_type_module_prop_is_treated_as_auxiliary_directory() {
+        let root = module_dir("dir-prop");
+        let path = root.join("plain");
+        fs::create_dir_all(path.join("system")).unwrap();
+        fs::create_dir(path.join("module.prop")).unwrap();
+
+        assert!(scan(&root, &[]).is_empty());
+    }
+
+    #[test]
+    fn unreadable_module_root_is_a_scan_error_not_an_empty_list() {
+        let file = std::env::temp_dir().join(format!(
+            "hybrid-mount-scanner-not-a-dir-{}",
+            std::process::id()
+        ));
+        fs::write(&file, "not a directory").unwrap();
+
+        let err = list_modules(&file, &[]).unwrap_err();
+        assert!(matches!(err, Error::ScanReadDir { .. }), "{err}");
+
+        fs::remove_file(&file).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_component_is_not_removed_from_the_scanned_path() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let invalid =
+            PathBuf::from("system/etc").join(OsString::from_vec(vec![b'b', b'a', b'd', 0xff]));
+
+        assert_eq!(relative_path_to_string(&invalid), None);
+    }
+}

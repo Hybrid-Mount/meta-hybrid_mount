@@ -6,7 +6,7 @@ whenToUse: 出现 plan conflict、挂载未生效、需要判断某路径走 ove
 
 # 规划器冲突诊断
 
-规划阶段（`src/plan/mod.rs`）在 executor 之前把跨模块冲突显式暴露。
+规划阶段（`src/framework/plan/mod.rs`）在 executor 之前把跨模块冲突显式暴露。
 **修复必须在 planner，而不是在执行器里兜底。**
 
 ## 先确认规则命中
@@ -35,10 +35,10 @@ whenToUse: 出现 plan conflict、挂载未生效、需要判断某路径走 ove
 
 相关实现：
 
-- `src/plan/mod.rs` — 规则与冲突检测
-- `src/mount_tree.rs` — 统一节点树（`MountNode` / `MountSource`）
-- `src/pipeline.rs` — 执行顺序与回滚
-- `src/state.rs` — `run/state.json` 失败快照
+- `src/framework/plan/mod.rs` — 规则与冲突检测
+- `src/mount/model/tree.rs` — 统一节点树（`MountNode` / `MountSource`）
+- `src/framework/boot/mod.rs` — 执行顺序与回滚
+- `src/framework/state/mod.rs` — `run/state.json` 失败快照
 
 ```bash
 cargo test -p hybrid-mount plan -- --nocapture

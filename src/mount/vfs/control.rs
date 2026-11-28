@@ -1,0 +1,314 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! Runtime control and read-back verification, with an injectable keyring transport.
+
+use std::collections::BTreeMap;
+
+use serde::Serialize;
+
+use super::backend::{KeyringKernel, parse_version_response, rule_format};
+use super::protocol::{self, EncodedRule, ListedRule, NmCommand, RuleFormat, UidScope};
+use super::sys::KeyringChannel;
+use crate::errors::{Error, Result};
+
+pub(crate) trait Transport {
+    fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>>;
+
+    fn channel(&self) -> KeyringChannel {
+        KeyringChannel::Hybridmount
+    }
+}
+
+impl Transport for KeyringKernel {
+    fn exchange(&mut self, request: &[u8]) -> Result<Vec<u8>> {
+        KeyringKernel::exchange(self, request)
+    }
+
+    fn channel(&self) -> KeyringChannel {
+        self.channel()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ClearScope {
+    Rules,
+    Uids,
+    All,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Mutation {
+    Add {
+        rules: Vec<EncodedRule>,
+        scope: UidScope,
+    },
+    Delete {
+        paths: Vec<Vec<u8>>,
+        scope: UidScope,
+    },
+    AddUids(Vec<u32>),
+    DeleteUids(Vec<u32>),
+    Clear(ClearScope),
+}
+
+impl Mutation {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Add { .. } => "rule.add",
+            Self::Delete { .. } => "rule.del",
+            Self::AddUids(_) => "uid.add",
+            Self::DeleteUids(_) => "uid.del",
+            Self::Clear(ClearScope::Rules) => "rule.clear",
+            Self::Clear(ClearScope::Uids) => "uid.clear",
+            Self::Clear(ClearScope::All) => "clear.all",
+        }
+    }
+
+    /// Encode every page before issuing any mutation, including later batches.
+    fn pages(&self, format: RuleFormat) -> Result<Vec<Vec<u8>>> {
+        match self {
+            Self::Add { rules, scope } => {
+                protocol::build_add_rule_payloads_for(rules, *scope, format)
+            }
+            Self::Delete { paths, scope } => {
+                protocol::build_del_rule_payloads_for(paths, *scope, format)
+            }
+            Self::AddUids(uids) | Self::DeleteUids(uids) => {
+                let cmd = if matches!(self, Self::AddUids(_)) {
+                    NmCommand::AddUid
+                } else {
+                    NmCommand::DelUid
+                };
+                uids.iter()
+                    .map(|uid| protocol::build_payload(cmd, *uid, &[]))
+                    .collect()
+            }
+            Self::Clear(scope) => {
+                let cmd = match scope {
+                    ClearScope::Rules => NmCommand::ClearRules,
+                    ClearScope::Uids => NmCommand::ClearUids,
+                    ClearScope::All => NmCommand::ClearAll,
+                };
+                Ok(vec![protocol::build_payload(cmd, 0, &[])?])
+            }
+        }
+    }
+
+    fn check_response(&self, response: &[u8]) -> Result<()> {
+        match self {
+            Self::Add { .. } => protocol::ensure_consumed(response),
+            Self::Delete { .. } | Self::DeleteUids(_) => {
+                protocol::ensure_status_allow_enoent(response)
+            }
+            Self::AddUids(_) => protocol::ensure_status_allow_eexist(response),
+            Self::Clear(_) => protocol::ensure_status(response),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct VerifiedItem {
+    pub target: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uid: Option<u32>,
+    pub confirmed: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct MutationReport {
+    pub operation: &'static str,
+    pub ok: bool,
+    pub results: Vec<VerifiedItem>,
+    pub error: Option<String>,
+    pub readback_error: Option<String>,
+}
+
+pub(crate) struct Controller<T> {
+    transport: T,
+    format: RuleFormat,
+}
+
+impl<T> Controller<T>
+where
+    T: Transport,
+{
+    pub fn new(transport: T) -> Self {
+        Self {
+            transport,
+            format: RuleFormat::HybridMount,
+        }
+    }
+
+    pub fn version(&mut self) -> Result<String> {
+        let request = protocol::build_payload(NmCommand::GetVersion, 0, &[])?;
+        let response = self.transport.exchange(&request)?;
+        match self.transport.channel() {
+            KeyringChannel::Hybridmount => parse_version_response(&response),
+            KeyringChannel::Nomount => protocol::parse_version(&response),
+        }
+    }
+
+    /// Ordinary CLI operations never load a provider as a side effect.
+    pub fn require_supported(&mut self) -> Result<String> {
+        let found = self.version().map_err(|err| Error::VfsUnavailable {
+            reason: format!("{err}; use 'hybrid-mount vfs doctor' to diagnose or 'hybrid-mount vfs load' to load explicitly"),
+        })?;
+        self.format = rule_format(self.transport.channel(), &found)?;
+        Ok(found)
+    }
+
+    /// Reads every page of one listing command through the injected transport.
+    fn list<R, P>(&mut self, command: NmCommand, parse: P) -> Result<Vec<R>>
+    where
+        P: Fn(&[u8]) -> Result<(Vec<R>, u32)>,
+    {
+        protocol::paginate(
+            |cursor| {
+                self.transport
+                    .exchange(&protocol::build_list_payload(command, cursor)?)
+            },
+            parse,
+        )
+    }
+
+    pub fn list_rules(&mut self) -> Result<Vec<ListedRule>> {
+        let format = self.format;
+        self.list(NmCommand::GetList, |page| {
+            protocol::parse_list_for(page, format)
+        })
+    }
+
+    pub fn list_uids(&mut self) -> Result<Vec<u32>> {
+        self.list(NmCommand::GetUids, protocol::parse_uids)
+    }
+
+    pub fn mutate(&mut self, mutation: &Mutation) -> Result<MutationReport> {
+        let pages = mutation.pages(self.format)?;
+        let mut error = None;
+        for (index, page) in pages.iter().enumerate() {
+            let result = self
+                .transport
+                .exchange(page)
+                .and_then(|response| mutation.check_response(&response));
+            if let Err(err) = result {
+                let item = match mutation {
+                    Mutation::AddUids(uids) | Mutation::DeleteUids(uids) => {
+                        format!("UID {}", uids[index])
+                    }
+                    _ => format!("batch {}", index + 1),
+                };
+                error = Some(format!(
+                    "{} {item}: {err}; earlier records may have taken effect",
+                    mutation.name()
+                ));
+                break;
+            }
+        }
+
+        // Even a failed batch may have applied some records. Verify desired final state,
+        // including records after the failing offset; never roll back an overwritten rule.
+        let mut readback_errors = Vec::new();
+        let mut results = Vec::new();
+        match mutation {
+            Mutation::Add { rules, scope } => {
+                let listed = note_readback(&mut readback_errors, self.list_rules());
+                // Repeated paths use the last requested value, matching kernel replacement.
+                let expected: BTreeMap<&[u8], &EncodedRule> = rules
+                    .iter()
+                    .map(|rule| (rule.virtual_path.as_slice(), rule))
+                    .collect();
+                for (path, rule) in expected {
+                    let confirmed = listed.as_ref().is_some_and(|rows| {
+                        rows.iter().any(|row| {
+                            row.scope == *scope
+                                && row.virtual_path.as_bytes() == path
+                                && row.real_path.as_bytes() == rule.real_path
+                                && row.flags & (protocol::FLAG_WHITEOUT | protocol::FLAG_OPAQUE)
+                                    == rule.flags
+                                && (rule.flags & protocol::FLAG_OPAQUE == 0
+                                    || row.flags & protocol::FLAG_VIRTUAL_DIR != 0)
+                        })
+                    });
+                    results.push(VerifiedItem {
+                        target: String::from_utf8_lossy(path).into_owned(),
+                        uid: Some(scope.uid),
+                        confirmed,
+                    });
+                }
+            }
+            Mutation::Delete { paths, scope } => {
+                let listed = note_readback(&mut readback_errors, self.list_rules());
+                for path in paths {
+                    let confirmed = listed.as_ref().is_some_and(|rows| {
+                        !rows.iter().any(|row| {
+                            row.scope == *scope
+                                && row.virtual_path.as_bytes() == path
+                                && !protocol::is_derived_parent(row.flags, &row.real_path)
+                        })
+                    });
+                    results.push(VerifiedItem {
+                        target: String::from_utf8_lossy(path).into_owned(),
+                        uid: Some(scope.uid),
+                        confirmed,
+                    });
+                }
+            }
+            Mutation::AddUids(uids) | Mutation::DeleteUids(uids) => {
+                let listed = note_readback(&mut readback_errors, self.list_uids());
+                let present = matches!(mutation, Mutation::AddUids(_));
+                for uid in uids {
+                    results.push(VerifiedItem {
+                        target: uid.to_string(),
+                        uid: Some(*uid),
+                        confirmed: listed
+                            .as_ref()
+                            .is_some_and(|rows| rows.contains(uid) == present),
+                    });
+                }
+            }
+            Mutation::Clear(scope) => {
+                if matches!(scope, ClearScope::Rules | ClearScope::All) {
+                    let listed = note_readback(&mut readback_errors, self.list_rules());
+                    results.push(VerifiedItem {
+                        target: "rules".into(),
+                        uid: None,
+                        confirmed: listed.is_some_and(|rows| rows.is_empty()),
+                    });
+                }
+                if matches!(scope, ClearScope::Uids | ClearScope::All) {
+                    let listed = note_readback(&mut readback_errors, self.list_uids());
+                    results.push(VerifiedItem {
+                        target: "uids".into(),
+                        uid: None,
+                        confirmed: listed.is_some_and(|rows| rows.is_empty()),
+                    });
+                }
+            }
+        }
+        let readback_error = (!readback_errors.is_empty()).then(|| readback_errors.join("; "));
+        let ok = error.is_none()
+            && readback_error.is_none()
+            && results.iter().all(|item| item.confirmed);
+        Ok(MutationReport {
+            operation: mutation.name(),
+            ok,
+            results,
+            error,
+            readback_error,
+        })
+    }
+}
+
+/// Keeps a failed read-back as a report entry while still returning the successful listing.
+///
+/// A read-back failure must not hide records that did apply, so the error is collected and the
+/// caller carries on with `None`.
+fn note_readback<T>(readback_errors: &mut Vec<String>, listed: Result<T>) -> Option<T> {
+    listed
+        .map_err(|err| readback_errors.push(err.to_string()))
+        .ok()
+}
+
+#[cfg(test)]
+#[path = "control_tests.rs"]
+mod tests;

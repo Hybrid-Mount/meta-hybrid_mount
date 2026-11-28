@@ -4,7 +4,7 @@ description: >
   Microsoft Rust Guidelines 的选题集（原 microsoft/rust-guidelines）：把「什么是
   panic、什么是错误」当成类型与契约问题来裁，并为 unsafe、FFI、日志、lint 覆盖、
   魔法值给出可引用的条目式判据。用于 Hybrid Mount 的错误处理分层与 unsafe/FFI 审查：
-  src/errors.rs、src/sys/**、src/vfs/**、以及 workspace 级 lint 覆盖。
+  src/errors.rs、src/platform/sys/**、src/mount/vfs/**、以及 workspace 级 lint 覆盖。
 whenToUse: >
   当你要决定「这里该返回 Result 还是 panic」、要给 `#[allow]` 换成 `#[expect]`、
   要判断某段 unsafe 是否可能 unsound、或要给挂载/ioctl 常量补文档时读取。若只是
@@ -40,7 +40,7 @@ metadata:
 这些是通用的 API 设计建议，本仓库自己的契约优先。冲突时以 `CLAUDE.md` 与现有代码为准。
 
 - **「检测到编程错误就 panic」不能推广成「可以 `unwrap()`」。** `Cargo.toml` 的 workspace lint 对 `unwrap_used`/`expect_used` 是 `deny`，`clippy.toml` 只在 `#[cfg(test)]` 下放开（`allow-unwrap-in-tests = true`）。`M-PANIC-ON-BUG` 说的是"不要给不可恢复的 bug 造 `Error` 类型"，不是"允许在生产路径 unwrap"。生产代码用 `Result` + `?`，真的不可恢复就用 `panic!` 并写清消息（`M-PANIC-MESSAGE`）。
-- **分层已经给定，不要照搬书里的 crate 划分。** `src/errors.rs` 定义 `Error`，`src/sys/**` 是系统调用与 ABI 层，`src/runtime/**` 是所有权账本与事务层。`M-FFI-TRANSLATES` 说的"逻辑放核心、边界只做翻译"在这里对应：规划与冲突检测留在 `src/plan/**`，`src/sys/**` 只负责把 syscall 结果翻译成 `Result`。
+- **分层已经给定，不要照搬书里的 crate 划分。** `src/errors.rs` 定义 `Error`，`src/platform/sys/**` 是系统调用与 ABI 层，`src/framework/runtime/**` 是所有权账本与事务层。`M-FFI-TRANSLATES` 说的"逻辑放核心、边界只做翻译"在这里对应：规划与冲突检测留在 `src/framework/plan/**`，`src/platform/sys/**` 只负责把 syscall 结果翻译成 `Result`。
 - **`M-STATIC-VERIFICATION` 不能替代本仓库实际门禁。** 真正的门禁是 `.github/workflows/lints.yml`（fmt、`clippy -D warnings`、`cargo test --workspace`、禁用符号、ShellCheck、Android 三架构）。改完代码以 `hm-verify` 的清单为准，而不是"看起来满足规则"。
 - **主机编译通过不算数。** `src/main.rs` 有 `#![cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]`，Android 专属分支在 Windows 上根本不编译。
 

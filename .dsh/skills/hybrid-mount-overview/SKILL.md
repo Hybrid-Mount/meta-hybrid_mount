@@ -9,7 +9,7 @@ whenToUse: 任务涉及 Hybrid Mount 架构、模块扫描/规划/挂载流程�
 面向 KernelSU / APatch 的混合挂载元模块。Rust（edition 2024）+ Vue 3 WebUI，
 仓库根即 Cargo workspace 根，主 crate 名为 `hybrid-mount`。
 
-## 启动流水线（`src/pipeline.rs`，无参数入口）
+## 启动流水线（`src/framework/boot/mod.rs`，无参数入口）
 
 1. **config** 读取 `/data/adb/hybrid-mount/config.toml`
 2. **scan** 只读扫描 `/data/adb/modules`，构建 `ModuleRecord`
@@ -44,24 +44,24 @@ executor 随后会直接提前返回。后端 mode 取值为 `overlay | magic | 
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/pipeline.rs` | 启动流水线与回滚事务 |
-| `src/config.rs` | TOML 解析与校验 |
-| `src/scanner.rs` | 只读模块扫描 |
-| `src/plan/mod.rs` | 规划器（统一节点树） |
-| `src/mount_tree.rs` | 跨后端共享节点树 |
-| `src/overlayfs/` · `src/magic_mount/` | 两个执行后端 |
-| `src/storage/` | overlay staging（tmpfs / ext4） |
-| `src/sys/` | 文件系统 / 挂载 / nuke / LKM 加载器 |
-| `src/vfs/` | VFS 后端控制面：规则映射、wire protocol、keyring 通信、LKM 选型与加载 |
-| `src/runtime/` | 所有权账本、规则事务、挂载身份校验（见 `docs/RUNTIME.md`） |
-| `src/state.rs` | 运行状态快照（WebUI 读取） |
-| `src/cli.rs` | 手工 CLI 参数解析与分派 |
+| `src/framework/boot/mod.rs` | 启动流水线与回滚事务 |
+| `src/framework/config/mod.rs` | TOML 解析与校验 |
+| `src/framework/scan/mod.rs` | 只读模块扫描 |
+| `src/framework/plan/mod.rs` | 规划器（统一节点树） |
+| `src/mount/model/tree.rs` | 跨后端共享节点树 |
+| `src/mount/overlayfs/` · `src/mount/magic_mount/` | 两个执行后端 |
+| `src/mount/storage/` | overlay staging（tmpfs / ext4） |
+| `src/platform/sys/` | 文件系统 / 挂载 / nuke / LKM 加载器 |
+| `src/mount/vfs/` | VFS 后端控制面：规则映射、wire protocol、keyring 通信、LKM 选型与加载 |
+| `src/framework/runtime/` | 所有权账本、规则事务、挂载身份校验（见 `docs/RUNTIME.md`） |
+| `src/framework/state/mod.rs` | 运行状态快照（WebUI 读取） |
+| `src/cli/mod.rs` | 手工 CLI 参数解析与分派 |
 | `module/` | 安装与启动脚本、LKM、默认 config.toml |
 | `webui/` | Vue 3 + Vite WebUI |
 | `docs/` | 用户文档与 CLI / runtime 接口参考 |
 | `xtask/` | 构建 / 发布自动化 |
 
-## CLI 子命令（`src/cli.rs`）
+## CLI 子命令（`src/cli/mod.rs`）
 
 无参数 = 执行挂载流水线，`boot` = 带启动锁的流水线入口。其余：`show-config`、
 `save-config`、`gen-config`、`modules`、`status`、`version`、`install-state`、

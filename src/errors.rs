@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use crate::sys::process::{ProcessError, ProcessErrorKind};
+use crate::platform::sys::process::{ProcessError, ProcessErrorKind};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

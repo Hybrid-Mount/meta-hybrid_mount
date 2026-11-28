@@ -40,9 +40,9 @@ whenToUse: 要改 customize.sh、metainstall.sh、metamount.sh、boot-completed.
 5. **metainstall 只做符号链接**：唯一允许的操作是 `ln -sf "./system/$partition" "$MODPATH/$partition"`，不得 `cp -a` + `rm -rf`、不得 `mv system/<partition>`；`ln` 之前必须先判 `-e`/`-L`，否则会往已存在的目录里再建一层链接。`handle_partition` 被刻意留成空实现、`mark_replace` 改写 opaque xattr，这两处是安装器动态解析的钩子，不要删。
 6. **别手改生成物**：`module/module.prop` 被 `.gitignore` 忽略，由 `cargo xtask build` 生成到 `output/stage-<flavor>/module.prop`（`id=hybrid_mount`、`metamodule=1`，取自 `xtask/src/main.rs` 的 `MODULE_ID`）；打包时整份 `module/` 复制进 stage 再补二进制。改 id 或 metamodule 标记要改 xtask，并同步 `metainstall.sh` 的两个 `*_METAMODULE`。
 7. `module/module_blacklist.toml` 头部写明由 `auto-blacklist-pr.yml` 自动维护，不要手工加条目。
-8. `module/config.toml` 只是全新安装的种子：新增字段要同步 `src/config.rs` 的解析与默认值；向导只在 `/data/adb/hybrid-mount/config.toml` 不存在时运行，别改成覆盖已有配置。
+8. `module/config.toml` 只是全新安装的种子：新增字段要同步 `src/framework/config/mod.rs` 的解析与默认值；向导只在 `/data/adb/hybrid-mount/config.toml` 不存在时运行，别改成覆盖已有配置。
 9. **平台裁剪分支不能反**：`KSU=true` 时删 `lkm/`（改用官方 nuke ioctl），非 KSU 保留；`vfs/binaries/` 只在非 arm64 删，arm64 的 KernelSU 也保留（可经 ksud 加载），`vfs/src` 在任何平台都保留（GPL 完整性）。
-10. **熔断标记不在脚本里**：`lkm_boot_guard`、`vfs_lkm_boot_guard` 由 `src/sys/lkm.rs` 的 `LoadAttemptGuard` 在 `insmod` 前写、正常返回后删。脚本侧与 LKM 相关的唯一落点是 `customize.sh` 的保留/裁剪分支，外加 `vfs/setup.sh` 对 NoMount 内核树的拒绝；`uninstall.sh` 删运行目录时会连带清掉标记。
+10. **熔断标记不在脚本里**：`lkm_boot_guard`、`vfs_lkm_boot_guard` 由 `src/platform/sys/lkm.rs` 的 `LoadAttemptGuard` 在 `insmod` 前写、正常返回后删。脚本侧与 LKM 相关的唯一落点是 `customize.sh` 的保留/裁剪分支，外加 `vfs/setup.sh` 对 NoMount 内核树的拒绝；`uninstall.sh` 删运行目录时会连带清掉标记。
 11. `module/vfs/setup.sh` 只在没有 NoMount 的树里工作，Kconfig/Makefile 行用 `grep -F` 按字面量比较并追加；`--cleanup` 必须能原样回滚。改这些字面量要同步改 `tests/shell/vfs_setup.sh` 的断言。
 
 ## ShellCheck 与本地自测

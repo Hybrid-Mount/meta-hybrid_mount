@@ -23,6 +23,9 @@ Submit a PR on either platform and describe the problem, changed behavior and ve
 AtomGit PRs require maintainer integration into GitHub before the next automatic sync;
 please do not open duplicate PRs on both platforms.
 
+See the [source layout](docs/PROJECT_LAYOUT.md) for the CLI, framework, mount backends and platform interfaces.
+源码目录与依赖关系见[项目架构](docs/PROJECT_LAYOUT.md)。
+
 Rust changes should pass `cargo fmt --all -- --check`,
 `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
 For WebUI changes, run `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm test`

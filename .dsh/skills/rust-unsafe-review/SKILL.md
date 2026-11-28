@@ -4,8 +4,8 @@ description: >
   Google 的 unsafe Rust 安全文档与审查方法论（上游名 unsafe-rust-review）：把每个
   `# Safety` 文档与 safety 注释当作可机械检验的证明义务，依据 Rust Reference、
   标准库文档、可信依赖契约与项目不变量逐条核对。用于 Hybrid Mount 的 unsafe /
-  FFI / syscall 面——src/sys（mount、ioctl、lkm、fs）、src/storage/ext4、
-  src/magic_mount、src/overlayfs、src/vfs 的 raw pointer 与 libc 调用。
+  FFI / syscall 面——src/platform/sys（mount、ioctl、lkm、fs）、src/mount/storage/ext4、
+  src/mount/magic_mount、src/mount/overlayfs、src/mount/vfs 的 raw pointer 与 libc 调用。
 whenToUse: >
   在 Hybrid Mount 中新增或审查任何 unsafe 边界时使用：unsafe fn / unsafe trait /
   unsafe impl / unsafe {} 块、raw pointer 解引用、libc 与 ioctl 调用、FFI 结构体、
@@ -30,7 +30,7 @@ metadata:
 
 These rules are generic unsafe-Rust defaults. This repository's own contracts win wherever they differ. Verify against `CLAUDE.md`, `hm-mount-safety-review` and the current source before acting.
 
-- **The `unsafe` surface here is syscall and ABI plumbing, not data-structure invention.** `src/sys/` performs `mount(2)`, `ioctl(2)`, ELF/vermagic rewriting and raw `libc` calls; `src/vfs/protocol.rs` parses an ioctl wire format. The proof obligations you must discharge are about *what the kernel guarantees for those calls on Android*, which the Rust Reference alone does not supply — cite that contract explicitly or mark the premise unverifiable.
+- **The `unsafe` surface here is syscall and ABI plumbing, not data-structure invention.** `src/platform/sys/` performs `mount(2)`, `ioctl(2)`, ELF/vermagic rewriting and raw `libc` calls; `src/mount/vfs/protocol.rs` parses an ioctl wire format. The proof obligations you must discharge are about *what the kernel guarantees for those calls on Android*, which the Rust Reference alone does not supply — cite that contract explicitly or mark the premise unverifiable.
 - **Match the file's existing comment convention.** This repo already writes SAFETY comments above its unsafe blocks; follow the surrounding style instead of introducing a new template, and do not rewrite a safety comment that already states its assumptions.
 - **Do not add `unsafe` to escape a lint.** `unwrap_used`, `expect_used`, `dbg_macro`, `todo` and `unimplemented` are `deny` at workspace level; `clippy.toml` relaxes `unwrap`/`expect` inside tests only. Reaching for `unsafe` to work around a denied API is never an acceptable discharge.
 - **A host build is not evidence.** `src/main.rs` sets `#![cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]`, so code the Android target never compiles can still look exercised on the host.

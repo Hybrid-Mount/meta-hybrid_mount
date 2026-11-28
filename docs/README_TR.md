@@ -1,6 +1,6 @@
 # Hybrid Mount
 
-<img src="../icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
+<img src="../assets/icon.svg" alt="Hybrid Mount logo" align="right" width="120" />
 
 Hybrid Mount, KernelSU ve APatch için karma bir bağlama metamodülüdür. Açılış sırasında diğer modülleri tarar; genel, modül ve yol kurallarına göre her girdiyi OverlayFS, Magic Mount, VFS veya yoksayma moduna yönlendirir. Modül kaynak dizinleri her zaman salt okunur girdi olarak kabul edilir.
 

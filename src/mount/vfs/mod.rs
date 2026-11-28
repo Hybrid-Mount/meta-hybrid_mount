@@ -1,0 +1,230 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! Userspace backend for hybridmount and compatible NoMount kernels.
+
+pub mod backend;
+pub mod boot_guard;
+pub(crate) mod control;
+pub mod doctor;
+pub mod exec;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod guard;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod lkm;
+pub mod lkm_target;
+pub mod protocol;
+pub mod rule;
+pub mod sys;
+
+/// Whether the VFS backend can be offered on this device right now.
+///
+/// Every surface that advertises VFS reads this, so a kernel without the module shows no VFS
+/// option, count or description line anywhere.
+pub fn available() -> bool {
+    doctor::responds_now()
+}
+
+/// Brings the provider up before the mount plan is built, and reports whether it is usable.
+///
+/// The plan degrades every `vfs` rule to `ignore` while [`available`] is false, and the executor
+/// only reaches its own load step for a plan that still contains vfs work. Loading here therefore
+/// has to happen *before* planning: probing alone can never make the first plan contain vfs, so a
+/// device whose kernel does not carry the module would otherwise never load the bundled one.
+///
+/// `available` is the read-only probe and `load` performs the `insmod`; both are injected so the
+/// ordering and startup capability discovery are testable without a device. A load failure is
+/// not an error here — the plan then degrades exactly as it does when no module is bundled.
+pub fn ensure_loaded_for_plan(
+    wants_vfs: bool,
+    available: impl Fn() -> bool,
+    load: impl FnOnce() -> crate::errors::Result<()>,
+) -> bool {
+    ensure_loaded_for_plan_with_guard(wants_vfs, false, available, load)
+}
+
+/// Same as [`ensure_loaded_for_plan`], but refuses to load Hybrid Mount when another VFS
+/// implementation was observed before planning. The guard belongs before the load decision:
+/// once a foreign provider is present, probing again after `insmod` is too late to prevent both
+/// implementations from taking effect.
+pub fn ensure_loaded_for_plan_with_guard(
+    wants_vfs: bool,
+    foreign_provider: bool,
+    available: impl Fn() -> bool,
+    load: impl FnOnce() -> crate::errors::Result<()>,
+) -> bool {
+    if foreign_provider {
+        log::warn!("foreign vfs provider is present; refusing to load hybridmount");
+        return false;
+    }
+
+    if available() {
+        return true;
+    }
+
+    log::info!("vfs key type does not answer; checking the bundled module (wants_vfs={wants_vfs})");
+    if let Err(err) = load() {
+        log::warn!("bundled vfs module load failed: {err}");
+    }
+
+    let ready = available();
+    if !ready {
+        log::warn!("no vfs kernel provider after loading; vfs rules degrade to ignore");
+    }
+    ready
+}
+
+/// Whether an unavailable provider has to abort the boot instead of degrading.
+///
+/// `vfs_strict` is a promise about a backend the config actually uses, so it applies only when a
+/// rule selects vfs: a device configured for overlay or magic must still boot normally with the
+/// option left on. The boot pipeline asks this before planning, because the plan rewrites every
+/// `vfs` rule to `ignore` and the executor then returns early without reaching its own strict
+/// checks, which would otherwise make the option silently ineffective.
+pub const fn unavailable_is_fatal(wants_vfs: bool, strict: bool, available: bool) -> bool {
+    wants_vfs && strict && !available
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    #[test]
+    fn a_wanted_vfs_loads_the_bundled_module_when_the_probe_is_silent() {
+        let available = Cell::new(false);
+        let loads = Cell::new(0);
+
+        let ready = ensure_loaded_for_plan_with_guard(
+            true,
+            false,
+            || available.get(),
+            || {
+                loads.set(loads.get() + 1);
+                available.set(true);
+                Ok(())
+            },
+        );
+
+        assert!(ready, "a successful load must leave vfs available");
+        assert_eq!(loads.get(), 1, "the bundled module must be loaded once");
+    }
+
+    #[test]
+    fn an_answering_provider_is_never_reloaded() {
+        let loads = Cell::new(0);
+
+        let ready = ensure_loaded_for_plan_with_guard(
+            true,
+            false,
+            || true,
+            || {
+                loads.set(loads.get() + 1);
+                Ok(())
+            },
+        );
+
+        assert!(ready);
+        assert_eq!(loads.get(), 0, "an answering key type needs no insmod");
+    }
+
+    #[test]
+    fn vfs_is_attempted_even_when_no_rule_asks_for_it() {
+        let loads = Cell::new(0);
+
+        let ready = ensure_loaded_for_plan_with_guard(
+            false,
+            false,
+            || false,
+            || {
+                loads.set(loads.get() + 1);
+                Ok(())
+            },
+        );
+
+        assert!(!ready);
+        assert_eq!(
+            loads.get(),
+            1,
+            "boot must discover VFS support before offering it in the UI"
+        );
+    }
+
+    #[test]
+    fn a_failed_load_reports_unavailable_without_aborting() {
+        let ready = ensure_loaded_for_plan_with_guard(false, false, || false, || Ok(()));
+        assert!(!ready);
+
+        let ready = ensure_loaded_for_plan_with_guard(
+            true,
+            false,
+            || false,
+            || {
+                Err(crate::errors::Error::msg(
+                    "no bundled module for this kernel",
+                ))
+            },
+        );
+        assert!(
+            !ready,
+            "a failed load must degrade rather than claim success"
+        );
+    }
+
+    #[test]
+    fn a_foreign_provider_blocks_the_loader_before_planning() {
+        let loads = Cell::new(0);
+
+        let ready = ensure_loaded_for_plan_with_guard(
+            true,
+            true,
+            || false,
+            || {
+                loads.set(loads.get() + 1);
+                Ok(())
+            },
+        );
+
+        assert!(!ready);
+        assert_eq!(loads.get(), 0, "a foreign provider must block insmod");
+    }
+
+    #[test]
+    fn strict_fails_the_boot_when_a_requested_provider_is_missing() {
+        assert!(unavailable_is_fatal(true, true, false));
+    }
+
+    #[test]
+    fn strict_is_inert_without_a_vfs_rule_or_without_a_problem() {
+        assert!(!unavailable_is_fatal(false, true, false), "no vfs rule");
+        assert!(!unavailable_is_fatal(true, true, true), "provider present");
+        assert!(!unavailable_is_fatal(true, false, false), "strict off");
+    }
+
+    #[test]
+    fn the_boot_pipeline_loads_before_it_plans() {
+        let pipeline = include_str!("../../framework/boot/mod.rs");
+
+        let load = pipeline
+            .find("ensure_loaded_for_plan")
+            .expect("the boot pipeline must bring the provider up");
+        let plan = pipeline
+            .find("build_plan(")
+            .expect("the boot pipeline must build a plan");
+        assert!(
+            load < plan,
+            "the bundled module must be loaded before planning: the plan degrades vfs while the \
+             key type is silent, so a load after it can never be reached"
+        );
+
+        let planned = &pipeline[plan..];
+        let input = &planned[..planned.find("})").expect("the PlanInput call must close")];
+        assert!(
+            input.contains("vfs_available,"),
+            "build_plan must be handed the post-load probe result"
+        );
+        assert!(
+            !input.contains("crate::mount::vfs::available()"),
+            "build_plan must not re-probe, which would ignore the module just loaded"
+        );
+    }
+}
