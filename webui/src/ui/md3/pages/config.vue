@@ -5,11 +5,14 @@ import { useI18n } from "vue-i18n";
 import { uiStore } from "../../../lib/stores/uiStore";
 import { configStore } from "../../../lib/stores/configStore";
 import { sysStore } from "../../../lib/stores/sysStore";
-import type { DefaultMountMode, OverlayMode, UiStyle } from "../../../lib/types";
+import type { DefaultMountMode, OverlayMode } from "../../../lib/types";
+import Md3ActionButton from "../components/Md3ActionButton.vue";
+import Md3ConfigPreferences from "../components/Md3ConfigPreferences.vue";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import Md3SelectField, { type SelectOption } from "../components/Md3SelectField.vue";
 import { ICONS } from "../icons";
 
+defineProps<{ wear?: boolean }>();
 const { t } = useI18n();
 const resetOpen = ref(false);
 const modeOptions = computed(() => sysStore.defaultMountModes);
@@ -18,16 +21,6 @@ const modeLabels = computed<Record<DefaultMountMode, string>>(() => ({
   magic: t("config.modeMagic"),
   vfs: t("config.modeVfs"),
 }));
-const languageOptions = computed<SelectOption[]>(() =>
-  uiStore.availableLanguages.map((language) => ({
-    value: language.code,
-    label: language.display,
-  })),
-);
-const styleOptions: SelectOption[] = [
-  { value: "md3", label: "Material Design 3" },
-  { value: "miuix", label: "Miuix" },
-];
 const overlayOptions = computed<SelectOption[]>(() => {
   const options: SelectOption[] = [];
   if (configStore.config.tmpfs_xattr_supported) {
@@ -48,11 +41,6 @@ function updateConfig(patch: Partial<typeof configStore.config>): void {
   configStore.setConfig({ ...configStore.config, ...patch });
 }
 
-function updateUiStyle(value: string): void {
-  uiStore.setUiStyle(value as UiStyle);
-  uiStore.showToast(t("common.styleChanged"));
-}
-
 async function save(): Promise<void> {
   const ok = await configStore.saveConfig();
   uiStore.showToast(ok ? t("config.saveSuccess") : t("config.saveFailed"));
@@ -71,41 +59,9 @@ onMounted(() =>
 
 <template>
   <div class="config-container">
-    <section class="config-group">
-      <div class="config-card">
-        <div class="card-header">
-          <span class="card-icon">
-            <md-icon
-              ><svg viewBox="0 0 24 24"><path :d="ICONS.settings" /></svg
-            ></md-icon>
-          </span>
-          <span class="card-text">
-            <span class="card-title">WebUI</span>
-            <span class="card-desc"
-              >{{ t("common.language")
-              }}<span class="phone-style-field"> · {{ t("common.uiStyle") }}</span></span
-            >
-          </span>
-        </div>
-        <div class="field-grid">
-          <Md3SelectField
-            :label="t('common.language')"
-            :model-value="uiStore.lang"
-            :options="languageOptions"
-            @update:model-value="uiStore.setLang"
-          />
-          <Md3SelectField
-            class="phone-style-field"
-            :label="t('common.uiStyle')"
-            :model-value="uiStore.uiStyle"
-            :options="styleOptions"
-            @update:model-value="updateUiStyle"
-          />
-        </div>
-      </div>
-    </section>
+    <Md3ConfigPreferences v-if="!wear" />
 
-    <section class="config-group">
+    <section class="config-group" :inert="wear && configStore.loading">
       <div class="config-card">
         <div class="card-header">
           <span class="card-icon">
@@ -139,6 +95,7 @@ onMounted(() =>
               <span>{{ t("config.disableUmountDesc") }}</span>
             </span>
             <md-switch
+              :aria-label="wear ? t('config.disableUmount') : undefined"
               :selected="configStore.config.disable_umount"
               @change="updateConfig({ disable_umount: eventSelected($event) })"
             />
@@ -165,6 +122,7 @@ onMounted(() =>
             type="button"
             class="mode-item"
             :class="{ selected: configStore.config.default_mode === mode }"
+            :aria-pressed="wear ? configStore.config.default_mode === mode : undefined"
             @click="updateConfig({ default_mode: mode })"
           >
             <span class="mode-info">
@@ -181,26 +139,24 @@ onMounted(() =>
     </section>
 
     <Md3BottomActions>
-      <md-filled-tonal-icon-button
+      <Md3ActionButton
+        :wear="wear"
         class="destructive-action"
-        :title="t('common.reset')"
-        :aria-label="t('common.reset')"
+        :label="t('common.reset')"
+        :icon="ICONS.reset"
+        :disabled="wear && (configStore.loading || configStore.saving)"
         @click="resetOpen = true"
-      >
-        <md-icon
-          ><svg viewBox="0 0 24 24"><path :d="ICONS.reset" /></svg
-        ></md-icon>
-      </md-filled-tonal-icon-button>
-      <md-filled-tonal-icon-button
-        :title="t('config.save')"
-        :aria-label="t('config.save')"
+      />
+      <Md3ActionButton
+        :wear="wear"
+        :label="t('config.save')"
+        :icon="ICONS.save"
+        :disabled="wear && (!configStore.hasLoaded || configStore.saving)"
         @click="save"
-      >
-        <md-icon
-          ><svg viewBox="0 0 24 24"><path :d="ICONS.save" /></svg
-        ></md-icon>
-      </md-filled-tonal-icon-button>
+      />
     </Md3BottomActions>
+
+    <Md3ConfigPreferences v-if="wear" wear />
 
     <md-dialog :open="resetOpen" @closed="resetOpen = false">
       <div slot="headline">{{ t("common.reset") }}</div>

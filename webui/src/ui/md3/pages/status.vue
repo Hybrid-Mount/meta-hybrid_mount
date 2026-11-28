@@ -16,10 +16,12 @@ import {
   uniqueActiveMounts,
 } from "../../../lib/statusMounts";
 import type { BannerAction } from "../../../lib/statusMounts";
+import Md3ActionButton from "../components/Md3ActionButton.vue";
 import Md3BottomActions from "../components/Md3BottomActions.vue";
 import StatusErrorBanner from "../components/StatusErrorBanner.vue";
 import { ICONS } from "../icons";
 
+defineProps<{ wear?: boolean }>();
 const { t } = useI18n();
 const rebootOpen = ref(false);
 const guardOpen = ref(false);
@@ -259,26 +261,20 @@ onMounted(refresh);
     </div>
 
     <Md3BottomActions>
-      <md-filled-tonal-icon-button
+      <Md3ActionButton
+        :wear="wear"
         class="destructive-action"
-        :title="t('common.reboot')"
-        :aria-label="t('common.reboot')"
+        :label="t('common.reboot')"
+        :icon="ICONS.power"
         @click="rebootOpen = true"
-      >
-        <md-icon
-          ><svg viewBox="0 0 24 24"><path :d="ICONS.power" /></svg
-        ></md-icon>
-      </md-filled-tonal-icon-button>
-      <md-filled-tonal-icon-button
+      />
+      <Md3ActionButton
+        :wear="wear"
+        :label="t('common.refresh')"
+        :icon="ICONS.refresh"
         :disabled="sysStore.loading"
-        :title="t('common.refresh')"
-        :aria-label="t('common.refresh')"
         @click="refresh"
-      >
-        <md-icon
-          ><svg viewBox="0 0 24 24"><path :d="ICONS.refresh" /></svg
-        ></md-icon>
-      </md-filled-tonal-icon-button>
+      />
     </Md3BottomActions>
 
     <md-dialog :open="rebootOpen" @closed="rebootOpen = false">

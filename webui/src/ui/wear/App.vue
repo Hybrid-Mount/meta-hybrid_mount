@@ -9,7 +9,12 @@ import ModulesPage from "../md3/pages/modules.vue";
 import InfoPage from "../md3/pages/info.vue";
 
 const { t } = useI18n();
-const pages = [StatusPage, ConfigPage, ModulesPage, InfoPage];
+const pages = [
+  { component: StatusPage, props: { wear: true } },
+  { component: ConfigPage, props: { wear: true } },
+  { component: ModulesPage },
+  { component: InfoPage },
+];
 const titles = computed(() => [
   t("tabs.status"),
   t("tabs.config"),
