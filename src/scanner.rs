@@ -14,6 +14,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
 use crate::defs;
 use crate::errors::{Error, Result};
+use crate::extensions::ModuleEdits;
 use crate::module_id::ModuleId;
 use crate::mount_tree::NodeFileType;
 
@@ -43,6 +44,7 @@ pub struct ModuleRecord {
     pub has_mount_files: bool,
     pub source_path: PathBuf,
     pub entries: Vec<ModuleEntry>,
+    pub edits: ModuleEdits,
 }
 
 impl ModuleRecord {
@@ -61,6 +63,16 @@ impl ModuleRecord {
 ///   fields, an invalid id, or a directory name that disagrees with the declared id are warned about and skipped, keeping non-modules out.
 /// - Two accepted directories declaring the same module id is fatal, so they cannot overwrite each other's staging paths.
 pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Vec<ModuleRecord>> {
+    list_modules_with(module_dir, extra_partitions, |_, _| {
+        Ok(ModuleEdits::default())
+    })
+}
+
+pub fn list_modules_with(
+    module_dir: &Path,
+    extra_partitions: &[String],
+    mut before_scan: impl FnMut(&ModuleId, bool) -> Result<ModuleEdits>,
+) -> Result<Vec<ModuleRecord>> {
     let mut modules = Vec::new();
     let mut declared_ids: BTreeMap<ModuleId, PathBuf> = BTreeMap::new();
 
@@ -172,11 +184,17 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
 
         let disabled = path.join(defs::DISABLE_FILE_NAME).exists()
             || path.join(defs::REMOVE_FILE_NAME).exists();
-        let skip_mount = path.join(defs::SKIP_MOUNT_FILE_NAME).exists();
+        let marked = path.join(defs::SKIP_MOUNT_FILE_NAME).exists();
+        let edits = before_scan(&module_id, !disabled && !marked)?;
+        let skip_mount = marked || edits.skip;
 
         let mut has_mount_files = false;
         let mut entries = Vec::new();
         for partition in &partitions {
+            let relative = Path::new(partition);
+            if edits.skip || edits.excludes(relative) || edits.replacements.contains_key(relative) {
+                continue;
+            }
             let partition_dir = path.join(partition);
             // `Path::is_dir` follows symlinks.  Magisk-style modules commonly
             // expose aliases such as `product -> ./system/product`; following
@@ -228,9 +246,16 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
                 });
             }
             if !directory_remove {
-                entries.extend(collect_partition_entries(&partition_dir, partition));
+                entries.extend(collect_partition_entries(
+                    &partition_dir,
+                    partition,
+                    &edits,
+                )?);
             }
         }
+        add_lua_entries(&edits, &mut entries)
+            .map_err(|err| Error::msg(format!("module {module_id}: {err}")))?;
+        has_mount_files |= !entries.is_empty();
         entries.sort_by(|left, right| left.relative.cmp(&right.relative));
 
         modules.push(ModuleRecord {
@@ -244,6 +269,7 @@ pub fn list_modules(module_dir: &Path, extra_partitions: &[String]) -> Result<Ve
             has_mount_files,
             source_path: path,
             entries,
+            edits,
         });
     }
 
@@ -265,22 +291,115 @@ fn parse_prop(text: &str) -> BTreeMap<String, String> {
         .collect()
 }
 
-fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<ModuleEntry> {
-    fn walk(dir: &Path, root: &Path, partition: &str, out: &mut Vec<ModuleEntry>) {
+fn add_lua_entries(edits: &ModuleEdits, entries: &mut Vec<ModuleEntry>) -> Result<()> {
+    for (target, source) in &edits.replacements {
+        if edits.excludes(target) {
+            continue;
+        }
+        let kind = source
+            .symlink_metadata()
+            .map_err(|err| Error::msg(format!("replace source {}: {err}", source.display())))?
+            .file_type();
+        if !kind.is_dir() && (!kind.is_file() || target.components().count() == 1) {
+            return Err(Error::msg(format!(
+                "invalid replacement {} for {}",
+                source.display(),
+                target.display()
+            )));
+        }
+        let relative = target.to_string_lossy().into_owned();
+        if kind.is_dir() {
+            entries.extend(collect_partition_entries(source, &relative, edits)?);
+        }
+        entries.push(ModuleEntry {
+            relative,
+            file_type: if kind.is_dir() {
+                NodeFileType::Directory
+            } else {
+                NodeFileType::RegularFile
+            },
+            replace: kind.is_dir(),
+            link_target: None,
+            directory_remove: false,
+            marker_error: None,
+        });
+    }
+    for path in &edits.removed {
+        entries.push(ModuleEntry {
+            relative: path.to_string_lossy().into_owned(),
+            file_type: NodeFileType::Whiteout,
+            replace: false,
+            link_target: None,
+            directory_remove: true,
+            marker_error: None,
+        });
+    }
+    if !edits.replacements.is_empty() || !edits.removed.is_empty() {
+        let leaves: BTreeSet<_> = entries
+            .iter()
+            .filter(|entry| entry.file_type != NodeFileType::Directory)
+            .map(|entry| Path::new(&entry.relative))
+            .collect();
+        for path in edits
+            .replacements
+            .keys()
+            .filter(|path| !edits.excludes(path))
+            .chain(&edits.removed)
+        {
+            if path
+                .ancestors()
+                .skip(1)
+                .any(|parent| leaves.contains(parent) && !edits.removed.contains(parent))
+            {
+                return Err(Error::msg(format!(
+                    "Lua target {} has a non-directory ancestor",
+                    path.display()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_partition_entries(
+    partition_dir: &Path,
+    partition: &str,
+    edits: &ModuleEdits,
+) -> Result<Vec<ModuleEntry>> {
+    fn walk(
+        dir: &Path,
+        root: &Path,
+        partition: &str,
+        edits: &ModuleEdits,
+        replacement: bool,
+        out: &mut Vec<ModuleEntry>,
+    ) -> Result<()> {
         let entries = match dir.read_dir() {
             Ok(entries) => entries,
+            Err(err) if replacement => {
+                return Err(Error::msg(format!(
+                    "read replacement {}: {err}",
+                    dir.display()
+                )));
+            }
             Err(err) => {
                 log::warn!(
                     "failed to read module partition directory {}: {err}",
                     dir.display()
                 );
-                return;
+                return Ok(());
             }
         };
 
         for entry in entries {
             let entry = match entry {
                 Ok(entry) => entry,
+                Err(err) if replacement => {
+                    return Err(Error::msg(format!(
+                        "read replacement entry in {}: {err}",
+                        dir.display()
+                    )));
+                }
                 Err(err) => {
                     log::warn!("failed to read module entry in {}: {err}", dir.display());
                     continue;
@@ -296,6 +415,12 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
                 continue;
             };
             let Some(relative) = relative_path_to_string(relative) else {
+                if replacement {
+                    return Err(Error::msg(format!(
+                        "replacement path requires UTF-8: {}",
+                        path.display()
+                    )));
+                }
                 log::warn!(
                     "module entry path is not valid UTF-8 and will be skipped: {}",
                     path.display()
@@ -305,15 +430,32 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
             if relative.is_empty() {
                 continue;
             }
+            let relative = format!("{partition}/{relative}");
+            let logical = Path::new(&relative);
+            if edits.excludes(logical) || edits.replacements.contains_key(logical) {
+                continue;
+            }
 
             let metadata = match fs::symlink_metadata(&path) {
                 Ok(metadata) => metadata,
+                Err(err) if replacement => {
+                    return Err(Error::msg(format!(
+                        "inspect replacement {}: {err}",
+                        path.display()
+                    )));
+                }
                 Err(err) => {
                     log::warn!("failed to inspect module entry {}: {err}", path.display());
                     continue;
                 }
             };
             let Some(file_type) = classify_file_type(&metadata) else {
+                if replacement {
+                    return Err(Error::msg(format!(
+                        "unsupported replacement entry {}",
+                        path.display()
+                    )));
+                }
                 log::warn!("unsupported module entry type: {}", path.display());
                 continue;
             };
@@ -326,7 +468,7 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
                 file_type == NodeFileType::Directory && !directory_remove && is_replace_dir(&path);
 
             out.push(ModuleEntry {
-                relative: format!("{partition}/{relative}"),
+                relative,
                 file_type: if directory_remove {
                     NodeFileType::Whiteout
                 } else {
@@ -343,14 +485,22 @@ fn collect_partition_entries(partition_dir: &Path, partition: &str) -> Vec<Modul
             });
 
             if file_type == NodeFileType::Directory && !directory_remove {
-                walk(&path, root, partition, out);
+                walk(&path, root, partition, edits, replacement, out)?;
             }
         }
+        Ok(())
     }
 
     let mut out = Vec::new();
-    walk(partition_dir, partition_dir, partition, &mut out);
-    out
+    walk(
+        partition_dir,
+        partition_dir,
+        partition,
+        edits,
+        edits.replacements.contains_key(Path::new(partition)),
+        &mut out,
+    )?;
+    Ok(out)
 }
 
 fn relative_path_to_string(path: &Path) -> Option<String> {

@@ -28,10 +28,10 @@ pub fn plan_hot_module(
         ));
     }
     // Temporary load is independent of the persistent disable marker.
-    let rules = crate::plan::ModuleRulesView::new(&module.id, config, true);
+    let rules = crate::plan::ModuleRulesView::new(module, config, true);
     let mut relevant = std::collections::BTreeSet::new();
     for entry in &module.entries {
-        let mode = rules.resolve_mode(&entry.relative);
+        let mode = rules.entry_mode(entry);
         if mode == crate::config::Mode::Ignore {
             continue;
         }
@@ -163,6 +163,7 @@ mod tests {
             description: "d".into(),
             disabled: true,
             skip_mount: false,
+            edits: Default::default(),
             has_mount_files: true,
             source_path: PathBuf::from("/nonexistent/demo"),
             entries: vec![ModuleEntry {

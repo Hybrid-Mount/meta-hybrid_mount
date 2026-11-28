@@ -40,6 +40,8 @@ default_mode = "magic"
 
 Cơ chế phân luồng này không thay đổi bước kiểm tra khả năng `CONFIG_TMPFS_XATTR` hiện có của dự án. Trên KernelSU, quá trình cài đặt xóa toàn bộ thư mục `lkm/` của mô-đun và khi chạy chỉ sử dụng ioctl `NukeExt4Sysfs` chính thức. Các bản cài đặt APatch và môi trường không phải KSU giữ lại LKM và mặc định thử dùng nó sau khi gắn kết vùng staging ext4. Các tệp `.ko` đi kèm chỉ hỗ trợ aarch64. Việc chọn tự động yêu cầu dòng kernel và thẻ Android/GKI khớp chính xác; các tổ hợp không xác định sẽ bị từ chối. LKM dựng sẵn vẫn phải được kiểm tra khả năng tương thích ABI trên thiết bị thực tương ứng. Nếu thiết bị gặp sự cố trong lúc chạy `insmod`, một dấu ngắt mạch bền vững sẽ ngăn LKM được tải lại ở lần khởi động tiếp theo mà vẫn giữ các chức năng khác của Hybrid Mount. Xem [`module/lkm/README.md`](../module/lkm/README.md) để biết ma trận hỗ trợ, checksum, nguồn và giấy phép.
 
+Để tùy chỉnh việc gắn kết, hãy đặt các tập lệnh Lua 5.5.1 vào `/data/adb/hybrid-mount/lua/` rồi khởi động lại thiết bị. API 1 cho phép khai báo các gắn kết toàn cục. Với API 2, `change_mount(path, mode)` chọn backend cho một tệp hoặc cả cây thư mục trong mô-đun. [Ví dụ và tài liệu API bằng tiếng Anh](CUSTOM_MOUNT.md#english-reference)
+
 ## Backend VFS
 
 VFS là đường dẫn tiêm phía kernel của riêng Hybrid Mount, được điều khiển qua keyring bởi mô-đun `hybridmount`. Đây là bản triển khai độc lập và không tương tác với NoMount.

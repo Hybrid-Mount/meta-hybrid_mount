@@ -22,6 +22,8 @@ default_mode = "magic"
 
 存储模式和额外分区选项见[默认配置](../module/config.toml)。VFS 需要兼容的内核后端。后端不可用时，默认跳过 VFS 规则；启用 `vfs_strict = true` 且有规则请求 VFS 时，本次挂载流程会失败。
 
+将 Lua 5.5.1 脚本放入 `/data/adb/hybrid-mount/lua/`，重启后生效。API 1 的 `before()` 和 `after()` 回调可调用 `bind_mount`、`overlay_mount` 和 `vfs_mount`。API 2 在 `load()` 中用 `change_mount(path, mode)` 按模块相对路径为文件或子树选择 `vfs`、`overlay` 或 `magic`。[脚本示例和 API 说明](CUSTOM_MOUNT.md)
+
 - [规则、目录标记与 CLI](ARCHITECTURE.md) · [运行时挂载与恢复](RUNTIME.md)
 - [VFS 命令与诊断](VFS_CLI.md) · [VFS 内核集成](../module/vfs/README.md)
 - [ext4 兼容模块](../module/lkm/README.md)

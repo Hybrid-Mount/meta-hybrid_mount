@@ -139,9 +139,7 @@ pub struct Config {
     pub(crate) legacy_partitions: Option<LegacyPartitions>,
 
     /// Upgrade-only input from releases that exposed custom bind mounts.
-    /// The backend no longer implements that feature; accepting and omitting
-    /// this field prevents one obsolete empty array from discarding the rest
-    /// of an otherwise valid configuration.
+    /// Current custom mounts use Lua. Accept the obsolete array so upgrades preserve other settings.
     #[serde(default, rename = "custom_mounts", skip_serializing)]
     pub(crate) legacy_custom_mounts: Vec<toml::Value>,
 

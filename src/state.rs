@@ -18,7 +18,7 @@ use crate::errors::{CausalError, ContextError, Error, Result};
 use crate::module_id::ModuleId;
 use crate::partitions::{OperationDiagnostic, PartitionDiagnostic};
 use crate::plan::{MountPlan, PlanInput, build_plan};
-use crate::scanner::{ModuleRecord, list_modules};
+use crate::scanner::{ModuleRecord, list_modules, list_modules_with};
 
 /// A module entry in the `modules` command output, and its JSON contract.
 /// `id` is still validated on deserialisation; the wire format stays a plain JSON string.
@@ -674,9 +674,16 @@ pub fn handle_modules() -> Result<()> {
         layout,
         cached,
         boot_owned,
+        lua_edits,
     } = crate::runtime::module_query_context(&config)?;
     let managed_partitions = layout.scan_names();
-    let installed = list_modules(&config.moduledir, &managed_partitions)?;
+    let installed = if lua_edits.is_empty() {
+        list_modules(&config.moduledir, &managed_partitions)?
+    } else {
+        list_modules_with(&config.moduledir, &managed_partitions, |id, _| {
+            Ok(lua_edits.get(id).cloned().unwrap_or_default())
+        })?
+    };
     let modules = if let Some(cached) = cached {
         merge_module_snapshot_with_layout(cached, &installed, &config, &boot_owned, &layout)?
     } else {
@@ -954,6 +961,7 @@ mod tests {
             description: "d".to_owned(),
             disabled: false,
             skip_mount: false,
+            edits: Default::default(),
             has_mount_files: true,
             source_path: PathBuf::from(format!("/data/adb/modules/{id}")),
             entries: Vec::new(),

@@ -24,14 +24,26 @@ callers must refresh runtime and module status even on failure. Both WebUI theme
 provide session load/unload/reload controls. Module enablement for the next boot is
 independent: loading a disabled module does not delete its `disable` marker.
 
-Hot operations require an already available supported HM VFS provider and clean
+Hot operations require an already available supported VFS provider and clean
 crash-guard state. They do not load a provider, replace module directories, run
 module scripts, restart applications, or make a batch atomically visible. Mixed
 Magic/Overlay modules, skip-mount/removal/blacklist entries, and paths overlapping
-live real mounts are refused. Reload/load rescan configuration; unload uses saved
-ownership. An active module may remain unloadable even if its new configuration
-is no longer eligible for reload. In that case `eligible` stays true for unload and
+live real mounts are refused. Unload uses saved ownership. An active module may
+remain eligible for unload after a configuration change prevents reload.
+In that case `eligible` stays true for unload and
 `reload_reason` explains why the WebUI disables reload.
+
+### Lua scripts and hot reload
+
+`runtime load ID` and `runtime reload ID` rescan the current TOML configuration and
+module files using the API 2 edits saved at boot. Those edits include backend choices
+from `change_mount`. A module that was disabled at boot has no saved Lua edits.
+Adding, editing or removing a `.lua` file takes effect on the next boot.
+
+API 1 requests belong to the boot session. Unloading a module leaves global
+`vfs_mount` rules and global bind or OverlayFS mounts in place. `runtime prepare-reboot`
+cleans up verified global effects along with the session's other owned resources.
+[Lua examples and API reference](CUSTOM_MOUNT.md#english-reference)
 
 ## Late-load and soft reboot
 

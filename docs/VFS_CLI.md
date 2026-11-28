@@ -253,3 +253,5 @@ JSON 转义及回读一致性。宿主机模拟传输测试和交叉编译不替
 ## 模块级热操作
 
 `vfs` 子命令保留低层调试语义；模块级 load/unload/reload 使用 `hybrid-mount runtime`，共享启动所有权、操作锁和软重启清理。请参阅 [RUNTIME.md](RUNTIME.md)。低层修改受管规则可能导致后续 runtime 操作因所有权漂移而拒绝执行。
+
+Lua 的 `vfs_mount(source, target)` 登记本次启动的全局规则。`change_mount(path, "vfs")` 仅为指定模块的文件或子树选择 VFS，纯 VFS 模块的热加载和重载会复用启动时保存的选择。编辑 Lua 脚本后重启即可应用更改。[Lua 自定义挂载](CUSTOM_MOUNT.md)

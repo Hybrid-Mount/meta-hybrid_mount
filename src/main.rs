@@ -7,6 +7,7 @@ mod cli;
 mod config;
 mod defs;
 mod errors;
+mod extensions;
 mod logging;
 mod magic_mount;
 mod module_id;

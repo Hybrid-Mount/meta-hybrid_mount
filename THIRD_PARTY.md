@@ -2,6 +2,10 @@
 
 This file records third-party components that Hybrid Mount is derived from or distributes alongside, together with the attribution and license terms that apply. It complements [LICENSE](LICENSE) (Hybrid Mount core, GPL-3.0-only).
 
+## Lua extensions
+
+Hybrid Mount embeds Lua 5.5.1 through `mlua`. The versioned headers, callbacks and module-editing API follow the Lua extensions in meta-magic_mount-rs. Hybrid Mount adds `overlay_mount` and `vfs_mount` to API 1 and `change_mount` to API 2. [Upstream commit](https://github.com/Tools-cx-app/meta-magic_mount-rs/commit/f01a8a9dafc8cea3c9af38edaac51fa993cea629) · [Custom mount API](docs/CUSTOM_MOUNT.md#english-reference) · [Bundled Lua and mlua MIT notices](module/LUA-LICENSE.txt)
+
 ## NoMount — VFS kernel subsystem (`hybridmount`)
 
 - Upstream project: NoMount, https://github.com/maxsteeel/nomount

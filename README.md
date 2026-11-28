@@ -22,6 +22,8 @@ default_mode = "magic"
 
 See the [default configuration](module/config.toml) for storage and partition options. VFS requires a compatible kernel provider. When unavailable, VFS rules are skipped unless `vfs_strict = true` makes the mount run fail.
 
+For custom mounts, place Lua 5.5.1 scripts in `/data/adb/hybrid-mount/lua/` and reboot. API 1 supplies `bind_mount`, `overlay_mount` and `vfs_mount` in the optional `before()` and `after()` callbacks. In API 2, call `change_mount(path, mode)` inside `load()` to route a module-relative file or subtree to `vfs`, `overlay` or `magic`. [Lua examples and API reference](docs/CUSTOM_MOUNT.md#english-reference)
+
 - [Runtime mounting and recovery](docs/RUNTIME.md)
 - [VFS CLI and diagnostics](docs/VFS_CLI.md) · [VFS kernel integration](module/vfs/README.md)
 - [ext4 compatibility module](module/lkm/README.md)

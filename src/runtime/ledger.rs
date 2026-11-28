@@ -3,7 +3,7 @@
 use super::rules::SavedRule;
 use crate::errors::{Error, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OwnedMount {
@@ -34,6 +34,8 @@ pub struct Ledger {
     #[serde(default)]
     pub ksu_unmounts: Option<Vec<String>>,
     pub non_vfs_modules: BTreeSet<String>,
+    #[serde(default)]
+    pub lua_edits: BTreeMap<crate::module_id::ModuleId, crate::extensions::ModuleEdits>,
     pub modules: Vec<crate::state::AppModule>,
     pub isolated_uids: Vec<u32>,
     pub error: Option<String>,
@@ -103,7 +105,13 @@ pub fn owned_module_ids(ledger: &Ledger) -> BTreeSet<String> {
         .non_vfs_modules
         .iter()
         .cloned()
-        .chain(ledger.rules.iter().map(|rule| rule.module_id.clone()))
+        .chain(
+            ledger
+                .rules
+                .iter()
+                .filter(|rule| rule.module_id != super::rules::LUA_OWNER)
+                .map(|rule| rule.module_id.clone()),
+        )
         .collect()
 }
 

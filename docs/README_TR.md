@@ -40,6 +40,8 @@ Kural yolları modül kök dizinine göre yazılır. Modül ve yol düzeyindeki 
 
 Bu yönlendirme, projenin mevcut `CONFIG_TMPFS_XATTR` yetenek denetimini değiştirmez. KernelSU kurulumunda modülün tüm `lkm/` dizini silinir ve çalışma zamanında yalnızca resmi `NukeExt4Sysfs` ioctl'u kullanılır. APatch ve diğer KSU dışı kurulumlar LKM'yi korur ve ext4 hazırlama alanı bağlandıktan sonra varsayılan olarak kullanmayı dener. Birlikte gelen `.ko` dosyaları yalnızca aarch64'ü destekler. Otomatik seçim için çekirdek serisi ile Android/GKI etiketinin tam olarak eşleşmesi gerekir; bilinmeyen kombinasyonlar reddedilir. Önceden derlenmiş LKM'lerin ABI uyumluluğu yine de ilgili gerçek cihazda doğrulanmalıdır. Cihaz `insmod` sırasında çökerse kalıcı bir devre kesici işareti, Hybrid Mount'un diğer işlevlerini korurken LKM'nin sonraki açılışta yeniden yüklenmesini önler. Destek matrisi, sağlama toplamları, kaynaklar ve lisanslar için [`module/lkm/README.md`](../module/lkm/README.md) dosyasına bakın.
 
+Özel bağlamalar için Lua 5.5.1 betiklerini `/data/adb/hybrid-mount/lua/` dizinine yerleştirip cihazı yeniden başlatın. API 1 ile genel bağlamalar tanımlayabilirsiniz. API 2'de `change_mount(path, mode)` ile modüldeki bir dosya veya dizin ağacı için arka ucu seçebilirsiniz. [İngilizce örnekler ve API kılavuzu](CUSTOM_MOUNT.md#english-reference)
+
 ## VFS arka ucu
 
 VFS, Hybrid Mount'un çekirdek tarafındaki kendi enjeksiyon yoludur ve `hybridmount` modülü tarafından keyring üzerinden yönetilir. Bağımsız bir uygulamadır ve NoMount ile birlikte çalışmaz.

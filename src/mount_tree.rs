@@ -50,7 +50,7 @@ impl fmt::Display for NodeFileType {
     }
 }
 
-/// One module's contribution to a target node. `source_path` always points into the read-only module source.
+/// A logical module path and its read-only backing source, including external Lua replacements.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MountSource {
     pub module_id: ModuleId,
@@ -152,6 +152,15 @@ impl Default for MountTree {
 
 impl MountTree {
     pub fn insert(&mut self, target: &str, source: MountSource) {
+        self.insert_mapped(target, source, None);
+    }
+
+    pub fn insert_mapped(
+        &mut self,
+        target: &str,
+        source: MountSource,
+        mapping: Option<(&Path, usize)>,
+    ) {
         let target_components = target
             .trim()
             .trim_start_matches('/')
@@ -181,6 +190,17 @@ impl MountTree {
                 let mut structural_path = source.source_path.clone();
                 for _ in kept_source_components..relative_components.len() {
                     structural_path.pop();
+                }
+                if let Some((root, mapped_depth)) = mapping
+                    && kept_source_components < mapped_depth
+                {
+                    let logical =
+                        root.join(relative_components[..kept_source_components].join("/"));
+                    structural_path = logical
+                        .ancestors()
+                        .find(|path| path.starts_with(root) && path.is_dir())
+                        .unwrap_or(root)
+                        .to_owned();
                 }
                 if !node.structural_sources.iter().any(|structural| {
                     structural.module_id == source.module_id

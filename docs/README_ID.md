@@ -40,6 +40,8 @@ Jalur aturan ditulis relatif terhadap root modul. Aturan tingkat modul dan jalur
 
 Perutean ini tidak mengubah pemeriksaan kemampuan `CONFIG_TMPFS_XATTR` yang sudah ada. Pada KernelSU, instalasi menghapus seluruh direktori `lkm/` milik modul dan saat berjalan hanya menggunakan ioctl resmi `NukeExt4Sysfs`. Instalasi APatch dan lingkungan non-KSU lain mempertahankan LKM dan secara default mencobanya setelah staging ext4 terpasang. File `.ko` bawaan hanya mendukung aarch64. Pemilihan otomatis memerlukan kecocokan persis antara lini kernel dan tag Android/GKI; kombinasi yang tidak dikenal akan ditolak. LKM prabangun tetap harus divalidasi kompatibilitas ABI-nya pada perangkat fisik yang sesuai. Jika perangkat mengalami crash selama `insmod`, penanda pemutus sirkuit persisten akan mencegah LKM dimuat kembali pada boot berikutnya tanpa menonaktifkan fungsi Hybrid Mount lainnya. Lihat [`module/lkm/README.md`](../module/lkm/README.md) untuk matriks dukungan, checksum, sumber, dan lisensi.
 
+Untuk menyesuaikan mount, simpan skrip Lua 5.5.1 di `/data/adb/hybrid-mount/lua/`, lalu mulai ulang perangkat. API 1 mendukung mount global. Pada API 2, `change_mount(path, mode)` memilih backend untuk satu berkas atau satu direktori beserta isinya di dalam modul. [Contoh dan referensi dalam bahasa Inggris](CUSTOM_MOUNT.md#english-reference)
+
 ## Backend VFS
 
 VFS adalah jalur injeksi sisi kernel milik Hybrid Mount, yang dikendalikan melalui keyring oleh modul `hybridmount`. Ini adalah implementasi independen dan tidak berinteroperasi dengan NoMount.

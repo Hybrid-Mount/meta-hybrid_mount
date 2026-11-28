@@ -13,6 +13,8 @@ pub mod boot;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod device;
 #[cfg(any(target_os = "linux", target_os = "android"))]
+pub(crate) mod hook_vfs;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod hot;
 
 pub fn handle(args: &[String]) -> crate::errors::Result<()> {
@@ -36,6 +38,8 @@ pub(crate) struct ModuleQueryContext {
     pub layout: crate::partitions::PartitionLayout,
     pub cached: Option<Vec<crate::state::AppModule>>,
     pub boot_owned: std::collections::BTreeSet<String>,
+    pub lua_edits:
+        std::collections::BTreeMap<crate::module_id::ModuleId, crate::extensions::ModuleEdits>,
 }
 
 /// Read applied layout, diagnostics and ownership from one boot-scoped ledger snapshot.
@@ -53,6 +57,7 @@ pub(crate) fn module_query_context(
                 layout,
                 cached: Some(saved.modules),
                 boot_owned,
+                lua_edits: saved.lua_edits,
             });
         }
         device::enter_init_namespace()?;
@@ -60,6 +65,7 @@ pub(crate) fn module_query_context(
             layout: crate::partitions::detect(config)?,
             cached: None,
             boot_owned,
+            lua_edits: Default::default(),
         })
     }
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -69,6 +75,7 @@ pub(crate) fn module_query_context(
             layout: Default::default(),
             cached: None,
             boot_owned: Default::default(),
+            lua_edits: Default::default(),
         })
     }
 }

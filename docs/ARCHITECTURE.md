@@ -2,6 +2,12 @@
 
 目录中的普通 `.remove` 文件规范化为目录路径的 whiteout，扫描停止收集其后代；`.remove` 优先于 `.replace`。规划在原逻辑路径上匹配 ignore，再应用实际分区映射与根/子挂载保护。跨模块 whiteout 与内容贡献冲突在执行前报错。Overlay staging 创建 0:0 字符设备，Magic 父镜像省略目标，VFS 发出已有 Whiteout 动作；不删除原目录，不改变协议。
 
+## Lua 扩展与挂载顺序
+
+1. 启动流程探测分区后，`src/extensions/` 按文件名加载 `/data/adb/hybrid-mount/lua/` 下的 Lua 5.5.1 脚本，先收集 API 1 的 `before()` 请求。
+2. 扫描每个符合条件的模块时，先运行匹配该 ID 的 API 2 `load()`。规划器合并 `change_mount` 与 TOML 路径规则，按最长路径匹配，相同路径取最后一次 Lua 声明。`remove(path)` 在有效目标上排除其他模块对同一子树的贡献，再由所选后端处理 whiteout。
+3. 计划就绪后，依次执行 `before()` 请求、常规模块挂载，再调用 `after()` 并执行其请求。全局挂载与常规模块挂载共用启动事务，执行阶段失败会触发回滚。[Lua 脚本示例与 API 说明](CUSTOM_MOUNT.md)
+
 ## CLI 契约
 
 设备上的可执行文件通常是 `/data/adb/modules/hybrid_mount/hybrid-mount`。无参数时直接运行启动挂载流水线；命令失败会写入 stderr 并以非零状态退出。
@@ -37,11 +43,12 @@ $BIN vfs-doctor
 
 WebUI 使用同一 CLI；状态快照由启动或成功的热操作更新，详见 [Runtime](RUNTIME.md)。
 
-`status` 中的 `active_mounts` 是 OverlayFS、Magic Mount 与 VFS 成功目标合并、排序、去重后的兼容字段；`overlay_active_mounts`、`magic_active_mounts` 与 `vfs_active_mounts` 保留分后端明细。Magic Mount 只把成功的文件 bind 目标和目录 mount-move 目标计入活动挂载点，符号链接创建仍只进入操作统计，不伪装成挂载点。OverlayFS 与 Magic Mount 的目标必须经 mountinfo 确认；VFS 注入点不是内核挂载，改由 `apply_vfs_phase` 的 Provider 读回确认，读回失败的批次会被整体丢弃，因此不会进入 `active_mounts`。
+`status` 中的 `active_mounts` 合并、排序并去重各后端已确认的目标。API 1 的 `overlay_mount` 计入 `overlay_active_mounts`，`bind_mount` 计入 `magic_active_mounts`。两者都由 mountinfo 确认，使用父目录承载文件或缺失路径时记录实际挂载的目录。Magic Mount 创建的符号链接只计入操作统计。`vfs_active_mounts` 记录经提供程序回读确认的 VFS 目标，包括全局 `vfs_mount` 请求。
 
-`status` 另外暴露 VFS 字段：`vfs_modules` 列出本次启动使用 VFS 的模块，`vfs_active_mounts` 记录注入成功的目标路径，`vfs_provider` 为本次启动唯一绑定的内核 Provider（只有 `hm`，即 HM 自有的 `hybridmount` 模块）。这些字段与配置一并由启动流水线与状态层写入启动快照。
+`vfs_modules` 列出本次启动使用 VFS 的模块 ID。全局 `vfs_mount` 归本次启动会话所有。`vfs_provider` 记录本次启动绑定的内核提供程序。
 
-`storage_mode` 记录本次启动实际创建的 overlay staging 后端，取值为 `tmpfs`、`ext4` 或哨兵值 `none`。只使用 VFS 或 Magic Mount 的启动不会创建 staging，此时写入 `none`：动态模块描述与 WebUI 都据此显示实际运行的挂载后端（例如 VFS），不会假报 Tmpfs 或 Ext4。
+`storage_mode` 记录常规模块 OverlayFS 计划使用的 staging 后端，取值为 `tmpfs` 或 `ext4`。没有常规模块 OverlayFS 操作时记录 `none`。API 1 的 `overlay_mount` 使用独立的临时层。
+
 # 分区布局诊断
 
 `status` 的 `degraded` 表示存在已跳过的分区或操作；`partition_errors` 记录分区、原因及受影响模块，`operation_errors` 记录被拒绝的具体模块路径。正常分区仍可成功提交。

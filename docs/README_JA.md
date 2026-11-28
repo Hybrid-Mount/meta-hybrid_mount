@@ -40,6 +40,8 @@ default_mode = "magic"
 
 この振り分けによって、プロジェクト既存の `CONFIG_TMPFS_XATTR` 機能判定が変更されることはありません。KernelSU では、インストール時にモジュール内の `lkm/` ディレクトリ全体を削除し、実行時には公式の `NukeExt4Sysfs` ioctl のみを使用します。APatch などの非 KSU 環境では LKM を保持し、ext4 ステージングのマウント後にデフォルトで使用を試みます。同梱の `.ko` は aarch64 のみに対応しています。自動選択にはカーネル系列と Android/GKI タグの完全一致が必要で、不明な組み合わせは拒否されます。ビルド済み LKM についても、対応する実機で ABI 互換性を検証する必要があります。`insmod` 中に端末がクラッシュした場合、永続的なサーキットブレーカーマーカーによって次回起動時の LKM 再読み込みを防ぎ、Hybrid Mount のその他の機能は維持されます。対応表、チェックサム、ソース、ライセンスについては [`module/lkm/README.md`](../module/lkm/README.md) を参照してください。
 
+カスタムマウントを設定するには、Lua 5.5.1 スクリプトを `/data/adb/hybrid-mount/lua/` に配置して再起動します。API 1 ではグローバルなマウントを定義できます。API 2 の `change_mount(path, mode)` では、モジュール内のファイルやディレクトリツリーごとにバックエンドを指定できます。[使用例と API リファレンス（英語）](CUSTOM_MOUNT.md#english-reference)
+
 ## VFS バックエンド
 
 VFS は Hybrid Mount 独自のカーネル側注入パスであり、`hybridmount` モジュールが keyring 経由で操作します。独立した実装であり、NoMount とは相互運用しません。

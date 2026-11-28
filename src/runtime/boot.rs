@@ -57,13 +57,23 @@ pub fn planned_rules(plan: &MountPlan) -> Result<Vec<SavedRule>> {
         .collect()
 }
 
-pub fn stage_plan(plan: &MountPlan, requested_uids: &[u32], nomount: bool) -> Result<()> {
+pub fn stage_plan(
+    plan: &MountPlan,
+    requested_uids: &[u32],
+    nomount: bool,
+    modules: &[crate::scanner::ModuleRecord],
+) -> Result<()> {
     let mut saved = device::load()?;
     saved.partition_layout = Some(plan.partition_layout.clone());
     saved.pending_rules = planned_rules(plan)?;
     saved.vfs_provider =
         (!saved.pending_rules.is_empty()).then(|| if nomount { "nomount" } else { "hm" }.into());
     saved.isolated_uids = requested_uids.to_vec();
+    saved.lua_edits = modules
+        .iter()
+        .filter(|module| module.edits != Default::default())
+        .map(|module| (module.id.clone(), module.edits.clone()))
+        .collect();
     saved.non_vfs_modules = plan
         .magic_module_ids
         .iter()
@@ -97,6 +107,9 @@ pub fn finish(session: BootSession, successful: bool, effect_targets: &[String])
         saved.rules = saved
             .pending_rules
             .iter()
+            .filter(|expected| {
+                !successful || state.vfs_active_mounts.contains(&expected.virtual_path)
+            })
             .filter(|expected| current.iter().any(|r| rules::semantic_equal(expected, r)))
             .cloned()
             .collect();
@@ -164,6 +177,7 @@ pub fn cleanup() -> Result<()> {
     saved.phase = "clean".into();
     saved.error = None;
     saved.non_vfs_modules.clear();
+    saved.lua_edits.clear();
     saved.pending_rules.clear();
     saved.vfs_provider = None;
     saved.modules.iter_mut().for_each(|m| m.is_mounted = false);

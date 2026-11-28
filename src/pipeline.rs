@@ -5,6 +5,9 @@
 //!
 //! Mounts and shallow staging write only inside the runtime directory; module sources stay read-only.
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod custom;
+
 #[cfg(unix)]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
@@ -22,6 +25,8 @@ use crate::config::{Config, OverlayMode};
 use crate::defs;
 use crate::errors::{Error, Result};
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::extensions::{Extensions, HookPhase, MountKind};
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use crate::magic_mount::exec;
 #[cfg(unix)]
 use crate::plan::MountPlan;
@@ -29,7 +34,7 @@ use crate::plan::MountPlan;
 use crate::plan::{PlanInput, build_plan};
 use crate::scanner::ModuleRecord;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use crate::scanner::list_modules;
+use crate::scanner::list_modules_with;
 use crate::state::MountStatistics;
 #[cfg(any(target_os = "linux", target_os = "android", test))]
 use crate::state::RunState;
@@ -500,8 +505,6 @@ fn execute_mount_phases(
     let vfs_stats = apply_vfs_phase(config, plan, state, use_nomount, transaction)?;
     vfs_phase.finish();
 
-    crate::utils::ksu::commit_unmount_list()?;
-
     Ok((
         overlay_dir_mounts,
         shallow_overlay_mounts,
@@ -773,7 +776,21 @@ fn run_mount_pipeline_impl(
         crate::partitions::detect_with_mounts(&config, baseline_mounts),
     )?;
     let managed_partitions = layout.scan_names();
-    let modules = startup_phase("scan", list_modules(&config.moduledir, &managed_partitions))?;
+    let extensions = startup_phase(
+        "lua",
+        Extensions::load(Path::new(defs::LUA_DIR), &config.moduledir),
+    )?;
+    let before = startup_phase("lua_before", extensions.commands(HookPhase::Before))?;
+    let modules = startup_phase(
+        "scan",
+        list_modules_with(&config.moduledir, &managed_partitions, |id, enabled| {
+            if !enabled || config.is_module_blacklisted(id.as_str()) {
+                Ok(Default::default())
+            } else {
+                extensions.module_edits(id, &layout)
+            }
+        }),
+    )?;
     log::info!("scanned modules: {}", modules.len());
     for module in &modules {
         let entry_roots = module
@@ -802,25 +819,34 @@ fn run_mount_pipeline_impl(
     // a plan built while the module is unloaded carries no VFS work, while loading next to a
     // foreign provider would let two inode-hooking implementations coexist.
     let nomount_probe = crate::vfs::guard::detect_foreign_nomount();
+    let wants_vfs = config.wants_vfs()
+        || before.iter().any(|mount| mount.kind == MountKind::Vfs)
+        || modules.iter().any(|module| {
+            module
+                .edits
+                .modes
+                .values()
+                .any(|mode| *mode == crate::config::Mode::Vfs)
+        });
     let vfs_available = if nomount_probe.present {
         crate::vfs::available()
     } else if nomount_probe.blocked() {
         crate::vfs::ensure_loaded_for_plan_with_guard(
-            config.wants_vfs(),
+            wants_vfs,
             true,
             crate::vfs::available,
             crate::vfs::lkm::load_hm_vfs,
         )
     } else {
         crate::vfs::ensure_loaded_for_plan(
-            config.wants_vfs(),
+            wants_vfs,
             crate::vfs::available,
             crate::vfs::lkm::load_hm_vfs,
         )
     };
     log::info!(
         "vfs provider probe: wants_vfs={}, available={}, foreign_nomount={}, strict={}",
-        config.wants_vfs(),
+        wants_vfs,
         vfs_available,
         nomount_probe.present,
         config.vfs_strict
@@ -830,7 +856,7 @@ fn run_mount_pipeline_impl(
     // where that is still decidable: the plan below rewrites every `vfs` rule to `ignore`, so
     // `apply_vfs_phase` sees an empty module set and returns before its own strict checks. Without
     // this the option would be silently ineffective for exactly the case it exists to catch.
-    if crate::vfs::unavailable_is_fatal(config.wants_vfs(), config.vfs_strict, vfs_available) {
+    if crate::vfs::unavailable_is_fatal(wants_vfs, config.vfs_strict, vfs_available) {
         let reason = if nomount_probe.present {
             "NoMount is present but no compatible, conflict-free VFS provider is available"
                 .to_owned()
@@ -905,7 +931,12 @@ fn run_mount_pipeline_impl(
         }
     }
     plan_phase.finish();
-    crate::runtime::boot::stage_plan(&plan, &config.vfs_isolate_uids, nomount_probe.present)?;
+    crate::runtime::boot::stage_plan(
+        &plan,
+        &config.vfs_isolate_uids,
+        nomount_probe.present,
+        &modules,
+    )?;
 
     // `modules` is a boot-time snapshot, not a proof that every mount already
     // succeeded.  Persist it before entering the fallible mount phases so the
@@ -933,7 +964,7 @@ fn run_mount_pipeline_impl(
     if nomount_probe.present && vfs_available {
         state.vfs_provider = Some("nomount".into());
     }
-    if config.wants_vfs() && !vfs_available {
+    if wants_vfs && !vfs_available {
         state.vfs_error = Some(nomount_probe.error.as_ref().map_or_else(
             || "VFS provider unavailable; configured VFS rules were skipped".to_owned(),
             |error| format!("VFS provider guard failed closed: {error}"),
@@ -953,8 +984,20 @@ fn run_mount_pipeline_impl(
     transaction.register_rollback_only("ksu_try_umount_list", || {
         crate::utils::ksu::clear_unmount_list()
     });
-    let (overlay_dir_mounts, shallow_overlay_mounts, active_mounts, magic_stats, vfs_stats) =
-        match execute_mount_phases(
+    let mut hooks = custom::HookEffects {
+        binds: Vec::new(),
+        overlays: Vec::new(),
+        vfs: Vec::new(),
+        mount_source,
+        provider: vfs_available.then_some(if nomount_probe.present {
+            "nomount"
+        } else {
+            "hm"
+        }),
+    };
+    let outcome = (|| {
+        hooks.apply(before, &config, &mut transaction, mounted)?;
+        let result = execute_mount_phases(
             &config,
             &modules,
             &mut plan,
@@ -962,26 +1005,42 @@ fn run_mount_pipeline_impl(
             &mut state,
             &mut transaction,
             mounted,
-        ) {
-            Ok(result) => result,
-            Err(err) => {
-                log::error!(
-                    "mount execution failed: phase=mount_execution, error={err}, overlay_modules={}, magic_modules={}",
-                    plan.overlay_module_ids.join(","),
-                    plan.magic_module_ids.join(",")
-                );
-                let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
-                return Err(record_mount_failure(
-                    &mut state,
-                    &modules,
-                    &config,
-                    &plan,
-                    "mount_execution",
-                    err,
-                    &rollback,
-                ));
-            }
-        };
+        )?;
+        hooks.apply(
+            extensions.commands(HookPhase::After)?,
+            &config,
+            &mut transaction,
+            mounted,
+        )?;
+        crate::utils::ksu::commit_unmount_list()?;
+        Ok(result)
+    })();
+    let (
+        overlay_dir_mounts,
+        shallow_overlay_mounts,
+        mut active_mounts,
+        mut magic_stats,
+        mut vfs_stats,
+    ) = match outcome {
+        Ok(result) => result,
+        Err(err) => {
+            log::error!(
+                "mount execution failed: phase=mount_execution, error={err}, overlay_modules={}, magic_modules={}",
+                plan.overlay_module_ids.join(","),
+                plan.magic_module_ids.join(",")
+            );
+            let rollback = rollback_mount_pipeline(transaction, mounted, &baseline);
+            return Err(record_mount_failure(
+                &mut state,
+                &modules,
+                &config,
+                &plan,
+                "mount_execution",
+                err,
+                &rollback,
+            ));
+        }
+    };
 
     // `is_mounted` comes from mountinfo-confirmed targets, never from the plan.
     // Executor attempt counts stay in `mount_stats` and are never copied into
@@ -1002,6 +1061,16 @@ fn run_mount_pipeline_impl(
             ));
         }
     };
+    active_mounts.extend(hooks.overlays.iter().cloned());
+    magic_stats
+        .active_mounts
+        .extend(hooks.binds.iter().cloned());
+    if !hooks.vfs.is_empty() {
+        vfs_stats.active_targets.extend(hooks.vfs);
+        vfs_stats.active_targets.sort();
+        vfs_stats.active_targets.dedup();
+        state.vfs_provider = hooks.provider.map(str::to_owned);
+    }
     let confirmed_overlay_targets = confirmed_mount_targets(&active_mounts, &final_mountinfo);
     let confirmed_magic_targets =
         confirmed_mount_targets(&magic_stats.active_mounts, &final_mountinfo);
@@ -1071,13 +1140,15 @@ fn run_mount_pipeline_impl(
     state.vfs_active_mounts = vfs_stats.active_targets.clone();
     state.confirmed_active_mounts = confirmed_active_mounts;
     state.mount_stats = pipeline_stats(
-        overlay_dir_mounts,
+        overlay_dir_mounts + hooks.overlays.len(),
         shallow_overlay_mounts,
         magic_stats.mounted_files as usize,
         magic_stats.mounted_symlinks as usize,
         magic_stats.ignored_files as usize,
         magic_stats.mounted_dirs as usize,
     );
+    state.mount_stats.total_mounts += hooks.binds.len();
+    state.mount_stats.successful_mounts += hooks.binds.len();
     state.mode_stats.vfs = vfs_stats.mounted_module_ids.len();
     if let Some(failure) = &vfs_stats.failure {
         state.vfs_error = Some(failure.clone());
@@ -1260,18 +1331,52 @@ fn overlay_storage_sizing_paths(
     plan: &MountPlan,
     execution_plan: &OverlayExecutionPlan,
 ) -> Vec<PathBuf> {
-    let mut paths = modules
+    let selected: Vec<_> = modules
         .iter()
         .filter(|module| plan.overlay_module_ids.contains(&module.id))
+        .collect();
+    let mut paths: Vec<_> = selected
+        .iter()
         .map(|module| module.source_path.clone())
-        .collect::<Vec<_>>();
-    paths.extend(
-        execution_plan
-            .1
-            .values()
-            .flatten()
-            .map(|source| source.source.clone()),
-    );
+        .collect();
+    let shallow: Vec<_> = execution_plan
+        .1
+        .values()
+        .flatten()
+        .map(|source| &source.source)
+        .collect();
+    paths.extend(shallow.iter().map(|source| (**source).clone()));
+    for module in selected {
+        for (logical, source) in &module.edits.replacements {
+            if module.edits.excludes(logical) {
+                continue;
+            }
+            let Ok((_, target)) = plan.partition_layout.map_target(&logical.to_string_lossy())
+            else {
+                continue;
+            };
+            if !plan
+                .tree
+                .find(&target.to_string_lossy())
+                .is_some_and(|node| node.has_backend(crate::config::Mode::Overlay))
+            {
+                continue;
+            }
+            paths.push(source.clone());
+            let layer = module.source_path.join(logical);
+            for staged in &shallow {
+                if let Ok(suffix) = staged.strip_prefix(&layer) {
+                    paths.push(if suffix.as_os_str().is_empty() {
+                        source.clone()
+                    } else {
+                        source.join(suffix)
+                    });
+                } else if layer.starts_with(staged) {
+                    paths.push(source.clone());
+                }
+            }
+        }
+    }
     paths
 }
 
@@ -2335,6 +2440,7 @@ mod tests {
             description: "d".to_owned(),
             disabled: false,
             skip_mount: false,
+            edits: Default::default(),
             has_mount_files: true,
             source_path: PathBuf::from("/data/adb/modules/adb-ndk"),
             entries: Vec::new(),
@@ -2364,6 +2470,7 @@ mod tests {
             description: "d".to_owned(),
             disabled: false,
             skip_mount: false,
+            edits: Default::default(),
             has_mount_files: true,
             source_path: module_root.clone(),
             entries: Vec::new(),

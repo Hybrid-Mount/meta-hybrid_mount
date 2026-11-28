@@ -69,6 +69,10 @@ rm -rf "$MODPATH/binaries"
 
 BASE_DIR="/data/adb/hybrid-mount"
 mkdir -p "$BASE_DIR"
+if [ ! -L "$BASE_DIR/lua" ]; then
+  mkdir -p "$BASE_DIR/lua"
+  set_perm "$BASE_DIR/lua" 0 0 0700
+fi
 
 wait_volume_key_or_timeout() {
   local timeout_seconds="$1"

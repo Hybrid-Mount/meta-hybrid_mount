@@ -40,6 +40,8 @@ Las rutas de las reglas son relativas a la raíz del módulo. Las reglas de mód
 
 Este enrutamiento no modifica la comprobación de capacidad `CONFIG_TMPFS_XATTR` existente. En KernelSU, la instalación elimina por completo el directorio `lkm/` del módulo y, durante la ejecución, solo usa el ioctl oficial `NukeExt4Sysfs`. Las instalaciones de APatch y otros sistemas que no son KSU conservan el LKM y lo prueban de forma predeterminada después de montar la preparación ext4. Los archivos `.ko` incluidos solo admiten aarch64. La selección automática exige una coincidencia exacta de la línea del kernel y la etiqueta Android/GKI; las combinaciones desconocidas se rechazan. Los LKM precompilados deben validarse para comprobar la compatibilidad ABI en el dispositivo real correspondiente. Si el dispositivo falla durante `insmod`, un marcador persistente de protección evita que el LKM vuelva a cargarse en el siguiente arranque sin desactivar el resto de Hybrid Mount. Consulta [`module/lkm/README.md`](../module/lkm/README.md) para ver la matriz de compatibilidad, las sumas de comprobación, las fuentes y las licencias.
 
+Para personalizar los montajes, coloca los scripts de Lua 5.5.1 en `/data/adb/hybrid-mount/lua/` y reinicia. La API 1 permite definir montajes globales. Con la API 2, `change_mount(path, mode)` selecciona el backend de un archivo o subárbol del módulo. [Ejemplos y referencia en inglés](CUSTOM_MOUNT.md#english-reference)
+
 ## Backend VFS
 
 VFS es la ruta de inyección del propio Hybrid Mount en el lado del kernel, controlada a través del keyring por el módulo `hybridmount`. Es una implementación independiente y no interopera con NoMount.

@@ -23,6 +23,7 @@ pub const VFS_LKM_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_lkm_boot_g
 pub const VFS_BOOT_GUARD_PATH: &str = "/data/adb/hybrid-mount/vfs_boot_guard";
 
 pub const CONFIG_PATH: &str = "/data/adb/hybrid-mount/config.toml";
+pub const LUA_DIR: &str = "/data/adb/hybrid-mount/lua";
 pub const MODULE_BLACKLIST_FILE_NAME: &str = "module_blacklist.toml";
 pub const MODULE_BLACKLIST_PATH: &str = "/data/adb/hybrid-mount/module_blacklist.toml";
 pub const BUNDLED_MODULE_BLACKLIST_PATH: &str =

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::errors::{Error, Result};
 use crate::vfs::protocol::FLAG_VIRTUAL_DIR;
 
+pub(crate) const LUA_OWNER: &str = "@lua";
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub(crate) struct SavedRule {
     pub module_id: String,

@@ -40,6 +40,8 @@ default_mode = "magic"
 
 這套路由不會改變專案現有的 `CONFIG_TMPFS_XATTR` 能力判斷。KernelSU 安裝時會刪除模組中的整個 `lkm/` 目錄，執行時只使用官方 `NukeExt4Sysfs` ioctl；APatch 等非 KSU 安裝會保留 LKM，並在 ext4 staging 掛載後預設嘗試使用。隨附的 `.ko` 僅支援 aarch64；自動選擇要求核心系列和 Android/GKI 標籤完全相符，未知組合會直接拒絕，但預編譯 LKM 仍必須在對應的實機上驗證 ABI 相容性。若裝置在 `insmod` 期間當機，持久熔斷標記會阻止下次啟動再次載入 LKM，同時保留 Hybrid Mount 的其他功能。支援矩陣、校驗值、來源與授權請參閱 [`module/lkm/README.md`](../module/lkm/README.md)。
 
+將 Lua 5.5.1 指令碼放入 `/data/adb/hybrid-mount/lua/`，重新啟動後生效。API 1 可透過 `before()` 與 `after()` 定義全域掛載。API 2 的 `change_mount(path, mode)` 可依模組相對路徑，為檔案或整個子樹指定 `vfs`、`overlay` 或 `magic` 後端。[指令碼範例與 API 說明（簡體中文）](CUSTOM_MOUNT.md)
+
 ## VFS 後端
 
 VFS 是 Hybrid Mount 自有的核心端注入路徑，由 `hybridmount` 模組經由 keyring 驅動。這是獨立實作，不與 NoMount 互通。

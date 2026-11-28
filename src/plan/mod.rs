@@ -70,6 +70,31 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
     modules.sort_by(|left, right| left.id.cmp(&right.id));
 
     let mut builder = PlanBuilder::default();
+    let protected = protected_targets(input.layout);
+    let mut removals = BTreeMap::new();
+    for module in &modules {
+        if module.edits.removed.is_empty()
+            || !module.mountable()
+            || input.config.is_module_blacklisted(module.id.as_str())
+        {
+            continue;
+        }
+        let rules = ModuleRulesView::new(module, input.config, input.vfs_available);
+        for relative in &module.edits.removed {
+            let logical = relative.to_string_lossy();
+            if rules.resolve_mode(&logical) != Mode::Ignore
+                && let Ok((_, target)) = input.layout.map_target(&logical)
+                && relative.components().count() > input.layout.root_len(&logical)
+                && !protected
+                    .iter()
+                    .any(|boundary| boundary.starts_with(&target))
+            {
+                removals
+                    .entry(target)
+                    .or_insert((&module.id, relative.as_path()));
+            }
+        }
+    }
     for module in modules {
         if !module.mountable() {
             continue;
@@ -78,8 +103,15 @@ pub fn build_plan(input: &PlanInput<'_>) -> Result<MountPlan> {
             log::debug!("plan skip module: id={}, reason=blacklisted", module.id);
             continue;
         }
-        let rules = ModuleRulesView::new(&module.id, input.config, input.vfs_available);
-        process_module(module, &rules, input.layout, &mut builder)?;
+        let rules = ModuleRulesView::new(module, input.config, input.vfs_available);
+        process_module(
+            module,
+            &rules,
+            input.layout,
+            &protected,
+            &removals,
+            &mut builder,
+        )?;
     }
 
     ensure_replace_backend_consistency(&builder.tree.root, "")?;
@@ -95,16 +127,17 @@ pub(crate) struct ModuleRulesView {
     default_mode: Mode,
     /// `(normalized_key, mode)`, sorted by key length descending so the longest prefix wins.
     path_rules: Vec<(String, Mode)>,
+    structural_dirs: BTreeSet<PathBuf>,
 }
 
 impl ModuleRulesView {
-    pub(crate) fn new(module_id: &ModuleId, config: &Config, vfs_available: bool) -> Self {
-        let module_rule = config.rules.get(module_id);
+    pub(crate) fn new(module: &ModuleRecord, config: &Config, vfs_available: bool) -> Self {
+        let module_rule = config.rules.get(&module.id);
         let default_mode = module_rule
             .and_then(|rule| rule.default_mode)
             .unwrap_or(config.default_mode);
 
-        let mut path_rules: Vec<(String, Mode)> = module_rule
+        let mut overrides: BTreeMap<String, Mode> = module_rule
             .map(|rule| {
                 rule.paths
                     .iter()
@@ -112,6 +145,14 @@ impl ModuleRulesView {
                     .collect()
             })
             .unwrap_or_default();
+        overrides.extend(
+            module
+                .edits
+                .modes
+                .iter()
+                .map(|(path, mode)| (path.to_string_lossy().into_owned(), *mode)),
+        );
+        let mut path_rules: Vec<_> = overrides.into_iter().collect();
         path_rules.sort_by(|left, right| {
             right
                 .0
@@ -130,13 +171,29 @@ impl ModuleRulesView {
             }
         };
 
-        Self {
+        let mut rules = Self {
             default_mode: degrade(default_mode),
             path_rules: path_rules
                 .into_iter()
                 .map(|(key, mode)| (key, degrade(mode)))
                 .collect(),
+            structural_dirs: BTreeSet::new(),
+        };
+        if vfs_available && module.edits.modes.values().any(|mode| *mode == Mode::Vfs) {
+            for entry in &module.entries {
+                let path = Path::new(&entry.relative);
+                if rules.resolve_mode(&entry.relative) == Mode::Vfs
+                    && path
+                        .ancestors()
+                        .any(|parent| module.edits.modes.get(parent) == Some(&Mode::Vfs))
+                {
+                    rules
+                        .structural_dirs
+                        .extend(path.ancestors().skip(1).map(Path::to_owned));
+                }
+            }
         }
+        rules
     }
 
     pub(crate) fn resolve_mode(&self, relative: &str) -> Mode {
@@ -145,6 +202,19 @@ impl ModuleRulesView {
             .find(|(key, _)| crate::utils::is_same_or_below(relative, key))
             .map(|(_, mode)| *mode)
             .unwrap_or(self.default_mode)
+    }
+
+    pub(crate) fn entry_mode(&self, entry: &ModuleEntry) -> Mode {
+        let mode = self.resolve_mode(&entry.relative);
+        if matches!(mode, Mode::Overlay | Mode::Magic)
+            && entry.file_type == NodeFileType::Directory
+            && !entry.replace
+            && self.structural_dirs.contains(Path::new(&entry.relative))
+        {
+            Mode::Ignore
+        } else {
+            mode
+        }
     }
 
     /// Whether a path rule classifies the whole `system` as overlay.
@@ -287,9 +357,10 @@ fn process_module(
     module: &ModuleRecord,
     rules: &ModuleRulesView,
     layout: &PartitionLayout,
+    protected: &[PathBuf],
+    removals: &BTreeMap<PathBuf, (&ModuleId, &Path)>,
     builder: &mut PlanBuilder,
 ) -> Result<()> {
-    let protected = protected_targets(layout);
     let mut blocked_subtrees = Vec::new();
     for entry in &module.entries {
         if rules.resolve_mode(&entry.relative) == Mode::Ignore {
@@ -347,7 +418,18 @@ fn process_module(
         {
             continue;
         }
-        let mode = rules.resolve_mode(&entry.relative);
+        let relative = Path::new(&entry.relative);
+        if !removals.is_empty()
+            && let Ok((_, target)) = layout.map_target(&entry.relative)
+            && target.ancestors().any(|ancestor| {
+                removals
+                    .get(ancestor)
+                    .is_some_and(|(id, path)| *id != &module.id || *path != relative)
+            })
+        {
+            continue;
+        }
+        let mode = rules.entry_mode(entry);
         let partition = layout.logical_partition(&entry.relative);
         if let Some(error) = layout.errors.get(partition) {
             if mode != Mode::Ignore {
@@ -372,17 +454,34 @@ fn process_module(
     // 1. Cross-module conflicts: plain directories may be shared, while files, types and `.replace` must be unique.
     for decision in &decisions {
         let (_, target) = map_target(&decision.entry.relative, layout)?;
-        builder.tree.insert(
-            &target,
-            MountSource {
-                module_id: module.id.clone(),
-                relative: decision.entry.relative.clone(),
-                source_path: join_relative(&module.source_path, &decision.entry.relative),
-                file_type: decision.entry.file_type,
-                replace: decision.entry.replace,
-                backend: decision.mode,
-            },
-        );
+        let relative = Path::new(&decision.entry.relative);
+        let source_path = if module.edits.removed.contains(relative) {
+            module.source_path.clone()
+        } else {
+            module.edits.source(&module.source_path, relative)
+        };
+        let source = MountSource {
+            module_id: module.id.clone(),
+            relative: decision.entry.relative.clone(),
+            source_path,
+            file_type: decision.entry.file_type,
+            replace: decision.entry.replace,
+            backend: decision.mode,
+        };
+        let mapped = if module.edits.removed.contains(relative) {
+            Some(relative)
+        } else {
+            module.edits.replacement_root(relative)
+        };
+        if let Some(mapped) = mapped {
+            builder.tree.insert_mapped(
+                &target,
+                source,
+                Some((&module.source_path, mapped.components().count())),
+            );
+        } else {
+            builder.tree.insert(&target, source);
+        }
         if decision.mode != Mode::Ignore {
             builder.register(
                 &target,
@@ -833,6 +932,7 @@ mod tests {
             description: "d".to_owned(),
             disabled: false,
             skip_mount: false,
+            edits: Default::default(),
             has_mount_files: true,
             source_path: PathBuf::from(format!("/data/adb/modules/{id}")),
             entries: entries

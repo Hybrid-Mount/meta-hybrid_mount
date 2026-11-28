@@ -45,11 +45,12 @@ fn guard() -> Result<()> {
     }
 }
 
-fn config_and_modules() -> Result<(Config, Vec<scanner::ModuleRecord>)> {
+fn config_and_modules(saved: &Ledger) -> Result<(Config, Vec<scanner::ModuleRecord>)> {
     let config = Config::load_for_boot(Path::new(defs::CONFIG_PATH))?;
-    let modules = scanner::list_modules(
+    let modules = scanner::list_modules_with(
         &config.moduledir,
         &config.scan_partition_names(Path::new("/")),
+        |id, _| Ok(saved.lua_edits.get(id).cloned().unwrap_or_default()),
     )?;
     Ok((config, modules))
 }
@@ -61,9 +62,14 @@ fn status() -> Result<Status> {
     let mut kernel = device::Kernel::open(&saved)?;
     rules::verify_owned(&mut kernel, &saved.rules)?;
     super::mounts::validate(&saved.mounts)?;
-    let (config, modules) = config_and_modules()?;
+    let (config, modules) = config_and_modules(&saved)?;
     let layout = crate::partitions::detect(&config)?;
-    let mut remaining: BTreeSet<_> = saved.rules.iter().map(|r| r.module_id.as_str()).collect();
+    let mut remaining: BTreeSet<_> = saved
+        .rules
+        .iter()
+        .map(|r| r.module_id.as_str())
+        .filter(|id| *id != rules::LUA_OWNER)
+        .collect();
     let mut rows = Vec::new();
     for module in modules {
         let active = remaining.remove(module.id.as_str());
@@ -177,7 +183,7 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
     let after = if action == "unload" {
         Vec::new()
     } else {
-        let (config, mut modules) = config_and_modules()?;
+        let (config, mut modules) = config_and_modules(&saved)?;
         let index = modules
             .iter()
             .position(|m| m.id.as_str() == module_id)
@@ -186,7 +192,7 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
         let disabled = modules[index].disabled;
         modules[index].disabled = false;
         let layout = crate::partitions::detect(&config)?;
-        crate::plan::build_plan(&crate::plan::PlanInput {
+        let full_plan = crate::plan::build_plan(&crate::plan::PlanInput {
             modules: &modules,
             config: &config,
             layout: &layout,
@@ -205,7 +211,24 @@ fn apply(action: &str, module_id: &str) -> Result<u64> {
         )
         .into_iter()
         .next();
-        boot::planned_rules(&plan)?
+        if saved
+            .lua_edits
+            .values()
+            .any(|edits| !edits.removed.is_empty())
+        {
+            let visible: Vec<_> = boot::planned_rules(&full_plan)?
+                .into_iter()
+                .filter(|rule| rule.module_id == module_id)
+                .collect();
+            if visible.is_empty() {
+                return Err(Error::msg(
+                    "module has no VFS rules in the merged mount plan",
+                ));
+            }
+            visible
+        } else {
+            boot::planned_rules(&plan)?
+        }
     };
     // Validation errors must leave the ready ledger untouched. In particular a
     // foreign new target is not an introduced rule requiring rollback.
@@ -259,6 +282,7 @@ pub fn refresh_snapshots(saved: &Ledger) -> Result<()> {
     state.vfs_modules = saved
         .rules
         .iter()
+        .filter(|rule| rule.module_id != rules::LUA_OWNER)
         .map(|r| r.module_id.clone())
         .collect::<BTreeSet<_>>()
         .into_iter()
